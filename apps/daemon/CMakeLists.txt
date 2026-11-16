@@ -8,7 +8,7 @@ target_sources(ketplus_daemon_core PRIVATE
     src/teams/TeamRiskPolicy.cpp src/teams/TeamRiskPolicy.h
     src/teams/TeamCoordinatorRiskPolicy.cpp)
 if(APPLE)
-    target_link_libraries(ketplus_daemon_core PRIVATE "-framework Security" "-framework CoreFoundation" "-framework IOKit")
+    target_link_libraries(ketplus_daemon_core PRIVATE "-framework Security" "-framework CoreFoundation" "-framework IOKit" proc)
 endif()
 target_link_libraries(ketplus_daemon_core PUBLIC
     Qt6::Concurrent
@@ -62,6 +62,14 @@ add_dependencies(ketplus_daemon ketplus_build_identity)
 target_include_directories(ketplus_daemon PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
 target_link_libraries(ketplus_daemon PRIVATE ketplus_daemon_core)
 ketplus_enable_warnings(ketplus_daemon)
+
+if(APPLE OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    add_subdirectory(src/runtime/executor)
+    add_dependencies(ketplus_daemon ketplus_job_executor)
+    if(NOT APPLE OR NOT KETPLUS_BUILD_DESKTOP)
+        install(TARGETS ketplus_job_executor RUNTIME DESTINATION bin COMPONENT Runtime)
+    endif()
+endif()
 
 # Claude Agent SDK sidecar: JS + production node_modules. Node itself is not
 # copied; the daemon runs this tree with ketplus-browser's bundled node
@@ -172,6 +180,10 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
         NO_TRANSLATIONS EXCLUDE_PLUGIN_TYPES platforms platformthemes styles
         EXCLUDE_PLUGINS qxcb qoffscreen ${ketplus_linux_excluded_runtime_plugins})
     install(SCRIPT "${ketplus_ctl_deploy}" COMPONENT Runtime)
+    qt_generate_deploy_app_script(TARGET ketplus_job_executor OUTPUT_SCRIPT ketplus_job_deploy
+        NO_TRANSLATIONS EXCLUDE_PLUGIN_TYPES platforms platformthemes styles
+        EXCLUDE_PLUGINS qxcb qoffscreen ${ketplus_linux_excluded_runtime_plugins})
+    install(SCRIPT "${ketplus_job_deploy}" COMPONENT Runtime)
     install(FILES "${PROJECT_SOURCE_DIR}/packaging/linux/ketplus-daemon.service"
         DESTINATION share/systemd/user COMPONENT Runtime)
 endif()

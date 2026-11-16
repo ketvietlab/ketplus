@@ -11,6 +11,7 @@
 #include "providers/CursorAdapter.h"
 #include "providers/compat/ProviderCapabilities.h"
 #include "runtime/ApprovalBroker.h"
+#include "runtime/ManagedTaskBridge.h"
 #include "runtime/ProviderHandoff.h"
 
 #include "CodexBrowserTools.h"
@@ -518,6 +519,7 @@ SessionHost::SessionHost(LocalJournal* journal, CodexAdapter* adapter,
     // After sessions_ is filled. A due conversation must see its session, or the catch-up
     // is recorded provider_not_ready and a run_once miss is consumed.
     startScheduleRunner();
+    initializeManagedTasks();
 }
 
 QJsonObject SessionHost::handleCommand(const QJsonObject& incoming, const QString& clientId) {
@@ -532,6 +534,31 @@ QJsonObject SessionHost::handleCommand(const QJsonObject& incoming, const QStrin
         return cancelPreparedSession(request);
     if (const auto failure = authorizePreparation(request); !failure.isEmpty())
         return failure;
+    if (isManagedTaskCommand(type)) {
+        if (type == "session.task.start")
+            return error("async_required", "Managed task admission uses handleCommandDeferred.");
+        if (type == "session.task.stop" || type == "session.task.output") {
+            Session* owner = nullptr;
+            if (checkedSession(request, &owner).isEmpty()) {
+                const auto found = journal_->backgroundTasks().get(
+                    request.value("payload").toObject().value("task_id").toString(),
+                    {owner->stored.id, owner->stored.generation, {}});
+                if (found.value("error_code") == "task_not_found") {
+                    for (const auto value : owner->backgroundTasks)
+                        if (value.toObject().value("task_id") ==
+                            request.value("payload").toObject().value("task_id"))
+                            return error("async_required",
+                                         "Legacy task controls use handleCommandDeferred.");
+                }
+            }
+        }
+        auto result = std::make_shared<QJsonObject>();
+        managedTaskCommand(request, clientId,
+                           [result](const QJsonObject& reply) { *result = reply; });
+        return result->isEmpty()
+                   ? error("async_required", "This task operation requires deferred dispatch.")
+                   : *result;
+    }
     // Local administration only, checked before the command-result cache.
     if (type.startsWith("session.agent_messages.") && !localClient(clientId))
         return error("forbidden", "Held-message authorization requires the local Desktop UI.");
@@ -698,6 +725,8 @@ QJsonObject SessionHost::handleCommand(const QJsonObject& incoming, const QStrin
 }
 
 bool SessionHost::hasActiveSessions() const {
+    if (managedTasks_ && managedTasks_->hasExecutions())
+        return true;
     for (const Session& session : sessions_) {
         const QString& state = session.stored.state;
         if (session.startingTurn || state == QStringLiteral("starting") ||
@@ -1340,6 +1369,14 @@ QJsonObject SessionHost::startTurn(const QJsonObject& request, bool localClient,
             it->stored.title = conversation_title::suggest(displayText);
         }
     }
+    if (managedTasks_) {
+        const auto failure = managedTasks_->prepareTurn({sessionId, it->stored.generation, {}});
+        if (!failure.isEmpty())
+            return failure;
+        it = sessions_.find(sessionId); // Admission may create another child conversation.
+        if (it == sessions_.end())
+            return error("session_not_found", "The conversation was closed during admission.");
+    }
     // ADR 0030: no desktop control while a remote client's turn runs. Busy sessions were
     // rejected above, so no turn is active here. A later local turn lifts the marker, so a
     // crash or a missed turn end can only leave control off.
@@ -1494,6 +1531,8 @@ QJsonObject SessionHost::startTurn(const QJsonObject& request, bool localClient,
         releaseTurnAttachments(*it);
         return error("journal_error", appendError);
     }
+    if (agentOrigin.isEmpty() && !payload.contains("schedule_id"))
+        resumeManagedTaskWake(sessionId, it->stored.generation);
     it->startingTurn = true;
     it->stopRequested = false;
     QJsonObject turnOptions = options;
@@ -1879,6 +1918,10 @@ void SessionHost::handleCommandDeferred(const QJsonObject& incoming, const QStri
         mediaReadDeferred(request, std::move(done));
         return;
     }
+    if (isManagedTaskCommand(request.value("message_type").toString())) {
+        managedTaskCommand(request, clientId, std::move(done));
+        return;
+    }
     if (isBackgroundTaskCommand(request.value(QStringLiteral("message_type")).toString())) {
         backgroundTaskCommand(request, std::move(done));
         return;
@@ -1937,8 +1980,9 @@ QJsonObject SessionHost::interrupt(const QJsonObject& request) {
     const qint64 generation = session->stored.generation;
     session->stopRequested = session->startingTurn || !session->stored.turnId.isEmpty() ||
                              session->stored.state == QStringLiteral("running");
+    holdManagedTaskWake(sessionId, generation, "user_stopped");
     QTimer::singleShot(0, approvals_, [this, sessionId, generation] {
-        approvals_->cancelPending(sessionId, generation);
+        approvals_->cancelPending(sessionId, generation, false);
     });
     if (session->stored.adapter == QStringLiteral("claude") ||
         session->stored.adapter == QStringLiteral("cursor") ||
@@ -2944,6 +2988,8 @@ void SessionHost::handleCanonicalQuestion(const QJsonValue& requestId, const QJs
 }
 
 void SessionHost::routeProviderResponse(const QJsonValue& taggedId, const QJsonObject& result) {
+    if (managedTaskPermission(taggedId, result))
+        return;
     if (answerAssistantQuestions(taggedId, result))
         return;
     QString adapterName;
@@ -2981,6 +3027,8 @@ void SessionHost::forgetProviderRoutes(const QList<QJsonValue>& requestIds) {
 
 void SessionHost::routeProviderError(const QJsonValue& taggedId, const QString& code,
                                      const QString& message) {
+    if (managedTaskPermission(taggedId, {{"decision", "decline"}}))
+        return;
     if (taggedId.toObject().value("ketplus_async_question").toBool())
         return;
     QString adapterName;

@@ -1,4 +1,5 @@
 #include "protocol/DaemonProtocol.h"
+#include "runtime/ManagedTaskBridge.h"
 #include "runtime/SessionHost.h"
 
 #include <QCryptographicHash>
@@ -65,6 +66,10 @@ SessionHost::~SessionHost() {
         }
     }
     deltaFlush_.stop();
+    // Destroy the dispatcher while session/journal fields still exist. QObject's
+    // child cleanup runs after C++ members have already been destroyed.
+    delete managedTasks_;
+    managedTasks_ = nullptr;
 }
 
 bool SessionHost::deferJournalEvent(Session& session, const QString& type,

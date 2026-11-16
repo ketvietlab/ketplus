@@ -81,14 +81,21 @@ QJsonArray updatesPage(const teams::TeamCoordinator& teams, const qint64 teamId,
 QString SessionHost::createMemberConversation(const QString& worktree, const QString& provider,
                                               const QString& model, const QString& effort,
                                               const QString& title, QString* problem,
-                                              const QString& executionPolicy) {
+                                              const QString& executionPolicy,
+                                              const QString& reservedSessionId) {
     const QString directory = normalizedWorktree(worktree);
     if (directory.isEmpty()) {
         *problem = QStringLiteral("The team's repository is not an existing directory.");
         return {};
     }
     Session session;
-    session.stored.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    session.stored.id = reservedSessionId.isEmpty()
+                            ? QUuid::createUuid().toString(QUuid::WithoutBraces)
+                            : reservedSessionId;
+    if (sessions_.contains(session.stored.id) || journal_->sessionExists(session.stored.id)) {
+        *problem = "The reserved conversation already exists.";
+        return {};
+    }
     session.stored.worktreePath = directory;
     session.stored.adapter = provider;
     session.stored.state = QStringLiteral("ready");

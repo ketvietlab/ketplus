@@ -354,6 +354,9 @@ if(APPLE)
         COMMAND "${CMAKE_COMMAND}" -E copy_if_different
             "$<TARGET_FILE:ketplus_daemon>"
             "$<TARGET_BUNDLE_DIR:ketplus>/Contents/Helpers/$<TARGET_FILE_NAME:ketplus_daemon>"
+        COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+            "$<TARGET_FILE:ketplus_job_executor>"
+            "$<TARGET_BUNDLE_DIR:ketplus>/Contents/Helpers/$<TARGET_FILE_NAME:ketplus_job_executor>"
         COMMAND "${CMAKE_COMMAND}" -E rm -rf
             "$<TARGET_BUNDLE_DIR:ketplus>/Contents/Resources/claude-sidecar"
         COMMAND /bin/cp -R "${KETPLUS_CLAUDE_SIDECAR_STAGE}"
@@ -363,7 +366,7 @@ if(APPLE)
         COMMAND "${CMAKE_COMMAND}" -E copy_directory
             "${PROJECT_SOURCE_DIR}/assets/agent-skills"
             "$<TARGET_BUNDLE_DIR:ketplus>/Contents/Resources/agent-skills"
-        DEPENDS ketplus ketplus_daemon ketplus_stage_claude_sidecar
+        DEPENDS ketplus ketplus_daemon ketplus_job_executor ketplus_stage_claude_sidecar
         VERBATIM
     )
     # ADR 0030: KetPlus Computer is a separately signed app nested in Contents/Helpers so TCC
@@ -604,7 +607,7 @@ if(APPLE)
 endif()
 
 if(APPLE)
-    install(TARGETS ketplus_daemon
+    install(TARGETS ketplus_daemon ketplus_job_executor
         RUNTIME DESTINATION "KetPlus.app/Contents/Helpers"
         COMPONENT Runtime
     )

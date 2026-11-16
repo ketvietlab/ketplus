@@ -124,8 +124,11 @@ QJsonObject SessionHost::listSessions(const QJsonObject& request) const {
             value.insert(QStringLiteral("awaiting_reply"), true);
         if (const auto sender = agentTurns.constFind(stored.id); sender != agentTurns.cend())
             value.insert(QStringLiteral("agent_turn"), *sender);
-        if (!session.backgroundTasks.isEmpty())
-            value.insert(QStringLiteral("background_tasks"), session.backgroundTasks);
+        const auto taskSnapshot = managedTaskSnapshot(session.stored.id, session.stored.generation);
+        const auto tasks = taskSnapshot.isEmpty() ? session.backgroundTasks
+                                                  : taskSnapshot.value("tasks").toArray();
+        if (!tasks.isEmpty())
+            value.insert(QStringLiteral("background_tasks"), tasks);
         values.append(value);
     }
     const QJsonObject live{

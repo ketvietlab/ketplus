@@ -1,0 +1,347 @@
+#include "runtime/ManagedTaskRuntime.h"
+#include "storage/BackgroundTaskLedger.h"
+
+#include <QEventLoop>
+#include <QFileInfo>
+#include <QJsonArray>
+#include <QSqlQuery>
+#include <QTemporaryDir>
+#include <QUuid>
+#include <QtTest>
+
+using namespace ketplus::daemon;
+
+namespace {
+class Fixture final {
+  public:
+    QTemporaryDir directory;
+    QString connection{QUuid::createUuid().toString()};
+    QSqlDatabase database{QSqlDatabase::addDatabase("QSQLITE", connection)};
+    BackgroundTaskLedger ledger{database};
+    std::unique_ptr<ManagedTaskRuntime> runtime;
+    int permissionRequests{0};
+    int updates{0};
+    ~Fixture() {
+        runtime.reset();
+        database.close();
+        // Ledger retains a handle until its destructor, so defer removeDatabase
+        // until after this fixture is destroyed through the test's scope below.
+    }
+    QString path() const { return QFileInfo(directory.path()).canonicalFilePath(); }
+    bool initialize(QString* error) {
+        database.setDatabaseName(directory.filePath("journal.sqlite"));
+        if (!database.open() || !ledger.initialize(error))
+            return false;
+        QSqlQuery query(database);
+        if (!query.exec("CREATE TABLE sessions(id TEXT PRIMARY KEY,generation INTEGER)") ||
+            !query.exec("INSERT INTO sessions VALUES('owner',1),('other',1)"))
+            return false;
+        runtime = std::make_unique<ManagedTaskRuntime>(ledger, path() + "/jobs",
+                                                       QStringLiteral(KETPLUS_JOB_EXECUTOR_PATH));
+        runtime->setCallbacks(
+            [this](const QJsonObject&) { ++updates; },
+            [this](const QJsonObject&, const QJsonObject&) { ++permissionRequests; }, {}, {});
+        return runtime->initialize(error);
+    }
+    BackgroundTaskIntent intent(const QString& key = "start") const {
+        return {{"owner", 1, "turn"}, key,   "process",        "Fixture",
+                key.toUtf8(),         10000, {{"cwd", path()}}};
+    }
+    QJsonObject start(const BackgroundTaskIntent& intent, const QJsonObject& execution) {
+        QJsonObject reply;
+        QEventLoop loop;
+        QTimer deadline;
+        deadline.setSingleShot(true);
+        QObject::connect(&deadline, &QTimer::timeout, &loop, &QEventLoop::quit);
+        deadline.start(10000);
+        runtime->start(intent, execution, [&](QJsonObject result) {
+            reply = std::move(result);
+            loop.quit();
+        });
+        if (reply.isEmpty())
+            loop.exec();
+        return reply;
+    }
+    QJsonObject execution(const QJsonArray& argv) const {
+        return {{"argv", argv}, {"cwd", path()}, {"env_delta", QJsonObject{}}};
+    }
+    QJsonObject get(const QString& id) const {
+        return ledger.get(id, {"owner", 1, {}}).value("task").toObject();
+    }
+};
+} // namespace
+
+class ManagedTaskRuntimeTest final : public QObject {
+    Q_OBJECT
+  private slots:
+    void closingIntermediateChildCancelsItsWholeSubtreeWithoutStoppingRoot() {
+        QString connection;
+        {
+            Fixture fixture;
+            connection = fixture.connection;
+            QString error;
+            QVERIFY(fixture.initialize(&error));
+            QStringList stopped;
+            fixture.runtime->setCallbacks(
+                {},
+                [&](const QJsonObject& task, const QJsonObject&) {
+                    fixture.runtime->permissionResolved(task.value("task_id").toString(), true);
+                },
+                [&](const QJsonObject& task, const QJsonObject&) {
+                    const auto id = task.value("task_id").toString();
+                    const auto child = "child-" + id;
+                    QSqlQuery query(fixture.database);
+                    query.prepare("INSERT INTO sessions VALUES(?,1)");
+                    query.addBindValue(child);
+                    QVERIFY(query.exec());
+                    query.prepare("INSERT INTO managed_job_children VALUES(?,?,1)");
+                    query.addBindValue(id);
+                    query.addBindValue(child);
+                    QVERIFY(query.exec());
+                    BackgroundTaskChange running;
+                    running.state = "running";
+                    running.handshakeCommitted = true;
+                    running.executionIdentity = {{"child_session_id", child},
+                                                 {"child_generation", 1}};
+                    fixture.runtime->childChanged(id, running);
+                },
+                [&](const QJsonObject& task) { stopped.append(task.value("task_id").toString()); });
+            auto request = fixture.intent();
+            request.kind = "agent";
+            const auto root = fixture.start(request, {{"prompt", "Fake child"}})
+                                  .value("task")
+                                  .toObject()
+                                  .value("task_id")
+                                  .toString();
+            QTRY_COMPARE(fixture.get(root).value("state"), "running");
+            request.owner.sessionId = "child-" + root;
+            request.clientRequestId = "nested";
+            request.specFingerprint = "nested";
+            const auto middle = fixture.start(request, {{"prompt", "Fake nested child"}})
+                                    .value("task")
+                                    .toObject()
+                                    .value("task_id")
+                                    .toString();
+            QTRY_COMPARE(
+                fixture.ledger.get(middle, request.owner).value("task").toObject().value("state"),
+                "running");
+            const auto middleOwner = request.owner;
+            request.owner.sessionId = "child-" + middle;
+            request.clientRequestId = "leaf";
+            request.specFingerprint = "leaf";
+            const auto leaf = fixture.start(request, {{"prompt", "Fake leaf"}})
+                                  .value("task")
+                                  .toObject()
+                                  .value("task_id")
+                                  .toString();
+            QTRY_COMPARE(
+                fixture.ledger.get(leaf, request.owner).value("task").toObject().value("state"),
+                "running");
+            fixture.runtime->cancelOwner(middleOwner, "session_closed");
+            QVERIFY(stopped.contains(middle));
+            QVERIFY(stopped.contains(leaf));
+            QVERIFY(!stopped.contains(root));
+            QCOMPARE(fixture.get(root).value("state"), "running");
+            QCOMPARE(
+                fixture.ledger.get(middle, middleOwner).value("task").toObject().value("state"),
+                "stopping");
+            QCOMPARE(
+                fixture.ledger.get(leaf, request.owner).value("task").toObject().value("state"),
+                "stopping");
+        }
+        QSqlDatabase::removeDatabase(connection);
+    }
+
+    void terminalCommitFailureRetainsReceiptAndRetriesWithoutRelaunch() {
+        QString connection;
+        {
+            Fixture fixture;
+            connection = fixture.connection;
+            QString error;
+            QVERIFY(fixture.initialize(&error));
+            QSqlQuery query(fixture.database);
+            QVERIFY(query.exec("CREATE TRIGGER fail_terminal BEFORE UPDATE ON managed_jobs "
+                               "WHEN new.state='completed' BEGIN "
+                               "SELECT RAISE(ABORT,'injected terminal write failure'); END"));
+            const auto start = fixture.start(
+                fixture.intent(),
+                fixture.execution({"/bin/sh", "-c", "printf X >> once; printf result"}));
+            const auto id = start.value("task").toObject().value("task_id").toString();
+            QTRY_COMPARE(fixture.permissionRequests, 1);
+            fixture.runtime->permissionResolved(id, true);
+            const auto receiptPath = fixture.path() + "/jobs/" + id + "/executor.json";
+            const auto executorFinished = [&] {
+                QFile file(receiptPath);
+                return file.open(QIODevice::ReadOnly) &&
+                       QJsonDocument::fromJson(file.readAll()).object().value("state") ==
+                           "completed";
+            };
+            QTRY_VERIFY_WITH_TIMEOUT(executorFinished(), 5000);
+            QTest::qWait(300); // At least one terminal write/retry has been refused.
+            QCOMPARE(fixture.get(id).value("state"), "running");
+            QVERIFY(query.exec("SELECT count(*) FROM managed_job_outbox"));
+            QVERIFY(query.next());
+            QCOMPARE(query.value(0).toInt(), 0);
+            query.finish();
+            QVERIFY(query.exec("DROP TRIGGER fail_terminal"));
+            QTRY_COMPARE_WITH_TIMEOUT(fixture.get(id).value("state"), "completed", 3000);
+            QVERIFY(query.exec("SELECT count(*) FROM managed_job_outbox"));
+            QVERIFY(query.next());
+            QCOMPARE(query.value(0).toInt(), 1);
+            query.finish();
+            QFile marker(fixture.path() + "/once");
+            QVERIFY(marker.open(QIODevice::ReadOnly));
+            QCOMPARE(marker.readAll(), QByteArray("X"));
+            QCOMPARE(fixture.runtime->output(id, fixture.intent().owner).value("output"), "result");
+        }
+        QSqlDatabase::removeDatabase(connection);
+    }
+
+    void runningStopIsIdempotentAndWaitsForExecutorCleanup() {
+        QString connection;
+        {
+            Fixture fixture;
+            connection = fixture.connection;
+            QString error;
+            QVERIFY(fixture.initialize(&error));
+            const auto first =
+                fixture.start(fixture.intent(), fixture.execution({"/bin/sleep", "60"}));
+            const auto id = first.value("task").toObject().value("task_id").toString();
+            QTRY_COMPARE(fixture.permissionRequests, 1);
+            fixture.runtime->permissionResolved(id, true);
+            QTRY_COMPARE_WITH_TIMEOUT(fixture.get(id).value("state"), "running", 3000);
+            QCOMPARE(fixture.runtime->stop(id, {"other", 1, {}}).value("error_code"),
+                     "task_not_found");
+            const auto stop = fixture.runtime->stop(id, fixture.intent().owner);
+            QCOMPARE(stop.value("task").toObject().value("state"), "stopping");
+            const auto stoppingRevision = stop.value("task").toObject().value("revision");
+            QCOMPARE(fixture.runtime->stop(id, fixture.intent().owner)
+                         .value("task")
+                         .toObject()
+                         .value("revision"),
+                     stoppingRevision);
+            QTRY_COMPARE_WITH_TIMEOUT(fixture.get(id).value("state"), "cancelled", 5000);
+            QCOMPARE(fixture.get(id).value("cleanup_status"), "best_effort_complete");
+            QCOMPARE(fixture.get(id).value("output_size").toInteger(), 0);
+            QCOMPARE(fixture.get(id).value("completion").toObject().value("status"), "suppressed");
+            const auto terminalRevision = fixture.get(id).value("revision");
+            QCOMPARE(fixture.runtime->stop(id, fixture.intent().owner)
+                         .value("task")
+                         .toObject()
+                         .value("revision"),
+                     terminalRevision);
+            QCOMPARE(fixture.ledger.list(fixture.intent().owner).value("active_count").toInt(), 0);
+        }
+        QSqlDatabase::removeDatabase(connection);
+    }
+
+    void runtimeRestartReconnectsLiveSupervisorWithoutReplayingSideEffect() {
+        QString connection;
+        {
+            Fixture fixture;
+            connection = fixture.connection;
+            QString error;
+            QVERIFY(fixture.initialize(&error));
+            const auto first =
+                fixture.start(fixture.intent(),
+                              fixture.execution({"/bin/sh", "-c", "printf X >> once; sleep 2"}));
+            const auto id = first.value("task").toObject().value("task_id").toString();
+            QTRY_COMPARE(fixture.permissionRequests, 1);
+            fixture.runtime->permissionResolved(id, true);
+            QTRY_COMPARE_WITH_TIMEOUT(fixture.get(id).value("state"), "running", 3000);
+            fixture.runtime.reset();
+            fixture.runtime =
+                std::make_unique<ManagedTaskRuntime>(fixture.ledger, fixture.path() + "/jobs",
+                                                     QStringLiteral(KETPLUS_JOB_EXECUTOR_PATH));
+            fixture.runtime->setCallbacks(
+                {}, [&](const QJsonObject&, const QJsonObject&) { ++fixture.permissionRequests; },
+                {}, {});
+            QVERIFY(fixture.runtime->initialize(&error));
+            QTRY_VERIFY_WITH_TIMEOUT(fixture.get(id).value("state") == "completed" ||
+                                         fixture.get(id).value("state") == "needs_attention",
+                                     6000);
+            QFile receipt(fixture.path() + "/jobs/" + id + "/executor.json");
+            QVERIFY(receipt.open(QIODevice::ReadOnly));
+            QVERIFY2(fixture.get(id).value("state") == "completed", receipt.readAll().constData());
+            QCOMPARE(fixture.permissionRequests, 1);
+            QFile marker(fixture.path() + "/once");
+            QVERIFY(marker.open(QIODevice::ReadOnly));
+            QCOMPARE(marker.readAll(), QByteArray("X"));
+            QCOMPARE(fixture.get(id).value("cleanup_status"), "best_effort_complete");
+        }
+        QSqlDatabase::removeDatabase(connection);
+    }
+
+    void intentCommitsBeforePermissionAndLaunchThenOutputIsOwnerScoped() {
+        QString connection;
+        {
+            Fixture fixture;
+            connection = fixture.connection;
+            QString error;
+            QVERIFY2(fixture.initialize(&error), qPrintable(error));
+            const auto request = fixture.intent();
+            const auto spec = fixture.execution({"/usr/bin/printf", "hello"});
+            const auto reply = fixture.start(request, spec);
+            QVERIFY(reply.value("ok").toBool());
+            const auto id = reply.value("task").toObject().value("task_id").toString();
+            QCOMPARE(fixture.get(id).value("state"), "queued");
+            QCOMPARE(fixture.permissionRequests, 0);
+            QVERIFY(!QFileInfo::exists(fixture.path() + "/jobs/" + id + "/executor.json"));
+            QTRY_COMPARE(fixture.permissionRequests, 1);
+            QCOMPARE(fixture.get(id).value("state"), "queued");
+            QCOMPARE(fixture.ledger.list(request.owner).value("active_count").toInt(), 0);
+            fixture.runtime->permissionResolved(id, true);
+            QTRY_VERIFY_WITH_TIMEOUT(fixture.get(id).value("state") == "completed" ||
+                                         fixture.get(id).value("state") == "needs_attention",
+                                     10000);
+            QVERIFY2(fixture.get(id).value("state") == "completed",
+                     qPrintable(QString::fromUtf8(QJsonDocument(fixture.get(id)).toJson())));
+            QCOMPARE(fixture.get(id).value("cleanup_status"), "best_effort_complete");
+            QCOMPARE(fixture.get(id).value("completion").toObject().value("status"), "pending");
+            const auto output = fixture.runtime->output(id, request.owner);
+            QVERIFY(output.value("ok").toBool());
+            QCOMPARE(output.value("output"), "hello");
+            QCOMPARE(fixture.get(id).value("output_size").toInteger(), 5);
+            QCOMPARE(fixture.runtime->output(id, {"other", 1, {}}).value("error_code"),
+                     "task_not_found");
+            const auto retry = fixture.start(request, spec);
+            QCOMPARE(retry.value("task").toObject().value("task_id"), id);
+            QVERIFY(retry.value("reused").toBool());
+            QCOMPARE(fixture.permissionRequests, 1);
+        }
+        QSqlDatabase::removeDatabase(connection);
+    }
+
+    void deniedPermissionAndQueuedStopNeverLaunch() {
+        QString connection;
+        {
+            Fixture fixture;
+            connection = fixture.connection;
+            QString error;
+            QVERIFY(fixture.initialize(&error));
+            const auto spec = fixture.execution({"/bin/sleep", "60"});
+            const auto first = fixture.start(fixture.intent(), spec);
+            const auto id = first.value("task").toObject().value("task_id").toString();
+            QTRY_COMPARE(fixture.permissionRequests, 1);
+            fixture.runtime->permissionResolved(id, false);
+            QCOMPARE(fixture.get(id).value("state"), "failed");
+            QCOMPARE(fixture.get(id).value("completion").toObject().value("status"), "suppressed");
+            QVERIFY(!QFileInfo::exists(fixture.path() + "/jobs/" + id));
+            const auto second = fixture.start(fixture.intent("second"), spec);
+            const auto nextId = second.value("task").toObject().value("task_id").toString();
+            QVERIFY(fixture.runtime->stop(nextId, fixture.intent().owner).value("ok").toBool());
+            QCOMPARE(fixture.get(nextId).value("state"), "cancelled");
+            const auto revision = fixture.get(nextId).value("revision");
+            QVERIFY(fixture.runtime->stop(nextId, fixture.intent().owner).value("ok").toBool());
+            QCOMPARE(fixture.get(nextId).value("revision"), revision);
+            fixture.runtime->permissionResolved(nextId, true);
+            QTest::qWait(300);
+            QCOMPARE(fixture.get(nextId).value("state"), "cancelled");
+            QCOMPARE(fixture.permissionRequests, 1);
+            QVERIFY(!QFileInfo::exists(fixture.path() + "/jobs/" + nextId));
+        }
+        QSqlDatabase::removeDatabase(connection);
+    }
+};
+QTEST_GUILESS_MAIN(ManagedTaskRuntimeTest)
+#include "ManagedTaskRuntimeTest.moc"

@@ -772,7 +772,111 @@ their logs and strip the suffix only when dispatching test commands.
 
 ### Claude background tasks
 
-The proposed provider-neutral replacement is [ADR 0127](decisions/0127-daemon-background-tasks.md).
+The isolated storage/executor targets use temporary SQLite databases and no
+provider accounts. They cover transaction-abort injection, byte paging across
+UTF-8 boundaries, reopen, bounded 10 MiB retention, cursor gaps, short-write
+coalescing, start retry, revision races, atomic terminal/outbox and wake acceptance,
+quota admission/park/resume, pagination above 16 jobs, and native cleanup audit.
+On macOS the executor suite starts a native supervisor and test-owned workloads;
+it exercises a durable pre-launch handshake, reconnect without replay, timeout,
+known detached descendants, supervisor crash, lease expiry, changed birth
+identities, a pre-exec identity barrier, Stop before its commit and short-lived
+commands that exit before Qt started notification. This is best-effort cleanup evidence, not proof that all possible
+unobserved descendants are contained. The isolated target does not exercise SessionHost API or UI:
+
+```sh
+cmake -S tests/daemon/background-output -B build/background-output -G Ninja
+cmake --build build/background-output
+ctest --test-dir build/background-output --output-on-failure
+```
+
+The daemon build adds `ketplus_managed_task_host_tests` and
+`ketplus_managed_task_ipc_tests` on macOS and Linux. Both use the scripted FakeCodex provider
+and temporary journals; they consume no account quota. They cover independent
+child sessions/output/approval, foreground Stop fencing without cancelling process
+jobs, busy-owner durable enqueue without steering, duplicate completion/start
+requests, actual IPC token authentication, owner forgery, retired-generation
+local administration and complete registry pagination beyond 16 rows. The ledger
+suite also injects prune failure and reopens tombstones to verify expired requests
+cannot execute again after defaults change.
+
+```sh
+cmake --build build/daemon-dev --target ketplus_managed_task_host_tests ketplus_managed_task_ipc_tests
+ctest --test-dir build/daemon-dev -R 'ketplus_managed_task_(host|ipc)_tests' --output-on-failure
+```
+
+These tests do not verify the shared UI, SDK native-background blocking or a
+signed deployment bundle. On Linux, process tests require a non-root user with
+a working systemd user manager, delegated cgroup v2/`nsdelegate`, `cgroup.kill`,
+and permission to create isolated user/mount/PID/cgroup namespaces. Missing
+capabilities reject start with `containment_unavailable`; do not lower host
+policy to make the suite pass. A read-only cgroup mount alone, PGID cleanup or
+same-UID delegation is not migration-containment evidence.
+
+The opt-in `ketplus_linux_job_executor_tests` runs the real packaged helper and
+registry. It covers missing-manager admission, durable retry/output, double-fork/
+setsid descendants and migration attempts, timeout during forks, supervisor
+SIGKILL and a separate daemon-runtime process killed before lease recovery and
+registry reopen. Run it together with the fake-provider Host and socket IPC tests
+only in an exclusively owned reference guest:
+
+```sh
+cmake --build build/daemon-dev --target ketplus_linux_job_executor_tests ketplus_managed_task_host_tests ketplus_managed_task_ipc_tests
+bash tests/daemon/linux-containment/executor-acceptance.sh build/daemon-dev
+```
+
+The script does not install dependencies or modify sysctls, mount permissions or
+AppArmor policy. A skipped opt-in suite is not Linux executor acceptance.
+
+Review regressions cover a successful descendant waking its parked managed child
+both with free slots and with its root's four slots occupied. The macOS executor
+test captures an audit-token signal target, makes the process exec a new image
+while retaining PID/birth, and verifies that sending the old target does not
+signal the new incarnation. Linux's stalled-manager fixture uses an independent
+POSIX Unix-socket listener that accepts DBus connections without answering auth:
+admission times out after six seconds while a timer keeps advancing and another
+real job remains running under its unchanged five-second executor lease.
+
+#### Background job runtime verification record
+
+On 2026-11-16, the T-2 runtime checkpoint passed the following checks without
+provider accounts or changes to an installed application:
+
+| Check | Environment | Result |
+| --- | --- | --- |
+| Host, IPC, native executor and runtime CTest suites after review fixes | macOS arm64, Qt 6.11.2 | 4/4, 61.51 s |
+| Production-helper executor, Host, IPC, output, ledger and spec CTest suites after review fixes | Ubuntu 24.04 arm64, kernel 6.8, systemd 255, Qt 6.11.0 | 6/6, 114.37 s; no skipped executor cases |
+| Runtime-component install into a separate prefix | Same Linux reference guest | Install succeeded; staged daemon `--check-runtime` succeeded with loader/plugin environment overrides removed |
+| Staged executor capability probe in a delegated user unit | Same Linux reference guest | `available=true` |
+| Contract fixtures and public-tree hygiene | macOS host | 9/9 Node tests and 4/4 Python tests |
+
+The Linux helper suite verifies inherited environment plus explicit delta/removal,
+durable start retry and output, migration attempts, detached descendants, timeout
+during active forks, Stop/complete races, supervisor SIGKILL, daemon lease expiry
+and journal reopen without command replay. Host/IPC fixtures use scripted providers
+and exercise approval, busy/Stop fences, provider exit, descendant cancellation and
+owner/grant checks. The separate T-7 primitive probes are not counted as these
+runtime results. Only the disposable guest had the documented namespace-policy
+bootstrap; the acceptance script and product installer do not apply it.
+
+An earlier full Linux run failed the Host assertion that a managed permission
+remained pending. The focused case subsequently passed (2.59 s), as did the full
+matrix above. Its cause was not established. The test now checks and prints the
+start reply before checking approval so an admission rejection can be distinguished
+from an approval-lifetime failure. Earlier failure logs are retained locally for
+review; the green rerun does not erase that observation.
+
+During regression development the Qt-based fake bus listener aborted in Qt
+Network's incoming-socket path. A GDB backtrace was retained; the fixture now
+uses an independent POSIX listener instead. The focused stalled-manager test
+passed (8.44 s), followed by the complete Linux matrix and staging checks above.
+This change does not attribute or fix a general Qt Network defect.
+
+This record does not verify SDK native-background blocking, shared desktop UI,
+cross-provider live inference, Linux amd64, signed macOS distribution or an
+installed service. Those remain separate provider/UI/release acceptance checks.
+
+The accepted provider-neutral contract is [ADR 0127](decisions/0127-daemon-background-tasks.md).
 Run its design-fixture check without a build or provider account:
 
 ```sh

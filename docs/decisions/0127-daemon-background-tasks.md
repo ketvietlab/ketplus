@@ -1,6 +1,6 @@
 # 0127: The daemon owns background tasks and their completion delivery
 
-Status: proposed (leader-defined contract; independent review pending)
+Status: accepted (contract; runtime implementation and platform verification pending)
 Date: 2026-11-16
 
 ## Context
@@ -64,6 +64,32 @@ explicit shell command, plus `cwd` and an environment delta. Shell interpretatio
 must be explicit; argv is not silently joined into shell text. An agent spec
 supplies child-turn configuration through KetPlus's managed-agent mechanism.
 
+The managed-agent `execution` object is
+`{provider?: string, model?: string, effort?: string, prompt: string, cwd?: string}`.
+`prompt` is required. Omitted settings are resolved from the owner's configuration
+and persisted at acceptance. Provider/model/effort must pass catalog validation;
+cwd is canonical and within the existing workspace/permission boundary. Reject
+`session_id`, tokens, `env`, `permissionMode` and system-prompt overrides.
+
+Each agent job owns a separate managed child session, linked uniquely and durably
+by `task_id`. Persist `child_session_id`, child generation and `parent_task_id`;
+never substitute a message to an arbitrary conversation. The child is an ordinary
+conversation with that ownership link, not an implicit team member or unowned
+side conversation. Its one work turn and tool continuations use the existing
+session/provider authorization and quota pipeline. A configured different provider
+is allowed without expanding authority: intersect the owner's current policy
+with workspace/provider policy. Child approvals and questions go through
+ApprovalBroker/UI; neither parent approval nor child creation is a blanket grant.
+
+An agent job completes only after its child turn and all descendant jobs are
+terminal and no permission remains pending. Child failure is `failed`. After
+crash, unknown inference is not replayed: reclaim the ownership tree, then mark
+`interrupted`. Stop/cancel/timeout or invalid parent generation fences completion,
+cancels child requests and reclaims every descendant job. Never kill a shared
+provider process to cancel a child. Stopping the parent's foreground turn retains
+the job under the normal wake fence. Nested jobs use the same registry and quotas
+and cannot escape the ownership tree. Tests use fake providers.
+
 The daemon derives `owner_session_id`, `owner_generation` and the originating
 turn from the authenticated caller context, not arbitrary owner fields in the
 payload. All operations validate ownership and the current generation; knowing
@@ -97,6 +123,15 @@ identity and executor lease identity. PID alone never authorizes adoption or
 signalling; process group ids alone do not solve reuse either. Managed agent
 identity identifies its child session/generation/turn through KetPlus's executor.
 
+Signalling binds a kernel target before validating its recorded birth: a pidfd
+on Linux, or a task audit token on macOS. The macOS token is obtained through a
+task-name port, validated against the recorded PID/birth, then passed to
+`proc_signal_with_audittoken`; the kernel checks the PID version when signalling.
+Failure to obtain that identity fails closed. Group enumeration supplies discovery
+evidence only; a check followed by a PID/process-group `kill` is not sufficient.
+See Apple's [libproc wrapper](https://github.com/apple-oss-distributions/xnu/blob/main/libsyscall/wrappers/libproc/libproc.c)
+and [kernel implementation](https://github.com/apple-oss-distributions/xnu/blob/main/bsd/kern/proc_info.c).
+
 Tokens and the full inherited environment must never be stored in the journal
 or exposed in UI. The environment delta is not permission to journal credentials.
 Execution metadata and output projections follow existing credential and
@@ -125,6 +160,41 @@ the winner or emit another completion event. Receiving a Stop request is not
 proof of cancellation. `cancelled` and `timed_out` require confirmation that
 the executor and all contained descendants are reclaimed. An already absent,
 never-launched executor must be proven absent through its durable launch intent.
+The user-selected macOS exception below replaces the absolute containment/cleanup
+requirements for that platform; it does not replace durable ownership or permissions.
+
+#### macOS native cleanup amendment (user decision D-2)
+
+macOS process jobs run natively with `containment_mode=native_best_effort`, not
+in a product VM. Supervisor, durable journal/handshake and lease remain mandatory.
+Reclaim the process/group and identifiable descendants using birth identities;
+never signal a PID merely because its number used to belong to the job.
+
+Expose `cleanup_status=not_required | pending | verified | unverified |
+best_effort_complete`. A normal root exit with every known process reclaimed and
+no cleanup error ends in the normal terminal state according to the exit result,
+with `best_effort_complete` and normal completion delivery. This is not `verified`
+and does not promise absence of unobserved descendants. Lack of kernel containment
+alone must not force every native job into an attention state.
+
+Cleanup errors, known surviving processes, lost identity/lease or an unreconciled
+restart instead produce nonterminal `needs_attention`,
+`cleanup_status=unverified`, `reason=cleanup_unverified`. Preserve the root result,
+exit code and output, plus manual-check guidance. Do not report clean success or
+cancellation. Release the execution slot only once the known executor has stopped;
+the retained attention record still counts against the 116 nonterminal cap and
+is never automatically pruned, including after owner close/generation change.
+Existing authenticated local administration may inspect it; do not invent a new
+grant. Cleanup retries signal only identities that can still be validated and
+never replay the command.
+
+Only a user may invoke `session.task.resolve_cleanup` with `task_id` and revision.
+CAS `needs_attention -> interrupted(reason=cleanup_acknowledged)` with a durable
+audit whose source is `user`. Acknowledgement is a user statement, not kernel
+cleanup evidence; keep the assurance level visible. Agents cannot invoke this
+action on the user's behalf. Neither `needs_attention` nor acknowledgement wakes
+an agent; publish a UI notice only. Permission, outbox, dedup and owner fences
+remain unchanged.
 
 ### 5. Supervisor, launch and restart safety
 
@@ -135,19 +205,73 @@ crashes on both sides of spawn/register; persisting a PID after spawn leaves an
 unacceptable ownership gap. A managed child agent has the same lifecycle
 obligations, including work it launches through the managed mechanism.
 
+Linux requires a delegated cgroup v2 **domain** per job, `cgroup.kill`, and
+`cgroup.events`/`populated`. Persist boot/subtree identity and contain the trusted
+launcher before any workload exec; the supervisor stays outside the subtree.
+Reclaim with `cgroup.kill` and confirm `populated=0` before terminal commit.
+Delegation to the workload's own UID alone does not prevent migration. A
+supported deployment must also supply tested unit/namespace isolation that
+prevents migration outside the job boundary. Missing capabilities return
+`containment_unavailable` before accepted, with no PGID fallback. The daemon
+must not install privilege changes, mount cgroups or change system ownership to
+make admission succeed. This does not claim to contain deliberate requests to
+external services. See the [kernel cgroup v2 documentation](https://docs.kernel.org/admin-guide/cgroup-v2.html)
+for delegation, migration and populated semantics.
+
+The reference Linux path uses the non-root daemon user's existing systemd user
+manager. Each supervisor is MainPID of a separate transient user service with
+`Delegate=yes`, `KillMode=control-group`, `TimeoutStopSec=3s`, and `Restart=no`.
+The daemon commits the deterministic unit/lease and boot identity before requesting
+the service. The supervisor creates a fresh `job` domain, persists its boot/device/
+inode and unit invocation identity, and places a trusted blocked launcher there
+before releasing its durable pre-exec gate. The supervisor itself stays outside
+that domain; the user manager reclaims the complete service on supervisor death.
+
+The trusted launcher enters user, mount, PID and cgroup namespaces, makes mounts
+private, mounts namespace-local proc/cgroup views, and closes every descriptor
+above stdio before applying the workload's environment or executing its program.
+This prevents a workload environment such as `LD_PRELOAD` from running before
+isolation and prevents inherited migration descriptors or namespace handles from
+crossing exec. The namespace's UID 0 maps only to the existing daemon UID.
+The daemon's inherited environment travels only in the authenticated, bounded
+private launch channel; it is applied with the explicit delta after isolation.
+It is not stored in the service unit, receipt, registry, or UI. Thus a user
+service's different default environment does not silently replace the daemon's
+environment. Oversized private launch data fails before a supervisor is spawned.
+`nsdelegate` and successful namespace setup are required by an admission probe;
+an unavailable user bus or denied namespace policy returns
+`containment_unavailable`, without creating a job. Administrators supply these
+capabilities; neither the daemon nor installer lowers host namespace policy.
+
+Daemon-side admission and user-manager RPCs are asynchronous, including supervisor
+start, receipt certification and recovery queries. A stalled manager must not
+suspend the event loop that sends leases to other healthy executors. The existing
+five-second lease is unchanged. Admission commits only after the capability result
+and rechecks generation/quota/idempotency at that point; internal synchronous Host
+start dispatch is rejected before beginning admission.
+
+Linux records use `containment_mode=cgroup_v2`. `cleanup_status=verified` requires
+an identity-matching domain with `populated=0`, or verified service reclamation/
+host reboot during recovery. Otherwise the record stays `stopping`,
+`cleanup_pending=true`, and retains its slot. The native macOS acknowledgement
+action does not resolve this Linux state. This boundary contains the workload's
+own migration authority; it is not a sandbox against an independently acting
+same-UID host process or requests deliberately made to external services.
+
 Lease loss terminates contained work, then escalates to kill after a finite
 grace period. Containment includes descendants, not just the direct QProcess.
 An implementation must demonstrate the platform's containment behavior,
 including escape attempts; a process group alone is not a blanket guarantee.
-If safe containment cannot be provided on a platform, start is explicitly
-refused. The platform executor and its handshake are implementation gates,
+Except for the macOS native amendment above, if safe containment cannot be
+provided on a platform, start is explicitly refused. The platform executor and its handshake are implementation gates,
 not capabilities proven by this documentation.
 
 On daemon restart, reconcile every nonterminal registry record with the
 executor identity and lease. Reconnect only to a live, verifiable executor;
 otherwise reclaim it and record `interrupted` only after confirming the
 containment is clean. If that cannot be confirmed, keep `stopping/cleanup_pending`
-and continue reconciliation and warnings. Never relaunch a command with
+and continue reconciliation and warnings. macOS follows the native amendment's
+`needs_attention` path when restart cannot be reconciled. Never relaunch a command with
 side effects to reconstruct its result, even when its last state was queued or
 starting. Provider exit does not kill a daemon-owned process job.
 
@@ -175,6 +299,12 @@ This is at-least-once event delivery with durable acceptance deduplication.
 It is not exactly-once model inference. A turn interrupted by a crash is not
 automatically replayed to simulate an unobserved result.
 
+T-2 owns the enqueue/accept API with `event_id`. Commit the deduplication entry
+and accepted-turn record together before dispatching to a provider. Persist
+`accepted` and `dispatching` so recovery never dispatches an inference whose
+outcome is unknown. The provider/agent integration lane consumes this boundary;
+message-only routing cannot replace it.
+
 ### 7. Owner wake policy
 
 | Owner condition | Completion handling |
@@ -185,6 +315,7 @@ automatically replayed to simulate an unobserved result.
 | User Stop or pause | Keep pending; only explicit Resume releases it |
 | Closed/deleted owner or replaced generation | Suppress with a recorded reason |
 | Job cancelled by Stop or session close | Suppress; cancellation must not restart the agent |
+| Native cleanup needs attention or is user-acknowledged | UI notice only; no auto-wake |
 | Permission denied after job acceptance | `failed` with `reason=permission_denied`; suppress completion with the same reason |
 
 Delivery is rechecked at acceptance and dispatch, including generation and Stop
@@ -218,15 +349,38 @@ learn when requested bytes have fallen out of retention, rather than interpretin
 the surviving tail as a complete transcript. Byte pagination must tolerate
 UTF-8 characters crossing a page boundary. UI decoding is not cursor arithmetic.
 
-Terminal metadata is retained for seven days. Nonterminal records and pending
-outbox events must not be pruned. Retention cannot break a pending event's
-reference or its durable acceptance deduplication.
+Terminal metadata and output are retained for seven days. Prune only settled
+terminal records: retain pending outbox, accepted/dispatching wake and live
+ownership references. Atomically replace pruned metadata with a tombstone
+`{owner_session_id, owner_generation, client_request_id, spec_hash, task_id,
+expired_at}` and the accepted defaults snapshot needed to normalize retries.
+Same-key/same-spec retries return `ok=false`, `error_code=task_expired`, the
+original `task_id` and `expired=true`; changed specs return
+`idempotency_conflict`. Neither path launches execution. Canonical hashing
+resolves omitted fields against the original defaults, including after owner
+configuration changes. Retain the requested-to-resolved cwd mapping so a retry
+does not follow a later symlink retarget or deletion. Tombstones have no independent TTL while that generation
+can accept requests; GC is permitted only with permanent generation revocation.
+Keep nonterminal records and pending outbox events. Retention cannot break a pending event's
+reference or its durable acceptance deduplication. Keep the compact child link
+as an ownership fence after parent expiry, so an expired worker cannot become a
+new quota root simply because its metadata aged out.
 
-Default admission limits are four active jobs per session, sixteen active jobs
-globally and one hundred queued jobs globally. Exhaustion returns
-`resource_exhausted`. Admission checks and intent creation must be atomic so
-concurrent requests cannot overrun limits; a retry of an accepted request does
-not allocate another slot.
+Default admission limits are four execution slots per root owner session/generation
+and sixteen globally. Queued jobs do not consume slots. When slots are full,
+accept into the durable queue if its one-hundred-job capacity permits; reject
+with `resource_exhausted` when the queue is full. Independently cap all nonterminal
+jobs, including parked agents, at 116. Rejected admissions create no job/outbox.
+
+Starting/running/stopping work retains its slot until cleanup. An agent waiting
+only for children/permission may park and release its slot only after confirming
+that no inference is running. It retains its job, ownership and timeout; resuming
+inference must reacquire a slot. Descendants count against the same root owner.
+Claim slots atomically in FIFO order among eligible jobs, skipping owners at
+capacity to avoid head-of-line blocking. Reconcile reservations after crash.
+Admission checks and intent creation are atomic; accepted-request retries consume
+neither another queue entry nor a slot. Tests must cover a parent waiting on a
+child at the root quota so parked parents cannot deadlock the queue.
 
 ### 9. Provider migration and desktop contract
 
@@ -317,3 +471,41 @@ those integration points without dropping legacy cleanup or inventing results.
 - Claim exactly-once execution/inference: a crash can leave an already executed
   side effect or model request with an unknown result. Durable deduplication
   prevents duplicate acceptance, not that fundamental ambiguity.
+
+## Implementation checkpoint for T-2
+
+The native pre-exec barrier records the forked root birth identity durably before
+releasing it to exec; gate EOF aborts a child whose supervisor died before release.
+This also covers commands that exit before Qt emits its started notification.
+
+The storage/runtime implementation now includes the transactional registry,
+permission-gated native macOS supervisor, owner-bound IPC operations, independent
+managed child conversations, durable completion acceptance and wake dispatch.
+`background_tasks` remains a 16-row compatibility projection; its active records
+come first, while list/get/output/stop use the complete registry. Authenticated
+local administration can inspect a retained owner/generation after conversation
+deletion and acknowledge cleanup with revision/audit checks; agent and remote
+credentials do not gain this administration grant.
+
+An accepted wake contains a durable logical `turn_id=background-wake:<event_id>`.
+A live dispatcher may defer a claimed wake only before invoking a provider.
+Recovered `dispatching` records become interrupted and are never replayed;
+`accepted` records remain eligible after restart. Managed child terminal commit
+waits for descendant jobs and their accepted/pending completion continuations.
+A parked child must reacquire a quota slot before another inference starts.
+When reacquisition succeeds, its accepted wake is claimed and dispatched in the
+same poll; an idle-child poll cannot park that slot again before dispatch.
+
+Native macOS executor and fake-provider Host/IPC tests are runtime evidence;
+provider migration and shared UI acceptance remain separate gates. Linux process
+admission probes the reference user-service/namespace capabilities and fails
+closed when they are missing. On the Ubuntu 24.04 arm64 reference guest, the
+production helper, registry, fake-provider Host, IPC and restart acceptance suites
+pass together; Runtime-component staging also passes runtime discovery and a
+capability probe executed by the staged helper. See the dated verification record
+in [testing](../testing.md#background-job-runtime-verification-record).
+This evidence does not establish support on every Linux distribution or replace
+the required deployment capability probe. The separate
+[T-7 evidence](0127-linux-containment-evidence.md) establishes environment
+primitives, not executor acceptance. Its guest-only namespace-policy bootstrap
+is not a product installer step or a product VM dependency.

@@ -1,0 +1,37 @@
+#include "runtime/executor/LinuxJobContainment.h"
+#include "runtime/executor/NativeJobSupervisor.h"
+
+#include <QCoreApplication>
+#include <QFile>
+#include <QJsonDocument>
+#include <QTextStream>
+
+int main(int argc, char** argv) {
+    QCoreApplication application(argc, argv);
+    const auto arguments = application.arguments();
+#ifdef Q_OS_LINUX
+    if (arguments.size() == 4 && arguments[1] == "--linux-probe")
+        return ketplus::daemon::executor::linuxContainmentProbe(arguments[2], arguments[3]);
+    if (arguments.size() == 2 && arguments[1] == "--linux-launch") {
+        QFile input;
+        if (!input.open(stdin, QIODevice::ReadOnly))
+            return 125;
+        const auto bytes = input.read(256 * 1024 + 1);
+        if (bytes.size() > 256 * 1024)
+            return 125;
+        const auto spec = QJsonDocument::fromJson(bytes).object();
+        return spec.isEmpty() ? 125 : ketplus::daemon::executor::linuxIsolationLaunch(spec);
+    }
+#endif
+    if (arguments.size() != 4 || arguments[2].isEmpty() || arguments[2].size() > 128 ||
+        arguments[3].isEmpty() || arguments[3].size() > 128)
+        return 64;
+    ketplus::daemon::executor::NativeJobSupervisor supervisor(arguments[1], arguments[2],
+                                                              arguments[3]);
+    QString error;
+    if (!supervisor.initialize(&error)) {
+        QTextStream(stderr) << error << Qt::endl;
+        return 125;
+    }
+    return application.exec();
+}

@@ -19,6 +19,33 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/storage/LocalJournalDeletion.cpp
     src/runtime/SessionHostDeletion.cpp
     src/storage/LocalJournalTasks.cpp
+    src/storage/BackgroundTaskOutput.cpp
+    src/storage/BackgroundTaskLedger.cpp
+    src/storage/BackgroundTaskTransitions.cpp
+    src/storage/BackgroundTaskDelivery.cpp
+    src/storage/BackgroundTaskWakeQueue.cpp
+    src/storage/BackgroundTaskQuota.cpp
+    src/storage/BackgroundTaskList.cpp
+    src/storage/BackgroundTaskFingerprint.cpp
+    src/storage/BackgroundTaskRetention.cpp
+    src/storage/BackgroundTaskExecutors.cpp
+    src/storage/BackgroundTaskChildren.cpp
+    src/storage/LocalJournalManagedTasks.cpp
+    src/runtime/executor/NativeJobClient.cpp
+    src/runtime/executor/LinuxJobContainment.cpp
+    src/runtime/executor/NativeJobRecovery.cpp
+    src/runtime/executor/NativeProcessIdentity.cpp
+    src/runtime/executor/NativeJobControlAddress.cpp
+    src/runtime/ManagedTaskRuntime.cpp
+    src/runtime/ManagedTaskProcesses.cpp
+    src/runtime/ManagedTaskOutput.cpp
+    src/runtime/ManagedTaskSpec.cpp
+    src/runtime/ManagedTaskBridge.cpp
+    src/runtime/ManagedTaskPermissions.cpp
+    src/runtime/ManagedTaskChildren.cpp
+    src/runtime/ManagedTaskChildOutput.cpp
+    src/runtime/ManagedTaskWake.cpp
+    src/runtime/SessionHostManagedTasks.cpp
     src/storage/LocalJournalArchive.cpp
     src/storage/LocalJournalTags.cpp
     src/cloud/CloudControlCredentials.cpp

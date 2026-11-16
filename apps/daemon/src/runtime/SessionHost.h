@@ -35,6 +35,7 @@ class ClaudeAccountUsage;
 class CodexAdapter;
 class CursorAdapter;
 class ProviderAdapter;
+class ManagedTaskBridge;
 
 class SessionHost final : public QObject, private AgentHostPort, private teams::TeamHostPort {
     Q_OBJECT
@@ -105,6 +106,7 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     // the task_id its latest tasks.changed event listed. Answers once the provider has replied.
     void backgroundTaskCommand(const QJsonObject& request, CommandCallback done);
     [[nodiscard]] static bool isBackgroundTaskCommand(const QString& type);
+    [[nodiscard]] static bool isManagedTaskCommand(const QString& type);
     // ADR 0015 capability of the provider behind `adapter` ("codex", "claude", "cursor" or
     // "copilot").
     [[nodiscard]] bool providerSupports(const QString& adapter, const QString& capability) const;
@@ -138,6 +140,16 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     void noticeReady(const QString& type, const QJsonObject& payload);
 
   private:
+    friend class ManagedTaskBridge;
+    void initializeManagedTasks();
+    void managedTaskCommand(const QJsonObject& request, const QString& clientId,
+                            CommandCallback done, bool agentCaller = false);
+    bool managedTaskPermission(const QJsonValue& requestId, const QJsonObject& result);
+    void holdManagedTaskWake(const QString& sessionId, qint64 generation, const QString& reason);
+    void resumeManagedTaskWake(const QString& sessionId, qint64 generation);
+    [[nodiscard]] QJsonObject managedTaskSnapshot(const QString& sessionId,
+                                                  qint64 generation) const;
+    ManagedTaskBridge* managedTasks_{nullptr};
     ClaudeAccountUsage* claudeAccountUsage_{nullptr};
     void readClaudeAccountUsage(const QJsonObject& request, const QString& clientId,
                                 CommandCallback done);
@@ -443,7 +455,8 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     QString createMemberConversation(const QString& worktree, const QString& provider,
                                      const QString& model, const QString& effort,
                                      const QString& title, QString* problem,
-                                     const QString& executionPolicy = {});
+                                     const QString& executionPolicy = {},
+                                     const QString& reservedSessionId = {});
     void discardMemberConversation(const QString& sessionId);
     // Copies the source history in bounded event-loop passes (ADR 0094), then answers.
     struct PendingFork;
