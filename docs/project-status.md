@@ -201,10 +201,12 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   `team.decision.answer`), the tasks with a state filter and the outside-lane flag, the
   members, and the updates from `team.get`, newest first. Paused and queue banners explain
   why turns wait. `team.changed` rebuilds it in place and keeps the scroll position. A
-  task opens a 640 px dialog: state and lane badges, the facts two to a line, the
-  description as Markdown cut at about 150 px behind Show all, the criteria with how many
-  are met, and the full history; the body scrolls while the actions stay in view. Hand
-  over… opens a dialog of its own and sends `team.task.handover` with another developer
+  task opens a 720 px dialog bounded by the available window: state and lane badges, the
+  facts two to a line, the description as Markdown cut at about 150 px behind Show all,
+  the criteria with how many
+  are met, and the full history; the body scrolls while the actions stay in view. A valid
+  HTTP(S) pull-request URL from task metadata opens through a keyboard-accessible link;
+  missing or invalid metadata stays plain text. Hand over… opens a dialog of its own and sends `team.task.handover` with another developer
   and a required reason; Open the owner opens that conversation. The page never grows
   wider than its viewport: text wraps or elides with the whole value as tooltip, a
   decision's sentence choices become rows, the task table drops lane, owner, PR and

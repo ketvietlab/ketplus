@@ -40,7 +40,7 @@ class TeamTaskDialog final : public QWidget {
     [[nodiscard]] QString handoverKey() const;
 
     // Wider than a form's dialog, for a description to read.
-    static constexpr int kCardWidth = 640;
+    static constexpr int kCardWidth = 720;
 
     static ket::Dialog* present(QWidget* anchor, TeamDirectory* teams, const QString& teamId,
                                 const QString& taskId);
@@ -56,6 +56,7 @@ class TeamTaskDialog final : public QWidget {
     bool event(QEvent* event) override;
 
   private:
+    static QWidget* pullRequestLink(const QString& value, QWidget* parent);
     void rebuild();
     void fitHeight();
     // The newest page of history, or with `earlier` the page before the first entry shown.

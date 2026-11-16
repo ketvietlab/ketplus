@@ -7,8 +7,10 @@
 #include "teams/TeamPageParts.h"
 #include "teams/TeamTaskDialog.h"
 
+#include <QDesktopServices>
 #include <QJsonArray>
 #include <QPointer>
+#include <QUrl>
 #include <QVBoxLayout>
 
 #include <utility>
@@ -16,6 +18,19 @@
 // The task dialog's actions: presenting it, reading its history and handing the task over.
 
 namespace ketplus {
+
+QWidget* TeamTaskDialog::pullRequestLink(const QString& value, QWidget* parent) {
+    const QUrl url(value, QUrl::StrictMode);
+    if (!url.isValid() || url.isRelative() || url.host().isEmpty() || !url.userInfo().isEmpty() ||
+        (url.scheme() != QStringLiteral("https") && url.scheme() != QStringLiteral("http")))
+        return nullptr;
+    auto* open = new ket::Button(tr("Open"), ket::ButtonVariant::Ghost, parent);
+    open->setControlSize(ket::ControlSize::Small);
+    open->setToolTip(value);
+    open->setAccessibleName(tr("Open %1").arg(value));
+    connect(open, &QAbstractButton::clicked, open, [url] { QDesktopServices::openUrl(url); });
+    return open;
+}
 
 void TeamTaskDialog::readHistory(const bool earlier) {
     if (historyPending_) {
