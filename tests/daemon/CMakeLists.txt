@@ -92,6 +92,8 @@ ketplus_add_daemon_test(ketplus_daemon_context_relay_tests WorktreeContextRelayT
 target_sources(ketplus_daemon_context_relay_tests PRIVATE cloud-privacy/MemoryCredentials.cpp)
 ketplus_add_daemon_test(ketplus_cloud_trust_lifecycle_tests cloud-privacy/CloudTrustLifecycleTest.cpp)
 target_sources(ketplus_cloud_trust_lifecycle_tests PRIVATE cloud-privacy/MemoryCredentials.cpp)
+ketplus_add_daemon_test(ketplus_sender_key_cache_tests cloud-privacy/SenderKeyCacheTest.cpp)
+target_sources(ketplus_sender_key_cache_tests PRIVATE cloud-privacy/MemoryCredentials.cpp)
 ketplus_add_daemon_test(ketplus_daemon_cloud_privacy_tests cloud-privacy/CloudPrivacyTest.cpp)
 target_sources(ketplus_daemon_cloud_privacy_tests PRIVATE cloud-privacy/MemoryCredentials.cpp)
 # Signed builds may run PCRE2 without JIT; cloud projection must stay linear there too.

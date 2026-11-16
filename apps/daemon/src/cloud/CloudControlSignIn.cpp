@@ -31,6 +31,7 @@ const QString canceled = QStringLiteral("Sign-in was canceled.");
 
 void CloudControlClient::signIn(LocalCallback callback) {
     const quint64 signInEpoch = ++accountEpoch_;
+    invalidateSenderKeys();
     dropBrowserSignIn();
     signInError_.clear();
     QString installationId = storedString(QStringLiteral("installation-id"));
@@ -99,6 +100,7 @@ void CloudControlClient::signIn(LocalCallback callback) {
 void CloudControlClient::cancelSignIn(LocalCallback callback) {
     if (browserSignIn_ || deviceSignInStarting_ || !deviceCode_.isEmpty()) {
         ++accountEpoch_;
+        invalidateSenderKeys();
         dropBrowserSignIn();
     }
     signInError_.clear();
@@ -207,6 +209,7 @@ void CloudControlClient::enrollMachine(const quint64 signInEpoch, const QString&
             // returns the same identity. Keep the sign-in epoch so its completion callback
             // can still finish. Fence before resetting pins, including partial storage failure.
             ++enrollmentRevision_;
+            invalidateSenderKeys();
             const bool stored =
                 pins_.reset(&storageError) &&
                 storeString(QStringLiteral("control-url"), baseUrl_.toString(), &storageError) &&
