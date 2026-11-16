@@ -33,7 +33,17 @@ compiles the suite once, on the oldest runner of the set so the binaries load
 on the newer ones, and uploads the build tree (without object files or static
 libraries) as a three-day artifact. A `test` job per runner version
 (`fail-fast: false`) restores the same Qt and Node, unpacks the tree and runs
-`ctest` with `QT_QPA_PLATFORM=offscreen`:
+`ctest` with `QT_QPA_PLATFORM=offscreen`.
+
+The macOS Pro build configures `Python3_EXECUTABLE` as the checked-in
+`packaging/macos/ci-python3` launcher. CTest keeps this workspace-stable command
+instead of a build runner's versioned Python toolcache path. The launcher resolves
+`python3` from the executing runner's PATH and preserves arguments and exit codes;
+the test job checks that interpreter before CTest. This applies to the signing CLI,
+team translation catalog and SSH transaction fixtures, without altering their
+assertions or platform skips. `python3 tests/packaging/test_ci_python_launcher.py`
+checks configuration with one interpreter and execution after it is removed and
+replaced on PATH, plus missing-interpreter and child failure/skip behavior.
 
 | Job | Built on | Tested on |
 | --- | --- | --- |
