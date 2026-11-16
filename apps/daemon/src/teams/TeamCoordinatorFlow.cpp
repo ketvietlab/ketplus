@@ -51,9 +51,22 @@ QString digestText(const Team& team, const QList<TeamUpdateRecord>& updates) {
         const QString key = update.taskId;
         if (!lines.contains(key))
             order.append(key);
+        QString text = update.text;
+        if (update.kind == QStringLiteral("risk_route")) {
+            if (const auto decision = risk::fromJson(update.data)) {
+                const Task* task = key.isEmpty() ? nullptr : team.task(key);
+                text =
+                    QStringLiteral("Leader route %1; actor %2; head %3; evidence %4; "
+                                   "status %5; historical audit, not reviewer verdict/approval.")
+                        .arg(risk::routeName(decision->route), decision->actor, decision->revision,
+                             decision->evidenceIds.isEmpty() ? QStringLiteral("none")
+                                                             : decision->evidenceIds.first(),
+                             task ? task->state : QStringLiteral("team"));
+            }
+        }
         lines[key].append(QStringLiteral("%1 %2").arg(
             update.actionable ? QStringLiteral("- [needs you]") : QStringLiteral("-"),
-            update.text.left(400)));
+            text.left(400)));
     }
     QStringList text{
         QStringLiteral("Team %1: what changed since your last digest.").arg(team.name)};

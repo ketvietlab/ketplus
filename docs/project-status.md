@@ -1056,11 +1056,16 @@ visible in the draft. Per-file limits match the local workspace; daemon draft qu
 remain authoritative. Attachments require an existing conversation/session. See ADR
 0119 for lifecycle and protocol details and ADR 0007 for staging limits.
 
-## Team routing foundation (pending review)
+## Team routing and host evidence (pending review)
 
 The daemon has a versioned evidence-gated risk routing model and coordinator API
 (ADR 0129). Explicit same-team leader decisions can record advisory, verified
 low-risk or reviewer routes without manufacturing reviewer verdicts or completion.
-The default trusted-evidence adapter returns unknown. Runtime receipt production,
-agent-tool/UI wiring and workflow consumption remain follow-up work; this is not
-a shipped fast-pass or resource-cleanup claim.
+Authenticated agent tools add host receipt verification and explicit leader route
+decisions. The first independent semantic validator proves only mechanical plain
+prose reflow; unknown/code/material changes remain on the reviewer route. Receipts
+come from fixed host checks at the exact task revision, never caller risk/pass
+assertions. See [team-risk-routing.md](team-risk-routing.md). A route is an audit
+record, not a reviewer verdict, a user approval, completion or merge eligibility.
+Workflow consumption and general semantic verification remain separate work;
+there is no automatic cleanup capability.

@@ -140,7 +140,8 @@ QJsonArray firstOf(const QJsonArray& values, const qsizetype count) {
 } // namespace
 
 bool SessionHost::isRemoteTeamCommand(const QString& type) {
-    return allowedFields().contains(type);
+    return allowedFields().contains(type) || type == QStringLiteral("team.route.decide") ||
+           type == QStringLiteral("team.route.verify");
 }
 
 bool SessionHost::isRemoteTeamRead(const QString& type) {
@@ -164,6 +165,15 @@ QHash<QString, QJsonObject> SessionHost::teamMetadata() const {
 void SessionHost::remoteTeamCommand(const QJsonObject& request, const teams::remote::Ids& ids,
                                     CommandCallback done) {
     const QString type = request.value(QStringLiteral("message_type")).toString();
+    // A paired user has no agent-token leader binding. Reject before payload
+    // parsing, caching or dispatch, even when it names a real leader session.
+    if (type == QStringLiteral("team.route.decide") ||
+        type == QStringLiteral("team.route.verify")) {
+        done(refusal(QStringLiteral("role_forbidden"),
+                     QStringLiteral("Use the authenticated team agent tools; a paired client "
+                                    "cannot impersonate the leader.")));
+        return;
+    }
     const QJsonObject payload = request.value(QStringLiteral("payload")).toObject();
     if (!isRemoteTeamCommand(type)) {
         done(refusal(QStringLiteral("unknown_operation"),

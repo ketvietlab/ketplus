@@ -10,6 +10,19 @@ cmake --build --preset dev
 ctest --preset dev
 ```
 
+Team route tools (ADR 0130): run `ketplus_team_routing_tools_tests` together with
+the team risk-policy, agent-tools, agent-tasks, protocol and local/remote team
+fixtures. The positive case uses temporary real Git objects → the actual bounded
+prose-reflow producer → the runtime receipt store → coordinator policy. Unsupported
+semantics, forged facts/IDs, wrong actors, dirty/stale revisions and user-client
+impersonation fail closed. It starts no real provider and executes no repository
+scripts. Real Git attack fixtures set `diff.ignoreSubmodules=all` to conceal an
+added gitlink, or replace the base tree to conceal an authentication-code change.
+The producer must reject both complete deltas and the authenticated tools must
+issue no receipt or low-risk route. A shared host header/build-wiring change also
+requires the full build and full Pro suite below; focused fixtures alone are not
+the complete matrix.
+
 Every Pro/daemon ctest test runs with `QT_QPA_PLATFORM=offscreen`: `ketplus_tests_offscreen()`
 (`cmake/OffscreenTests.cmake`) sets it for each test in `tests/` and `tests/daemon/`, over the
 test's own environment and the shell's, so a test run never opens windows on the screen. A

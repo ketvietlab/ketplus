@@ -107,6 +107,10 @@ QString SessionHost::teamMemberByNumber(const teams::Team& team, const QString& 
 // review, the leader assigns a task or hands it over.
 void SessionHost::prepareTeamOperation(const QString& sessionId, const QString& operation,
                                        const QJsonObject& payload, std::function<void()> then) {
+    if (operation == QStringLiteral("team_task_route_verify")) {
+        prepareTeamRouting(sessionId, payload, std::move(then));
+        return;
+    }
     using Kind = teams::TeamCoordinator::TaskRequest::Kind;
     const teams::Team* team = teams_ ? teams_->teamOf(sessionId) : nullptr;
     const QString role = team ? team->member(sessionId)->role : QString{};
@@ -143,6 +147,9 @@ QJsonObject SessionHost::teamOperation(const QString& sessionId, const QString& 
     const qint64 teamId = team->id;
     const QString role = team->member(sessionId)->role;
     const QString taskId = payload.value(QStringLiteral("task_id")).toString();
+    if (operation == QStringLiteral("team_task_route_verify") ||
+        operation == QStringLiteral("team_task_route_decide"))
+        return teamRoutingOperation(sessionId, operation, payload);
     const auto answer = [&](const teams::TeamResult& result, const QString& id) {
         if (!result.ok())
             return refusal(result.error->code, result.error->message);

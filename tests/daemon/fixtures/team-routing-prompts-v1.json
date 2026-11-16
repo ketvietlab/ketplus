@@ -1,0 +1,20 @@
+[
+  {
+    "name": "advisory_answer_without_task",
+    "synthetic_prompt": "Explain how these two team routes differ.",
+    "route": "leader_direct",
+    "required_guidance": "do not manufacture a developer task or reviewer turn"
+  },
+  {
+    "name": "host_verified_mechanical_change",
+    "synthetic_prompt": "The host verified equivalent prose reflow at the exact clean commit.",
+    "route": "developer_leader",
+    "required_guidance": "verified low risk may use developer_leader"
+  },
+  {
+    "name": "uncertain_or_material_change",
+    "synthetic_prompt": "The change modifies authentication and its risk coverage is unknown.",
+    "route": "developer_reviewer",
+    "required_guidance": "high risk, uncertainty or missing evidence uses developer_reviewer"
+  }
+]

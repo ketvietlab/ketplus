@@ -47,6 +47,8 @@ QJsonObject tool(const QString& name, const QString& description, const QJsonObj
 const QStringList& names() {
     static const QStringList value{QStringLiteral("team_get"),
                                    QStringLiteral("team_tasks"),
+                                   QStringLiteral("team_task_route_verify"),
+                                   QStringLiteral("team_task_route_decide"),
                                    QStringLiteral("team_task_update"),
                                    QStringLiteral("team_wait"),
                                    QStringLiteral("team_task_create"),
@@ -84,6 +86,37 @@ QJsonArray teamTools() {
                             "slug when the title is not English."));
     const QJsonObject member = text(QStringLiteral("The member's conversation number."));
     return {
+        tool(QStringLiteral("team_task_route_verify"),
+             QStringLiteral("Task developer or leader: ask the host to verify a clean exact "
+                            "revision using its fixed mechanical prose-reflow recipe. Returns "
+                            "an opaque short-lived receipt, or review_required for unknown "
+                            "semantic scope. Submit evidence once to the leader. No user "
+                            "approval, reviewer verdict, task completion or merge is granted."),
+             {{"task_id", taskId},
+              {"expected_team_revision", number("Exact revision from team_get.", 0)},
+              {"head_commit", text("Exact full lowercase Git commit.")}},
+             {"task_id", "expected_team_revision", "head_commit"}),
+        tool(QStringLiteral("team_task_route_decide"),
+             QStringLiteral("Same-team leader: record leader_direct advice, developer_leader "
+                            "verification or developer_reviewer routing through daemon policy. "
+                            "Advice needs no task or receipt. Changes require an existing task "
+                            "and exact head; only host-issued evidence can establish low risk. "
+                            "Confidence is supplementary, never authority. A decision is an "
+                            "audit record, not approval, a reviewer verdict or a state change."),
+             {{"task_id", taskId},
+              {"expected_team_revision", number("Exact revision from team_get.", 0)},
+              {"kind", QJsonObject{{"type", "string"},
+                                   {"enum", QJsonArray{"explanation", "proposal", "synthesis",
+                                                       "coordination", "change"}}}},
+              {"route", QJsonObject{{"type", "string"},
+                                    {"enum", QJsonArray{"auto", "leader_direct", "developer_leader",
+                                                        "developer_reviewer"}}}},
+              {"head_commit", text("For change: exact full lowercase commit.")},
+              {"evidence_id",
+               text("Optional host-issued 64-hex receipt ID; never caller assertions.")},
+              {"confidence", number("Supplementary percentage; it grants no permission.", 0, 100)},
+              {"reason", text("Bounded machine reason code, not transcripts or check output.")}},
+             {"expected_team_revision", "kind", "reason"}),
         tool(QStringLiteral("team_get"),
              QStringLiteral("Your team: its goal, settings, members with roles and lanes, and "
                             "your own role and lane."),

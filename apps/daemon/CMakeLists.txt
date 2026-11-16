@@ -6,7 +6,9 @@ add_library(ketplus_daemon_core STATIC ${KETPLUS_DAEMON_CORE_SOURCES}
     src/providers/ClaudeKeychain.cpp)
 target_sources(ketplus_daemon_core PRIVATE
     src/teams/TeamRiskPolicy.cpp src/teams/TeamRiskPolicy.h
-    src/teams/TeamCoordinatorRiskPolicy.cpp)
+    src/teams/TeamCoordinatorRiskPolicy.cpp
+    src/teams/TeamRoutingEvidence.cpp src/teams/TeamRoutingEvidence.h
+    src/runtime/SessionHostTeamRouting.cpp)
 if(APPLE)
     target_link_libraries(ketplus_daemon_core PRIVATE "-framework Security" "-framework CoreFoundation" "-framework IOKit" proc)
 endif()

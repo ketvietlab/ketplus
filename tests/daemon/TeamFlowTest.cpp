@@ -81,6 +81,35 @@ class TeamFlowTest final : public QObject {
         QCOMPARE(team().automaticTurns, 2);
     }
 
+    void routingDigestNamesTheLeaderAuditWithoutInventingAVerdict() {
+        start();
+        const QString id = task("A real task remains todo");
+        const QString question = task("An unrelated developer question");
+        QVERIFY(teams_->assignTask(team_, question, "dev1", "lead").ok());
+        QVERIFY(teams_->moveTask(team_, question, state::inProgress, "dev1").ok());
+        host_.messages.clear();
+        QVERIFY(teams_
+                    ->decideRoute(team_, {},
+                                  {{"expected_team_revision", team().revision},
+                                   {"kind", "synthesis"},
+                                   {"reason", "summarize_options"}},
+                                  "lead")
+                    .ok());
+        settle();
+        // An informational route must not manufacture an actionable digest.
+        QVERIFY(host_.of("digest").isEmpty());
+        QVERIFY(teams_->moveTask(team_, question, state::blocked, "dev1", "Need a decision?").ok());
+        QTRY_VERIFY_WITH_TIMEOUT(!host_.of("digest").isEmpty(), 2000);
+        const auto digest = host_.of("digest").last().body;
+        QVERIFY(digest.contains("Leader route leader_direct"));
+        QVERIFY(digest.contains("actor lead"));
+        QVERIFY(digest.contains("evidence none"));
+        QVERIFY(digest.contains("historical audit, not reviewer verdict/approval"));
+        QVERIFY(!digest.contains("Verdict: no findings"));
+        QCOMPARE(team().task(id)->state, state::todo);
+        QCOMPARE(team().task(id)->round, 0);
+    }
+
     void aNoteOrAMetMarkAloneStartsNoTurn() {
         start();
         const QString id = task("Cart");
