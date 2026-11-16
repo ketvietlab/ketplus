@@ -839,6 +839,34 @@ This is native command-path coverage with fake transport, not a physical-device 
 relay end-to-end test. Run it alongside the T-4 trust-lifecycle suite; all credentials are
 synthetic and no provider is started.
 
+## OS credential storage
+
+Run `ketplus_daemon_credential_store_tests`, `ketplus_credential_keychain_tests`
+(macOS), and `ketplus_credential_secret_service_tests` (Qt DBus and `dbus-daemon`
+required). The focused standalone build is:
+
+```sh
+cmake -S tests/daemon/credential-store -B build/credential-store -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build build/credential-store
+QT_QPA_PLATFORM=offscreen ctest --test-dir build/credential-store --output-on-failure
+```
+
+Keychain tests create and delete only a disposable keychain with synthetic values;
+a second executable must be denied without prompting. Secret Service tests start
+and stop their own private Unix bus and fake service; they never use the user's
+session service. They verify missing/locked/denied stores, prompt dismissal and retry.
+Migration tests preserve unsafe/corrupt sources, verify writes before cleanup, retry
+after write/read-back failure, reject conflicting backups and preserve atomic removal.
+Production storage refuses access in ordinary QStandardPaths test mode; fixtures
+explicitly inject their backend. Also run the cloud trust-lifecycle, sender-cache,
+remote-control client/projection/backend and WebRTC host phase 3 suites for account
+and sign-out interactions. No provider quota or real user credentials are used.
+
+The normal test configuration warns if the optional Secret Service fixture tools
+are unavailable on the build host; do not claim that coverage in that case. Fake
+D-Bus tests on macOS do not verify a Linux keyring's ACLs, backup or desktop prompts.
+Native signed upgrades and platform packaging remain separate acceptance checks.
+
 ## Conversation deletion and next-turn defaults
 
 `ketplus_provider_deletion_tests` uses fake providers and temporary journals to

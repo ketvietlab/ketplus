@@ -345,14 +345,14 @@ transitions (even if the same device is paired again). A same-workspace enrollme
 content keys but requires fresh pairing before an old sender can execute a command. Cache
 invalidation on relay revocation does not itself change the persisted pin policy.
 
-Cloud identity keys, session keys, wrapped device keys and account identifiers
-are stored in one owner-only (0600) JSON file,
-`Ketsuite/KetPlus/daemon/credentials-<service>.json` under the user's data
-directory, not in the macOS keychain. Keychain items are bound to the code
-signature, so each rebuilt or re-signed helper prompted once per key. A file
-with unsafe permissions or unreadable contents is an error and is never
-replaced with newly generated keys. Keychain items from earlier builds are not
-migrated, so an existing machine signs in and pairs again once after upgrading.
+Cloud identity keys, session keys, wrapped device keys and account identifiers are
+stored as one transactional record per service in the OS credential store: macOS
+Keychain or Linux Secret Service. Locked, denied or unavailable storage is an error;
+there is no plaintext fallback. The former owner-only JSON file is migrated only
+after a verified OS-store commit, then removed. Recovered legacy backups never
+silently overwrite the OS record or restore removed enrollment. See
+[ADR 0130](decisions/0130-os-credential-storage.md) for migration/recovery, platform
+access, headless prerequisites, prompt behavior and backup limitations.
 
 Deterministic tests use a fake provider and consume
 no model quota. Heartbeat snapshots are split into lossless, sequential batches

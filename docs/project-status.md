@@ -22,6 +22,11 @@ live-catalog bounds and the remaining #68 acceptance gates stay open. Incrementa
 (ADR 0092), avoiding tombstone walks and repeated deletion signals. Full refresh
 and CLI retain complete reconciliation; older daemon replies remain compatible.
 
+OS credential storage (ADR 0130) replaces the Control credential file with a
+transactional Keychain/Secret Service record and verified legacy-file migration.
+Unavailable storage fails closed. Native/fake fixtures are implementation evidence;
+Linux store policy, signed upgrade prompts and platform release acceptance remain open.
+
 ## Implemented
 
 - Linux Pro build-only AppImage/deb assembly uses native Ubuntu 24.04 Docker
