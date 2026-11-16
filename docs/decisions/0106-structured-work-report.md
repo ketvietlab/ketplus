@@ -174,3 +174,8 @@ establishes the durable boundary. Legacy transcript snapshots retain their
 historical rendering; new snapshots retain full audit data with request metadata
 and render only the matching scope. No journal migration or user-data rewrite is
 required.
+
+After accepted input commits, SessionHost publishes the scoped snapshot through
+`work_report.updated`, the existing live Report-pane delivery path. This refresh
+does not depend on another agent tool call. Rejected acceptance emits no scope
+refresh; the cursor marker prevents agent-origin events from refreshing scope.

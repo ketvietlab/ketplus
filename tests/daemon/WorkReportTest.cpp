@@ -55,6 +55,74 @@ class WorkReportTest final : public QObject {
   private slots:
     void initTestCase() { QStandardPaths::setTestModeEnabled(true); }
 
+    void acceptedInputPublishesScopeThroughLiveReportEvents() {
+        Fixture fixture;
+        QVERIFY(fixture.open());
+        const auto id = fixture.start("codex", "first");
+        QVERIFY(!id.isEmpty());
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(id, "turn.completed"), 1, 5000);
+        QVERIFY(fixture
+                    .agents(id, "agents.work_report",
+                            call({item("old", "done", {{"evidence", "verified"}}),
+                                  item("carried", "waiting")}))
+                    .value("ok")
+                    .toBool());
+        QSignalSpy delivered(fixture.host.get(), &SessionHost::eventReady);
+        QCOMPARE(fixture.start("codex", "hang", id), id);
+        // This is the same event consumed by daemon/workReport -> workReportChanged ->
+        // the open Report pane, not a manually supplied pane snapshot or another tool call.
+        const auto reports = [&] {
+            QList<QJsonObject> result;
+            for (const auto& args : delivered) {
+                const auto event = args.first().toJsonObject();
+                if (event.value("event_type") == "work_report.updated")
+                    result.append(event);
+            }
+            return result;
+        };
+        QTRY_COMPARE(reports().size(), 1);
+        auto scope = reports().last().value("payload").toObject();
+        QCOMPARE(scope.value("items").toArray().size(), 1);
+        QCOMPARE(scope.value("items").toArray().first().toObject().value("key"), "carried");
+        const auto boundary = scope.value("request_id").toInteger();
+        QVERIFY(reports().last().value("cursor").toInteger() > boundary);
+        QCOMPARE(fixture.journal->workReport(id, 1).value("request_id").toInteger(), boundary);
+        QCOMPARE(fixture.journal->workReport(id, 1).value("items").toArray().size(), 2);
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(id, "turn.started"), 2, 5000);
+        QVERIFY(fixture
+                    .agents(id, "agents.work_report",
+                            call({item("carried", "done", {{"evidence", "finished"}})}))
+                    .value("ok")
+                    .toBool());
+        delivered.clear();
+        const auto steer = fixture.host->handleCommand(
+            request("session.steer", {{"prompt", "next request"}, {"expected_context_revision", 1}},
+                    id, 1),
+            "desktop-test");
+        QVERIFY2(steer.value("ok").toBool(), qPrintable(text(steer)));
+        QTRY_COMPARE(reports().size(), 1);
+        scope = reports().last().value("payload").toObject();
+        QVERIFY(scope.value("request_id").toInteger() > boundary);
+        QVERIFY(scope.value("items").toArray().isEmpty());
+        // Rejected direct input must not emit a scope refresh.
+        delivered.clear();
+        const auto rejected = fixture.host->handleCommand(
+            request("session.start_turn", {{"prompt", "rejected generation"}}, id, 2),
+            "desktop-test");
+        QVERIFY(!rejected.value("ok").toBool());
+        QVERIFY(reports().isEmpty());
+        const auto sender = fixture.start("claude", "sender");
+        QVERIFY(!sender.isEmpty());
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(sender, "turn.completed"), 1, 5000);
+        delivered.clear();
+        const auto sent = fixture.agents(
+            sender, "agents.send",
+            {{"to", fixture.number(id)}, {"text", "agent continuation"}, {"urgent", true}});
+        QCOMPARE(sent.value("delivery").toString(), "steering");
+        QTRY_COMPARE(fixture.count(id, "turn.steered"), 2);
+        QVERIFY(reports().isEmpty());
+    }
+
     void requestScopeSurvivesAgentTurnsAndRestart() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());

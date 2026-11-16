@@ -566,6 +566,7 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     // ADR 0106, in SessionHostWorkReports.cpp.
     QJsonObject recordUserDecision(const QString& sessionId, qint64 generation,
                                    const QJsonObject& payload) override;
+    void publishWorkReportScope(Session& session, qint64 acceptedCursor);
     QJsonObject recordWorkReport(const QString& sessionId, qint64 generation,
                                  const QJsonObject& payload) override;
     [[nodiscard]] QJsonObject readWorkReport(const QJsonObject& request);
