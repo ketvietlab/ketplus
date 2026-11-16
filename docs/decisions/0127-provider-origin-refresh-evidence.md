@@ -275,7 +275,7 @@ narrow MCP/origin target passes 2/2; the sidecar/background-contract suite passe
 fixture uses a synthetic process record and starts no workload. No installed
 provider probe was repeated for this change, and no model was called.
 
-## Final provider gaps after the real-adapter control
+## Provider gaps after the real-adapter control (before D-3)
 
 | Provider | Proven scope | Remaining boundary | Smallest next access/probe |
 | --- | --- | --- | --- |
@@ -288,3 +288,61 @@ Authentication permission does not authorize model quota. No provider installati
 user transcript, manual provider-DB edit, automatic history reset or repeated
 empty-session probe is part of this follow-up. The reviewed T-8 document records
 the independent research and proposed user-decision boundary.
+
+## D-3 bounded validation: environment and authentication checkpoint
+
+On 2026-11-17, the user approved the proposed bounded follow-up. Its budget is
+at most one synthetic text-only model turn per Codex, Cursor and Copilot, three
+in total, with one developer holding the team budget. It excludes recall turns
+and automatic retries. A request whose delivery is uncertain consumes that
+provider's allowance. Authentication uses the official flow in a separate test
+profile; approval does not authorize copying a personal profile or transcript.
+A pinned Copilot CLI may be prepared in a test-only directory. Control/MCP
+verification must succeed before any model turn is sent. This decision changes
+the earlier access boundary, not the provider acceptance criteria.
+
+The checkpoint has consumed **Codex 0/1, Cursor 0/1, Copilot 0/1** live model
+turns. No login flow has been started and no credential has been copied. Clean
+child environments retain executable/locale essentials only, use separate homes
+and provider configuration directories, and do not inherit authentication or
+user configuration. Codex additionally forces file credential storage in its
+test profile: `login status` exits 1 and reports not logged in. Cursor `status`
+exits 0 but reports not authenticated. Both require user authentication before
+the completed-turn test can proceed. Official references describe
+[Codex file storage and login](https://learn.chatgpt.com/docs/auth) and
+[Cursor login](https://cursor.com/docs/cli/reference/authentication).
+
+Copilot CLI **1.0.112** was installed into a separate local npm prefix, with no
+global installation replacement. Registry integrity was
+`sha512-OieokPh6qDlniqP4LqTSSuw+y87b3g0CPgFOVB3w6U523aEAfruniP/DWca7IaFq5FMtgwTi6JdfOBCBEtNsew==`.
+Its installed help documents `COPILOT_OFFLINE` with a local model-provider
+endpoint; [GitHub's ACP reference](https://docs.github.com/en/copilot/reference/copilot-cli-reference/acp-server)
+also documents BYOK sessions without GitHub login. The control uses offline mode,
+an always-rejecting loopback endpoint, isolated home/profile/cache directories,
+disabled update/telemetry/built-in MCP, and no authentication variables.
+
+The real CLI returns `loadSession:true` and `sessionCapabilities.close` from
+`initialize`. `session/new` accepts one injected stdio MCP server and creates a
+session, but its worker does not spawn or discover tools during the bounded
+five-second observation after the control response.
+The informational `/mcp list` command also returns successfully without causing
+worker startup; GitHub documents informational ACP slash commands as non-model
+operations. The local endpoint observes **zero requests**, the provider exits,
+and no worker remains. The reproducible control
+`tests/providers/copilot/refresh-control.py` therefore exits **2** for missing
+MCP discovery. A separate launch-configuration control uses the documented
+`--additional-mcp-config` route instead of request injection. Its informational
+output names the fixture and its worker spawns, but no initialize/tools-list
+exchange is observed within the same bound. It also exits 2, with zero endpoint
+requests and no remaining workers. This separates registration/startup from
+verified MCP readiness; neither route is a passing provider test
+or evidence that the provider cannot support injected MCP. The discovery
+boundary requires investigation before the authorized model turn may be used.
+
+The control is a standalone protocol measurement, not a production-adapter
+history/epoch proof. Copilot's previously missing executable gap is closed for
+this pinned test environment; injected MCP readiness, completed history and
+production-adapter refresh remain unverified. Cursor/Copilot mutation gates stay
+in place. The next external step is official user login into the separate test
+profiles, coordinated by the leader; no request to increase the approved budget
+is needed at this checkpoint.

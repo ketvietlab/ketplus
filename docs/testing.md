@@ -891,6 +891,30 @@ python3 tests/providers/codex/refresh-offline.py --executable codex
 python3 tests/providers/cursor/refresh-offline.py --executable agent
 ```
 
+The D-3 environment checkpoint adds a pinned Copilot control. Prepare an external,
+test-only npm prefix, then invoke the already-installed CLI explicitly:
+
+```sh
+npm install --prefix "$TEST_PREFIX" --no-audit --no-fund @github/copilot@1.0.112
+python3 tests/providers/copilot/refresh-control.py \
+  --executable "$TEST_PREFIX/node_modules/.bin/copilot"
+python3 tests/providers/copilot/refresh-control.py \
+  --executable "$TEST_PREFIX/node_modules/.bin/copilot" --mcp-source launch
+```
+
+It creates and removes its own empty home/profile/cache/workspace, inherits no
+credentials, and enables offline BYOK with a rejecting local endpoint. It sends
+initialize/new and the informational `/mcp list` command, never a model question
+or tool call. Exit 2 means MCP discovery was not proved; it must not trigger a
+model fallback or automatic retry. The observed 1.0.112 run exits 2 with zero
+endpoint requests and zero remaining workers for both request injection and
+launch configuration. The launch variant spawns its registered worker, but
+neither variant observes MCP initialize/tools-list within five seconds. These
+are bounded observations, not an unsupported-provider conclusion. This control is not in the default
+suite and does not establish production-adapter history preservation. The bounded
+live-turn budget and remaining authentication/discovery gates are recorded in the
+[origin evidence](decisions/0127-provider-origin-refresh-evidence.md).
+
 Neither sends a model prompt, reads existing user history or fabricates provider
 storage. Empty-session load failure is recorded as a validation gap, not proof
 that non-empty history cannot load.
