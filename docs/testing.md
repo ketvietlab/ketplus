@@ -1202,3 +1202,14 @@ If Qt 6.11 stalls while loading a cached QML dynamic plugin, a diagnostic re-run
 can use `QML_DISABLE_DISK_CACHE=1`; this changes test-run cache behavior, not the
 application's scheme persistence or publication. See Qt's [disk-cache
 configuration](https://doc.qt.io/qt-6/qmldiskcache.html#configuration).
+
+## Evidence-gated team routing (ADR 0129)
+
+`ketplus_team_risk_policy_tests` exercises the daemon coordinator with a temporary
+journal and fake trusted receipts: low-risk acceptance, advisory calls without a
+task/worktree, mandatory/unknown domains, actor and revision fences, AC/findings,
+failed/missing checks, approval/rollback gaps and legacy serialization. No real
+provider, account or worktree is used. Run it with the team store/task/review and
+protocol targets after policy changes; shared-header/CMake changes retain the full
+Pro build/suite requirement above. The synthetic v1 JSON fixture is checked by the
+policy target; no live receipt adapter is enabled by these fixtures.

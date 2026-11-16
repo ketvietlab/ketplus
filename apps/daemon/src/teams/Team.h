@@ -1,6 +1,7 @@
 #pragma once
 
 #include "TeamLanguage.h"
+#include "teams/TeamRiskPolicy.h"
 
 #include <QJsonArray>
 #include <QJsonObject>
@@ -167,6 +168,7 @@ struct Task final {
     QString baseCommit;
     QString headCommit;
     QString pullRequest;
+    std::optional<risk::Decision> routingDecision;
     // T-90 (ADR 0123): the repository and integration branch the task works in when they are
     // not the team's: named when the task was created, or kept from before the team's
     // repository changed. Empty: the team's. Read them through taskScope().
@@ -288,6 +290,7 @@ struct Team final {
     QList<Relocation> relocations;
     int nextTask{1};
     int nextDecision{1};
+    std::optional<risk::Decision> lastRoutingDecision;
     qint64 revision{0};
     // ADR 0116 §4: the team revisions at which its settings (name, goal, branch, merge
     // setting, paused and its reason) and its member list last changed.

@@ -704,3 +704,11 @@ the role that may.
   client must see the same one; the conversations it coordinates live in the daemon.
 - **Status by agent messages.** Rejected: it is what a team replaces; every status
   message started a turn somewhere.
+
+### Evidence-gated routing foundation (ADR 0129)
+
+[ADR 0129](0129-evidence-gated-team-routing.md) adds a daemon policy model/API for
+leader-only advice, verified low-risk developer-to-leader routing and conservative
+developer-to-reviewer routing. It does not change the existing handoff/reviewer
+engine or expose an agent/UI method yet; the default evidence adapter grants no
+exception. Merge, completion and user approval remain separate.

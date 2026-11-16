@@ -1,0 +1,39 @@
+{
+  "version": 1,
+  "advisory_request": {
+    "expected_team_revision": 1,
+    "kind": "explanation",
+    "reason": "answer_request"
+  },
+  "change_request": {
+    "expected_team_revision": 1,
+    "kind": "change",
+    "route": "developer_leader",
+    "head_commit": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "evidence_id": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "confidence": 99,
+    "reason": "bounded_verified_change"
+  },
+  "mandatory_domains": [
+    "security",
+    "authentication",
+    "secrets",
+    "billing",
+    "data_deletion",
+    "migration",
+    "automatic_cleanup",
+    "signing",
+    "updates_releases",
+    "protocol_compatibility",
+    "large_blast_radius"
+  ],
+  "legacy_task": {
+    "id": "T-1",
+    "state": "in_progress"
+  },
+  "expected_routes": {
+    "advisory": "leader_direct",
+    "verified_low_risk": "developer_leader",
+    "legacy_or_unknown": "developer_reviewer"
+  }
+}
