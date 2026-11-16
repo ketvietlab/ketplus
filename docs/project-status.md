@@ -866,10 +866,12 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   [ADR 0127](decisions/0127-daemon-background-tasks.md) records the leader-defined
   registry, executor/lease, transactional completion and owner-wake contract.
   The runtime foundation includes transactional registry/output/quotas and native
-  macOS supervisor/lease,
+  macOS supervisor/lease and a delegated, isolated Linux cgroup executor,
   permission/IPC/managed-child integration and durable owner-wake implementation
-  with isolated and fake-provider tests. Linux cgroup
-  execution, provider migration (including enforced Claude blocking), shared UI
+  with isolated and fake-provider tests. The Ubuntu arm64 reference guest passes
+  real-helper crash/cleanup, Host/IPC and staged-runtime checks; Linux admission
+  still requires its documented systemd/namespace capabilities. Provider migration
+  (including enforced Claude blocking), shared UI
   and integration acceptance remain gates; this is not a completed product claim.
 
 - Agent teams ([ADR 0114](decisions/0114-agent-teams.md), epic #450): a leader, one

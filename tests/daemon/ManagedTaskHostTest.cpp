@@ -209,6 +209,8 @@ class ManagedTaskHostTest final : public QObject {
         QTRY_COMPARE(turns(log), 1);
         const auto start =
             command(host, "session.task.start", process(cwd, {"/usr/bin/printf", "approved"}));
+        QVERIFY2(start.value("ok").toBool(),
+                 qPrintable(QJsonDocument(start).toJson(QJsonDocument::Compact)));
         const auto id = start.value("task").toObject().value("task_id").toString();
         const auto pending = [&] {
             return command(host, "session.pending_approvals").value("pending_approvals").toArray();

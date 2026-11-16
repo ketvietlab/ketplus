@@ -481,9 +481,13 @@ A parked child must reacquire a quota slot before another inference starts.
 Native macOS executor and fake-provider Host/IPC tests are runtime evidence;
 provider migration and shared UI acceptance remain separate gates. Linux process
 admission probes the reference user-service/namespace capabilities and fails
-closed when they are missing. The new cgroup executor's complete production fault
-matrix remains an implementation/verification gate until the real helper,
-registry, IPC and restart tests pass on that reference environment. The separate
+closed when they are missing. On the Ubuntu 24.04 arm64 reference guest, the
+production helper, registry, fake-provider Host, IPC and restart acceptance suites
+pass together; Runtime-component staging also passes runtime discovery and a
+capability probe executed by the staged helper. See the dated verification record
+in [testing](../testing.md#background-job-runtime-verification-record).
+This evidence does not establish support on every Linux distribution or replace
+the required deployment capability probe. The separate
 [T-7 evidence](0127-linux-containment-evidence.md) establishes environment
 primitives, not executor acceptance. Its guest-only namespace-policy bootstrap
 is not a product installer step or a product VM dependency.

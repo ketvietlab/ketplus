@@ -818,6 +818,39 @@ bash tests/daemon/linux-containment/executor-acceptance.sh build/daemon-dev
 The script does not install dependencies or modify sysctls, mount permissions or
 AppArmor policy. A skipped opt-in suite is not Linux executor acceptance.
 
+#### Background job runtime verification record
+
+On 2026-11-16, the T-2 runtime checkpoint passed the following checks without
+provider accounts or changes to an installed application:
+
+| Check | Environment | Result |
+| --- | --- | --- |
+| Host, ledger, native executor and runtime CTest suites | macOS arm64, Qt 6.11.2 | 4/4, 54.97 s |
+| Production-helper executor, Host, IPC, output, ledger and spec CTest suites | Ubuntu 24.04 arm64, kernel 6.8, systemd 255, Qt 6.11.0 | 6/6, 128.62 s; no skipped executor cases |
+| Runtime-component install into a separate prefix | Same Linux reference guest | Install succeeded; staged daemon `--check-runtime` succeeded with loader/plugin environment overrides removed |
+| Staged executor capability probe in a delegated user unit | Same Linux reference guest | `available=true` |
+| Contract fixtures and public-tree hygiene | macOS host | 9/9 Node tests and 4/4 Python tests |
+
+The Linux helper suite verifies inherited environment plus explicit delta/removal,
+durable start retry and output, migration attempts, detached descendants, timeout
+during active forks, Stop/complete races, supervisor SIGKILL, daemon lease expiry
+and journal reopen without command replay. Host/IPC fixtures use scripted providers
+and exercise approval, busy/Stop fences, provider exit, descendant cancellation and
+owner/grant checks. The separate T-7 primitive probes are not counted as these
+runtime results. Only the disposable guest had the documented namespace-policy
+bootstrap; the acceptance script and product installer do not apply it.
+
+An earlier full Linux run failed the Host assertion that a managed permission
+remained pending. The focused case subsequently passed (2.59 s), as did the full
+matrix above. Its cause was not established. The test now checks and prints the
+start reply before checking approval so an admission rejection can be distinguished
+from an approval-lifetime failure. Earlier failure logs are retained locally for
+review; the green rerun does not erase that observation.
+
+This record does not verify SDK native-background blocking, shared desktop UI,
+cross-provider live inference, Linux amd64, signed macOS distribution or an
+installed service. Those remain separate provider/UI/release acceptance checks.
+
 The accepted provider-neutral contract is [ADR 0127](decisions/0127-daemon-background-tasks.md).
 Run its design-fixture check without a build or provider account:
 
