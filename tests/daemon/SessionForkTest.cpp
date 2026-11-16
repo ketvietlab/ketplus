@@ -458,12 +458,13 @@ class SessionForkTest final : public QObject {
     void journalForkBacklogCharacterization_data() {
         QTest::addColumn<int>("rows");
         QTest::newRow("1000") << 1000;
+        QTest::newRow("2049") << 2049;
         QTest::newRow("100000") << 100000;
         QTest::newRow("300000") << 300000;
     }
     void journalForkBacklogCharacterization() {
         QFETCH(int, rows);
-        if (rows > 1000 && !qEnvironmentVariableIsSet("KETPLUS_RUN_FORK_BACKLOG_TESTS"))
+        if (rows > 2049 && !qEnvironmentVariableIsSet("KETPLUS_RUN_FORK_BACKLOG_TESTS"))
             QSKIP("Opt-in synthetic backlog characterization");
         QTemporaryDir dir;
         const auto path = dir.filePath("journal.sqlite");
@@ -509,26 +510,48 @@ class SessionForkTest final : public QObject {
         auto staged = journal.beginFork("source", 1, copy, &error);
         QVERIFY2(staged, qPrintable(error));
         const auto began = timer.elapsed();
+        QCOMPARE(staged->copiedRows, 0);
         qint64 slowestPass = 0;
         int passes = 0;
+        int chunksCopied = 0;
+        const int chunks = qMin(rows, 4096);
+        // ADR 0094: at most 2048 rows or 8 MiB per pass. The chunks are 64 KiB
+        // each, so a pass must yield after at most 128 of them. The 2049 fixture
+        // crosses both limits; the larger opt-in fixtures check backlog growth.
+        // Allow one empty finishing pass per populated table and all ten tables.
+        const int maximumPasses = 2 * ((rows + 2047) / 2048 + 1) + (chunks + 127) / 128 + 10;
         for (LocalJournal::ForkStep step = LocalJournal::ForkStep::Progress;
              step != LocalJournal::ForkStep::Copied;) {
+            const qint64 beforeRows = staged->copiedRows;
+            const int beforeTable = staged->table;
             QElapsedTimer pass;
             pass.start();
             step = journal.continueFork(*staged, &error);
             slowestPass = qMax(slowestPass, pass.elapsed());
             QVERIFY2(step != LocalJournal::ForkStep::Failed, qPrintable(error));
-            QVERIFY(++passes < 100000);
+            const qint64 copied = staged->copiedRows - beforeRows;
+            QVERIFY(copied >= 0 && copied <= 2048);
+            QVERIFY2(copied > 0 || staged->table > beforeTable,
+                     "A fork pass made no progress without a competing writer.");
+            QVERIFY(q.exec("SELECT count(*) FROM large_event_payload_chunks "
+                           "WHERE session_id='fork' AND generation=1"));
+            QVERIFY(q.next());
+            const int nextChunks = q.value(0).toInt();
+            QVERIFY(nextChunks >= chunksCopied && nextChunks - chunksCopied <= 128);
+            chunksCopied = nextChunks;
+            q.finish();
+            QVERIFY(++passes <= maximumPasses);
         }
+        QCOMPARE(chunksCopied, chunks);
+        QCOMPARE(staged->copiedRows, qint64(rows) * 2 + chunks);
         timer.restart();
         QVERIFY2(journal.finishFork(*staged, copy, &error), qPrintable(error));
         const auto finished = timer.elapsed();
         qInfo() << "fork-characterization rows-per-event-table" << rows << "begin-ms" << began
                 << "passes" << passes << "slowest-pass-ms" << slowestPass << "finish-ms"
                 << finished;
-        // Each event-loop turn stays short however large the source history is.
-        QVERIFY2(began < 250 && slowestPass < 250 && finished < 250,
-                 qPrintable(QString("%1 %2 %3").arg(began).arg(slowestPass).arg(finished)));
+        // Timing remains diagnostic: filesystem/scheduler delays on a shared CI runner
+        // are not a measure of the work per pass asserted above.
         QCOMPARE(journal.eventsAfter("fork", 1, 0, 1).size(), 1);
     }
     void journalForkCopiesOneSnapshot() {

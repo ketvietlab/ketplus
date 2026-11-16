@@ -467,9 +467,11 @@ the corresponding Atlas mock first.
   read snapshot while the source changes, byte-exact malformed TEXT, interrupted
   copies recovered as purge work at open, ignored purge/staging writes on abandon
   and at open, duplicate destinations and source
-  deletion during a host fork. Opt in to 100k/300k timing with
-  `KETPLUS_RUN_FORK_BACKLOG_TESTS=1`; begin, each pass and finish must stay
-  under 250 ms.
+  deletion during a host fork. The 1k/2049-row fixtures assert the ADR 0094
+  per-pass limits (2048 rows or 8 MiB), progress and bounded completion. Opt in
+  to 100k/300k characterization with `KETPLUS_RUN_FORK_BACKLOG_TESTS=1`.
+  Begin, slowest-pass and finish timings remain diagnostic; a shared runner's
+  filesystem/scheduler latency is not a correctness threshold.
 - Bounded history purge (ADR 0093): `ketplus_provider_deletion_tests` covers an
   ignored purge marker, tombstone retention while purge is pending, a stalled
   pass, an ignored marker delete, event-loop draining and reopen. The opt-in
