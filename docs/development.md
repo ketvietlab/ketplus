@@ -29,7 +29,7 @@ must not be committed.
 For the independent Linux server target, see
 [`linux-headless-daemon.md`](linux-headless-daemon.md). `daemon-dev` and
 `daemon-release` configure `KETPLUS_BUILD_DESKTOP=OFF`; their Qt dependency set
-excludes Widgets, QML and WebView. Set the release Control URL explicitly before
+excludes Widgets, QML and WebView; Linux additionally uses Qt DBus for Secret Service. Set the release Control URL explicitly before
 staging a complete install tree. The product and bundled daemon version is 0.1.50;
 replacement bundles advance it so an older installed daemon can upgrade when its turns are idle.
 

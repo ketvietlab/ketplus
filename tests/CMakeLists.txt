@@ -1,3 +1,5 @@
+include("${CMAKE_CURRENT_LIST_DIR}/daemon/credential-store/FixtureDaemon.cmake")
+
 if(APPLE)
     find_package(Python3 REQUIRED COMPONENTS Interpreter)
     add_test(NAME ketplus_macos_signing_cli_tests
@@ -294,8 +296,8 @@ target_link_libraries(ketplus_machine_end_to_end_tests PRIVATE
     ketplus_remote_control
 )
 target_compile_definitions(ketplus_machine_end_to_end_tests PRIVATE
-    KETPLUS_TEST_DAEMON="$<TARGET_FILE:ketplus_daemon>")
-add_dependencies(ketplus_machine_end_to_end_tests ketplus_daemon)
+    KETPLUS_TEST_DAEMON="$<TARGET_FILE:ketplus_fixture_daemon>")
+add_dependencies(ketplus_machine_end_to_end_tests ketplus_fixture_daemon)
 
 ketplus_add_gui_test(ketplus_linux_machines_tests LinuxMachinesSectionTest.cpp)
 target_include_directories(ketplus_linux_machines_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})

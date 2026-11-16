@@ -95,7 +95,7 @@ Package creation and local smoke testing do not waive these release gates.
 The current CMake configuration references these Qt modules:
 
 ```text
-Core, Gui, Widgets, Network, WebSockets, Sql, Concurrent,
+Core, Gui, Widgets, Network, DBus, WebSockets, Sql, Concurrent,
 Core5Compat, Svg, SvgWidgets,
 Quick, Qml, QuickControls2, WebView
 ```

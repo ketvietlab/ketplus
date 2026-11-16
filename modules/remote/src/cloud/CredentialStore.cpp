@@ -1,211 +1,231 @@
 #include "cloud/CredentialStore.h"
 #include "DaemonPaths.h"
-
+#include "cloud/CredentialBackend.h"
+#include <QCryptographicHash>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonDocument>
-#include <QJsonObject>
-#include <QSaveFile>
-#include <QStandardPaths>
-
-#include <optional>
+#include <QRegularExpression>
 #include <utility>
-
 #if defined(Q_OS_UNIX)
+#include <fcntl.h>
+#include <sys/file.h>
 #include <sys/stat.h>
+#include <unistd.h>
 #endif
 
 namespace ketplus::daemon {
 namespace {
-
-// Credentials live in one owner-only file beside the daemon journal instead of the macOS
-// keychain. Keychain items are bound to the code signature, so every rebuilt or re-signed
-// helper prompted the user again for each key. This matches how CLI agents store tokens.
-QString credentialPath(const QString& service) {
-    const QString directory =
-        QDir(remote::DaemonPaths::dataDirectory()).filePath(QStringLiteral("daemon"));
-    return QDir(directory).filePath(QStringLiteral("credentials-%1.json").arg(service));
-}
-
-void setError(QString* error, const QString& message) {
-    if (error != nullptr)
+constexpr qsizetype maximumRecordBytes = 16 * 1024 * 1024;
+bool fail(QString* error, const QString& message) {
+    if (error)
         *error = message;
+    return false;
 }
+// A kernel lock releases on close/process exit even if permissions change during
+// cleanup. Keep its empty inode; unlinking a held lock could split the lock domain.
+class StoreLock {
+    int descriptor_{-1};
 
-bool readFile(const QString& path, QJsonObject* values, QString* error) {
-    *values = {};
-    QFile file(path);
-    if (!file.open(QIODevice::ReadOnly)) {
-        setError(error, QStringLiteral("Unable to read the daemon credential file."));
-        return false;
+  public:
+    ~StoreLock() {
+#if defined(Q_OS_UNIX)
+        if (descriptor_ >= 0)
+            ::close(descriptor_);
+#endif
     }
-    QJsonParseError parseError;
-    const QJsonDocument document = QJsonDocument::fromJson(file.readAll(), &parseError);
-    if (parseError.error != QJsonParseError::NoError || !document.isObject()) {
-        setError(error, QStringLiteral("The daemon credential file is corrupt."));
-        return false;
+    bool acquire(const QString& path, QString* error) {
+#if defined(Q_OS_UNIX)
+        descriptor_ = ::open(QFile::encodeName(path).constData(),
+                             O_RDWR | O_CREAT | O_NOFOLLOW | O_CLOEXEC, 0600);
+        struct stat status{};
+        if (descriptor_ >= 0 && ::fstat(descriptor_, &status) == 0 && S_ISREG(status.st_mode) &&
+            status.st_uid == ::geteuid() && (status.st_mode & 0077) == 0 && status.st_nlink == 1 &&
+            ::flock(descriptor_, LOCK_EX | LOCK_NB) == 0)
+            return true;
+#else
+        Q_UNUSED(path);
+#endif
+        return fail(error, QStringLiteral(
+                               "Credential storage is busy or inaccessible; retry the operation."));
     }
-    *values = document.object();
+};
+QString credentialPath(const QString& service) {
+    return QDir(remote::DaemonPaths::dataDirectory())
+        .filePath(QStringLiteral("daemon/credentials-%1.json").arg(service));
+}
+bool decode(const QJsonObject& values, QHash<QString, QByteArray>* accounts, QString* error) {
+    accounts->clear();
+    for (auto it = values.begin(); it != values.end(); ++it) {
+        const auto value = QByteArray::fromBase64Encoding(it.value().toString().toLatin1(),
+                                                          QByteArray::AbortOnBase64DecodingErrors);
+        if (!it.value().isString() || !value)
+            return fail(error, QStringLiteral("The credential record is corrupt."));
+        accounts->insert(it.key(), value.decoded);
+    }
     return true;
 }
-
-bool isUnsafe(const QFileInfo& info) {
-#if defined(Q_OS_UNIX)
-    constexpr QFileDevice::Permissions unsafe = QFileDevice::ReadGroup | QFileDevice::WriteGroup |
-                                                QFileDevice::ExeGroup | QFileDevice::ReadOther |
-                                                QFileDevice::WriteOther | QFileDevice::ExeOther;
-    return info.isSymLink() || (info.permissions() & unsafe) != 0;
-#else
-    Q_UNUSED(info);
-    return false;
-#endif
+QJsonObject encode(const QHash<QString, QByteArray>& accounts) {
+    QJsonObject values;
+    for (auto it = accounts.begin(); it != accounts.end(); ++it)
+        values.insert(it.key(), QString::fromLatin1(it.value().toBase64()));
+    return values;
 }
-
-// Only a POSIX stat identifies a file version exactly; QFileInfo's millisecond times match a
-// same-size rewrite made in the same millisecond. Elsewhere the file is read every time.
-std::optional<CredentialStore::FileStamp> stampOf(const QString& path) {
+bool parse(const QByteArray& bytes, QJsonObject* object, QString* error) {
+    QJsonParseError parseError;
+    const auto doc = QJsonDocument::fromJson(bytes, &parseError);
+    if (bytes.size() > maximumRecordBytes || parseError.error != QJsonParseError::NoError ||
+        !doc.isObject())
+        return fail(error, QStringLiteral("The credential record is corrupt or too large."));
+    *object = doc.object();
+    return true;
+}
+// Open before checking ownership/mode, and never follow a symlink during migration.
+bool readLegacy(const QString& path, QByteArray* bytes, QString* error) {
 #if defined(Q_OS_UNIX)
+    const int fd = ::open(QFile::encodeName(path).constData(), O_RDONLY | O_NOFOLLOW | O_CLOEXEC);
+    if (fd < 0)
+        return fail(error, QStringLiteral("Unable to open the legacy credential file."));
     struct stat status{};
-    if (::stat(QFile::encodeName(path).constData(), &status) != 0)
-        return std::nullopt;
-#if defined(Q_OS_DARWIN)
-    const timespec modified = status.st_mtimespec;
-    const timespec changed = status.st_ctimespec;
-#else
-    const timespec modified = status.st_mtim;
-    const timespec changed = status.st_ctim;
-#endif
-    constexpr qint64 nanoseconds = 1'000'000'000;
-    return CredentialStore::FileStamp{
-        static_cast<qint64>(status.st_dev), static_cast<qint64>(status.st_ino),
-        static_cast<qint64>(status.st_size), modified.tv_sec * nanoseconds + modified.tv_nsec,
-        changed.tv_sec * nanoseconds + changed.tv_nsec};
+    const bool safe = ::fstat(fd, &status) == 0 && S_ISREG(status.st_mode) &&
+                      status.st_uid == ::geteuid() && (status.st_mode & 0077) == 0 &&
+                      status.st_nlink == 1 && status.st_size <= maximumRecordBytes;
+    QFile file;
+    if (!safe || !file.open(fd, QIODevice::ReadOnly, QFileDevice::AutoCloseHandle)) {
+        ::close(fd);
+        return fail(error,
+                    QStringLiteral(
+                        "The legacy credential file has unsafe ownership, permissions or size."));
+    }
+    *bytes = file.read(maximumRecordBytes + 1);
+    if (file.error() != QFileDevice::NoError || bytes->size() > maximumRecordBytes)
+        return fail(error, QStringLiteral("Unable to read the legacy credential file."));
+    return true;
 #else
     Q_UNUSED(path);
-    return std::nullopt;
+    Q_UNUSED(bytes);
+    return fail(error, QStringLiteral("Credential migration is not supported on this platform."));
 #endif
 }
-
-bool save(const QString& path, const QJsonObject& values, QString* error) {
-    const QString directory = QFileInfo(path).absolutePath();
-    if (!QDir().mkpath(directory)) {
-        setError(error, QStringLiteral("Unable to create the daemon credential directory."));
-        return false;
-    }
-#if defined(Q_OS_UNIX)
-    QFile::setPermissions(directory,
-                          QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
-#endif
-    QSaveFile file(path);
-    const QByteArray bytes = QJsonDocument(values).toJson(QJsonDocument::Compact);
-    // Restrict the temporary file before any secret is written or the file is renamed into place.
-    if (!file.open(QIODevice::WriteOnly) ||
-        !file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner) ||
-        file.write(bytes) != bytes.size() || !file.commit()) {
-        setError(error, QStringLiteral("Unable to write the daemon credential file."));
-        return false;
-    }
-    return true;
+QString digest(const QByteArray& bytes) {
+    return QString::fromLatin1(QCryptographicHash::hash(bytes, QCryptographicHash::Sha256).toHex());
 }
-
 } // namespace
 
-CredentialStore::CredentialStore(QString service) : service_(std::move(service)) {}
+CredentialStore::CredentialStore(QString service)
+    : CredentialStore(service, nativeCredentialBackend(), credentialPath(service)) {}
+CredentialStore::CredentialStore(QString service, std::shared_ptr<CredentialBackend> backend,
+                                 QString legacyPath)
+    : service_(std::move(service)), backend_(std::move(backend)),
+      legacyPath_(std::move(legacyPath)) {}
 
-// Distinguishes "no credentials yet" (true, empty object) from an unreadable, unsafe or corrupt
-// file (false). Callers must never treat the latter as missing and generate replacement keys.
-// The file's safety is checked on every read; only its contents come from the snapshot, and only
-// while the file is the version the snapshot was read from.
-bool CredentialStore::load(QJsonObject* values, QString* error) const {
-    const QString path = credentialPath(service_);
-    const QFileInfo info(path);
-    *values = {};
-    if (!info.exists()) {
-        snapshot_ = {};
-        return true;
-    }
-    if (isUnsafe(info)) {
-        snapshot_ = {};
-        setError(error, QStringLiteral("The daemon credential file has unsafe permissions."));
+bool CredentialStore::transaction(const std::function<void(QHash<QString, QByteArray>&)>& change,
+                                  QHash<QString, QByteArray>* result, QString* error) const {
+    if (error)
+        error->clear();
+    static const QRegularExpression safeService(QStringLiteral("^[A-Za-z0-9_.-]{1,200}$"));
+    if (!backend_ || !safeService.match(service_).hasMatch())
+        return fail(error, QStringLiteral("Invalid credential store configuration."));
+    const QString directory = QFileInfo(legacyPath_).absolutePath();
+    if (!QDir().mkpath(directory))
+        return fail(error, QStringLiteral("Unable to create the credential lock directory."));
+#if defined(Q_OS_UNIX)
+    struct stat status{};
+    if (::lstat(QFile::encodeName(directory).constData(), &status) != 0 ||
+        !S_ISDIR(status.st_mode) || status.st_uid != ::geteuid() ||
+        !QFile::setPermissions(directory, QFileDevice::ReadOwner | QFileDevice::WriteOwner |
+                                              QFileDevice::ExeOwner))
+        return fail(error, QStringLiteral("Unsafe credential lock directory."));
+#endif
+    StoreLock lock;
+    if (!lock.acquire(legacyPath_ + QStringLiteral(".lock"), error))
         return false;
-    }
-    const std::optional<FileStamp> before = stampOf(path);
-    if (snapshot_.valid && before && snapshot_.stamp == *before) {
-        *values = snapshot_.values;
-        return true;
-    }
-    snapshot_ = {};
-    ++fileReads_;
-    if (!readFile(path, values, error))
+    QByteArray bytes;
+    const auto read = backend_->read(service_, &bytes, error);
+    if (read == CredentialBackend::Result::Error)
         return false;
-    // A write between the two stats leaves the snapshot empty, and the next read parses again.
-    if (before && stampOf(path) == before)
-        snapshot_ = {true, *before, *values};
+    QJsonObject record;
+    QHash<QString, QByteArray> accounts;
+    if (read == CredentialBackend::Result::Found) {
+        if (!parse(bytes, &record, error))
+            return false;
+        if (record.value("version") != QJsonValue(1) || !record.value("accounts").isObject())
+            return fail(error, QStringLiteral("Unsupported credential record format."));
+        if (!decode(record.value("accounts").toObject(), &accounts, error))
+            return false;
+    }
+    const QFileInfo legacy(legacyPath_);
+    if (legacy.exists() || legacy.isSymLink()) {
+        QByteArray legacyBytes;
+        if (!readLegacy(legacyPath_, &legacyBytes, error))
+            return false;
+        if (read == CredentialBackend::Result::Missing) {
+            QJsonObject values;
+            if (!parse(legacyBytes, &values, error) || !decode(values, &accounts, error))
+                return false;
+            record = {{"version", 1}, {"accounts", values}, {"legacyDigest", digest(legacyBytes)}};
+            const auto migrated = QJsonDocument(record).toJson(QJsonDocument::Compact);
+            if (migrated.size() > maximumRecordBytes || !backend_->write(service_, migrated, error))
+                return fail(error, QStringLiteral("Credential migration could not commit to the OS "
+                                                  "store; the legacy file is retained."));
+            QByteArray verified;
+            if (backend_->read(service_, &verified, error) != CredentialBackend::Result::Found ||
+                verified != migrated)
+                return fail(
+                    error,
+                    QStringLiteral(
+                        "Credential migration verification failed; the legacy file is retained."));
+        } else if (record.value("legacyDigest").toString() != digest(legacyBytes)) {
+            return fail(error,
+                        QStringLiteral("Legacy credentials conflict with the OS store; preserve "
+                                       "both and resolve recovery before retrying."));
+        }
+        // Retrying after a crash/write success never reimports stale enrollment or removed keys.
+        QByteArray current;
+        if (!readLegacy(legacyPath_, &current, error) || current != legacyBytes ||
+            !QFile::remove(legacyPath_))
+            return fail(error, QStringLiteral("Credentials are in the OS store, but legacy-file "
+                                              "cleanup failed; retry before continuing."));
+    }
+    const auto before = accounts;
+    if (change)
+        change(accounts);
+    if (accounts != before) {
+        record.insert("version", 1);
+        record.insert("accounts", encode(accounts));
+        const auto updated = QJsonDocument(record).toJson(QJsonDocument::Compact);
+        if (updated.size() > maximumRecordBytes)
+            return fail(error, QStringLiteral("The credential record exceeds the storage limit."));
+        if (!backend_->write(service_, updated, error))
+            return false;
+    }
+    if (result)
+        *result = accounts;
     return true;
 }
-
-void CredentialStore::remember(const QJsonObject& values) const {
-    const std::optional<FileStamp> stamp = stampOf(credentialPath(service_));
-    snapshot_ = stamp ? Snapshot{true, *stamp, values} : Snapshot{};
-}
-
 QByteArray CredentialStore::read(const QString& account, QString* error) const {
-    QJsonObject values;
-    if (!load(&values, error))
+    QHash<QString, QByteArray> accounts;
+    if (!transaction({}, &accounts, error))
         return {};
-    return QByteArray::fromBase64(values.value(account).toString().toLatin1());
+    return accounts.value(account);
 }
-
 bool CredentialStore::write(const QString& account, const QByteArray& value, QString* error) const {
-    QJsonObject values;
-    if (!load(&values, error))
-        return false;
-    values.insert(account, QString::fromLatin1(value.toBase64()));
-    ++fileWrites_;
-    if (!save(credentialPath(service_), values, error)) {
-        snapshot_ = {};
-        return false;
-    }
-    remember(values);
-    return true;
+    return update([&](auto& accounts) { accounts.insert(account, value); }, error);
 }
-
 bool CredentialStore::remove(const QString& account, QString* error) const {
-    return removeIf([&account](const QString& candidate) { return candidate == account; }, error);
+    return removeIf([&](const QString& candidate) { return candidate == account; }, error);
 }
-
-bool CredentialStore::removeIf(const std::function<bool(const QString& account)>& match,
+bool CredentialStore::removeIf(const std::function<bool(const QString&)>& match,
                                QString* error) const {
     return update(
-        [&match](QHash<QString, QByteArray>& accounts) {
-            accounts.removeIf([&match](const auto& entry) { return match(entry.key()); });
+        [&](auto& accounts) {
+            accounts.removeIf([&](const auto& entry) { return match(entry.key()); });
         },
         error);
 }
-
-bool CredentialStore::update(
-    const std::function<void(QHash<QString, QByteArray>& accounts)>& change, QString* error) const {
-    QJsonObject values;
-    if (!load(&values, error))
-        return false;
-    QHash<QString, QByteArray> accounts;
-    for (auto entry = values.constBegin(); entry != values.constEnd(); ++entry)
-        accounts.insert(entry.key(), QByteArray::fromBase64(entry.value().toString().toLatin1()));
-    const QHash<QString, QByteArray> before = accounts;
-    change(accounts);
-    if (accounts == before)
-        return true;
-    values = {};
-    for (auto entry = accounts.cbegin(); entry != accounts.cend(); ++entry)
-        values.insert(entry.key(), QString::fromLatin1(entry.value().toBase64()));
-    ++fileWrites_;
-    if (!save(credentialPath(service_), values, error)) {
-        snapshot_ = {};
-        return false;
-    }
-    remember(values);
-    return true;
+bool CredentialStore::update(const std::function<void(QHash<QString, QByteArray>&)>& change,
+                             QString* error) const {
+    return transaction(change, nullptr, error);
 }
-
 } // namespace ketplus::daemon

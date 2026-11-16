@@ -1,3 +1,5 @@
+include("${CMAKE_CURRENT_LIST_DIR}/credential-store/FixtureDaemon.cmake")
+
 function(ketplus_add_daemon_test target source)
     qt_add_executable(${target} ${source})
     ketplus_enable_warnings(${target})
@@ -22,8 +24,8 @@ add_test(NAME ketplus_machine_backend_tests COMMAND ketplus_machine_backend_test
 
 ketplus_add_daemon_test(ketplus_headless_daemon_tests HeadlessDaemonTest.cpp)
 target_compile_definitions(ketplus_headless_daemon_tests PRIVATE
-    KETPLUS_TEST_DAEMON="$<TARGET_FILE:ketplus_daemon>" KETPLUS_TEST_CTL="$<TARGET_FILE:ketplusctl>")
-add_dependencies(ketplus_headless_daemon_tests ketplus_daemon ketplusctl)
+    KETPLUS_TEST_DAEMON="$<TARGET_FILE:ketplus_fixture_daemon>" KETPLUS_TEST_CTL="$<TARGET_FILE:ketplusctl>")
+add_dependencies(ketplus_headless_daemon_tests ketplus_fixture_daemon ketplusctl)
 ketplus_add_daemon_test(ketplus_device_authorization_tests DeviceAuthorizationTest.cpp)
 ketplus_add_daemon_test(ketplus_atlas_access_tests AtlasAccessTest.cpp)
 target_sources(ketplus_device_authorization_tests PRIVATE cloud-privacy/MemoryCredentials.cpp)
@@ -66,8 +68,8 @@ ketplus_enable_warnings(ketplus_remote_ssh_daemon_integration_tests)
 target_link_libraries(ketplus_remote_ssh_daemon_integration_tests PRIVATE
     Qt6::Test ketplus_remote_ssh_backend)
 target_compile_definitions(ketplus_remote_ssh_daemon_integration_tests PRIVATE
-    KETPLUS_TEST_DAEMON="$<TARGET_FILE:ketplus_daemon>")
-add_dependencies(ketplus_remote_ssh_daemon_integration_tests ketplus_daemon)
+    KETPLUS_TEST_DAEMON="$<TARGET_FILE:ketplus_fixture_daemon>")
+add_dependencies(ketplus_remote_ssh_daemon_integration_tests ketplus_fixture_daemon)
 add_test(NAME ketplus_remote_ssh_daemon_integration_tests
     COMMAND ketplus_remote_ssh_daemon_integration_tests)
 
@@ -76,8 +78,8 @@ ketplus_add_daemon_test(ketplus_atlas_live_tunnel_tests AtlasLiveTunnelTest.cpp)
 ketplus_add_daemon_test(ketplus_provider_catalog_cache_tests ProviderCatalogCacheTest.cpp)
 ketplus_add_daemon_test(ketplus_copilot_cli_tests CopilotCliTest.cpp)
 target_compile_definitions(ketplus_copilot_cli_tests PRIVATE
-    KETPLUS_TEST_DAEMON="$<TARGET_FILE:ketplus_daemon>")
-add_dependencies(ketplus_copilot_cli_tests ketplus_daemon)
+    KETPLUS_TEST_DAEMON="$<TARGET_FILE:ketplus_fixture_daemon>")
+add_dependencies(ketplus_copilot_cli_tests ketplus_fixture_daemon)
 ketplus_add_daemon_test(ketplus_daemon_protocol_tests DaemonProtocolTest.cpp)
 ketplus_add_daemon_test(ketplus_schedule_rule_tests ScheduleRuleTest.cpp)
 ketplus_add_daemon_test(ketplus_schedule_protocol_tests ScheduleProtocolTest.cpp)
@@ -192,6 +194,8 @@ ketplus_add_daemon_test(ketplus_provider_malformed_frame_tests ProviderMalformed
 ketplus_add_daemon_test(ketplus_provider_stderr_flood_tests ProviderStderrFloodTest.cpp)
 ketplus_add_daemon_test(ketplus_provider_line_reader_tests ProviderLineReaderTest.cpp)
 ketplus_add_daemon_test(ketplus_daemon_credential_store_tests CredentialStoreTest.cpp)
+set(CREDENTIAL_STORAGE_LIBRARY ketplus_control_crypto)
+include(credential-store/NativeTests.cmake)
 ketplus_add_daemon_test(ketplus_daemon_worktree_revision_cache_tests WorktreeRevisionCacheTest.cpp)
 ketplus_add_daemon_test(ketplus_daemon_journal_space_tests JournalSpaceTest.cpp)
 ketplus_add_daemon_test(ketplus_daemon_journal_startup_tests JournalStartupTest.cpp)
@@ -252,6 +256,7 @@ target_link_libraries(ketplus_desktop_transcript_large_event_fetch_tests PRIVATE
 ketplus_add_daemon_test(ketplus_desktop_transcript_navigation_tests DesktopTranscriptNavigationTest.cpp)
 target_link_libraries(ketplus_desktop_transcript_navigation_tests PRIVATE ketplus_ai)
 ketplus_add_daemon_test(ketplus_desktop_session_discovery_tests DesktopSessionDiscoveryTest.cpp)
+target_sources(ketplus_desktop_session_discovery_tests PRIVATE cloud-privacy/MemoryCredentials.cpp)
 target_link_libraries(ketplus_desktop_session_discovery_tests PRIVATE ketplus_ai)
 ketplus_add_daemon_test(ketplus_desktop_reviewer_tests DesktopReviewerTest.cpp)
 target_link_libraries(ketplus_desktop_reviewer_tests PRIVATE ketplus_ai)

@@ -18,7 +18,7 @@ v2 pairing protocol does not migrate that application.
 ## Build and stage
 
 Use CMake 3.24+, Ninja, a C++20 compiler, OpenSSL 3 and Qt 6.11+ Core, Concurrent,
-Gui, Network, Sql and WebSockets. Gui supplies image decoding; Widgets, QML,
+Gui, Network, DBus, Sql and WebSockets. Gui supplies image decoding; Widgets, QML,
 WebView, `core/` and an X server are not needed for the headless
 target. Tests additionally require Qt Test. Node 24+ and npm stage the Claude
 sidecar. An already staged tree can be supplied with
@@ -97,8 +97,14 @@ The CLI and daemon share `KETPLUS_DAEMON_DATA_DIR`, `KETPLUS_DAEMON_SOCKET`,
 in an administrative shell, especially the unit's socket path
 `$XDG_RUNTIME_DIR/ketplus-daemon-v0`. Defaults are derived from the user data
 directory and runtime directory, with a shared data-directory fallback.
-Linux credentials are kept in service-specific owner-only files. Protect this
-OS account and its backups; it is the host trust boundary.
+Linux credentials use an unlocked default Secret Service collection on this user's
+local Unix session bus. Provision the service and unlock the collection using the
+OS administration tools before enrollment; KetPlus does not request an interactive
+unlock and never falls back to a plaintext file. An absent/locked store reports an
+error. The service unit must reach the same user session bus. Existing owner-only
+credential files are migration sources, removed after a verified store commit;
+conflicting backups require explicit recovery. Protect the OS account, collection
+unlock credentials and backups. See [ADR 0130](decisions/0130-os-credential-storage.md).
 
 Install Git and the providers that the server will run. Authenticate each provider
 under the service user using that provider's supported login method. The service
@@ -199,7 +205,7 @@ authenticated event decryption, encrypted command preparation/submission and
 host-signed command-result decryption. Persist the prepared envelope and retry
 exactly that ciphertext. It never resolves server paths or starts a local daemon.
 Revoked credentials fence in-flight responses. Sign-out also reports a local
-credential-file removal failure instead of claiming a durable successful logout.
+credential-store removal failure instead of claiming a durable successful logout.
 It revokes the server session only with a live access token: an expired one is
 rotated once first, and anything but a 200 reports that remote revocation
 failed. A rotated credential that cannot be stored stays in memory and is

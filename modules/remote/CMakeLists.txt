@@ -67,12 +67,21 @@ qt_add_resources(ketplus_team_language ketplus_team_translations
 add_library(ketplus_control_crypto STATIC
     src/cloud/CloudCrypto.cpp src/cloud/CloudCrypto.h
     src/cloud/CredentialStore.cpp src/cloud/CredentialStore.h
+    src/cloud/CredentialBackend.cpp src/cloud/CredentialBackend.h
     src/cloud/BrowserSignIn.cpp src/cloud/BrowserSignIn.h
     src/cloud/ControlEndpoint.h src/cloud/HostPlatform.h)
 target_link_libraries(ketplus_control_crypto PUBLIC Qt6::Core Qt6::Network OpenSSL::Crypto ketplus_remote)
 target_include_directories(ketplus_control_crypto PUBLIC
     "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>")
 ketplus_enable_warnings(ketplus_control_crypto)
+if(APPLE)
+    target_sources(ketplus_control_crypto PRIVATE src/cloud/KeychainCredentialBackend.cpp)
+    target_link_libraries(ketplus_control_crypto PRIVATE "-framework Security" "-framework CoreFoundation")
+elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    find_package(Qt6 6.11 REQUIRED COMPONENTS DBus)
+    target_sources(ketplus_control_crypto PRIVATE src/cloud/SecretServiceCredentialBackend.cpp)
+    target_link_libraries(ketplus_control_crypto PRIVATE Qt6::DBus)
+endif()
 
 # Independent backend for a Desktop acting as a paired remote client; no UI composition yet.
 add_library(ketplus_remote_control STATIC

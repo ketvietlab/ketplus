@@ -1,5 +1,6 @@
 #include "DaemonClient.h"
 #include "TranscriptWindowTestSupport.h"
+#include "cloud-privacy/MemoryCredentials.h"
 
 #include <QDir>
 #include <QElapsedTimer>
@@ -60,6 +61,7 @@ class DesktopSessionDiscoveryTest final : public QObject {
 
   private slots:
     void initTestCase() { QStandardPaths::setTestModeEnabled(true); }
+    void init() { r03::resetCredentials(); }
 
     void discoversAnotherClientThroughRealDaemon_data() {
         QTest::addColumn<int>("tombstones");
