@@ -168,12 +168,10 @@ Rectangle {
                 readonly property bool stopped: card.terminalStatus === "interrupted" || card.terminalStatus === "stopped"
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
-                text: card.ledger ? qsTr("Work ledger")
-                    : failed ? qsTr("Turn failed") : stopped ? qsTr("Turn stopped")
+                text: failed ? qsTr("Turn failed") : stopped ? qsTr("Turn stopped")
                     : card.running ? qsTr("Running") : allDone ? qsTr("All done")
                     : card.needsYou ? qsTr("Needs you") : qsTr("Turn %1").arg(card.turn)
-                tone: card.ledger ? KetTheme.BadgeTone.Neutral
-                    : failed || stopped ? KetTheme.BadgeTone.Warning
+                tone: failed || stopped ? KetTheme.BadgeTone.Warning
                     : card.running ? KetTheme.BadgeTone.Accent
                     : allDone ? KetTheme.BadgeTone.Success
                     : card.needsYou ? KetTheme.BadgeTone.Warning : KetTheme.BadgeTone.Neutral

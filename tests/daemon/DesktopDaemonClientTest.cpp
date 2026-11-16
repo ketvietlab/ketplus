@@ -1512,6 +1512,15 @@ class DesktopDaemonClientTest final : public QObject {
         QVERIFY(agentRoundTrip(agent, "agents.whoami", {}).contains("number"));
         QVERIFY(turnReports.isEmpty());
 
+        // Use the actual pane-read route twice, as opening and reopening the tab mid-turn.
+        // Neither read may reveal the persisted pending tool report.
+        for (int opened = 1; opened <= 2; ++opened) {
+            desktop.readWorkReport(worktree);
+            QTRY_COMPARE_WITH_TIMEOUT(reports.size(), opened, 5000);
+            QVERIFY(reports.last().at(2).toMap().value(QStringLiteral("items")).toList().isEmpty());
+        }
+        reports.clear();
+
         const QString optionId = question.value(QStringLiteral("questions"))
                                      .toList()
                                      .first()
@@ -1546,13 +1555,17 @@ class DesktopDaemonClientTest final : public QObject {
         // Terminal delivery updates the pane and end row, never the running-card signal.
         QVERIFY(turnReports.isEmpty());
 
-        // Opening the tab reads the stored ledger.
+        // Reopening after completion reads the same published snapshot as live delivery.
         reports.clear();
         desktop.readWorkReport(worktree);
         QTRY_VERIFY_WITH_TIMEOUT(!reports.isEmpty(), 5000);
         QCOMPARE(reports.last().at(1).toString(), conversation);
         QVERIFY2(reports.last().at(3).toString().isEmpty(),
                  qPrintable(reports.last().at(3).toString()));
+        QCOMPARE(reports.last().at(2).toMap().value(QStringLiteral("items")),
+                 report.value(QStringLiteral("items")));
+        QCOMPARE(reports.last().at(2).toMap().value(QStringLiteral("terminal_status")).toString(),
+                 QStringLiteral("completed"));
         // T-126 advances the version once at accepted request scope, then the tool does.
         QCOMPARE(reported.value("version").toInteger(), 2);
         QCOMPARE(reports.last().at(2).toMap().value(QStringLiteral("version")).toLongLong(),

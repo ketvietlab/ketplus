@@ -711,10 +711,9 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   Without the tools, or when the call fails, the turn still ends with the localized
   task/status/evidence/next-action matrix. The header's Work report button and the
   card's footer open one Report tab in the right pane. It shows the selected
-  conversation's whole ledger (`session.work_report.read`), with Open and All filters,
-  and follows scope refreshes and terminal snapshots. Its Work ledger label and
-  pending-update notice distinguish audit entries from turn completion; failed or
-  stopped terminal cards retain that status even if all items are done.
+  conversation's last terminal report (`session.work_report.read`), with Open and All filters,
+  scoped to the current request. Reads/reopens and scope refreshes never expose pending
+  ledger edits; failed or stopped terminal cards retain that status even if all items are done.
   Steered questions or added tasks resume the prior
   unfinished objective afterward unless the user cancels, pauses or replaces it.
   After compaction, agents are instructed to verify and announce repository,

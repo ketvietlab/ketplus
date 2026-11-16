@@ -459,13 +459,15 @@ void AgentWorkspaceViewTest::workReportPaneFollowsItsConversation() {
     QTRY_VERIFY((card = findVisibleItem(root, "workReportLedger")) != nullptr);
     QVERIFY(card->property("ledger").toBool());
     QCOMPARE(card->property("finished").toInt(), 1);
-    auto* auditNotice = findVisibleItem(root, "workReportAuditNotice");
-    QVERIFY(auditNotice != nullptr);
-    QVERIFY(auditNotice->property("text").toString().contains("including pending updates"));
-    QVERIFY(auditNotice->property("text").toString().contains("does not mark the end of a turn"));
     auto* ledgerBadge = findVisibleItem(card, "workReportStatus");
     QVERIFY(ledgerBadge != nullptr);
-    QCOMPARE(ledgerBadge->property("text").toString(), QStringLiteral("Work ledger"));
+    QCOMPARE(ledgerBadge->property("text").toString(), QStringLiteral("All done"));
+    auto failed = ledger(2, "done");
+    failed.insert("terminal_status", "failed");
+    pane.acceptReport("first", failed, {});
+    QTRY_COMPARE(ledgerBadge->property("text").toString(), QStringLiteral("Turn failed"));
+    pane.acceptReport("first", ledger(2, "done"), {});
+    QTRY_COMPARE(ledgerBadge->property("text").toString(), QStringLiteral("All done"));
     // The ledger view has no footer link back to itself.
     QVERIFY(!findVisibleItem(card, "workReportFooter")->property("opens").toBool());
     QCOMPARE(findVisibleItem(card, "workReportFooter")->property("label").toString(),

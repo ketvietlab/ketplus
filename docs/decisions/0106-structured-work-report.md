@@ -79,11 +79,16 @@ cannot count it, filter it or show it anywhere else.
     on cloud projection. Old `work_report.updated` history is still readable at
     its matching end row, but never creates a running card.
   - Accepted direct input still publishes T-126's scope refresh for the Report
-    pane. An explicit local Report-pane read is an audit read of the durable
-    ledger, including pending edits; it is not a terminal transcript card. The
-    pane labels this as a Work ledger with an explicit pending-update notice,
-    never an All done badge. Terminal cards retain the provider's failed/stopped
-    status even when every ledger item was reported done.
+    pane. Both this refresh and `session.work_report.read` use only the latest
+    matching terminal snapshot in `replay_events`, filtered by the durable current
+    request marker. Terminal rows survive transport acknowledgement and detail
+    retention, so no duplicate snapshot table is needed. Opening/reopening the
+    pane before the first published snapshot shows no report. Pending edits remain
+    internal to tool reconciliation; even a pending completion cannot remove a
+    previously published unresolved item. A no-report turn leaves the pane's last
+    published snapshot with its original turn identity, never an invented new one.
+    Legacy mid-turn `work_report.updated` events cannot refresh the pane. Terminal
+    cards and pane reads retain failed/stopped status even if all items are done.
   - Failure to persist returns an error. Success acknowledges persistence, not
     that a card is already visible or the turn finished.
 - **Guidance.**
@@ -158,12 +163,14 @@ cannot count it, filter it or show it anywhere else.
 
 ## Request-scoped presentation (T-126)
 
-The durable ledger remains the audit and stable-key merge source. Current report
+The durable ledger remains the internal audit and stable-key merge source. Current report
 counts, tool responses, the Report pane and copied text show all outstanding items
 plus items closed during the current direct-user request, never lifetime totals.
 An outstanding item carried from an earlier request and completed now belongs to
 the current request. Rewording an already completed item does not move it into a
 new request; reopening and completing it does.
+The pane applies this filter to the last terminal snapshot, not to pending ledger
+edits; tool responses continue to reconcile the pending ledger immediately.
 
 Acceptance of a direct `user.message` or successful direct `turn.steered` stores
 its event cursor as `request_id` in the same journal transaction. Steers in the
@@ -180,7 +187,7 @@ historical rendering; new snapshots retain full audit data with request metadata
 and render only the matching scope. No journal migration or user-data rewrite is
 required.
 
-After accepted input commits, SessionHost publishes the scoped snapshot through
+After accepted input commits, SessionHost projects the last terminal snapshot into the new scope through
 `work_report.updated`, the existing live Report-pane delivery path. This refresh
 does not depend on another agent tool call. Its `scope_only` marker keeps it out
 of transcript end-row fallback, so a later turn with no report cannot promote an

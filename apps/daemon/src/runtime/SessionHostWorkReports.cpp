@@ -11,6 +11,19 @@ QJsonObject failure(const QString& code, const QString& message) {
             {QStringLiteral("error_message"), message}};
 }
 
+QJsonObject publishedReport(LocalJournal& journal, const QString& id, const qint64 generation) {
+    auto report = journal.publishedWorkReport(id, generation);
+    const auto pending = journal.workReport(id, generation);
+    // Only request/version metadata comes from the mutable ledger. In particular, a pending
+    // completion must not remove an unresolved item from the last published snapshot.
+    if (report.value(QStringLiteral("request_id")) != pending.value(QStringLiteral("request_id")))
+        report.remove(QStringLiteral("title"));
+    if (pending.contains(QStringLiteral("request_id")))
+        report.insert(QStringLiteral("request_id"), pending.value(QStringLiteral("request_id")));
+    report.insert(QStringLiteral("version"), pending.value(QStringLiteral("version")));
+    return work_report::currentRequest(report);
+}
+
 } // namespace
 
 // Called only after accepted input events have committed and been delivered. Use the
@@ -20,8 +33,7 @@ void SessionHost::publishWorkReportScope(Session& session, const qint64 accepted
     if (!ledger.contains(QStringLiteral("items")) ||
         ledger.value(QStringLiteral("request_id")).toInteger(-1) != acceptedCursor)
         return;
-    auto report = work_report::currentRequest(ledger);
-    report.insert(QStringLiteral("turn"), session.stored.currentTurnSequence);
+    auto report = publishedReport(*journal_, session.stored.id, session.stored.generation);
     report.insert(QStringLiteral("scope_only"), true);
     (void)appendEvent(session, QStringLiteral("work_report.updated"), report);
 }
@@ -48,15 +60,15 @@ QJsonObject SessionHost::recordWorkReport(const QString& sessionId, const qint64
     return answer;
 }
 
-// session.work_report.read, for the desktop's Report tab: the current ledger, empty before the
-// conversation's first report.
+// The Report tab reads terminal snapshots only, scoped to the current request. Opening or
+// reopening it during a turn must never expose pending tool updates.
 QJsonObject SessionHost::readWorkReport(const QJsonObject& request) {
     Session* session = nullptr;
     if (const auto checked = checkedSession(request, &session); !checked.isEmpty())
         return checked;
     return {{QStringLiteral("ok"), true},
-            {QStringLiteral("report"), work_report::currentRequest(journal_->workReport(
-                                           session->stored.id, session->stored.generation))}};
+            {QStringLiteral("report"),
+             publishedReport(*journal_, session->stored.id, session->stored.generation)}};
 }
 
 } // namespace ketplus::daemon

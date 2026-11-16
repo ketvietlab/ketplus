@@ -2,8 +2,8 @@ import Ket
 import QtQuick
 import QtQuick.Controls.Basic as Basic
 
-// ADR 0106: the details pane's Report tab (mock DetailsPane, report). The whole ledger of the
-// active conversation, every item by group, with Open and All filters.
+// ADR 0106: the details pane's Report tab. The active conversation's last terminal
+// snapshot, scoped to the current request, with Open and All filters.
 Rectangle {
     id: pane
 
@@ -32,19 +32,6 @@ Rectangle {
             y: pane.px(16)
             width: scroll.availableWidth - 2 * x
             bottomPadding: pane.px(16)
-            spacing: pane.px(12)
-
-            Text {
-                objectName: "workReportAuditNotice"
-                visible: pane.hasItems
-                width: parent.width
-                wrapMode: Text.Wrap
-                textFormat: Text.PlainText
-                text: qsTr("Recorded work, including pending updates. Entries may change while the agent works; this ledger does not mark the end of a turn.")
-                color: KetTheme.t.textSecondary
-                font.family: KetTheme.fontFamily
-                font.pixelSize: pane.px(13)
-            }
 
             TranscriptWorkReport {
                 id: ledgerCard
@@ -53,6 +40,7 @@ Rectangle {
                 width: parent.width
                 ledger: true
                 report: pane.hasItems ? pane.report : ({})
+                terminalStatus: pane.report.terminal_status || ""
             }
             Text {
                 objectName: "workReportEmpty"
@@ -62,7 +50,7 @@ Rectangle {
                 textFormat: Text.PlainText
                 text: reportHost.loading ? qsTr("Loading the work report…")
                     : reportHost.message.length > 0 ? reportHost.message
-                    : qsTr("No work report yet. When the agent records its work, the report appears here and updates as the conversation goes on.")
+                    : qsTr("No work report yet. A report appears after the agent's turn ends.")
                 color: KetTheme.t.textSecondary
                 font.family: KetTheme.fontFamily
                 font.pixelSize: pane.px(13)
