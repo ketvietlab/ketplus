@@ -96,7 +96,10 @@ sandbox inside the disposable container; the shipped launcher never does.
 No browser session, hosted account, provider quota or external network is used.
 
 Artifacts include both packages, `BUILD-METADATA.json`, a preliminary SPDX 2.3
-inventory and `SHA256SUMS`. `publicationAuthorized` is always false; a successful
+inventory and `SHA256SUMS`. The assembler also emits a detailed staged file/component
+SBOM, an unapproved component-review template and `ARTIFACT-EVIDENCE.json` binding
+the package, metadata, inventory and SBOM digests. See [artifact inventory](artifact-inventory.md)
+for the fail-closed review check and its limits. `publicationAuthorized` is always false; a successful
 smoke test does not satisfy the remaining licensing or release-signing gates.
 The release checklist must add complete transitive notices, corresponding source
 and any relinking materials, a per-platform audit, and Debian repository signing.

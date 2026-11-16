@@ -10,12 +10,15 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import urllib.request
 import uuid
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent.parent
+sys.path.insert(0, str(HERE.parent))
+from artifact_inventory import bind_artifacts, encoded, write_evidence
 
 
 def run(*args, **kwargs):
@@ -237,13 +240,23 @@ def main():
     runtime_cache.mkdir(exist_ok=True)
     runtime = verified_runtime(runtime_cache, arch, pin)
     write_sbom(prefix, out, info, args.version, args.qt_version, arch, pin, epoch)
+    source_commit = run("git", "-C", REPO, "rev-parse", "HEAD", capture_output=True,
+                        text=True).stdout.strip()
+    if not source_commit.startswith(info["build_revision"]):
+        raise ValueError("Installed build identity differs from the packaging source commit")
+    write_evidence(prefix, out, source_commit, "linux-" + arch, epoch)
     artifacts = [make_deb(prefix, work, out, args.version, deb_arch, epoch),
                  make_appimage(prefix, appdir, work, out, args.version, arch, runtime, epoch)]
     metadata = {"edition": "pro", "architecture": arch, "version": args.version,
                 "qtVersion": args.qt_version, "daemonBuildInfo": info,
-                "sourceDateEpoch": epoch, "signed": False, "publicationAuthorized": False}
+                "sourceDateEpoch": epoch, "sourceCommit": source_commit,
+                "signed": False, "publicationAuthorized": False}
     (out / "BUILD-METADATA.json").write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n")
-    files = artifacts + [out / "BUILD-METADATA.json", out / "SBOM.spdx.json"]
+    (out / "ARTIFACT-EVIDENCE.json").write_bytes(encoded(
+        bind_artifacts(out, artifacts, out / "BUILD-METADATA.json")))
+    files = artifacts + [out / name for name in (
+        "BUILD-METADATA.json", "SBOM.spdx.json", "STAGED-INVENTORY.json",
+        "STAGED-SBOM.spdx.json", "COMPONENT-REVIEW.template.json", "ARTIFACT-EVIDENCE.json")]
     (out / "SHA256SUMS").write_text("".join(f"{digest(path)}  {path.name}\n" for path in sorted(files)))
     print("Engineering artifacts created; no signing, upload or publication was performed.")
 

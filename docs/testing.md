@@ -274,6 +274,14 @@ KetAtlas lane opt-in and report its skip separately.
 
 ## Minimum verification
 
+Staged inventory/review-gate changes run
+`python3 -m unittest discover -s tests/hygiene -p 'test_*.py'` and
+`python3 tests/packaging/test_linux_desktop_packages.py`. These use disposable
+staging/artifacts and no SDK, network, provider quota or signing keys. They verify
+evidence integrity/completeness; actual per-platform package, source/notice,
+signing and final release acceptance remain separate in
+[artifact inventory](artifact-inventory.md).
+
 Linux Pro packaging changes run `tests/packaging/test_linux_desktop_packages.py`,
 the offscreen bundled-browser/Claude-adapter tests and production build-info
 checks through `packaging/linux/build-desktop.sh`. Verify both actual package

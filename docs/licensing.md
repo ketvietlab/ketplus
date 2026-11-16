@@ -238,12 +238,17 @@ The following gaps exist in the current tree and packaging configuration:
   by operating system, plugins, and the Qt build used for packaging.
 - Pro Windows CI is deferred until the required Qt 6.11 WebView development
   packages are available from Qt's public Windows repository.
-- License files are installed by CMake but there is no About dialog entry that
-  makes them directly accessible from the running application.
+- License files are installed by CMake. The shared About dialog displays product
+  and version, but lacks source revision and access to installed notices.
 - The referenced libvterm repository is archived. This does not change its MIT
   license, but upgrades and security maintenance need an explicit upstream or
   maintained fork.
-- No release SBOM or automated license-policy check is currently generated.
+- Linux engineering packages include a preliminary three-package SPDX inventory.
+  The staged collector now adds file/component inventories and digest-bound review
+  inputs, with a fail-closed completeness/integrity check. It does not establish
+  legal sufficiency, static component completeness or publication approval; see
+  [artifact inventory](artifact-inventory.md). Exact per-platform release audits,
+  corresponding-source availability and final artifact acceptance remain open.
 
 ## Required distribution files
 
