@@ -183,3 +183,31 @@ No Copilot CLI is installed in this environment. The concrete adapter builds
 with the dedicated-process changes, and the generic ACP fixture covers the
 control sequence. Real advertised capabilities, cross-process history load and
 MCP replacement remain unverified. No quota-consuming substitute was run.
+
+## Verification checkpoint
+
+The source checkpoint `905142e2` includes the latest integration baseline and
+was rebuilt with the headless daemon preset on macOS arm64. No app bundle was
+deployed and no provider model turn was submitted.
+
+| Check | Result | Evidence boundary |
+| --- | --- | --- |
+| Post-integration Host, IPC, origin, Codex isolation, ACP isolation, messaging CTest matrix | 6/6 pass, 60.33 s | Real local fixture processes and temporary journals |
+| Narrow MCP/origin CTest target | 2/2 pass | Strict schemas, immutable invocation credential, authority state machine |
+| Sidecar and background contract Node suite | 95 pass, 3 opt-in SDK skips | Fake SDK/native hook and lifecycle fixtures; no model |
+| Explicit installed SDK 0.3.322 plus process-barrier control tests | 6/6 pass | Native query process/MCP control only; no prompt yielded |
+| Cursor/Copilot adapters and turn-acceptance matrix before integration refresh | 6/6 pass | Concrete adapters with scripted providers, not installed-provider history |
+| Claude adapter/worktree, daemon lifecycle, Codex isolation/items, messaging regression matrix before integration refresh | 6/6 pass | Includes scoped browser config and permission behavior |
+
+A failed first version of the new ACP stale-response fixture expected an
+untranslated response instead of the existing ACP permission outcome. A failed
+first delete-release fixture reused a message ID and therefore received its
+cached failure on retry. Corrected fixtures pass; neither failure is counted as
+a successful run. The Claude close-throw regression also verifies that an SDK
+exception cannot bypass actual subprocess drain.
+
+The acceptance gate still requires a supported no-inference persisted-history
+fixture for installed Codex/Cursor, and an available Copilot runtime with history
+and injected-MCP verification. Passing synthetic adapter history is insufficient
+to close that gate. The task remains blocked on this evidence rather than
+silently resetting provider history or reducing the supported-provider goal.
