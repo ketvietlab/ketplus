@@ -134,6 +134,20 @@ void ManagedTaskBridge::pollChildren() {
         if (childId.isEmpty())
             continue;
         const auto child = host_->sessions_.constFind(childId);
+        if (child != host_->sessions_.cend() &&
+            child->stored.generation == identity.value("child_generation").toInteger() &&
+            !child->failedTurnId.isEmpty() && child->failedTurnId == child->stored.turnId &&
+            task.value("state") != "stopping" && !stoppingChildren_.contains(id)) {
+            BackgroundTaskChange stopping;
+            stopping.state = "stopping";
+            stopping.terminalTarget = "failed";
+            stopping.reason = "child_failed";
+            runtime_->childChanged(id, stopping);
+            task = ledger_.runtimeTask(id);
+            if (task.value("state") == "stopping")
+                stopChild(task);
+            // Await provider completion/cancellation evidence before terminal.
+        }
         if (child == host_->sessions_.cend()) {
             if (host_->journal_->sessionExists(childId))
                 continue; // Missing runtime state is not cleanup evidence.
@@ -160,6 +174,22 @@ void ManagedTaskBridge::pollChildren() {
             running.handshakeCommitted = true;
             runtime_->childChanged(id, running);
             task = ledger_.runtimeTask(id);
+        }
+        if (!stoppingChildren_.contains(id) && task.value("state") != "stopping" &&
+            (child == host_->sessions_.cend() || child->stored.state == "failed" ||
+             child->stored.state == "interrupted")) {
+            // Fence descendant completions before cancelling their ownership tree.
+            // A failed child must never be restarted by one of its own job results.
+            BackgroundTaskChange stopping;
+            stopping.state = "stopping";
+            stopping.terminalTarget = child == host_->sessions_.cend() ? "interrupted" : "failed";
+            stopping.reason =
+                child == host_->sessions_.cend() ? "child_executor_lost" : "child_failed";
+            runtime_->childChanged(id, stopping);
+            task = ledger_.runtimeTask(id);
+            if (task.value("state") == "stopping") {
+                stopChild(task);
+            }
         }
         if (child != host_->sessions_.cend() && child->stored.awaitingReply &&
             !stoppingChildren_.contains(id)) {

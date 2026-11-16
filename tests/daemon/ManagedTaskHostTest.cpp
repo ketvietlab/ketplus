@@ -338,6 +338,66 @@ class ManagedTaskHostTest final : public QObject {
         QCOMPARE(journal.backgroundTasks().nonterminal().value("tasks").toArray().size(), 0);
     }
 
+    void failedChildCancelsDescendantsWithoutReceivingTheirWake() {
+        QTemporaryDir directory;
+        const auto cwd = QFileInfo(directory.path()).canonicalFilePath();
+        const auto log = directory.filePath("provider.log");
+        QVERIFY(writeFakeCodex(directory.filePath("fake-codex"), log));
+        LocalJournal journal(directory.filePath("journal.sqlite"));
+        QVERIFY(seed(journal, cwd));
+        CodexAdapter adapter(directory.filePath("fake-codex"));
+        SessionHost host(&journal, &adapter);
+        const auto cleanup = qScopeGuard([&] { adapter.stop(); });
+        const auto started = command(host, "session.task.start",
+                                     {{"client_request_id", "failed-child"},
+                                      {"kind", "agent"},
+                                      {"title", "Fail with descendants"},
+                                      {"timeout_ms", 20000},
+                                      {"execution_spec", QJsonObject{{"prompt", "hang"}}}});
+        const auto id = started.value("task").toObject().value("task_id").toString();
+        QTRY_COMPARE_WITH_TIMEOUT(task(host, id).value("state"), "running", 6000);
+        const auto child = task(host, id)
+                               .value("execution_identity")
+                               .toObject()
+                               .value("child_session_id")
+                               .toString();
+        const auto descendant =
+            command(host, "session.task.start", process(cwd, {"/bin/sleep", "15"}), child)
+                .value("task")
+                .toObject()
+                .value("task_id")
+                .toString();
+        QVERIFY(!descendant.isEmpty());
+        QTRY_COMPARE_WITH_TIMEOUT(journal.backgroundTasks().runtimeTask(descendant).value("state"),
+                                  "running", 6000);
+        StoredSession current;
+        for (const auto& session : journal.sessions())
+            if (session.id == child)
+                current = session;
+        emit adapter.notificationReceived(
+            "error", {{"threadId", current.threadId},
+                      {"turnId", current.turnId},
+                      {"willRetry", false},
+                      {"error", QJsonObject{{"message", "Fixture child failure"}}}});
+        QTRY_COMPARE_WITH_TIMEOUT(journal.backgroundTasks().runtimeTask(descendant).value("state"),
+                                  "cancelled", 6000);
+        QCOMPARE(task(host, id).value("state"), "stopping");
+        QCOMPARE(turns(log), 1);
+        // FakeCodex acknowledges interrupt without a completion event. Supply
+        // that independent evidence before expecting terminal cleanup.
+        emit adapter.notificationReceived(
+            "turn/completed",
+            {{"threadId", current.threadId},
+             {"turn", QJsonObject{{"id", current.turnId}, {"status", "failed"}}}});
+        QTRY_COMPARE_WITH_TIMEOUT(task(host, id).value("state"), "failed", 7000);
+        const auto cancelled = journal.backgroundTasks().runtimeTask(descendant);
+        QCOMPARE(cancelled.value("state"), "cancelled");
+        QCOMPARE(cancelled.value("completion").toObject().value("status"), "suppressed");
+        QTRY_COMPARE_WITH_TIMEOUT(turns(log), 2, 6000); // Initial child, then owner result.
+        QTest::qWait(800);
+        QCOMPARE(turns(log), 2);
+    }
+
     void managedChildUsesDedicatedLinkedSessionAndReturnsItsOutput() {
         QTemporaryDir directory;
         const auto cwd = QFileInfo(directory.path()).canonicalFilePath();
