@@ -2,16 +2,19 @@
 // paused states, answering, the task dialog, the handover request and a live update.
 // Run with QT_QPA_PLATFORM=offscreen.
 #include "teams/TeamPage.h"
+#include "KetAppearance.h"
 #include "KetBanner.h"
 #include "KetButton.h"
 #include "KetDialog.h"
 #include "KetEmptyState.h"
 #include "KetExpandableText.h"
+#include "KetMarkdownView.h"
 #include "KetSegmentedControl.h"
 #include "KetSelect.h"
 #include "KetStyle.h"
 #include "KetTextArea.h"
 #include "KetTextField.h"
+#include "TeamLanguage.h"
 #include "teams/TeamDialogs.h"
 #include "teams/TeamDirectory.h"
 #include "teams/TeamGoal.h"
@@ -21,15 +24,19 @@
 #include "ui/Theme.h"
 
 #include <QApplication>
+#include <QDesktopServices>
+#include <QDir>
 #include <QHeaderView>
 #include <QInputMethodEvent>
 #include <QJsonArray>
 #include <QLabel>
+#include <QScopeGuard>
 #include <QScrollArea>
 #include <QScrollBar>
 #include <QStandardPaths>
 #include <QTableWidget>
 #include <QTextEdit>
+#include <QUrl>
 #include <QtTest>
 #include <functional>
 
@@ -158,6 +165,7 @@ class TeamPageTest final : public QObject {
   private:
     FakeDaemon daemon_;
     std::unique_ptr<TeamDirectory> teams_;
+    QList<QUrl> openedUrls_;
 
     void start(const QJsonObject& team) {
         daemon_ = {};
@@ -177,6 +185,8 @@ class TeamPageTest final : public QObject {
     }
 
   private slots:
+    void captureUrl(const QUrl& url) { openedUrls_.append(url); }
+
     void initTestCase() {
         QStandardPaths::setTestModeEnabled(true);
         ket::Style::install(*qApp);
@@ -831,6 +841,9 @@ class TeamPageTest final : public QObject {
             QVERIFY(all && all->isVisibleTo(dialog));
             QCOMPARE(all->text(), QStringLiteral("Show all"));
             auto* clip = dialog->findChild<QWidget*>("teamTaskDescriptionClip");
+            auto* markdown = dialog->findChild<ket::MarkdownView*>("teamTaskDescription");
+            QVERIFY(markdown && markdown->isVisibleTo(dialog));
+            QVERIFY(markdown->findChild<ket::MarkdownText*>()->toPlainText().contains("Scope"));
             const int cut = clip->height();
             QVERIFY(cut < 200);
             if (!grabs.isEmpty())
@@ -855,6 +868,212 @@ class TeamPageTest final : public QObject {
                     QStringLiteral("%1/team-task-%2-all.png").arg(grabs).arg(size.width()));
             dialog->reject();
         }
+    }
+
+    void taskProseStartsAtTheTopOfItsCollapsedDescription() {
+        auto team = fixture();
+        auto tasks = team.value("tasks").toArray();
+        auto first = tasks.at(0).toObject();
+        first.insert("description",
+                     QString("Keep callback validation scoped to the active workspace and cover "
+                             "the transition with a fake transport. ")
+                         .repeated(60));
+        tasks.replace(0, first);
+        team.insert("tasks", tasks);
+        start(team);
+        QWidget window;
+        window.resize(1200, 1000);
+        TeamPage page(teams_.get(), "7", "/work/shop", &window);
+        page.resize(window.size());
+        window.show();
+        auto* dialog = page.openTask("T-1");
+        QCoreApplication::processEvents();
+        auto* clip = dialog->findChild<QWidget*>("teamTaskDescriptionClip");
+        auto* prose = clip->findChild<ket::MarkdownText*>();
+        QVERIFY(prose && prose->isVisibleTo(dialog));
+        const int top = prose->mapTo(clip, QPoint()).y();
+        const QString grabs = qEnvironmentVariable("KETPLUS_TEAM_PAGE_GRABS");
+        if (!grabs.isEmpty())
+            window.grab().save(grabs + "/task-prose.png");
+        QVERIFY2(top >= 0 && top < team_page::px(20),
+                 "The first paragraph must start inside the collapsed preview");
+        dialog->findChild<ket::Button*>("teamTaskDescriptionAll")->click();
+        QCoreApplication::processEvents();
+        clip = dialog->findChild<QWidget*>("teamTaskDescriptionClip");
+        prose = clip->findChild<ket::MarkdownText*>();
+        QCOMPARE(prose->mapTo(clip, QPoint()).y(), 0);
+        QVERIFY(qAbs(clip->height() - prose->height()) <= 2);
+        dialog->reject();
+    }
+
+    void taskDescriptionRefreshesWithoutBlankSpace_data() {
+        QTest::addColumn<QString>("language");
+        QTest::addColumn<QSize>("size");
+        QTest::addColumn<bool>("dark");
+        QTest::addColumn<qreal>("zoom");
+        QTest::newRow("en-desktop-light") << QString("en") << QSize(1200, 900) << false << 1.0;
+        QTest::newRow("vi-desktop-dark-zoom") << QString("vi") << QSize(1200, 900) << true << 1.25;
+        QTest::newRow("en-narrow-dark") << QString("en") << QSize(520, 700) << true << 1.0;
+        QTest::newRow("vi-narrow-light-zoom") << QString("vi") << QSize(520, 700) << false << 1.25;
+    }
+
+    void taskDescriptionRefreshesWithoutBlankSpace() {
+        QFETCH(QString, language);
+        QFETCH(QSize, size);
+        QFETCH(bool, dark);
+        QFETCH(qreal, zoom);
+        auto& appearance = ket::Appearance::instance();
+        const auto oldMode = appearance.mode();
+        const auto oldZoom = appearance.zoom();
+        const auto restore = qScopeGuard([&] {
+            appearance.setMode(oldMode);
+            appearance.setZoom(oldZoom);
+        });
+        appearance.setMode(dark ? ket::Appearance::Mode::Dark : ket::Appearance::Mode::Light);
+        appearance.setZoom(zoom);
+        remote::team_language::Scope speaking(language);
+        QJsonObject team = fixture();
+        team.insert("language", language);
+        auto tasks = team.value("tasks").toArray();
+        auto first = tasks.at(0).toObject();
+        const QString shortText = "## Scope\n\nRead **visible text**.\n\nKeep `sample.cpp`.";
+        first.insert("description", shortText);
+        first.insert("pull_request", "https://example.org/projects/sample/pull/42");
+        tasks.replace(0, first);
+        team.insert("tasks", tasks);
+        start(team);
+        QWidget window;
+        window.resize(size);
+        TeamPage page(teams_.get(), "7", "/work/shop", &window);
+        page.resize(size);
+        window.show();
+        auto* dialog = page.openTask("T-1");
+        QCoreApplication::processEvents();
+        auto description = [&] {
+            return dialog->findChild<ket::MarkdownView*>("teamTaskDescription");
+        };
+        QVERIFY(description() && description()->isVisibleTo(dialog));
+        QCOMPARE(description()->markdown(), shortText);
+        auto* pr = dialog->findChild<ket::Button*>("teamTaskPullRequest");
+        QVERIFY(pr && pr->isVisibleTo(dialog));
+        QCOMPARE(pr->text(), remote::team_language::text(language, "Team", "Open"));
+        QVERIFY(
+            description()->findChild<ket::MarkdownText*>()->toPlainText().contains("visible text"));
+        QVERIFY(!dialog->findChild<ket::Button*>("teamTaskDescriptionAll")->isVisibleTo(dialog));
+        if (size.width() > 1000)
+            QVERIFY(dialog->card()->width() >= team_page::px(700));
+        QVERIFY(dialog->findChild<QLabel*>("teamTaskOwner")->width() > dialog->card()->width() / 3);
+        const QRect frame(QPoint(), window.size());
+        QVERIFY(frame.contains(
+            QRect(dialog->card()->mapTo(&window, QPoint()), dialog->card()->size())));
+        auto update = [&](const QString& text) {
+            first.insert("description", text);
+            tasks.replace(0, first);
+            team.insert("tasks", tasks);
+            team.insert("revision", team.value("revision").toInt() + 1);
+            teams_->applyEvent("team.changed", {{"team", team}});
+            QCoreApplication::processEvents();
+        };
+        const QString longText = shortText + "\n\n" +
+                                 QString("- Preserve every line of Markdown\n").repeated(24) +
+                                 "\n```cpp\nrun();\n```\n";
+        update(longText);
+        QVERIFY(description() && description()->isVisibleTo(dialog));
+        QCOMPARE(description()->markdown(), longText);
+        const int collapsed = dialog->findChild<QWidget*>("teamTaskDescriptionClip")->height();
+        auto* all = dialog->findChild<ket::Button*>("teamTaskDescriptionAll");
+        QVERIFY(all->isVisibleTo(dialog));
+        QCOMPARE(all->text(), remote::team_language::text(language, "Team", "Show all"));
+        const QString grabs = qEnvironmentVariable("KETPLUS_TEAM_PAGE_GRABS");
+        if (!grabs.isEmpty()) {
+            QVERIFY(QDir().mkpath(grabs));
+            QVERIFY(window.grab().save(grabs + "/task-" + QTest::currentDataTag() + ".png"));
+        }
+        all->click();
+        QCoreApplication::processEvents();
+        QVERIFY(description()->isVisibleTo(dialog));
+        QCOMPARE(description()->markdown(), longText);
+        QVERIFY(dialog->findChild<QWidget*>("teamTaskDescriptionClip")->height() > collapsed);
+        all = dialog->findChild<ket::Button*>("teamTaskDescriptionAll");
+        QCOMPARE(all->text(), remote::team_language::text(language, "Team", "Show less"));
+        update(shortText);
+        QVERIFY(description()->isVisibleTo(dialog));
+        QVERIFY(!dialog->findChild<ket::Button*>("teamTaskDescriptionAll")->isVisibleTo(dialog));
+        update(longText);
+        all = dialog->findChild<ket::Button*>("teamTaskDescriptionAll");
+        all->click();
+        QCoreApplication::processEvents();
+        QVERIFY(description()->isVisibleTo(dialog));
+        QCOMPARE(dialog->findChild<QWidget*>("teamTaskDescriptionClip")->height(), collapsed);
+        update("  \n");
+        QVERIFY(!description());
+        QVERIFY(!dialog->findChild<QWidget*>("teamTaskDescriptionClip"));
+        QVERIFY(!dialog->findChild<QWidget*>("teamTaskDescriptionHeading"));
+        update(shortText);
+        QVERIFY(description() && description()->isVisibleTo(dialog));
+        QVERIFY(!dialog->findChild<ket::Button*>("teamTaskDescriptionAll")->isVisibleTo(dialog));
+        auto* body = dialog->findChild<TeamTaskDialog*>();
+        for (const auto* button : dialog->findChildren<ket::Button*>())
+            if (button->isVisibleTo(&window) && !body->isAncestorOf(button))
+                QVERIFY2(frame.contains(QRect(button->mapTo(&window, QPoint()), button->size())),
+                         qPrintable(button->text()));
+        dialog->reject();
+    }
+
+    void taskPullRequestOnlyOpensMetadataWebUrls() {
+        openedUrls_.clear();
+        QDesktopServices::setUrlHandler("https", this, "captureUrl");
+        QDesktopServices::setUrlHandler("http", this, "captureUrl");
+        const auto restore = qScopeGuard([] {
+            QDesktopServices::unsetUrlHandler("https");
+            QDesktopServices::unsetUrlHandler("http");
+        });
+        QJsonObject team = fixture();
+        start(team);
+        QWidget window;
+        window.resize(1100, 800);
+        TeamPage page(teams_.get(), "7", "/work/shop", &window);
+        page.resize(window.size());
+        window.show();
+        auto* dialog = page.openTask("T-1");
+        QCoreApplication::processEvents();
+        QVERIFY(!dialog->findChild<ket::Button*>("teamTaskPullRequest"));
+        QCOMPARE(dialog->findChild<QLabel*>("teamTaskPullRequest")->text(), QString::fromUtf8("–"));
+        auto update = [&](const QString& url) {
+            auto tasks = team.value("tasks").toArray();
+            auto first = tasks.at(0).toObject();
+            first.insert("pull_request", url);
+            tasks.replace(0, first);
+            team.insert("tasks", tasks);
+            team.insert("revision", team.value("revision").toInt() + 1);
+            teams_->applyEvent("team.changed", {{"team", team}});
+            QCoreApplication::processEvents();
+        };
+        const QString url = "https://example.org/projects/sample/pull/42";
+        update(url);
+        auto* open = dialog->findChild<ket::Button*>("teamTaskPullRequest");
+        QVERIFY(open && open->isVisibleTo(dialog));
+        QCOMPARE(open->toolTip(), url);
+        QVERIFY(open->accessibleName().contains(url));
+        open->setFocus(Qt::TabFocusReason);
+        QTest::keyClick(open, Qt::Key_Space);
+        QCOMPARE(openedUrls_, QList<QUrl>{QUrl(url)});
+        const QString next = "http://example.org/changes/43";
+        update(next);
+        dialog->findChild<ket::Button*>("teamTaskPullRequest")->click();
+        QCOMPARE(openedUrls_, (QList<QUrl>{QUrl(url), QUrl(next)}));
+        for (const QString invalid :
+             {"javascript:alert(1)", "file:///tmp/sample", "data:text/plain,hi", "/pull/42",
+              "https://", "https://bad host/pull/42", "https://user:password@example.org/pull/42",
+              ""}) {
+            update(invalid);
+            QVERIFY2(!dialog->findChild<ket::Button*>("teamTaskPullRequest"), qPrintable(invalid));
+            auto* text = dialog->findChild<QLabel*>("teamTaskPullRequest");
+            QVERIFY(text);
+            QCOMPARE(text->text(), invalid.isEmpty() ? QString::fromUtf8("–") : invalid);
+        }
+        QCOMPARE(openedUrls_.size(), 2);
+        dialog->reject();
     }
 
     // ADR 0114, open point 2: the header's turns and the team's budget dialog, in both themes,

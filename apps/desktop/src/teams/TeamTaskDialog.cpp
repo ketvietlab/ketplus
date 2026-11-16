@@ -25,6 +25,9 @@
 #include <QScrollBar>
 #include <QVBoxLayout>
 
+#include <functional>
+#include <utility>
+
 namespace ketplus {
 namespace {
 
@@ -97,9 +100,11 @@ class Fade final : public QWidget {
 // The description at its cut or its whole height, with the fade over the cut.
 class Clip final : public QWidget {
   public:
-    Clip(ket::MarkdownView* view, const bool whole, QWidget* parent)
-        : QWidget(parent), view_(view), fade_(new Fade(this)), whole_(whole) {
+    Clip(ket::MarkdownView* view, const bool whole, QWidget* parent, std::function<void()> fitted)
+        : QWidget(parent), view_(view), fade_(new Fade(this)), whole_(whole),
+          fitted_(std::move(fitted)) {
         view->setParent(this);
+        view->installEventFilter(this);
         fade_->raise();
         QSizePolicy policy(QSizePolicy::Preferred, QSizePolicy::Fixed);
         policy.setHeightForWidth(true);
@@ -118,6 +123,17 @@ class Clip final : public QWidget {
     }
 
   protected:
+    bool eventFilter(QObject* watched, QEvent* event) override {
+        // Markdown's text view fits after show/resize. Follow its new layout height too,
+        // otherwise a paragraph measured at the initial narrow width stays centered below the cut.
+        if (watched == view_ && event->type() == QEvent::LayoutRequest) {
+            view_->layout()->activate();
+            view_->resize(width(), view_->heightForWidth(width()));
+            updateGeometry();
+            fitted_();
+        }
+        return QWidget::eventFilter(watched, event);
+    }
     void resizeEvent(QResizeEvent*) override {
         view_->setGeometry(0, 0, width(), view_->heightForWidth(width()));
         const bool shown = cut(width()) && !whole_;
@@ -129,6 +145,7 @@ class Clip final : public QWidget {
     ket::MarkdownView* view_;
     Fade* fade_;
     bool whole_;
+    std::function<void()> fitted_;
 };
 
 // Scrolls the task. It asks for the task's whole height; the dialog gives it what the window
@@ -275,12 +292,13 @@ void TeamTaskDialog::rebuild() {
         QString value;
         const char* name;
         bool mono;
+        bool externalLink{false};
     };
     QList<Fact> facts{
         {tr("Owner"), ownerName, "teamTaskOwner", false},
         {tr("Reviewer"), reviewer, "teamTaskReviewer", false},
         {tr("Pull request"), task.value(QStringLiteral("pull_request")).toString(),
-         "teamTaskPullRequest", true},
+         "teamTaskPullRequest", true, true},
         {tr("Branch"), task.value(QStringLiteral("branch")).toString(), "teamTaskBranch", true},
         {tr("Worktree"), task.value(QStringLiteral("worktree")).toString(), "teamTaskWorktree",
          true},
@@ -304,15 +322,21 @@ void TeamTaskDialog::rebuild() {
         label->setType(12);
         const bool has = !fact.value.isEmpty();
         // A path or a branch is cut in the middle, where it says least.
-        auto* value = new Text(has ? fact.value : none, details_, Text::Fit::ElideMiddle);
+        QWidget* value = fact.externalLink ? pullRequestLink(fact.value, details_) : nullptr;
+        const bool link = value != nullptr;
+        if (!value) {
+            auto* text = new Text(has ? fact.value : none, details_, Text::Fit::ElideMiddle);
+            text->setType(has && fact.mono ? 12 : 13,
+                          has && fact.mono ? QFont::Medium : QFont::Normal, has && fact.mono);
+            text->setAccessibleName(
+                QStringLiteral("%1: %2").arg(fact.label, has ? fact.value : none));
+            value = text;
+        }
         value->setObjectName(QLatin1String(fact.name));
-        value->setType(has && fact.mono ? 12 : 13, has && fact.mono ? QFont::Medium : QFont::Normal,
-                       has && fact.mono);
-        value->setAccessibleName(QStringLiteral("%1: %2").arg(fact.label, has ? fact.value : none));
         auto* cell = new QVBoxLayout;
         cell->setSpacing(px(4));
         cell->addWidget(label);
-        cell->addWidget(value);
+        cell->addWidget(value, 0, link ? Qt::AlignLeft : Qt::Alignment{});
         grid->addLayout(cell, index / 2, index % 2);
     }
     column->addLayout(grid);
@@ -324,7 +348,7 @@ void TeamTaskDialog::rebuild() {
         column->addWidget(heading(tr("Description"), details_, "teamTaskDescriptionHeading"));
         auto* markdown = new ket::MarkdownView(description);
         markdown->setObjectName(QStringLiteral("teamTaskDescription"));
-        auto* clip = new Clip(markdown, wholeDescription_, details_);
+        auto* clip = new Clip(markdown, wholeDescription_, details_, [this] { fitHeight(); });
         clip->setObjectName(QStringLiteral("teamTaskDescriptionClip"));
         column->addWidget(clip);
         auto* all = new ket::Button(wholeDescription_ ? tr("Show less") : tr("Show all"),
@@ -460,7 +484,7 @@ void TeamTaskDialog::fitHeight() {
     const int width = qMax(px(200), scroll_->viewport()->width());
     if (auto* all = details_->findChild<ket::Button*>(QStringLiteral("teamTaskDescriptionAll")))
         if (auto* clip = static_cast<Clip*>(all->property("clip").value<QWidget*>()))
-            all->setVisible(wholeDescription_ || clip->cut(width - px(14)));
+            all->setVisible(clip->cut(width - px(14)));
     for (QWidget* up = parentWidget(); up; up = up->parentWidget())
         if (auto* dialog = qobject_cast<ket::Dialog*>(up)) {
             if (dialog->isVisible())
