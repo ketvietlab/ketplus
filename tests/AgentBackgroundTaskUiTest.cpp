@@ -159,6 +159,63 @@ void AgentWorkspaceViewTest::managedTaskOutputFencesRequestsAndKeepsCursors() {
     QVERIFY(view.backgroundTaskOutput().isEmpty());
 }
 
+void AgentWorkspaceViewTest::managedTaskOutputRetriesAfterReadError() {
+    ketplus::AgentWorkspaceView view;
+    view.applyTheme(testPalette());
+    view.setAgentAvailable(true);
+    view.setBackgroundTaskState(access());
+    view.setBackgroundTasks({task("job", "completed")});
+    view.setProductSidebarVisible(false);
+    view.resize(900, 760);
+    view.show();
+    QVERIFY(QTest::qWaitForWindowExposed(view.quickView()));
+    QSignalSpy reads(&view, &ketplus::AgentWorkspaceView::backgroundTaskOutputRequested);
+    view.requestBackgroundTaskOutput("job");
+    QCOMPARE(reads.count(), 1);
+    view.acceptBackgroundTaskResult("job", "output", {{"error", "Temporary read failure"}});
+    auto* root = view.quickView()->rootObject();
+    auto* retry = findVisualItem(root, "backgroundTaskOutputRetry");
+    QVERIFY(retry);
+    QTRY_VERIFY(retry->isVisible());
+    QTRY_VERIFY(retry->isEnabled());
+
+    auto denied = access();
+    denied.insert("canRead", false);
+    view.setBackgroundTaskState(denied);
+    QTRY_VERIFY(!retry->isEnabled());
+    view.requestBackgroundTaskOutput("job");
+    QCOMPARE(reads.count(), 1);
+    auto disconnected = access();
+    disconnected.insert("connected", false);
+    view.setBackgroundTaskState(disconnected);
+    QTRY_VERIFY(!retry->isEnabled());
+    view.requestBackgroundTaskOutput("job");
+    QCOMPARE(reads.count(), 1);
+    view.setBackgroundTaskState(access());
+    view.setAgentAvailable(false);
+    QTRY_VERIFY(!retry->isEnabled());
+    view.requestBackgroundTaskOutput("job");
+    QCOMPARE(reads.count(), 1);
+    view.setAgentAvailable(true);
+    QTRY_VERIFY(retry->isEnabled());
+
+    QTest::mouseClick(view.quickView(), Qt::LeftButton, Qt::NoModifier,
+                      retry->mapToScene(retry->boundingRect().center()).toPoint());
+    QTRY_COMPARE(reads.count(), 2);
+    QTRY_VERIFY(!retry->isEnabled());
+    view.requestBackgroundTaskOutput("job");
+    QCOMPARE(reads.count(), 2); // The retry remains fenced while the read is pending.
+    view.acceptBackgroundTaskResult("job", "output",
+                                    {{"request", QString::number(reads.last().at(2).toULongLong())},
+                                     {"output", "Recovered output"}});
+    QTRY_VERIFY(!retry->isVisible());
+    QVERIFY(view.backgroundTaskOutput().value("error").toString().isEmpty());
+    QCOMPARE(view.backgroundTaskOutput().value("output").toString(), "Recovered output");
+    auto* output = root->findChild<QObject*>("backgroundTaskOutputText");
+    QVERIFY(output);
+    QTRY_COMPARE(output->property("text").toString(), "Recovered output");
+}
+
 void AgentWorkspaceViewTest::managedTaskStatesRender_data() {
     QTest::addColumn<bool>("dark");
     QTest::addColumn<int>("width");

@@ -385,10 +385,11 @@ Rectangle {
                     wrapMode: Text.Wrap
                 }
                 KetButton {
+                    objectName: "backgroundTaskOutputRetry"
                     visible: !!bar.pane.error
                     text: "Retry output"
                     controlSize: KetTheme.ControlSize.Small
-                    enabled: !bar.offline && bar.canRead && !bar.pane.loading && !bar.pane.error
+                    enabled: !bar.offline && bar.canRead && !bar.pane.loading
                     onClicked: agentHost.requestBackgroundTaskOutput(bar.pane.taskId)
                 }
                 RowLayout {

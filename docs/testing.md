@@ -778,11 +778,14 @@ not a daemon or provider: it covers registry pages beyond 16 rows, opaque cursor
 stale-cursor refetch, negotiated control/read permissions, cleanup revision payloads
 and offline refusal. Agent Workspace tests `backgroundTaskBar`,
 `managedTaskCleanupRequiresUserConfirmation`,
-`managedTaskOutputFencesRequestsAndKeepsCursors` and `managedTaskStatesRender`
+`managedTaskOutputFencesRequestsAndKeepsCursors`,
+`managedTaskOutputRetriesAfterReadError` and `managedTaskStatesRender`
 cover legacy compatibility, non-dismissable cleanup warnings despite a successful
 root exit, explicit revision-fenced user confirmation, duplicate suppression,
 read-only/offline/recovery, keyboard focus during registry loading, live theme/zoom
-switching, output pagination/cache/request fencing, and all shared
+switching, output pagination/cache/request fencing, a failed output read followed
+by a real Retry click and successful recovery (disabled offline, without read
+permission or while pending), and all shared
 states with 25 tasks. The render cases use light/dark at 900px and a 390px content
 surface at 125% zoom, with the product sidebar hidden as in the embedded workspace.
 `KETPLUS_BACKGROUND_CAPTURE_DIR` saves their Qt Quick offscreen captures. These
