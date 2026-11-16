@@ -230,6 +230,12 @@ modules/computer/   computer use settings and provider MCP launch
 tests/              Pro and cross-boundary integration tests
 ```
 
+## Contributing
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) for issue reports, development setup,
+verification, and pull requests into `integration`. For suspected vulnerabilities,
+read [SECURITY.md](SECURITY.md) before sharing any details.
+
 ## License
 
 KetPlus is licensed under the [Mozilla Public License 2.0](LICENSE).

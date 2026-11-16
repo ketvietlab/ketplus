@@ -38,7 +38,8 @@ Pro code extends `core/` through its exported `KetPlusCM::*` CMake targets and
 separate modules, not through edition compile flags inside `core/`, so the Lite
 build stays the editor alone.
 
-The branch policy is `develop` for integration and `main` for production.
+Contributions target `integration`; promotion to verified `develop` and releases
+to production `main` follow [the release process](release-process.md).
 
 ## Identity and organizations
 
