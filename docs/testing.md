@@ -818,6 +818,15 @@ bash tests/daemon/linux-containment/executor-acceptance.sh build/daemon-dev
 The script does not install dependencies or modify sysctls, mount permissions or
 AppArmor policy. A skipped opt-in suite is not Linux executor acceptance.
 
+Review regressions cover a successful descendant waking its parked managed child
+both with free slots and with its root's four slots occupied. The macOS executor
+test captures an audit-token signal target, makes the process exec a new image
+while retaining PID/birth, and verifies that sending the old target does not
+signal the new incarnation. Linux's stalled-manager fixture uses an independent
+POSIX Unix-socket listener that accepts DBus connections without answering auth:
+admission times out after six seconds while a timer keeps advancing and another
+real job remains running under its unchanged five-second executor lease.
+
 #### Background job runtime verification record
 
 On 2026-11-16, the T-2 runtime checkpoint passed the following checks without
@@ -825,8 +834,8 @@ provider accounts or changes to an installed application:
 
 | Check | Environment | Result |
 | --- | --- | --- |
-| Host, ledger, native executor and runtime CTest suites | macOS arm64, Qt 6.11.2 | 4/4, 54.97 s |
-| Production-helper executor, Host, IPC, output, ledger and spec CTest suites | Ubuntu 24.04 arm64, kernel 6.8, systemd 255, Qt 6.11.0 | 6/6, 128.62 s; no skipped executor cases |
+| Host, IPC, native executor and runtime CTest suites after review fixes | macOS arm64, Qt 6.11.2 | 4/4, 61.51 s |
+| Production-helper executor, Host, IPC, output, ledger and spec CTest suites after review fixes | Ubuntu 24.04 arm64, kernel 6.8, systemd 255, Qt 6.11.0 | 6/6, 114.37 s; no skipped executor cases |
 | Runtime-component install into a separate prefix | Same Linux reference guest | Install succeeded; staged daemon `--check-runtime` succeeded with loader/plugin environment overrides removed |
 | Staged executor capability probe in a delegated user unit | Same Linux reference guest | `available=true` |
 | Contract fixtures and public-tree hygiene | macOS host | 9/9 Node tests and 4/4 Python tests |
@@ -846,6 +855,12 @@ matrix above. Its cause was not established. The test now checks and prints the
 start reply before checking approval so an admission rejection can be distinguished
 from an approval-lifetime failure. Earlier failure logs are retained locally for
 review; the green rerun does not erase that observation.
+
+During regression development the Qt-based fake bus listener aborted in Qt
+Network's incoming-socket path. A GDB backtrace was retained; the fixture now
+uses an independent POSIX listener instead. The focused stalled-manager test
+passed (8.44 s), followed by the complete Linux matrix and staging checks above.
+This change does not attribute or fix a general Qt Network defect.
 
 This record does not verify SDK native-background blocking, shared desktop UI,
 cross-provider live inference, Linux amd64, signed macOS distribution or an

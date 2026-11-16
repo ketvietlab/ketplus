@@ -6,7 +6,11 @@
 #include <QFile>
 #include <QJsonDocument>
 #include <QProcess>
+#include <QProcessEnvironment>
+#include <QTimer>
 #include <QUuid>
+#include <memory>
+#include <utility>
 #ifdef Q_OS_LINUX
 #include <sys/stat.h>
 #include <sys/vfs.h>
@@ -136,11 +140,114 @@ bool linuxContainmentAvailable(const QString& helper, QString* error) {
 #endif
 }
 
-bool linuxStartSupervisor(const QString& helper, const QString& directory, const QString& task,
-                          const QString& lease, QString* error) {
+namespace {
+// Every daemon-side manager RPC yields to the heartbeat event loop. Synchronous
+// helpers above are used only by the standalone supervisor/probe process.
+void runAsync(const QString& program, const QStringList& arguments, QObject* owner, int timeout,
+              std::function<void(bool, QByteArray, QString)> done) {
+    auto* process = new QProcess(owner);
+    process->setProcessEnvironment(QProcessEnvironment::systemEnvironment());
+    process->setStandardInputFile(QProcess::nullDevice());
+    auto* deadline = new QTimer(process);
+    deadline->setSingleShot(true);
+    auto completed = std::make_shared<bool>(false);
+    const auto finish = [process, deadline, completed, done = std::move(done)](
+                            bool success, const QByteArray& output, const QString& error) {
+        if (std::exchange(*completed, true))
+            return;
+        deadline->stop();
+        if (process->state() == QProcess::NotRunning)
+            process->deleteLater();
+        done(success, output, error);
+    };
+    QObject::connect(process, &QProcess::finished, process, &QObject::deleteLater);
+    QObject::connect(
+        process, &QProcess::finished, owner,
+        [process, finish](int code, QProcess::ExitStatus status) {
+            finish(status == QProcess::NormalExit && code == 0,
+                   process->readAllStandardOutput().left(16384),
+                   QString::fromUtf8(process->readAllStandardError().left(1024)).trimmed());
+        });
+    QObject::connect(process, &QProcess::errorOccurred, owner,
+                     [finish](QProcess::ProcessError error) {
+                         if (error == QProcess::FailedToStart)
+                             finish(false, {}, "The user service manager could not be started.");
+                     });
+    QObject::connect(deadline, &QTimer::timeout, owner, [process, finish] {
+        process->kill();
+        finish(false, {}, "The user service manager did not answer within its deadline.");
+    });
+    deadline->start(timeout);
+    process->start(program, arguments);
+}
+QJsonObject parseProperties(const QByteArray& output) {
+    QJsonObject result;
+    for (const auto& line : output.split('\n')) {
+        const auto split = line.indexOf('=');
+        if (split > 0)
+            result.insert(QString::fromLatin1(line.left(split)),
+                          QString::fromLatin1(line.mid(split + 1)));
+    }
+    return result;
+}
+} // namespace
+
+void linuxContainmentAvailableAsync(const QString& helper, QObject* owner,
+                                    std::function<void(bool, QString)> done) {
+#ifdef Q_OS_LINUX
+    if (geteuid() == 0 || linuxBootId().isEmpty()) {
+        done(false, "The Linux executor requires a non-root daemon user and a boot identity.");
+        return;
+    }
+    const auto task = QUuid::createUuid().toString(QUuid::Id128);
+    const auto lease = QUuid::createUuid().toString(QUuid::Id128);
+    auto arguments = properties();
+    arguments << "--wait" << "--pipe" << "--property=RuntimeMaxSec=10s"
+              << "--unit=" + linuxJobUnit(task, lease) << helper << "--linux-probe" << task
+              << lease;
+    runAsync("/usr/bin/systemd-run", arguments, owner, 6000,
+             [done = std::move(done)](bool ok, const QByteArray& output, const QString& error) {
+                 const bool available =
+                     ok &&
+                     QJsonDocument::fromJson(output.trimmed()).object().value("available").toBool();
+                 done(available,
+                      available ? QString{}
+                      : error.isEmpty()
+                          ? QStringLiteral("Delegated cgroup v2, nsdelegate, isolated namespaces "
+                                           "or user-unit cleanup are unavailable.")
+                          : error);
+             });
+#else
+    Q_UNUSED(helper)
+    Q_UNUSED(owner)
+    done(false, "Linux cgroup containment is unavailable on this platform.");
+#endif
+}
+
+void linuxUnitPropertiesAsync(const QString& unit, QObject* owner,
+                              std::function<void(QJsonObject)> done) {
+    if (!unit.startsWith("ketplus-job-") || !unit.endsWith(".service") || unit.contains('/')) {
+        done({});
+        return;
+    }
+    runAsync("/usr/bin/systemctl",
+             {"--user", "show", unit,
+              "--property=LoadState,ActiveState,SubState,MainPID,InvocationID,ControlGroup,"
+              "Delegate,KillMode,TimeoutStopUSec"},
+             owner, 4000, [done = std::move(done)](bool, const QByteArray& output, const QString&) {
+                 done(parseProperties(output)); // Missing units can return a nonzero exit code.
+             });
+}
+
+void linuxStartSupervisorAsync(const QString& helper, const QString& directory, const QString& task,
+                               const QString& lease, QObject* owner, std::function<void()> done) {
     auto arguments = properties();
     arguments << "--unit=" + linuxJobUnit(task, lease) << helper << directory << task << lease;
-    return run("/usr/bin/systemd-run", arguments, nullptr, error);
+    runAsync(
+        "/usr/bin/systemd-run", arguments, owner, 4000,
+        [done = std::move(done)](bool, const QByteArray&, const QString&) {
+            done(); // Ambiguous replies always reconcile the durable unit; never replay launch.
+        });
 }
 
 QJsonObject linuxCreateBoundary(const QString& task, const QString& lease, QString* error) {
@@ -194,10 +301,10 @@ bool linuxPlaceLauncher(const QJsonObject& identity, qint64 pid) {
            write(identity.value("path").toString() + "/cgroup.procs", QByteArray::number(pid));
 }
 
-bool linuxReceiptTrusted(const QString& task, const QString& lease, const QJsonObject& receipt) {
+bool linuxReceiptTrusted(const QString& task, const QString& lease, const QJsonObject& receipt,
+                         const QJsonObject& service) {
     const auto unit = linuxJobUnit(task, lease);
     const auto boundary = receipt.value("linux_boundary").toObject();
-    const auto service = linuxUnitProperties(unit);
     return !linuxBootId().isEmpty() && receipt.value("boot_id") == linuxBootId() &&
            receipt.value("systemd_unit") == unit && boundary.value("unit") == unit &&
            boundary.value("invocation_id") == service.value("InvocationID") &&
@@ -210,7 +317,7 @@ bool linuxReceiptTrusted(const QString& task, const QString& lease, const QJsonO
 }
 
 QJsonObject linuxRecoverBoundary(const QString& task, const QString& lease,
-                                 const QJsonObject& receipt) {
+                                 const QJsonObject& receipt, const QJsonObject& service) {
     const auto unit = linuxJobUnit(task, lease);
     const auto identity = receipt.value("linux_boundary").toObject();
     const auto oldBoot = receipt.value("boot_id").toString();
@@ -219,7 +326,6 @@ QJsonObject linuxRecoverBoundary(const QString& task, const QString& lease,
         return {{"clean", false}, {"reason", "linux_boot_identity_unavailable"}};
     if (!oldBoot.isEmpty() && oldBoot != currentBoot)
         return {{"clean", true}, {"reason", "host_rebooted"}};
-    const auto service = linuxUnitProperties(unit);
     if (!identity.isEmpty() && linuxBoundaryMatches(identity)) {
         if (identity.value("unit") != unit ||
             identity.value("invocation_id") != service.value("InvocationID"))

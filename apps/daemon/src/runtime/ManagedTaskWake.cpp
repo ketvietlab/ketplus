@@ -100,8 +100,15 @@ void ManagedTaskBridge::dispatchWakes() {
                 continue;
             }
             if (parent.value("parked").toBool()) {
-                (void)runtime_->resumeChild(parent.value("task_id").toString());
-                continue;
+                const auto id = parent.value("task_id").toString();
+                if (!runtime_->resumeChild(id).value("ok").toBool())
+                    continue;
+                const auto claimed = ledger_.runtimeTask(id);
+                if (claimed.value("parked").toBool() || !claimed.value("slot_held").toBool() ||
+                    claimed.value("state") != "running")
+                    continue;
+                // Dispatch in this poll. pollChildren() would otherwise park the
+                // idle child again before its accepted continuation could run.
             }
             if (!ledger_.claimWake(eventId, owner).value("ok").toBool())
                 continue;

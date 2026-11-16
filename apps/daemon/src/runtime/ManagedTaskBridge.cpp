@@ -200,10 +200,12 @@ void ManagedTaskBridge::start(const QJsonObject& request, const BackgroundTaskOw
         if (!admitted.error.isEmpty())
             done(failure(admitted.errorCode, admitted.error));
         else {
-            auto reply = runtime_->start(admitted.intent, admitted.execution);
-            if (reply.value("ok").toBool())
-                reply.insert("accepted", true);
-            done(reply);
+            runtime_->start(admitted.intent, admitted.execution,
+                            [done = std::move(done)](QJsonObject reply) {
+                                if (reply.value("ok").toBool())
+                                    reply.insert("accepted", true);
+                                done(reply);
+                            });
         }
     };
     if (payload.value("kind") != "agent") {

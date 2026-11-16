@@ -28,6 +28,7 @@ class NativeJobClient final : public QObject {
   private:
     bool validateDirectory(QString* error) const;
     void connectSocket();
+    void connectVerified(const QJsonObject& record);
     void receive();
     void message(const QJsonObject& message);
     void send(const QJsonObject& message);
@@ -46,6 +47,8 @@ class NativeJobClient final : public QObject {
     QJsonObject inheritedEnvironment_;
     QJsonObject lastReceipt_;
     QJsonObject recoveryIdentity_;
+    QJsonObject trustedLinuxReceipt_;
+    bool managerPending_{false};
     CommitHandshake commitHandshake_;
     Event event_;
     qint64 remainingTimeout_{0};

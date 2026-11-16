@@ -7,10 +7,14 @@
 #include <QJsonDocument>
 #include <QLocalSocket>
 #include <QProcess>
+#include <QScopeGuard>
 #include <QTemporaryDir>
 #include <QUuid>
 #include <QtTest>
 #include <csignal>
+#ifdef Q_OS_MACOS
+#include <libproc.h>
+#endif
 
 using namespace ketplus::daemon::executor;
 
@@ -187,7 +191,7 @@ class NativeJobExecutorTest final : public QObject {
                 detached = true;
         QVERIFY(detached);
         const auto done = executor.receive("done");
-        QCOMPARE(done.value("state"), "timed_out");
+        QVERIFY2(done.value("state") == "timed_out", qPrintable(QJsonDocument(done).toJson()));
         QCOMPARE(done.value("cleanup_status"), "best_effort_complete");
         for (const auto value : before) {
             const auto old = value.toObject();
@@ -297,6 +301,41 @@ class NativeJobExecutorTest final : public QObject {
         client.acknowledge();
     }
 
+    void capturedMacSignalCannotTargetAChangedProcessIncarnation() {
+#ifdef Q_OS_MACOS
+        QProcess process;
+        process.start("/bin/sh", {"-c", "printf ready; read line; exec /bin/sleep 60"});
+        const auto cleanup = qScopeGuard([&] {
+            process.kill();
+            process.waitForFinished(2000);
+        });
+        QVERIFY(process.waitForStarted());
+        QVERIFY(process.waitForReadyRead());
+        QCOMPARE(process.readAllStandardOutput(), "ready");
+        const auto identity = inspect(process.processId());
+        QVERIFY(identity);
+        QString error;
+        const auto captured = NativeProcessSignal::capture(*identity, &error);
+        QVERIFY2(captured, qPrintable(error));
+        process.write("exec\n");
+        process.waitForBytesWritten();
+        const auto execed = [&] {
+            char path[PROC_PIDPATHINFO_MAXSIZE]{};
+            return proc_pidpath(int(process.processId()), path, sizeof(path)) > 0 &&
+                   QByteArray(path).endsWith("/sleep");
+        };
+        QTRY_VERIFY(execed());
+        // exec changes the kernel PID version while preserving PID and birth.
+        // This deterministically exercises lookup-to-signal incarnation change.
+        QCOMPARE(inspect(process.processId())->birth, identity->birth);
+        QVERIFY2(captured->send(SIGTERM, &error), qPrintable(error));
+        QTest::qWait(150);
+        QCOMPARE(process.state(), QProcess::Running);
+        QVERIFY2(signalIdentity(*inspect(process.processId()), SIGTERM, &error), qPrintable(error));
+        QVERIFY(process.waitForFinished(2000));
+#endif
+    }
+
     void handshakeDoesNotLaunchAndNormalExitIsBestEffort() {
         Executor executor;
         QVERIFY(executor.start());
@@ -340,7 +379,7 @@ class NativeJobExecutorTest final : public QObject {
         const auto before = executor.receipt().value("known_processes").toArray();
         QVERIFY(before.size() >= 2);
         const auto done = executor.receive("done");
-        QCOMPARE(done.value("state"), "timed_out");
+        QVERIFY2(done.value("state") == "timed_out", qPrintable(QJsonDocument(done).toJson()));
         QCOMPARE(done.value("cleanup_status"), "best_effort_complete");
         QVERIFY(done.value("known_processes").toArray().isEmpty());
         for (const auto value : before) {

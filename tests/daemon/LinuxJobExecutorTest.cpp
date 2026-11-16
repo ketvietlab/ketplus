@@ -5,6 +5,7 @@
 
 #include <QCoreApplication>
 #include <QDir>
+#include <QEventLoop>
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -54,6 +55,21 @@ class Fixture final {
         return {{"owner", 1, "turn"}, key,     "process",      "Linux fixture",
                 key.toUtf8(),         timeout, {{"cwd", base}}};
     }
+    QJsonObject start(const BackgroundTaskIntent& intent, const QJsonObject& execution) {
+        QJsonObject reply;
+        QEventLoop loop;
+        QTimer deadline;
+        deadline.setSingleShot(true);
+        QObject::connect(&deadline, &QTimer::timeout, &loop, &QEventLoop::quit);
+        deadline.start(10000);
+        runtime->start(intent, execution, [&](QJsonObject result) {
+            reply = std::move(result);
+            loop.quit();
+        });
+        if (reply.isEmpty())
+            loop.exec();
+        return reply;
+    }
     QJsonObject execution(const QJsonArray& argv) const {
         return {{"argv", argv}, {"cwd", base}, {"env_delta", QJsonObject{}}};
     }
@@ -99,11 +115,65 @@ class LinuxJobExecutorTest final : public QObject {
         const auto bus = qgetenv("DBUS_SESSION_BUS_ADDRESS");
         const auto restore = qScopeGuard([&] { qputenv("DBUS_SESSION_BUS_ADDRESS", bus); });
         qputenv("DBUS_SESSION_BUS_ADDRESS", "unix:path=/nonexistent/ketplus-test-bus");
-        const auto result =
-            fixture.runtime->start(fixture.intent(), fixture.execution({"/usr/bin/true"}));
+        const auto result = fixture.start(fixture.intent(), fixture.execution({"/usr/bin/true"}));
         QCOMPARE(result.value("error_code"), "containment_unavailable");
         QVERIFY(fixture.ledger.nonterminal().value("tasks").toArray().isEmpty());
     }
+    void stalledAdmissionDoesNotExpireAnotherExecutorsLease() {
+        QTemporaryDir directory;
+        Fixture fixture(directory.path());
+        QString error;
+        QVERIFY(fixture.initialize(&error));
+        const auto id = idOf(fixture.start(fixture.intent("healthy", 60000),
+                                           fixture.execution({"/bin/sleep", "60"})));
+        QVERIFY(!id.isEmpty());
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.task(id).value("state"), "running", 10000);
+        const auto socket = directory.filePath("stalled-bus");
+        const auto connected = directory.filePath("bus-connected");
+        QProcess stalledBus;
+        // An independent POSIX listener avoids using the Qt socket accept path
+        // under test as the deliberately nonresponsive service-manager fixture.
+        stalledBus.start("/usr/bin/python3", {"-c", R"PY(import socket, sys
+server = socket.socket(socket.AF_UNIX)
+server.bind(sys.argv[1])
+server.listen()
+print('ready', flush=True)
+clients = []
+while True:
+    clients.append(server.accept()[0])
+    open(sys.argv[2], 'w').close()
+)PY",
+                                              socket, connected});
+        const auto stopBus = qScopeGuard([&] {
+            stalledBus.kill();
+            stalledBus.waitForFinished(2000);
+        });
+        QTRY_VERIFY(stalledBus.bytesAvailable() > 0);
+        const auto bus = qgetenv("DBUS_SESSION_BUS_ADDRESS");
+        const auto restore = qScopeGuard([&] { qputenv("DBUS_SESSION_BUS_ADDRESS", bus); });
+        qputenv("DBUS_SESSION_BUS_ADDRESS", ("unix:path=" + socket).toUtf8());
+        int beats = 0;
+        QTimer timer;
+        timer.setInterval(100);
+        connect(&timer, &QTimer::timeout, [&] { ++beats; });
+        timer.start();
+        QElapsedTimer elapsed;
+        elapsed.start();
+        const auto rejected =
+            fixture.start(fixture.intent("stalled"), fixture.execution({"/usr/bin/true"}));
+        qputenv("DBUS_SESSION_BUS_ADDRESS", bus);
+        QCOMPARE(rejected.value("error_code"), "containment_unavailable");
+        QVERIFY(elapsed.elapsed() >= 5500); // Longer than the supervisor's 5 s lease.
+        QVERIFY(beats > 20);
+        QVERIFY(QFile::exists(connected));
+        QTest::qWait(500); // Allow any genuine lease-loss notification to arrive.
+        QCOMPARE(fixture.task(id).value("state"), "running");
+        QCOMPARE(fixture.ledger.nonterminal().value("tasks").toArray().size(), 1);
+        QVERIFY(fixture.runtime->stop(id, {"owner", 1, {}}).value("ok").toBool());
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.task(id).value("state"), "cancelled", 10000);
+        QVERIFY(gone(fixture.task(id)));
+    }
+
     void durableStartRetryOutputAndVerifiedCompletion() {
         QTemporaryDir directory;
         qputenv("KETPLUS_FIXTURE_INHERITED", "from-daemon");
@@ -123,11 +193,11 @@ class LinuxJobExecutorTest final : public QObject {
              "\"${KETPLUS_FIXTURE_REMOVE-unset}\""});
         execution.insert("env_delta", QJsonObject{{"KETPLUS_FIXTURE_DELTA", "delta"},
                                                   {"KETPLUS_FIXTURE_REMOVE", QJsonValue::Null}});
-        const auto started = fixture.runtime->start(request, execution);
+        const auto started = fixture.start(request, execution);
         QVERIFY2(started.value("ok").toBool(),
                  qPrintable(started.value("error_message").toString()));
         const auto id = idOf(started);
-        QCOMPARE(idOf(fixture.runtime->start(request, execution)), id);
+        QCOMPARE(idOf(fixture.start(request, execution)), id);
         QTRY_COMPARE_WITH_TIMEOUT(fixture.task(id).value("state"), "completed", 10000);
         QCOMPARE(fixture.task(id).value("containment_mode"), "cgroup_v2");
         QCOMPARE(fixture.task(id).value("cleanup_status"), "verified");
@@ -136,7 +206,7 @@ class LinuxJobExecutorTest final : public QObject {
         QVERIFY(!read(directory.filePath("journal.sqlite")).contains("from-daemon"));
         QCOMPARE(read(directory.filePath("marker")), "once");
         QVERIFY(gone(fixture.task(id)));
-        QCOMPARE(idOf(fixture.runtime->start(request, execution)), id);
+        QCOMPARE(idOf(fixture.start(request, execution)), id);
         QCOMPARE(fixture.ledger.deliveryPage(false).value("events").toArray().size(), 1);
     }
     void detachedDescendantsAndMigrationAttemptsStayInsideBoundary() {
@@ -175,7 +245,7 @@ if os.fork() == 0:
 time.sleep(.3)
 print(json.dumps(attempts), flush=True)
 )PY"));
-        const auto id = idOf(fixture.runtime->start(
+        const auto id = idOf(fixture.start(
             fixture.intent(),
             fixture.execution({"/usr/bin/python3", directory.filePath("worker.py")})));
         QVERIFY(!id.isEmpty());
@@ -204,9 +274,9 @@ for index in range(300):
     time.sleep(.02)
 while True: time.sleep(.1)
 )PY"));
-        const auto id = idOf(fixture.runtime->start(
-            fixture.intent("timeout", 2500),
-            fixture.execution({"/usr/bin/python3", directory.filePath("fork.py")})));
+        const auto id = idOf(
+            fixture.start(fixture.intent("timeout", 2500),
+                          fixture.execution({"/usr/bin/python3", directory.filePath("fork.py")})));
         QVERIFY(!id.isEmpty());
         QTRY_VERIFY_WITH_TIMEOUT(!read(directory.filePath("fork-count")).isEmpty(), 6000);
         QTRY_COMPARE_WITH_TIMEOUT(fixture.task(id).value("state"), "timed_out", 12000);
@@ -221,9 +291,9 @@ while True: time.sleep(.1)
         QString error;
         QVERIFY(fixture.initialize(&error));
         for (int index = 0; index < 4; ++index) {
-            const auto id = idOf(
-                fixture.runtime->start(fixture.intent(QString::number(index)),
-                                       fixture.execution({"/bin/sh", "-c", "sleep .1; exit 0"})));
+            const auto id =
+                idOf(fixture.start(fixture.intent(QString::number(index)),
+                                   fixture.execution({"/bin/sh", "-c", "sleep .1; exit 0"})));
             QVERIFY(!id.isEmpty());
             QTRY_VERIFY_WITH_TIMEOUT(fixture.task(id).value("state") != "queued", 6000);
             if (index > 0) {
@@ -262,9 +332,9 @@ while True: time.sleep(.1)
         Fixture fixture(directory.path());
         QString error;
         QVERIFY(fixture.initialize(&error));
-        const auto id = idOf(fixture.runtime->start(
-            fixture.intent(),
-            fixture.execution({"/bin/sh", "-c", "printf once >> marker; sleep 30"})));
+        const auto id = idOf(
+            fixture.start(fixture.intent(),
+                          fixture.execution({"/bin/sh", "-c", "printf once >> marker; sleep 30"})));
         QVERIFY(!id.isEmpty());
         QTRY_COMPARE_WITH_TIMEOUT(fixture.task(id).value("state"), "running", 10000);
         const auto identity = fixture.task(id)
@@ -317,9 +387,9 @@ int main(int argc, char** argv) {
         QString error;
         if (!fixture.initialize(&error))
             return 2;
-        const auto id = idOf(fixture.runtime->start(
-            fixture.intent("crash", 60000),
-            fixture.execution({"/bin/sh", "-c", "printf once >> marker; sleep 30"})));
+        const auto id = idOf(
+            fixture.start(fixture.intent("crash", 60000),
+                          fixture.execution({"/bin/sh", "-c", "printf once >> marker; sleep 30"})));
         if (id.isEmpty())
             return 3;
         QTimer timer;

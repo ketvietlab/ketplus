@@ -1,6 +1,7 @@
 #include "runtime/ManagedTaskRuntime.h"
 #include "storage/BackgroundTaskLedger.h"
 
+#include <QEventLoop>
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QSqlQuery>
@@ -45,6 +46,21 @@ class Fixture final {
     BackgroundTaskIntent intent(const QString& key = "start") const {
         return {{"owner", 1, "turn"}, key,   "process",        "Fixture",
                 key.toUtf8(),         10000, {{"cwd", path()}}};
+    }
+    QJsonObject start(const BackgroundTaskIntent& intent, const QJsonObject& execution) {
+        QJsonObject reply;
+        QEventLoop loop;
+        QTimer deadline;
+        deadline.setSingleShot(true);
+        QObject::connect(&deadline, &QTimer::timeout, &loop, &QEventLoop::quit);
+        deadline.start(10000);
+        runtime->start(intent, execution, [&](QJsonObject result) {
+            reply = std::move(result);
+            loop.quit();
+        });
+        if (reply.isEmpty())
+            loop.exec();
+        return reply;
     }
     QJsonObject execution(const QJsonArray& argv) const {
         return {{"argv", argv}, {"cwd", path()}, {"env_delta", QJsonObject{}}};
@@ -92,7 +108,7 @@ class ManagedTaskRuntimeTest final : public QObject {
                 [&](const QJsonObject& task) { stopped.append(task.value("task_id").toString()); });
             auto request = fixture.intent();
             request.kind = "agent";
-            const auto root = fixture.runtime->start(request, {{"prompt", "Fake child"}})
+            const auto root = fixture.start(request, {{"prompt", "Fake child"}})
                                   .value("task")
                                   .toObject()
                                   .value("task_id")
@@ -101,7 +117,7 @@ class ManagedTaskRuntimeTest final : public QObject {
             request.owner.sessionId = "child-" + root;
             request.clientRequestId = "nested";
             request.specFingerprint = "nested";
-            const auto middle = fixture.runtime->start(request, {{"prompt", "Fake nested child"}})
+            const auto middle = fixture.start(request, {{"prompt", "Fake nested child"}})
                                     .value("task")
                                     .toObject()
                                     .value("task_id")
@@ -113,7 +129,7 @@ class ManagedTaskRuntimeTest final : public QObject {
             request.owner.sessionId = "child-" + middle;
             request.clientRequestId = "leaf";
             request.specFingerprint = "leaf";
-            const auto leaf = fixture.runtime->start(request, {{"prompt", "Fake leaf"}})
+            const auto leaf = fixture.start(request, {{"prompt", "Fake leaf"}})
                                   .value("task")
                                   .toObject()
                                   .value("task_id")
@@ -147,7 +163,7 @@ class ManagedTaskRuntimeTest final : public QObject {
             QVERIFY(query.exec("CREATE TRIGGER fail_terminal BEFORE UPDATE ON managed_jobs "
                                "WHEN new.state='completed' BEGIN "
                                "SELECT RAISE(ABORT,'injected terminal write failure'); END"));
-            const auto start = fixture.runtime->start(
+            const auto start = fixture.start(
                 fixture.intent(),
                 fixture.execution({"/bin/sh", "-c", "printf X >> once; printf result"}));
             const auto id = start.value("task").toObject().value("task_id").toString();
@@ -189,7 +205,7 @@ class ManagedTaskRuntimeTest final : public QObject {
             QString error;
             QVERIFY(fixture.initialize(&error));
             const auto first =
-                fixture.runtime->start(fixture.intent(), fixture.execution({"/bin/sleep", "60"}));
+                fixture.start(fixture.intent(), fixture.execution({"/bin/sleep", "60"}));
             const auto id = first.value("task").toObject().value("task_id").toString();
             QTRY_COMPARE(fixture.permissionRequests, 1);
             fixture.runtime->permissionResolved(id, true);
@@ -226,9 +242,9 @@ class ManagedTaskRuntimeTest final : public QObject {
             connection = fixture.connection;
             QString error;
             QVERIFY(fixture.initialize(&error));
-            const auto first = fixture.runtime->start(
-                fixture.intent(),
-                fixture.execution({"/bin/sh", "-c", "printf X >> once; sleep 2"}));
+            const auto first =
+                fixture.start(fixture.intent(),
+                              fixture.execution({"/bin/sh", "-c", "printf X >> once; sleep 2"}));
             const auto id = first.value("task").toObject().value("task_id").toString();
             QTRY_COMPARE(fixture.permissionRequests, 1);
             fixture.runtime->permissionResolved(id, true);
@@ -265,7 +281,7 @@ class ManagedTaskRuntimeTest final : public QObject {
             QVERIFY2(fixture.initialize(&error), qPrintable(error));
             const auto request = fixture.intent();
             const auto spec = fixture.execution({"/usr/bin/printf", "hello"});
-            const auto reply = fixture.runtime->start(request, spec);
+            const auto reply = fixture.start(request, spec);
             QVERIFY(reply.value("ok").toBool());
             const auto id = reply.value("task").toObject().value("task_id").toString();
             QCOMPARE(fixture.get(id).value("state"), "queued");
@@ -288,7 +304,7 @@ class ManagedTaskRuntimeTest final : public QObject {
             QCOMPARE(fixture.get(id).value("output_size").toInteger(), 5);
             QCOMPARE(fixture.runtime->output(id, {"other", 1, {}}).value("error_code"),
                      "task_not_found");
-            const auto retry = fixture.runtime->start(request, spec);
+            const auto retry = fixture.start(request, spec);
             QCOMPARE(retry.value("task").toObject().value("task_id"), id);
             QVERIFY(retry.value("reused").toBool());
             QCOMPARE(fixture.permissionRequests, 1);
@@ -304,14 +320,14 @@ class ManagedTaskRuntimeTest final : public QObject {
             QString error;
             QVERIFY(fixture.initialize(&error));
             const auto spec = fixture.execution({"/bin/sleep", "60"});
-            const auto first = fixture.runtime->start(fixture.intent(), spec);
+            const auto first = fixture.start(fixture.intent(), spec);
             const auto id = first.value("task").toObject().value("task_id").toString();
             QTRY_COMPARE(fixture.permissionRequests, 1);
             fixture.runtime->permissionResolved(id, false);
             QCOMPARE(fixture.get(id).value("state"), "failed");
             QCOMPARE(fixture.get(id).value("completion").toObject().value("status"), "suppressed");
             QVERIFY(!QFileInfo::exists(fixture.path() + "/jobs/" + id));
-            const auto second = fixture.runtime->start(fixture.intent("second"), spec);
+            const auto second = fixture.start(fixture.intent("second"), spec);
             const auto nextId = second.value("task").toObject().value("task_id").toString();
             QVERIFY(fixture.runtime->stop(nextId, fixture.intent().owner).value("ok").toBool());
             QCOMPARE(fixture.get(nextId).value("state"), "cancelled");

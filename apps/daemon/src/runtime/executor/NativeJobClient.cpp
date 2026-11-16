@@ -101,7 +101,11 @@ bool NativeJobClient::start(const QJsonObject& execution, qint64 remainingTimeou
 #ifdef Q_OS_LINUX
     // An ambiguous manager response must still be reconciled by the durable
     // unit/lease identity. It is not evidence that the helper never launched.
-    linuxStartSupervisor(executable_, directory_, taskId_, lease_, error);
+    managerPending_ = true;
+    linuxStartSupervisorAsync(executable_, directory_, taskId_, lease_, this, [this] {
+        managerPending_ = false;
+        tick();
+    });
 #else
     QProcess supervisor;
     supervisor.setProgram(executable_);
@@ -140,9 +144,24 @@ void NativeJobClient::connectSocket() {
     lastConnectionAttempt_ = clock_.elapsed();
     const auto record = receipt();
 #ifdef Q_OS_LINUX
-    if (!linuxReceiptTrusted(taskId_, lease_, record))
+    if (managerPending_)
         return;
+    managerPending_ = true;
+    linuxUnitPropertiesAsync(
+        linuxJobUnit(taskId_, lease_), this, [this, record](const QJsonObject& service) {
+            managerPending_ = false;
+            if (acknowledged_ || socket_.state() != QLocalSocket::UnconnectedState ||
+                !linuxReceiptTrusted(taskId_, lease_, record, service))
+                return;
+            trustedLinuxReceipt_ = record;
+            connectVerified(record);
+        });
+#else
+    connectVerified(record);
 #endif
+}
+
+void NativeJobClient::connectVerified(const QJsonObject& record) {
     const auto self = record.value("supervisor_identity").toObject();
     const auto identity = inspect(self.value("pid").toInteger());
     if (!identity || identity->birth != self.value("birth").toString() || identity->zombie)
@@ -182,7 +201,13 @@ void NativeJobClient::message(const QJsonObject& value) {
     if (value.value("task_id") != taskId_ || value.value("executor_lease_identity") != lease_)
         return;
 #ifdef Q_OS_LINUX
-    if (type == "ready" && !linuxReceiptTrusted(taskId_, lease_, value)) {
+    const auto certified = trustedLinuxReceipt_.value("supervisor_identity").toObject();
+    const auto claimed = value.value("supervisor_identity").toObject();
+    if (type == "ready" &&
+        (trustedLinuxReceipt_.isEmpty() || certified.value("pid") != claimed.value("pid") ||
+         certified.value("birth") != claimed.value("birth") ||
+         trustedLinuxReceipt_.value("linux_boundary") != value.value("linux_boundary") ||
+         !linuxBoundaryMatches(value.value("linux_boundary").toObject()))) {
         socket_.abort();
         return;
     }

@@ -58,8 +58,8 @@ int turns(const QString& path) {
             ++count;
     return count;
 }
-QJsonObject task(SessionHost& host, const QString& id) {
-    return command(host, "session.task.get", {{"task_id", id}}).value("task").toObject();
+QJsonObject task(SessionHost& host, const QString& id, const QString& owner = "owner") {
+    return command(host, "session.task.get", {{"task_id", id}}, owner).value("task").toObject();
 }
 } // namespace
 
@@ -372,6 +372,73 @@ class ManagedTaskHostTest final : public QObject {
         QTRY_COMPARE_WITH_TIMEOUT(task(host, id).value("completion").toObject().value("status"),
                                   "delivered", 6000);
         QTRY_COMPARE_WITH_TIMEOUT(turns(log), 2, 6000);
+    }
+
+    void successfulDescendantResumesParkedChild_data() {
+        QTest::addColumn<int>("fillers");
+        QTest::newRow("available-slots") << 0;
+        QTest::newRow("root-quota-pressure") << 3;
+    }
+
+    void successfulDescendantResumesParkedChild() {
+        QFETCH(int, fillers);
+        QTemporaryDir directory;
+        const auto cwd = QFileInfo(directory.path()).canonicalFilePath();
+        const auto log = directory.filePath("provider.log");
+        QVERIFY(writeFakeCodex(directory.filePath("fake-codex"), log));
+        LocalJournal journal(directory.filePath("journal.sqlite"));
+        QVERIFY(seed(journal, cwd));
+        CodexAdapter adapter(directory.filePath("fake-codex"));
+        SessionHost host(&journal, &adapter);
+        const auto cleanup = qScopeGuard([&] { adapter.stop(); });
+        const auto started = command(host, "session.task.start",
+                                     {{"client_request_id", "parent"},
+                                      {"kind", "agent"},
+                                      {"title", "Nested work"},
+                                      {"timeout_ms", 60000},
+                                      {"execution_spec", QJsonObject{{"prompt", "hang"}}}});
+        const auto id = started.value("task").toObject().value("task_id").toString();
+        QVERIFY2(!id.isEmpty(), qPrintable(QJsonDocument(started).toJson()));
+        QTRY_COMPARE_WITH_TIMEOUT(turns(log), 1, 6000);
+        const auto child = task(host, id)
+                               .value("execution_identity")
+                               .toObject()
+                               .value("child_session_id")
+                               .toString();
+        QStringList occupied;
+        for (int i = 0; i < fillers; ++i) {
+            auto input = process(cwd, {"/bin/sleep", "60"});
+            input.insert("client_request_id", "filler-" + QString::number(i));
+            input.insert("timeout_ms", 60000);
+            const auto reply = command(host, "session.task.start", input);
+            const auto other = reply.value("task").toObject().value("task_id").toString();
+            QVERIFY2(!other.isEmpty(), qPrintable(QJsonDocument(reply).toJson()));
+            occupied.append(other);
+            QTRY_COMPARE_WITH_TIMEOUT(task(host, other).value("state"), "running", 7000);
+        }
+        const auto descendant = command(host, "session.task.start",
+                                        process(cwd, {"/usr/bin/printf", "child result"}), child);
+        const auto leaf = descendant.value("task").toObject().value("task_id").toString();
+        QVERIFY2(!leaf.isEmpty(), qPrintable(QJsonDocument(descendant).toJson()));
+        if (fillers == 3)
+            QCOMPARE(task(host, leaf, child).value("state"), "queued");
+        StoredSession active;
+        for (const auto& session : journal.sessions())
+            if (session.id == child)
+                active = session;
+        emit adapter.notificationReceived(
+            "turn/completed",
+            {{"threadId", active.threadId},
+             {"turn", QJsonObject{{"id", active.turnId}, {"status", "completed"}}}});
+        QTRY_COMPARE_WITH_TIMEOUT(task(host, leaf, child).value("state"), "completed", 10000);
+        QTRY_COMPARE_WITH_TIMEOUT(task(host, id).value("state"), "completed", 10000);
+        QTRY_COMPARE_WITH_TIMEOUT(turns(log), 3, 6000); // Child, child wake, owner wake.
+        QCOMPARE(task(host, leaf, child).value("completion").toObject().value("status"),
+                 "delivered");
+        for (const auto& other : occupied)
+            QVERIFY(command(host, "session.task.stop", {{"task_id", other}}).value("ok").toBool());
+        for (const auto& other : occupied)
+            QTRY_COMPARE_WITH_TIMEOUT(task(host, other).value("state"), "cancelled", 7000);
     }
 
     void failedChildCancelsDescendantsWithoutReceivingTheirWake() {

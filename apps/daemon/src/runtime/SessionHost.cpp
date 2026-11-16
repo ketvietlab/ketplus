@@ -535,9 +535,8 @@ QJsonObject SessionHost::handleCommand(const QJsonObject& incoming, const QStrin
     if (const auto failure = authorizePreparation(request); !failure.isEmpty())
         return failure;
     if (isManagedTaskCommand(type)) {
-        if (type == "session.task.start" &&
-            request.value("payload").toObject().value("kind") == "agent")
-            return error("async_required", "Managed agent admission uses handleCommandDeferred.");
+        if (type == "session.task.start")
+            return error("async_required", "Managed task admission uses handleCommandDeferred.");
         if (type == "session.task.stop" || type == "session.task.output") {
             Session* owner = nullptr;
             if (checkedSession(request, &owner).isEmpty()) {

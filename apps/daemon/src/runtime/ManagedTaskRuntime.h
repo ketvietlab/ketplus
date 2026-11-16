@@ -21,12 +21,13 @@ class ManagedTaskRuntime final : public QObject {
     using Permission = std::function<void(const QJsonObject&, const QJsonObject&)>;
     using ChildStart = std::function<void(const QJsonObject&, const QJsonObject&)>;
     using ChildStop = std::function<void(const QJsonObject&)>;
+    using Done = std::function<void(QJsonObject)>;
     ManagedTaskRuntime(BackgroundTaskLedger ledger, QString directory, QString executor,
                        QObject* parent = nullptr);
     void setCallbacks(Changed changed, Permission permission, ChildStart childStart,
                       ChildStop childStop);
     bool initialize(QString* error);
-    QJsonObject start(const BackgroundTaskIntent& intent, const QJsonObject& execution);
+    void start(const BackgroundTaskIntent& intent, const QJsonObject& execution, Done done);
     QJsonObject stop(const QString& taskId, const BackgroundTaskOwner& owner,
                      bool localAdministration = false);
     void permissionResolved(const QString& taskId, bool granted);
@@ -43,6 +44,7 @@ class ManagedTaskRuntime final : public QObject {
     bool appendChildOutput(const QString& taskId, qint64 turn, const QByteArray& bytes);
 
   private:
+    QJsonObject accept(const BackgroundTaskIntent& intent, const QJsonObject& execution);
     struct LiveTask {
         QJsonObject record;
         QJsonObject execution;

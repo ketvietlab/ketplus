@@ -11,6 +11,7 @@
 
 #ifdef Q_OS_MACOS
 #include <libproc.h>
+#include <mach/mach.h>
 #include <sys/proc.h>
 #include <sys/proc_info.h>
 #elif defined(Q_OS_LINUX)
@@ -99,51 +100,104 @@ QList<qint64> groupMembers(qint64 group, bool* complete) {
 #endif
 }
 
-bool signalIdentity(const NativeProcessIdentity& identity, int signal, QString* error) {
-    if (identity.pid <= 0 || identity.birth.isEmpty()) {
+std::unique_ptr<NativeProcessSignal>
+NativeProcessSignal::capture(const NativeProcessIdentity& identity, QString* error) {
+    if (identity.pid <= 0 || identity.pid > std::numeric_limits<pid_t>::max() ||
+        identity.birth.isEmpty()) {
         if (error)
             *error = "Missing process birth identity.";
-        return false;
+        return {};
     }
+    auto target = std::unique_ptr<NativeProcessSignal>(new NativeProcessSignal);
 #ifdef Q_OS_LINUX
-    // Open the live handle BEFORE rechecking birth; pidfd_send_signal cannot
-    // accidentally target a replacement process between inspection and kill.
-    const int descriptor = int(syscall(SYS_pidfd_open, pid_t(identity.pid), 0));
-    if (descriptor < 0) {
-        if (errno == ESRCH)
-            return true;
+    target->descriptor_ = int(syscall(SYS_pidfd_open, pid_t(identity.pid), 0));
+    if (target->descriptor_ < 0) {
+        if (errno == ESRCH) {
+            target->gone_ = true;
+            return target;
+        }
         if (error)
             *error = "A verified pidfd is unavailable.";
-        return false;
+        return {};
     }
-    struct ClosePidfd {
-        int fd;
-        ~ClosePidfd() { close(fd); }
-    } guard{descriptor};
+#elif defined(Q_OS_MACOS)
+    mach_port_t port = MACH_PORT_NULL;
+    auto result = task_name_for_pid(mach_task_self(), int(identity.pid), &port);
+    audit_token_t token{};
+    mach_msg_type_number_t count = TASK_AUDIT_TOKEN_COUNT;
+    if (result == KERN_SUCCESS)
+        result = task_info(port, TASK_AUDIT_TOKEN, reinterpret_cast<task_info_t>(&token), &count);
+    if (port != MACH_PORT_NULL)
+        mach_port_deallocate(mach_task_self(), port);
+    if (result != KERN_SUCCESS || count != TASK_AUDIT_TOKEN_COUNT || token.val[5] != identity.pid) {
+        const auto current = inspect(identity.pid);
+        if (current && current->birth == identity.birth && current->zombie) {
+            target->gone_ = true;
+            return target;
+        }
+        if (kill(pid_t(identity.pid), 0) != 0 && errno == ESRCH) {
+            target->gone_ = true;
+            return target;
+        }
+        if (error)
+            *error = "A verified process audit token is unavailable.";
+        return {};
+    }
+    target->auditToken_ = QByteArray(reinterpret_cast<const char*>(&token), sizeof(token));
+#else
+    if (error)
+        *error = "Identity-bound signaling is unavailable on this platform.";
+    return {};
 #endif
+    // The kernel target is captured FIRST. A process exiting or execing after
+    // this check cannot redirect the eventual signal to a new incarnation.
     const auto current = inspect(identity.pid);
     if (!current) {
-        if (kill(pid_t(identity.pid), 0) != 0 && errno == ESRCH)
-            return true;
+        if (kill(pid_t(identity.pid), 0) != 0 && errno == ESRCH) {
+            target->gone_ = true;
+            return target;
+        }
         if (error)
             *error = "Process identity is unavailable.";
-        return false;
+        return {};
     }
     if (current->birth != identity.birth) {
         if (error)
             *error = "Process birth changed; the reused PID was not signalled.";
-        return false;
+        return {};
     }
-    if (current->zombie)
+    target->gone_ = current->zombie;
+    return target;
+}
+
+NativeProcessSignal::~NativeProcessSignal() {
+    if (descriptor_ >= 0)
+        close(descriptor_);
+}
+
+bool NativeProcessSignal::send(int signal, QString* error) const {
+    if (gone_)
         return true;
+    int result = ENOTSUP;
 #ifdef Q_OS_LINUX
-    if (syscall(SYS_pidfd_send_signal, descriptor, signal, nullptr, 0) == 0 || errno == ESRCH)
-#else
-    if (kill(pid_t(identity.pid), signal) == 0 || errno == ESRCH)
+    result = syscall(SYS_pidfd_send_signal, descriptor_, signal, nullptr, 0) == 0 ? 0 : errno;
+#elif defined(Q_OS_MACOS)
+    audit_token_t token{};
+    if (auditToken_.size() != sizeof(token))
+        return false;
+    memcpy(&token, auditToken_.constData(), sizeof(token));
+    // libproc returns the error number directly, rather than setting errno.
+    result = proc_signal_with_audittoken(&token, signal);
 #endif
+    if (result == 0 || result == ESRCH)
         return true;
     if (error)
-        *error = QString::fromLocal8Bit(strerror(errno));
+        *error = QString::fromLocal8Bit(strerror(result));
     return false;
+}
+
+bool signalIdentity(const NativeProcessIdentity& identity, int signal, QString* error) {
+    const auto target = NativeProcessSignal::capture(identity, error);
+    return target && target->send(signal, error);
 }
 } // namespace ketplus::daemon::executor

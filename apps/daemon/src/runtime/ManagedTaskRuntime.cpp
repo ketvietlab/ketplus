@@ -138,31 +138,51 @@ void ManagedTaskRuntime::maintain() {
         QTimer::singleShot(100, this, [this] { maintain(); });
 }
 
-QJsonObject ManagedTaskRuntime::start(const BackgroundTaskIntent& intent,
-                                      const QJsonObject& execution) {
+void ManagedTaskRuntime::start(const BackgroundTaskIntent& intent, const QJsonObject& execution,
+                               Done done) {
     const auto retry = ledger_.retry(intent);
-    if (!retry.value("ok").toBool() || !retry.value("task").isNull())
-        return retry;
-    // Platform and callback availability are admission errors, before accepted.
-    if (intent.kind == "process") {
-#ifdef Q_OS_LINUX
-        QString error;
-        if (!executor::linuxContainmentAvailable(executor_, &error))
-            return failure("containment_unavailable", error);
-#elif !defined(Q_OS_MACOS)
-        return failure("containment_unavailable",
-                       "A verified delegated cgroup v2 executor with migration isolation is "
-                       "required on this platform.");
-#endif
-        if (!QFileInfo(executor_).isExecutable())
-            return failure("executor_unavailable",
-                           "The managed background executor is not installed.");
-    } else if (!childStart_ || !childStop_) {
-        return failure("executor_unavailable", "The managed child executor is unavailable.");
+    if (!retry.value("ok").toBool() || !retry.value("task").isNull()) {
+        done(retry);
+        return;
     }
-    if (!permission_)
-        return failure("permission_unavailable",
-                       "The background permission broker is unavailable.");
+    if (intent.kind == "process") {
+#if !defined(Q_OS_MACOS) && !defined(Q_OS_LINUX)
+        done(failure("containment_unavailable", "A verified process executor is required."));
+        return;
+#endif
+        if (!QFileInfo(executor_).isExecutable()) {
+            done(failure("executor_unavailable",
+                         "The managed background executor is not installed."));
+            return;
+        }
+    } else if (!childStart_ || !childStop_) {
+        done(failure("executor_unavailable", "The managed child executor is unavailable."));
+        return;
+    }
+    if (!permission_) {
+        done(failure("permission_unavailable", "The background permission broker is unavailable."));
+        return;
+    }
+#ifdef Q_OS_LINUX
+    if (intent.kind == "process") {
+        executor::linuxContainmentAvailableAsync(
+            executor_, this,
+            [this, intent, execution, done = std::move(done)](bool available, QString error) {
+                if (!available)
+                    done(failure("containment_unavailable", error));
+                else
+                    done(accept(intent, execution));
+            });
+        return;
+    }
+#endif
+    done(accept(intent, execution));
+}
+
+QJsonObject ManagedTaskRuntime::accept(const BackgroundTaskIntent& intent,
+                                       const QJsonObject& execution) {
+    // create() rechecks the current generation, quotas and retry key after
+    // asynchronous admission; no workload/permission is launched by the probe.
     auto acceptedIntent = intent;
 #ifdef Q_OS_LINUX
     if (intent.kind == "process")

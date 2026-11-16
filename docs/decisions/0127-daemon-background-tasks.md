@@ -123,6 +123,15 @@ identity and executor lease identity. PID alone never authorizes adoption or
 signalling; process group ids alone do not solve reuse either. Managed agent
 identity identifies its child session/generation/turn through KetPlus's executor.
 
+Signalling binds a kernel target before validating its recorded birth: a pidfd
+on Linux, or a task audit token on macOS. The macOS token is obtained through a
+task-name port, validated against the recorded PID/birth, then passed to
+`proc_signal_with_audittoken`; the kernel checks the PID version when signalling.
+Failure to obtain that identity fails closed. Group enumeration supplies discovery
+evidence only; a check followed by a PID/process-group `kill` is not sufficient.
+See Apple's [libproc wrapper](https://github.com/apple-oss-distributions/xnu/blob/main/libsyscall/wrappers/libproc/libproc.c)
+and [kernel implementation](https://github.com/apple-oss-distributions/xnu/blob/main/bsd/kern/proc_info.c).
+
 Tokens and the full inherited environment must never be stored in the journal
 or exposed in UI. The environment delta is not permission to journal credentials.
 Execution metadata and output projections follow existing credential and
@@ -233,6 +242,13 @@ environment. Oversized private launch data fails before a supervisor is spawned.
 an unavailable user bus or denied namespace policy returns
 `containment_unavailable`, without creating a job. Administrators supply these
 capabilities; neither the daemon nor installer lowers host namespace policy.
+
+Daemon-side admission and user-manager RPCs are asynchronous, including supervisor
+start, receipt certification and recovery queries. A stalled manager must not
+suspend the event loop that sends leases to other healthy executors. The existing
+five-second lease is unchanged. Admission commits only after the capability result
+and rechecks generation/quota/idempotency at that point; internal synchronous Host
+start dispatch is rejected before beginning admission.
 
 Linux records use `containment_mode=cgroup_v2`. `cleanup_status=verified` requires
 an identity-matching domain with `populated=0`, or verified service reclamation/
@@ -477,6 +493,8 @@ Recovered `dispatching` records become interrupted and are never replayed;
 `accepted` records remain eligible after restart. Managed child terminal commit
 waits for descendant jobs and their accepted/pending completion continuations.
 A parked child must reacquire a quota slot before another inference starts.
+When reacquisition succeeds, its accepted wake is claimed and dispatched in the
+same poll; an idle-child poll cannot park that slot again before dispatch.
 
 Native macOS executor and fake-provider Host/IPC tests are runtime evidence;
 provider migration and shared UI acceptance remain separate gates. Linux process

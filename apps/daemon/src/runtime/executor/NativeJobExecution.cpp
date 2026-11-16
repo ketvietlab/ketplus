@@ -195,19 +195,14 @@ void NativeJobSupervisor::signalKnown(int signal) {
     }
 #endif
     refreshKnown();
-    // The direct child is owned by QProcess until reaped. Its original group is anchored
-    // only while its birth is still valid; detached known descendants are signalled below.
-    if (root_ && process_.state() == QProcess::Running) {
-        const auto current = inspect(root_->pid);
-        if (current && current->birth == root_->birth && current->group == root_->pid &&
-            kill(-pid_t(root_->pid), signal) != 0 && errno != ESRCH)
-            cleanupError_ = true;
-    }
+    // Group membership is discovery evidence, not an atomic signal target.
+    // Signal each recorded incarnation; Linux escalates through cgroup.kill.
     for (const auto& identity : known_) {
         QString error;
         if (!signalIdentity(identity, signal, &error)) {
             cleanupError_ = true;
             metadata_.insert("cleanup_issue", "process_signal_failed");
+            metadata_.insert("cleanup_error", error);
         }
     }
 }
