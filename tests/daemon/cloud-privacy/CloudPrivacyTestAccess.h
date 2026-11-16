@@ -7,6 +7,14 @@
 namespace ketplus::daemon {
 class CloudPrivacyTestAccess {
   public:
+    static transport::Signaling& signaling(CloudControlClient& client) {
+        return *client.signaling_;
+    }
+    static void scope(CloudControlClient& client, const QString& machine,
+                      const QString& workspace) {
+        client.machineId_ = machine;
+        client.workspaceId_ = workspace;
+    }
     static transport::RemotePeers& peers(CloudControlClient& client) { return *client.peers_; }
     static transport::EventPage peerEvents(CloudControlClient& client, const QString& id,
                                            qint64 gen, qint64 cursor) {
@@ -163,7 +171,7 @@ class CloudPrivacyTestAccess {
     }
     static void expireSenderKeys(CloudControlClient& client) {
         for (auto& entry : client.senderKeys_)
-            entry.second = QDateTime::currentDateTimeUtc().addSecs(-1);
+            entry.expiresAt = QDateTime::currentDateTimeUtc().addSecs(-1);
     }
     // Pins a device on this Mac, as approving its pairing does.
     static void pinDevice(CloudControlClient& client, const QString& id, int version,

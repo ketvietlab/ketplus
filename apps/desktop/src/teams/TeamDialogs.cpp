@@ -160,26 +160,41 @@ NewTeamForm::NewTeamForm(TeamDirectory* teams, const QString& repository,
     setObjectName(QStringLiteral("newTeamForm"));
     auto* layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
+    columns_ = new QBoxLayout(QBoxLayout::LeftToRight);
+    columns_->setContentsMargins(0, 0, 0, 0);
+    layout->addLayout(columns_);
+    auto* context = new QWidget(this);
+    context->setObjectName(QStringLiteral("teamContextColumn"));
+    auto* contextLayout = new QVBoxLayout(context);
+    contextLayout->setContentsMargins(0, 0, 0, 0);
+    contextLayout->setAlignment(Qt::AlignTop);
+    auto* settings = new QWidget(this);
+    settings->setObjectName(QStringLiteral("teamSettingsColumn"));
+    auto* settingsLayout = new QVBoxLayout(settings);
+    settingsLayout->setContentsMargins(0, 0, 0, 0);
+    settingsLayout->setAlignment(Qt::AlignTop);
+    columns_->addWidget(context, 1, Qt::AlignTop);
+    columns_->addWidget(settings, 1, Qt::AlignTop);
     name_->setObjectName(QStringLiteral("teamNameField"));
     name_->setPlaceholderText(tr("Checkout"));
     branch_->setObjectName(QStringLiteral("teamIntegrationBranchField"));
     branch_->setPlaceholderText(tr("The branch reviewed tasks merge into"));
     rows_.insert(QStringLiteral("name"), new ket::FieldRow(tr("Name"), name_, {}, this));
-    layout->addWidget(rows_.value(QStringLiteral("name")));
+    contextLayout->addWidget(rows_.value(QStringLiteral("name")));
     rows_.insert(QStringLiteral("goal"),
                  new ket::FieldRow(tr("Goal"), goal_,
                                    tr("The leader breaks it into tasks and may ask the "
                                       "conversations it mentions for context."),
                                    this));
     rows_.value(QStringLiteral("goal"))->setStacked(true);
-    layout->addWidget(rows_.value(QStringLiteral("goal")));
+    contextLayout->addWidget(rows_.value(QStringLiteral("goal")));
     // ADR 0114: an unknown mention or a goal above the limit shows at once, before Create.
     connect(goalEditor_, &TeamGoalEditor::problemChanged, this, [this](const QString& problem) {
         rows_.value(QStringLiteral("goal"))->setError(problem);
         if (problem.isEmpty())
             errors_.remove(QStringLiteral("goal"));
     });
-    layout->addWidget(new ket::FieldRow(tr("Integration branch"), branch_, {}, this));
+    settingsLayout->addWidget(new ket::FieldRow(tr("Integration branch"), branch_, {}, this));
 
     // T-56: the language the leader works in. The team page, its Updates and the daemon's
     // decisions follow it. It starts from the system's language and follows the goal's
@@ -197,10 +212,10 @@ NewTeamForm::NewTeamForm(TeamDirectory* teams, const QString& repository,
             !languageChosen_ && !written.isEmpty())
             language_->setCurrentIndex(language_->findData(written));
     });
-    layout->addWidget(new ket::FieldRow(tr("Language"), language_,
-                                        tr("The team page, its updates and the leader's "
-                                           "decisions use it."),
-                                        this));
+    settingsLayout->addWidget(new ket::FieldRow(tr("Language"), language_,
+                                                tr("The team page, its updates and the leader's "
+                                                   "decisions use it."),
+                                                this));
 
     auto* merges = new QWidget(this);
     auto* mergeRow = new QHBoxLayout(merges);
@@ -215,9 +230,9 @@ NewTeamForm::NewTeamForm(TeamDirectory* teams, const QString& repository,
     mergeRow->addWidget(userMerges_);
     mergeRow->addStretch();
     mergeRow_ = mergeRow;
-    layout->addWidget(new ket::FieldRow(tr("Merges tasks"), merges, {}, this));
+    settingsLayout->addWidget(new ket::FieldRow(tr("Merges tasks"), merges, {}, this));
     review_ = new TeamReviewFields(team_review::standardRounds, team_review::board, {}, this);
-    layout->addWidget(review_);
+    settingsLayout->addWidget(review_);
 
     budget_ = team_budget::field(tr("Automatic turns"), this);
     budget_->setObjectName(QStringLiteral("teamTurnBudgetField"));
@@ -226,7 +241,7 @@ NewTeamForm::NewTeamForm(TeamDirectory* teams, const QString& repository,
                                    tr("Turns members start on their own before the team asks you "
                                       "to continue. New teams start from Settings → Teams."),
                                    this));
-    layout->addWidget(rows_.value(QStringLiteral("turn_budget")));
+    settingsLayout->addWidget(rows_.value(QStringLiteral("turn_budget")));
     team_budget::readGlobal(teams_, budget_, [field = QPointer<ket::TextField>(budget_)](int v) {
         // What the user typed meanwhile wins over the value read.
         if (field && !field->isModified())
@@ -251,7 +266,7 @@ NewTeamForm::NewTeamForm(TeamDirectory* teams, const QString& repository,
     permissionsRow_->setObjectName(QStringLiteral("teamPermissionsRow"));
     connect(permissions_, &QComboBox::currentIndexChanged, this, &NewTeamForm::describePermissions);
     describePermissions();
-    layout->addWidget(permissionsRow_);
+    settingsLayout->addWidget(permissionsRow_);
 
     const team_agents::Defaults defaults = team_agents::defaults(models_);
     agents_.insert(leader, defaults.leader);
@@ -291,18 +306,46 @@ NewTeamForm::NewTeamForm(TeamDirectory* teams, const QString& repository,
                                                  : team_roles::label(role);
         auto* field = new ket::FieldRow(label, control, {}, this);
         rows_.insert(role, field);
-        layout->addWidget(field);
+        contextLayout->addWidget(field);
     }
     requirements_->setObjectName(QStringLiteral("teamLeaderWritesRequirements"));
     requirements_->setChecked(true);
     requirements_->setWordWrap(true);
-    layout->addWidget(requirements_);
+    contextLayout->addWidget(requirements_);
     if (defaults.singleProvider)
         showNote(hint_, tr("Everything runs on one provider. A second provider gives a more "
                            "independent review."));
-    layout->addWidget(hint_);
+    contextLayout->addWidget(hint_);
     layout->addWidget(error_);
-    layout->addStretch();
+    layout->setAlignment(Qt::AlignTop);
+    for (ket::FieldRow* row : findChildren<ket::FieldRow*>()) {
+        row->setStacked(true);
+        // A column may be taller than its fields: keep the label, field and help together.
+        row->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Maximum);
+        row->layout()->setAlignment(Qt::AlignTop);
+        row->installEventFilter(this);
+    }
+    // Follow the visual reading order through both columns, including compound controls.
+    const QList<QWidget*> tabOrder{
+        name_,
+        goal_->editor(),
+        agentButtons_.value(leader),
+        developers_,
+        agentButtons_.value(developer),
+        reviewers_,
+        agentButtons_.value(reviewer),
+        requirements_,
+        branch_,
+        language_,
+        leaderMerges_,
+        userMerges_,
+        review_->findChild<ket::Select*>(QStringLiteral("teamReviewRounds")),
+        review_->findChild<ket::Radio*>(QStringLiteral("teamReviewPlaceBoard")),
+        review_->findChild<ket::Radio*>(QStringLiteral("teamReviewPlacePullRequest")),
+        budget_,
+        permissions_};
+    for (qsizetype index = 1; index < tabOrder.size(); ++index)
+        QWidget::setTabOrder(tabOrder.at(index - 1), tabOrder.at(index));
     connect(developers_, &ket::SegmentedControl::currentChanged, this,
             [this] { emit memberCountChanged(memberCount()); });
     connect(reviewers_, &ket::SegmentedControl::currentChanged, this,
@@ -472,13 +515,14 @@ void NewTeamForm::submit(std::function<void(const QJsonObject& team)> created) {
         });
 }
 
-// A narrow window, or a large zoom, makes the card narrower than the form needs with its
-// labels beside the controls. The form is then compact: every label sits above its control
-// and the two rows that hold two controls stack them, so nothing is cut off at the card's
-// edge. Measured again whenever the card's width or the zoom changes.
+// The intent and settings sit side by side with room; narrow cards stack the columns.
+// Labels stay above controls, and compound controls stack when their column needs it.
+// Re-evaluate on window, viewport and zoom changes; content never widens the card.
 void NewTeamForm::follow(QWidget* viewport) {
     viewport_ = viewport;
+    installEventFilter(this);
     viewport->installEventFilter(this);
+    viewport->window()->installEventFilter(this);
     connect(&ket::Appearance::instance(), &ket::Appearance::zoomChanged, this, &NewTeamForm::fit,
             Qt::QueuedConnection);
     fit();
@@ -493,27 +537,44 @@ void NewTeamForm::setCompact(const bool compact) {
     developers_->setExpanding(compact);
     developers_->setMinimumWidth(compact ? developers_->sizeHint().width() * 3 / 4 : 0);
     for (ket::FieldRow* row : findChildren<ket::FieldRow*>())
-        row->setStacked(compact);
-    // The goal is the leader's main input: it takes the card's whole width.
-    rows_.value(QStringLiteral("goal"))->setStacked(true);
+        row->setStacked(true);
 }
 
 void NewTeamForm::fit() {
     if (!viewport_ || fitting_)
         return;
     fitting_ = true;
-    setCompact(false);
-    // The rows changed under the layout: without this it answers with the sizes it cached
-    // while they were stacked.
-    for (QWidget* child : findChildren<QWidget*>())
-        child->updateGeometry();
-    layout()->invalidate();
-    setCompact(viewport_->width() < layout()->minimumSize().width());
+    const auto& appearance = ket::Appearance::instance();
+    const bool twoColumns = viewport_->width() >= qRound(appearance.scaled(760));
+    columns_->setDirection(twoColumns ? QBoxLayout::LeftToRight : QBoxLayout::TopToBottom);
+    columns_->setStretch(0, twoColumns ? 1 : 0);
+    columns_->setStretch(1, twoColumns ? 1 : 0);
+    columns_->setAlignment(twoColumns ? Qt::Alignment{} : Qt::AlignTop);
+    columns_->setSpacing(qRound(appearance.scaled(24)));
+    const int columnWidth =
+        twoColumns ? (viewport_->width() - columns_->spacing()) / 2 : viewport_->width();
+    setCompact(columnWidth < qRound(appearance.scaled(420)));
+    // The scroll body may shrink with the host window; the kit's header/footer stay outside.
+    if (auto* scroll = qobject_cast<QScrollArea*>(viewport_->parentWidget())) {
+        const int room = qMax(0, viewport_->window()->height() - qRound(appearance.scaled(240)));
+        scroll->setMaximumHeight(room);
+        const int wanted = layout()->totalHeightForWidth(viewport_->width());
+        scroll->setMinimumHeight(qMin(qMax(0, wanted), room));
+    }
     fitting_ = false;
 }
 
 bool NewTeamForm::eventFilter(QObject* watched, QEvent* event) {
-    if (watched == viewport_ && event->type() == QEvent::Resize)
+    if (auto* row = qobject_cast<ket::FieldRow*>(watched); row && event->type() == QEvent::Resize) {
+        // The kit pins wrapped help to its measured height. Release the old measurement
+        // before its resize handler measures a new column width, so help can shrink too.
+        for (QLabel* label : row->findChildren<QLabel*>(Qt::FindDirectChildrenOnly))
+            if (label->wordWrap())
+                label->setMinimumHeight(0);
+    }
+    if (viewport_ && (((watched == viewport_ || watched == viewport_->window()) &&
+                       event->type() == QEvent::Resize) ||
+                      (watched == this && event->type() == QEvent::LayoutRequest)))
         fit();
     return QWidget::eventFilter(watched, event);
 }
@@ -529,9 +590,9 @@ ket::Dialog* NewTeamForm::present(QWidget* anchor, TeamDirectory* teams, const Q
     dialog->setAttribute(Qt::WA_DeleteOnClose);
     auto* form = new NewTeamForm(teams, repository, models, std::move(conversations));
     QScrollArea* scroll = scrolling(form, anchor);
-    form->follow(scroll->viewport());
     dialog->setBody(scroll);
-    dialog->setCardWidth(560);
+    dialog->setCardWidth(960);
+    form->follow(scroll->viewport());
     auto* cancel = dialog->addButton(tr("Cancel"));
     QObject::connect(cancel, &QAbstractButton::clicked, dialog, &ket::Dialog::reject);
     auto* create = dialog->addButton({}, ket::ButtonVariant::Primary);

@@ -108,6 +108,7 @@ class NewTeamForm final : public QWidget {
     // By role, or "name" and "" for the dialog.
     QHash<QString, QString> errors_;
     // The rows that hold two controls side by side.
+    QBoxLayout* columns_{nullptr};
     QBoxLayout* mergeRow_{nullptr};
     QBoxLayout* developerRow_{nullptr};
     QBoxLayout* reviewerRow_{nullptr};

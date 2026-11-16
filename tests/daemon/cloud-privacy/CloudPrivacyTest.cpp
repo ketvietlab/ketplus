@@ -2574,6 +2574,11 @@ class CloudPrivacyTest final : public QObject {
     void onlyDevicesPinnedHereReceiveKeysOrSendCommands() {
         QTemporaryDir dir;
         Context c(dir.filePath("journal.sqlite"));
+        CredentialStore legacy;
+        QVERIFY(legacy.write("machine-id", "machine-synthetic"));
+        QVERIFY(legacy.write("workspace-id", "workspace-synthetic"));
+        QVERIFY(legacy.write("control-url",
+                             CloudControlClient::configuredControlUrl().toString().toUtf8()));
         c.start();
         CredentialStore phoneStore("pinned-phone");
         CredentialStore intruderStore("relay-intruder");
@@ -2734,7 +2739,7 @@ class CloudPrivacyTest final : public QObject {
         QTemporaryDir dir;
         Context c(dir.filePath("journal.sqlite"));
         c.start();
-        QVERIFY(Access::pins(*c.client).adopt({})); // pins exist, nothing pinned yet
+        QVERIFY(Access::pins(*c.client).reset()); // pins exist, nothing pinned yet
         CredentialStore phoneStore("claiming-phone");
         CredentialStore relayStore("relay-substitute");
         const QJsonObject phone = CloudCrypto(&phoneStore).publicKeys();

@@ -31,6 +31,7 @@ const QString canceled = QStringLiteral("Sign-in was canceled.");
 
 void CloudControlClient::signIn(LocalCallback callback) {
     const quint64 signInEpoch = ++accountEpoch_;
+    invalidateSenderKeys();
     dropBrowserSignIn();
     signInError_.clear();
     QString installationId = storedString(QStringLiteral("installation-id"));
@@ -99,6 +100,7 @@ void CloudControlClient::signIn(LocalCallback callback) {
 void CloudControlClient::cancelSignIn(LocalCallback callback) {
     if (browserSignIn_ || deviceSignInStarting_ || !deviceCode_.isEmpty()) {
         ++accountEpoch_;
+        invalidateSenderKeys();
         dropBrowserSignIn();
     }
     signInError_.clear();
@@ -158,6 +160,7 @@ void CloudControlClient::redeemSignIn(const quint64 signInEpoch, const QString& 
 void CloudControlClient::enrollMachine(const quint64 signInEpoch, const QString& access,
                                        const QJsonObject& subject, const QString& installationId,
                                        const QJsonObject& keys, LocalCallback callback) {
+    legacyPinAdoptionPending_ = false;
     const QJsonObject enrollment{
         {QStringLiteral("installationId"), installationId},
         {QStringLiteral("displayName"), QHostInfo::localHostName().left(128)},
@@ -202,6 +205,11 @@ void CloudControlClient::enrollMachine(const quint64 signInEpoch, const QString&
             // daemon or a restart would mistake for one from before pins. Content keys made in
             // another workspace are removed last, so this daemon keeps the keys of the
             // enrollment it still runs if a write fails; a restart removes them (#84).
+            // Invalidate trust operations started during sign-in even if this enrollment
+            // returns the same identity. Keep the sign-in epoch so its completion callback
+            // can still finish. Fence before resetting pins, including partial storage failure.
+            ++enrollmentRevision_;
+            invalidateSenderKeys();
             const bool stored =
                 pins_.reset(&storageError) &&
                 storeString(QStringLiteral("control-url"), baseUrl_.toString(), &storageError) &&

@@ -286,6 +286,8 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   restart (a folded repository shows a dot while something inside waits). Also the mock's
   field-styled Quick search, a machine header with its chevron, and update pills. Rows draw no user tags and the sidebar has no tag filter (ADR 0117); the
   daemon still stores tags and their catalog (ADR 0107, 0113) for other clients.
+  Repository groups keep pin order, then name/path order across conversation and
+  team updates; conversations inside each group still follow their newest turn.
   Storage pressure warnings consume the local daemon's existing size-status contract,
   and "Waiting for you" comes from the daemon (ADR 0112). It matches
   `workspace` and `workspace/storage-warning` at zoom 1 and 1.25 (#158).
@@ -1044,3 +1046,12 @@ begin/chunk/commit result is confirmed; Relay `queued` receipts wait for
 visible in the draft. Per-file limits match the local workspace; daemon draft quotas
 remain authoritative. Attachments require an existing conversation/session. See ADR
 0119 for lifecycle and protocol details and ADR 0007 for staging limits.
+
+## Team routing foundation (pending review)
+
+The daemon has a versioned evidence-gated risk routing model and coordinator API
+(ADR 0129). Explicit same-team leader decisions can record advisory, verified
+low-risk or reviewer routes without manufacturing reviewer verdicts or completion.
+The default trusted-evidence adapter returns unknown. Runtime receipt production,
+agent-tool/UI wiring and workflow consumption remain follow-up work; this is not
+a shipped fast-pass or resource-cleanup claim.

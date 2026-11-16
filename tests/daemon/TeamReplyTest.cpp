@@ -236,22 +236,33 @@ class TeamReplyTest final : public QObject {
     // the assignments follow in their order.
     void startIsAnsweredBeforeTheAssignmentsAreSent() {
         const QString plan = openDecision("first_plan");
-        const SlowGit slow(fixture_->directory.filePath("bin"));
+        const QString gitStarted = fixture_->directory.filePath("start-git-started");
+        const SlowGit slow(fixture_->directory.filePath("bin"), "2", gitStarted);
         QVERIFY(slow.installed);
-        qint64 elapsed = -1;
-        const QJsonObject reply =
-            timed("team.decision.answer",
-                  {{"team_id", teamId_}, {"decision_id", plan}, {"choice", "Start"}}, &elapsed);
+        QJsonObject reply;
+        int assignmentsAtReply = -1;
+        bool gitStartedAtReply = true;
+        fixture_->host->handleCommandDeferred(
+            agent_test::request("team.decision.answer",
+                                {{"team_id", teamId_}, {"decision_id", plan}, {"choice", "Start"}}),
+            "desktop-test", [&](const QJsonObject& result) {
+                assignmentsAtReply = count("assignment");
+                gitStartedAtReply = QFileInfo::exists(gitStarted);
+                reply = result;
+            });
+        QTRY_VERIFY_WITH_TIMEOUT(!reply.isEmpty(), 30000);
         QVERIFY2(reply.value("ok").toBool(), qPrintable(agent_test::text(reply)));
-        qInfo("team.decision.answer (first plan, Start): reply after %lld ms", elapsed);
-        QVERIFY2(elapsed < replyBudgetMs, qPrintable(QString::number(elapsed)));
+        // ADR 0114 promises reply-before-outbox ordering, independent of the time
+        // needed to commit the decision or schedule this process on a shared runner.
+        QCOMPARE(assignmentsAtReply, 0);
+        QVERIFY2(!gitStartedAtReply, "Deferred Git ran before the Start reply.");
         const QJsonObject team = reply.value("team").toObject();
         QVERIFY(team.value("plan_approved").toBool());
         for (const QJsonValue& value : team.value("decisions").toArray())
             if (value.toObject().value("id").toString() == plan)
                 QCOMPARE(value.toObject().value("state").toString(), QStringLiteral("answered"));
         QVERIFY(!team.contains("outbox"));
-        QCOMPARE(count("assignment"), 0);
+        QTRY_VERIFY_WITH_TIMEOUT(QFileInfo::exists(gitStarted), 30000);
         QTRY_COMPARE_WITH_TIMEOUT(count("assignment"), 2, 30000);
         QCOMPARE(fixture_->journal->agentMessagesOf(developers_.at(0), 1, 50)
                      .first()
@@ -285,30 +296,67 @@ class TeamReplyTest final : public QObject {
     // Start released before it is still sent, and refusals are decided before the reply.
     void aSecondCommandIsAnsweredWithoutWaiting() {
         const QString plan = openDecision("first_plan");
-        const SlowGit slow(fixture_->directory.filePath("bin"));
+        const QString gitStarted = fixture_->directory.filePath("second-command-git-started");
+        const SlowGit slow(fixture_->directory.filePath("bin"), "2", gitStarted);
         QVERIFY(slow.installed);
-        qint64 elapsed = -1;
-        QVERIFY(timed("team.decision.answer",
-                      {{"team_id", teamId_}, {"decision_id", plan}, {"choice", "Start"}}, &elapsed)
-                    .value("ok")
-                    .toBool());
-        const QJsonObject paused =
-            timed("team.update", {{"team_id", teamId_}, {"paused", true}}, &elapsed);
+        QJsonObject started;
+        QJsonObject paused;
+        QJsonObject again;
+        bool pauseBeforeOutbox = false;
+        bool refusalBeforeOutbox = false;
+        // Send the next command from the preceding reply callback: the event loop
+        // has not yet released Start's deferred Git or assignment messages.
+        fixture_->host->handleCommandDeferred(
+            agent_test::request("team.decision.answer",
+                                {{"team_id", teamId_}, {"decision_id", plan}, {"choice", "Start"}}),
+            "desktop-test", [&](const QJsonObject& result) {
+                started = result;
+                fixture_->host->handleCommandDeferred(
+                    agent_test::request("team.update", {{"team_id", teamId_}, {"paused", true}}),
+                    "desktop-test", [&](const QJsonObject& result) {
+                        paused = result;
+                        pauseBeforeOutbox =
+                            count("assignment") == 0 && !QFileInfo::exists(gitStarted);
+                        fixture_->host->handleCommandDeferred(
+                            agent_test::request(
+                                "team.decision.answer",
+                                {{"team_id", teamId_}, {"decision_id", plan}, {"choice", "Start"}}),
+                            "desktop-test", [&](const QJsonObject& result) {
+                                again = result;
+                                refusalBeforeOutbox =
+                                    count("assignment") == 0 && !QFileInfo::exists(gitStarted);
+                            });
+                    });
+            });
+        QTRY_VERIFY_WITH_TIMEOUT(!again.isEmpty(), 30000);
+        QVERIFY2(started.value("ok").toBool(), qPrintable(agent_test::text(started)));
         QVERIFY2(paused.value("ok").toBool(), qPrintable(agent_test::text(paused)));
-        qInfo("team.update (pause): reply after %lld ms", elapsed);
-        QVERIFY2(elapsed < replyBudgetMs, qPrintable(QString::number(elapsed)));
-        const QJsonObject again =
-            timed("team.decision.answer",
-                  {{"team_id", teamId_}, {"decision_id", plan}, {"choice", "Start"}}, &elapsed);
+        QVERIFY(paused.value("team").toObject().value("paused").toBool());
+        QVERIFY2(pauseBeforeOutbox, "Pause waited for Start's deferred work.");
         QCOMPARE(again.value("error_code").toString(), QStringLiteral("decision_closed"));
-        QVERIFY2(elapsed < replyBudgetMs, qPrintable(QString::number(elapsed)));
+        QVERIFY2(refusalBeforeOutbox, "The closed-decision reply waited for deferred work.");
+        QTRY_VERIFY_WITH_TIMEOUT(QFileInfo::exists(gitStarted), 30000);
         QTRY_COMPARE_WITH_TIMEOUT(count("assignment"), 2, 30000);
-        // Resuming releases nothing that was sent already, and is answered at once too.
-        const QJsonObject resumed =
-            timed("team.update", {{"team_id", teamId_}, {"paused", false}}, &elapsed);
+        // Resuming releases nothing that was sent already. Observe its reply before
+        // the next event-loop checkpoint, not against the runner's wall clock.
+        QJsonObject resumed;
+        int assignmentsAtResume = -1;
+        bool checkpoint = false;
+        bool resumeBeforeCheckpoint = false;
+        QTimer::singleShot(0, [&] { checkpoint = true; });
+        fixture_->host->handleCommandDeferred(
+            agent_test::request("team.update", {{"team_id", teamId_}, {"paused", false}}),
+            "desktop-test", [&](const QJsonObject& result) {
+                resumed = result;
+                assignmentsAtResume = count("assignment");
+                resumeBeforeCheckpoint = !checkpoint;
+            });
+        QTRY_VERIFY_WITH_TIMEOUT(!resumed.isEmpty(), 30000);
         QVERIFY(resumed.value("ok").toBool());
-        qInfo("team.update (resume): reply after %lld ms", elapsed);
-        QVERIFY2(elapsed < replyBudgetMs, qPrintable(QString::number(elapsed)));
+        QVERIFY(!resumed.value("team").toObject().value("paused").toBool());
+        QVERIFY2(resumeBeforeCheckpoint, "Resume waited for deferred event-loop work.");
+        QCOMPARE(assignmentsAtResume, 2);
+        QTRY_VERIFY_WITH_TIMEOUT(checkpoint, 30000);
         QTest::qWait(500);
         QCOMPARE(count("assignment"), 2);
     }
@@ -459,13 +507,17 @@ class TeamReplyTest final : public QObject {
                     .value("ok")
                     .toBool());
         QTRY_COMPARE_WITH_TIMEOUT(count("assignment"), 2, 30000);
+        // Message delivery precedes the fake agent finishing its turn. A busy
+        // conversation can refuse the later worktree switch before Git is called.
+        for (const QString& developer : developers_)
+            QTRY_VERIFY_WITH_TIMEOUT(
+                fixture_->count(developer, QStringLiteral("turn.completed")) > 0, 30000);
         QVERIFY(
             command("team.update", {{"team_id", teamId_}, {"paused", true}}).value("ok").toBool());
         QVERIFY(command("team.task.create", {{"team_id", teamId_}, {"title", "Docs"}})
                     .value("ok")
                     .toBool());
         assignByTheLeader("T-3", developers_.at(0));
-        QTest::qWait(300);
         QCOMPARE(count("assignment"), 2);
         const QString gitStarted = fixture_->directory.filePath("resume-git-started");
         const SlowGit slow(fixture_->directory.filePath("bin"), "2", gitStarted);

@@ -90,6 +90,10 @@ ketplus_add_daemon_test(ketplus_daemon_claude_worktree_tests ClaudeWorktreeTest.
 ketplus_add_daemon_test(ketplus_daemon_context_relay_tests WorktreeContextRelayTest.cpp)
 # Link in-memory credential symbols before the static core; never use the OS key store.
 target_sources(ketplus_daemon_context_relay_tests PRIVATE cloud-privacy/MemoryCredentials.cpp)
+ketplus_add_daemon_test(ketplus_cloud_trust_lifecycle_tests cloud-privacy/CloudTrustLifecycleTest.cpp)
+target_sources(ketplus_cloud_trust_lifecycle_tests PRIVATE cloud-privacy/MemoryCredentials.cpp)
+ketplus_add_daemon_test(ketplus_sender_key_cache_tests cloud-privacy/SenderKeyCacheTest.cpp)
+target_sources(ketplus_sender_key_cache_tests PRIVATE cloud-privacy/MemoryCredentials.cpp)
 ketplus_add_daemon_test(ketplus_daemon_cloud_privacy_tests cloud-privacy/CloudPrivacyTest.cpp)
 target_sources(ketplus_daemon_cloud_privacy_tests PRIVATE cloud-privacy/MemoryCredentials.cpp)
 # Signed builds may run PCRE2 without JIT; cloud projection must stay linear there too.
@@ -127,6 +131,7 @@ ketplus_add_daemon_test(ketplus_daemon_session_fork_tests SessionForkTest.cpp)
 ketplus_add_daemon_test(ketplus_agent_messaging_tests AgentMessagingTest.cpp)
 ketplus_add_daemon_test(ketplus_agent_urgent_delivery_tests AgentUrgentDeliveryTest.cpp)
 ketplus_add_daemon_test(ketplus_team_store_tests TeamStoreTest.cpp)
+ketplus_add_daemon_test(ketplus_team_risk_policy_tests TeamRiskPolicyTest.cpp)
 ketplus_add_daemon_test(ketplus_team_protocol_tests TeamProtocolTest.cpp)
 ketplus_add_daemon_test(ketplus_team_task_tests TeamTaskTest.cpp)
 ketplus_add_daemon_test(ketplus_team_task_git_tests TeamTaskGitTest.cpp)

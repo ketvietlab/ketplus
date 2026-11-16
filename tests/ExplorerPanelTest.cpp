@@ -43,7 +43,7 @@ class ExplorerPanelTest final : public QObject {
     void conversationStatusMarksUnreadCompletionAndRotatesWorkingIcon();
     void runningAgentTurnNamesItsSender();
     void ordersRepositoryConversationsByLatestTurnAcrossWorktrees();
-    void ordersRepositoriesByTheirNewestConversation();
+    void ordersRepositoriesByNameRegardlessOfConversationActivity();
     void scalesSidebarTypeWithInterfaceZoom();
     void drawsNoTagsAndUsesAuthoritativeStorageWarning();
 };
@@ -229,8 +229,9 @@ void ExplorerPanelTest::switchesActivityModes() {
     const auto groups =
         bar.findChildren<QAbstractButton*>(QStringLiteral("productRepositoryGroupButton"));
     QCOMPARE(groups.size(), 2);
-    QCOMPARE(groups.at(0)->accessibleName(), QStringLiteral("repo"));
-    QVERIFY(groups.at(0)->property("activeRepository").toBool());
+    QCOMPARE(groups.at(0)->accessibleName(), QStringLiteral("other"));
+    QCOMPARE(groups.at(1)->accessibleName(), QStringLiteral("repo"));
+    QVERIFY(groups.at(1)->property("activeRepository").toBool());
     const auto rows =
         bar.findChildren<QAbstractButton*>(QStringLiteral("productConversationButton"));
     QCOMPARE(rows.size(), 2);
@@ -257,7 +258,7 @@ void ExplorerPanelTest::switchesActivityModes() {
 
     // Repositories without conversations open their folder; there is no collapse icon.
     QVERIFY(bar.findChildren<QLabel*>(QStringLiteral("productRepositoryCollapsedIcon")).isEmpty());
-    groups.at(1)->click();
+    groups.at(0)->click();
     QCOMPARE(repositoryActivation.count(), 1);
     QCOMPARE(repositoryActivation.constFirst().constFirst().toString(), QStringLiteral("/other"));
 
@@ -266,7 +267,7 @@ void ExplorerPanelTest::switchesActivityModes() {
         bar.findChildren<QAbstractButton*>(QStringLiteral("productNewConversationButton"));
     QCOMPARE(create.size(), 2);
     QVERIFY(create.constFirst()->isHidden());
-    create.at(1)->click();
+    create.at(0)->click();
     QCOMPARE(newConversation.count(), 1);
     QCOMPARE(newConversation.constFirst().constFirst().toString(), QStringLiteral("/other"));
 
@@ -359,18 +360,20 @@ void ExplorerPanelTest::collapsesAndPreviewsRepositoryConversations() {
     const auto groups =
         bar.findChildren<QAbstractButton*>(QStringLiteral("productRepositoryGroupButton"));
     QCOMPARE(groups.size(), 2);
+    QCOMPARE(groups.at(0)->accessibleName(), QStringLiteral("other"));
+    QCOMPARE(groups.at(1)->accessibleName(), QStringLiteral("repo"));
     QSignalSpy activation(&bar, &ketplus::ActivityBar::repositoryActivationRequested);
-    groups.at(0)->click();
+    groups.at(1)->click();
     QCOMPARE(activation.count(), 0);
     QCOMPARE(visibleIds().size(), 0);
-    QVERIFY(groups.at(0)->accessibleDescription().startsWith(QStringLiteral("Collapsed, ")));
+    QVERIFY(groups.at(1)->accessibleDescription().startsWith(QStringLiteral("Collapsed, ")));
     QCOMPARE(QSettings().value(QStringLiteral("sidebar/collapsedRepositories")).toStringList(),
              QStringList{QStringLiteral("/repo")});
-    groups.at(0)->click();
+    groups.at(1)->click();
     QCOMPARE(activation.count(), 0);
     QCOMPARE(visibleIds().size(), 5);
-    QVERIFY(groups.at(0)->accessibleDescription().startsWith(QStringLiteral("Expanded, ")));
-    groups.at(1)->click();
+    QVERIFY(groups.at(1)->accessibleDescription().startsWith(QStringLiteral("Expanded, ")));
+    groups.at(0)->click();
     QCOMPARE(activation.count(), 1);
     QCOMPARE(activation.constFirst().constFirst().toString(), QStringLiteral("/other"));
 }
@@ -519,7 +522,7 @@ void ExplorerPanelTest::ordersRepositoryConversationsByLatestTurnAcrossWorktrees
                                    QStringLiteral("alpha"), QStringLiteral("legacy")}));
 }
 
-void ExplorerPanelTest::ordersRepositoriesByTheirNewestConversation() {
+void ExplorerPanelTest::ordersRepositoriesByNameRegardlessOfConversationActivity() {
     ketplus::ActivityBar bar;
     const auto conversation = [](const QString& id, const QString& title, const qint64 startedAt) {
         return QVariantMap{{QStringLiteral("id"), id},
@@ -542,8 +545,8 @@ void ExplorerPanelTest::ordersRepositoriesByTheirNewestConversation() {
             ids << row->property("conversationId").toString();
         return ids;
     };
-    // Phones apply this order too. Being the open repository does not move one, and
-    // repositories without a turn follow by name.
+    // Repository names determine group order even with newer turns or active selection.
+    // Conversations still follow recency within each group.
     bar.setRepositories({{QStringLiteral("/work/sample-project"),
                           QStringLiteral("sample-project"),
                           true,
@@ -557,8 +560,8 @@ void ExplorerPanelTest::ordersRepositoriesByTheirNewestConversation() {
                            conversation(QStringLiteral("sidebar"), QStringLiteral("Sidebar"), 30)}},
                          {QStringLiteral("/work/atlas"), QStringLiteral("atlas"), false, {}}});
     QCOMPARE(repositoryOrder(),
-             (QStringList{QStringLiteral("/work/ketplus"), QStringLiteral("/work/sample-project"),
-                          QStringLiteral("/work/atlas"), QStringLiteral("/work/zeta")}));
+             (QStringList{QStringLiteral("/work/atlas"), QStringLiteral("/work/ketplus"),
+                          QStringLiteral("/work/sample-project"), QStringLiteral("/work/zeta")}));
     QCOMPARE(conversationOrder(),
              (QStringList{QStringLiteral("sidebar"), QStringLiteral("untitled-a"),
                           QStringLiteral("untitled-b"), QStringLiteral("crm")}));

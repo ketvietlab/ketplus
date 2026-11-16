@@ -11,8 +11,10 @@
 #include "KetSegmentedControl.h"
 #include "KetSelect.h"
 #include "KetStyle.h"
+#include "KetTextArea.h"
 #include "KetTextField.h"
 #include "KetToggle.h"
+#include "TeamLanguage.h"
 #include "app/AgentWorktreeDialog.h"
 #include "teams/TeamAgentDialog.h"
 #include "teams/TeamDirectory.h"
@@ -22,11 +24,14 @@
 
 #include <QApplication>
 #include <QCheckBox>
+#include <QDir>
 #include <QJsonArray>
 #include <QLabel>
 #include <QScrollArea>
+#include <QScrollBar>
 #include <QStandardItemModel>
 #include <QStandardPaths>
+#include <QTextEdit>
 #include <QtTest>
 
 using namespace ketplus;
@@ -482,17 +487,115 @@ class TeamDialogsTest final : public QObject {
             ket::Appearance::instance().setZoom(zoom);
             problems << settled(dialog, QStringLiteral("zoomed to %1 while open").arg(zoom));
         }
-        // With room again the labels go back beside their controls.
+        // With room again the compound controls return side by side.
         window.resize(1024, 640);
         auto* form = dialog->findChild<NewTeamForm*>();
         QTRY_VERIFY(form->developerCount()->geometry().right() <
                     form->agentButton("developer")->geometry().left());
-        // The goal is a large field: its label stays above it at every width.
+        // Labels stay above their controls in both columns.
         for (const ket::FieldRow* row : form->findChildren<ket::FieldRow*>())
-            QVERIFY(row->isStacked() == (row->control() == form->goalField()));
+            QVERIFY(row->isStacked());
         dialog->reject();
         problems.removeAll(QString{});
         QVERIFY2(problems.isEmpty(), qPrintable(problems.join(QLatin1Char('\n'))));
+    }
+
+    void columnsReflowAndKeepTheFooterReachable_data() {
+        QTest::addColumn<QSize>("windowSize");
+        QTest::addColumn<QString>("language");
+        QTest::addColumn<bool>("twoColumns");
+        for (const QString& language : {QStringLiteral("en"), QStringLiteral("vi")}) {
+            QTest::newRow(qPrintable("desktop-" + language))
+                << QSize(1280, 900) << language << true;
+            QTest::newRow(qPrintable("narrow-" + language)) << QSize(480, 640) << language << false;
+            QTest::newRow(qPrintable("short-" + language)) << QSize(1024, 420) << language << true;
+        }
+    }
+
+    void columnsReflowAndKeepTheFooterReachable() {
+        QFETCH(QSize, windowSize);
+        QFETCH(QString, language);
+        QFETCH(bool, twoColumns);
+        remote::team_language::Scope languageScope(language);
+        QWidget window;
+        window.resize(windowSize);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        auto* dialog = NewTeamForm::present(&window, teams_.get(), "/repo", bothProviders);
+        auto* form = dialog->findChild<NewTeamForm*>();
+        form->nameField()->setText("Checkout");
+        form->goalField()->setText(language == "vi"
+                                       ? QStringLiteral("Hoàn tất trang thanh toán.")
+                                       : QStringLiteral("Complete the checkout page."));
+        auto* context = form->findChild<QWidget*>("teamContextColumn");
+        auto* settings = form->findChild<QWidget*>("teamSettingsColumn");
+        auto* scroll = dialog->findChild<QScrollArea*>("teamDialogScroll");
+        auto* create = dialog->findChild<ket::Button*>("teamCreateButton");
+        QTRY_COMPARE(settings->x() > context->x(), twoColumns);
+        QTRY_VERIFY(form->width() <= scroll->viewport()->width());
+        QTRY_VERIFY(window.rect().contains(dialog->card()->geometry()));
+        const auto insideWindow = [&window](QWidget* widget) {
+            return window.rect().contains(QRect(widget->mapTo(&window, QPoint{}), widget->size()));
+        };
+        QVERIFY(insideWindow(create));
+        QVERIFY(!scroll->isAncestorOf(create));
+        QCOMPARE(scroll->horizontalScrollBar()->maximum(), 0);
+        for (ket::FieldRow* row : form->findChildren<ket::FieldRow*>()) {
+            QTRY_VERIFY2(row->control()->mapTo(form, row->control()->rect().bottomRight()).x() <
+                             form->width(),
+                         qPrintable(row->control()->objectName()));
+            QVERIFY(row->isStacked());
+            for (QLabel* label : row->findChildren<QLabel*>(Qt::FindDirectChildrenOnly)) {
+                if (label->wordWrap() && !label->isHidden()) {
+                    const int natural = label->fontMetrics()
+                                            .boundingRect(QRect(0, 0, label->width(), 10000),
+                                                          Qt::TextWordWrap, label->text())
+                                            .height();
+                    QTRY_VERIFY2(label->height() <= natural + 4,
+                                 qPrintable(QStringLiteral("%1: height %2, natural %3, min %4")
+                                                .arg(label->text())
+                                                .arg(label->height())
+                                                .arg(natural)
+                                                .arg(label->minimumHeight())));
+                }
+            }
+        }
+        // The left column stays top aligned: spare settings height is not spread below Goal.
+        auto* leaderRow = form->agentButton("leader")->parentWidget();
+        const int gap = leaderRow->mapTo(form, QPoint{}).y() -
+                        form->goalField()->parentWidget()->mapTo(form, QPoint{}).y() -
+                        form->goalField()->parentWidget()->height();
+        QVERIFY2(gap >= 0 && gap < 40, qPrintable(QString::number(gap)));
+        if (!twoColumns)
+            QTRY_VERIFY(settings->y() - context->geometry().bottom() <= 25);
+        // Tab follows the left column before entering settings, and auto-scroll reveals it.
+        form->nameField()->setFocus();
+        QTest::keyClick(form->nameField(), Qt::Key_Tab);
+        QTRY_VERIFY(form->goalField()->editor()->hasFocus());
+        auto* requirements = form->findChild<ket::Checkbox*>("teamLeaderWritesRequirements");
+        requirements->setFocus();
+        QTest::keyClick(requirements, Qt::Key_Tab);
+        auto* branch = form->findChild<ket::TextField*>("teamIntegrationBranchField");
+        QTRY_VERIFY(branch->hasFocus());
+        auto* permissions = form->findChild<ket::Select*>("teamPermissions");
+        for (int stop = 0; stop < 16 && !permissions->hasFocus(); ++stop)
+            QTest::keyClick(QApplication::focusWidget(), Qt::Key_Tab);
+        QTRY_VERIFY(permissions->hasFocus());
+        QTRY_VERIFY(scroll->viewport()->rect().contains(
+            QRect(permissions->mapTo(scroll->viewport(), QPoint{}), permissions->size())));
+        QVERIFY(insideWindow(create));
+        if (const QString path = qEnvironmentVariable("KETPLUS_T15_CAPTURE"); !path.isEmpty()) {
+            QDir().mkpath(path);
+            scroll->verticalScrollBar()->setValue(0);
+            QApplication::processEvents();
+            QVERIFY(window.grab().save(path + '/' + QTest::currentDataTag() + ".png"));
+            qInfo() << QTest::currentDataTag() << "window" << window.size() << "card"
+                    << dialog->card()->geometry() << "context" << context->geometry() << "settings"
+                    << settings->geometry() << "scroll" << scroll->size() << "create"
+                    << QRect(create->mapTo(&window, QPoint{}), create->size());
+        }
+        QVERIFY(daemon_.sent.isEmpty());
+        dialog->reject();
     }
 
     // A long model name elides inside its button instead of widening the form past the card.
