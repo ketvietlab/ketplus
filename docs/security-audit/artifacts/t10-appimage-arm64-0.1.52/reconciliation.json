@@ -1,0 +1,38 @@
+{
+  "artifact": {
+    "name": "KetPlus-Pro-0.1.52-aarch64.AppImage",
+    "sha256": "9451ea73dbbc5cd25a7b11b34bb73322f00e585e733a13854da385644ff7bcac"
+  },
+  "artifactEvidenceSha256": "680b6cfbb5939e35485ea5115de34e9d9c8075c94ca90334744ba55a53ef1af7",
+  "candidateSpdxSha256": "105a28f2387ad8e05218ac8e40026eaca9b60c664fb981d0d56fe3e8ae8b4f47",
+  "declaredRuntimeEmbeddedComponents": 6,
+  "discoveredComponentCount": 290,
+  "extractor": {
+    "builtTarget": "unsquashfs",
+    "childUmask": 0,
+    "darwinPatchApplied": false,
+    "source": "https://github.com/plougher/squashfs-tools/tree/4.7.5",
+    "sourceArchiveSha256": "547b7b7f4d2e44bf91b6fc554664850c69563701deab9fd9cd7e21f694c88ea6",
+    "xattrsExtracted": false
+  },
+  "fileCount": 6919,
+  "files": {
+    "README.md": "c4435ef28e961a2144296bd11ee4b897b90eda7b7e2ca2e68e55f936d5bdffff",
+    "components.csv": "adff86e219af62c03ce24827bf917f547ed923b6d480ed5c45439c81a909e777",
+    "gate-result.json": "dde1810101bf411cde8bf6ecd1dcbdd6eaafd3b340ce393e7702651c9af4f673",
+    "runtime-source-evidence.json": "247c7c757d2d77d4f8d83d60db774169d3ee2884de9b316d0e202a816085cf29"
+  },
+  "inventorySha256": "6bef535398ea978c715cf7f54a2b21579367cf155fb7bd46e96a3e87773491f4",
+  "prefixCorrespondence": {
+    "archiveOwnershipTimesAndXattrsVerified": false,
+    "bytesTypesSizesAndLinkTargetsMatch": true,
+    "darwinHostSymlinkModesDiffer": 51,
+    "entriesCompared": 6914,
+    "regularFileModesMatch": true
+  },
+  "publicationAuthorized": false,
+  "reviewComponentCount": 296,
+  "reviewSha256": "0753abc3940a9e4facfc6c4ff3a8c3389481902aff88da5c2d3c0b84a2b3c266",
+  "schemaVersion": 1,
+  "sourceCommit": "5b9417abc8b9b9fcf5a20301397eed9e1644ba27"
+}

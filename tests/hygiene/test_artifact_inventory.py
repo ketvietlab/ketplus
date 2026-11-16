@@ -108,6 +108,10 @@ class ArtifactInventoryTest(unittest.TestCase):
         self.assertIn("component-notices-missing", errors)
         self.assertIn("embedded-or-dependency-evidence-missing", errors)
 
+    def test_license_pointer_is_not_a_concluded_redistribution_license(self):
+        self.review["components"][0]["license"] = "SEE LICENSE IN README.md"
+        self.assertIn("component-identity-or-license-unresolved", self.check()["errors"])
+
     def test_unresolved_source_and_changed_npm_identity_fail(self):
         self.inv["sourceCommit"] = "NOASSERTION"
         self.assertIn("source-identity-unresolved", self.check()["errors"])

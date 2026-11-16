@@ -26,12 +26,13 @@ class FinalPayloadTest(unittest.TestCase):
                 archive.addfile(member, io.BytesIO(contents))
         path.write_bytes(prefix + data.getvalue())
 
-    def extractor_fixture(self, *args):
+    def extractor_fixture(self, *args, **kwargs):
         # Synthetic offline stand-ins for dpkg-deb/unsquashfs; read the assembled
         # archive bytes, not the original staging tree.
         if args[0] == "dpkg-deb":
             artifact, destination, offset = args[2], args[3], 0
         else:
+            self.assertEqual(kwargs.get("umask"), 0)
             offset, destination, artifact = int(args[2]), args[5], args[6]
         destination.mkdir(parents=True)
         with artifact.open("rb") as stream:
@@ -80,6 +81,7 @@ class FinalPayloadTest(unittest.TestCase):
                 "usr/share/licenses/ketplus/LICENSE": b"Synthetic product license",
                 "usr/share/licenses/ketplus/AppImage-runtime.txt": notice},
                 runtime.read_bytes())
+            artifact.chmod(0o755)
             stage = root / "payload"
             layout = payload.extract_payload(artifact, stage, "appimage", self.extractor_fixture, runtime)
             inv = inventory.inventory(stage, "a" * 40, "fixture", 1)
@@ -89,6 +91,7 @@ class FinalPayloadTest(unittest.TestCase):
             self.assertIn("rootfs/fixture.desktop", names)
             self.assertEqual(len(names), 6)
             self.assertEqual((stage / "runtime-prefix").read_bytes(), runtime.read_bytes())
+            self.assertEqual((stage / "runtime-prefix").stat().st_mode & 0o777, 0o755)
             self.assertEqual(layout["runtimePrefixBytes"], runtime.stat().st_size)
             evidence = root / "appimage-evidence"
             inventory.write_evidence(stage, evidence, "a" * 40, "fixture", 1)

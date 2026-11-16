@@ -1,0 +1,49 @@
+{
+  "artifact": {
+    "name": "ketplus-pro_0.1.52_arm64.deb",
+    "sha256": "0d5265bf83829e2bc808269f19d3a286830a385180e2f82eb95ab09037cdeed7"
+  },
+  "artifactEvidenceSha256": "b93b5798b5c522639c2c8af60a59010e16fdd628e59c94a4886ad343d4395f72",
+  "componentCount": 298,
+  "coverage": {
+    "appImageFinalPayloadInventoried": true,
+    "appImageLicenseReviewComplete": false,
+    "dependencyAuditComplete": false,
+    "embeddedInventoryComplete": false,
+    "licenseReviewComplete": false,
+    "publicationAuthorized": false,
+    "sourceOfferAccepted": false
+  },
+  "fileCount": 6925,
+  "files": {
+    "README.md": "4a7e0f39c6990c8b24dc3f208e55d7cd4b7877998f12a42cb03f55710e62d6e2",
+    "components.csv": "1f2749d60acf67096f927cd782029fe9ef9c18ec698ea7b62f6f9d4f13e99812",
+    "elf-needed.json": "78b0a0214f2cd5a1e076f4168f0a1eab12f128a05a9ca76c5aa7227572a1d328",
+    "gate-result.json": "211147f77ad822e4459c4a8279813874e3ab23a299f9b55c28d45daba9bbe6d3",
+    "npm-payload-evidence.json": "158a0d645bc9ce4ab9437d154bccbd4015482cdaf80c9cdba15dcb696a8faca4",
+    "public-source-file-matches.json": "1d4bcd3b45d60c20a61244363d0429be2345b07a8bc4d13d9db61198fc8ffd79",
+    "source-materials.json": "788162984a6f81d05a14dbc528db366b7ca632c5a5aa712fbdb18731ecd47e13"
+  },
+  "groups": {
+    "icu": 3,
+    "mixed-resources": 1,
+    "node": 1,
+    "npm": 109,
+    "package-recipe": 4,
+    "product-native": 3,
+    "public-source-file": 24,
+    "qt-sdk": 153
+  },
+  "inventorySha256": "5e891f94073840116aa2e7462853f94dcd5d624a270159078938ea91966007d7",
+  "nativeElfFilesRead": 134,
+  "npmFilesMatched": 6548,
+  "publicSourceFilesMatched": 89,
+  "reconciledReviewSha256": "354b85b03f53c15e1459324e57cedb0d21f73344d9c5c1adc2a17cab2fd53894",
+  "schemaVersion": 1,
+  "scope": "Existing unsigned engineering Debian artifact; not a rebuild or publication acceptance",
+  "sourceArchive": {
+    "sha256": "c46b316d808aa4878f900339bd3c3835204f05d0d089d392c410c8718eb1aaca",
+    "url": "https://api.github.com/repos/ketvietlab/ketplus/tarball/5b9417abc8b9b9fcf5a20301397eed9e1644ba27"
+  },
+  "sourceCommit": "5b9417abc8b9b9fcf5a20301397eed9e1644ba27"
+}

@@ -71,13 +71,22 @@ The copied evidence metadata explicitly identifies that resolution and does not
 alter the original package or its original metadata. The original prefix evidence
 above remains a historical record of the first exercise.
 
-The new candidate mapping has declared source hints for 53 components and notice
-paths for 111 components, derived from installed npm metadata/files and known
-wrapper provenance. Other native/static/Qt/Chromium identities and corresponding
-source/notice materials still require reconciliation. The final-payload gate
-recognizes this full Debian layout but remains failed for unresolved component
-identities/licenses/source materials and embedded/dependency audit evidence.
-No source hint is treated as legal acceptance or publication authorization.
+The initial candidate mapping had declared source hints for 53 components and
+notice paths for 111. The subsequent [component reconciliation dossier](artifacts/t10-deb-arm64-0.1.52/README.md)
+records all 298 discovered identities, concrete source comparisons and outstanding
+materials by component. It includes lock-pinned npm archive/file comparisons,
+Node binary/notice comparisons, ten retrieved static-library source archives,
+public source-file matches and an offline ELF dependency inventory. The reviewed
+gate was rerun against this exact Debian digest and still fails for the concrete
+source/notice/build/audit gaps documented there. No source hint or byte comparison
+is treated as legal acceptance or publication authorization.
+
+A [separate AppImage dossier](artifacts/t10-appimage-arm64-0.1.52/README.md) records
+6,919 files/symlinks, 290 discovered components, a hash-verified runtime prefix,
+shared-prefix correspondence and its independently failed reviewed gate. It also
+records six declared runtime dependencies, including mimalloc from the pinned
+build recipe that is absent from the installed runtime notice. Runtime dependency
+versions, notices, source/relink materials and native acceptance remain unresolved.
 
 ## Checks and remaining acceptance
 
@@ -91,7 +100,19 @@ The focused temporary-tree tests cover a positive completed review plus failures
 for missing components, notices, source materials and source identity; changed
 bytes/modes, nested npm identity, artifact/SBOM digests and invalid symlinks.
 The existing Linux packaging fixtures pass as well. Public-tree boundary checks
-and `git diff --check` are part of the same verification. No C++ files changed.
+and `git diff --check` are part of the same verification. The About follow-up
+changed C++ and Qt tests; their build, formatting and Lite checks are recorded below.
+
+The reconciliation follow-up passed 32 hygiene/inventory/source/npm-evidence tests
+and the same 9 Linux packaging fixtures. Its new checks distinguish corrupted
+archives, changed installed files, nested npm ownership, credential-bearing URLs,
+missing notices, unsafe archive members, changed notice pins and package upgrades.
+AppImage extraction preserves ordinary file permissions through a child-only
+umask and records the prefix executable mode; inherited host umask masking was
+found and corrected during the real extraction exercise.
+The gate rejects unresolved `SEE LICENSE IN ...` pointers as license conclusions.
+This follow-up changes Python, notices and documentation; the C++/Qt verification
+above remains evidence for the preceding About change, not a new platform build.
 
 Shared About now implements revision/public source and installed notice/license
 access. Its Qt tests exercise edition/platform path resolution, keyboard URL actions,

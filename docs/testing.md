@@ -281,6 +281,10 @@ staging/artifacts and no SDK, network, provider quota or signing keys. They veri
 evidence integrity/completeness; actual per-platform package, source/notice,
 signing and final release acceptance remain separate in
 [artifact inventory](artifact-inventory.md).
+The npm archive comparator uses synthetic lock-pinned tarballs in those tests;
+real archive collection is a separate read-only provenance exercise. Notice
+supplement tests reject changed package manifests, changed pins, escaping paths
+and attempts to overwrite a different upstream notice.
 
 Shared About changes run `ketplus_brand_lockup_tests` and the full Lite suite
 offscreen. The focused target checks edition/platform notice layouts, public source

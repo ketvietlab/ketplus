@@ -1,0 +1,27 @@
+{
+  "exactDependencyPackageVersionsVerified": false,
+  "installedNotice": "rootfs/usr/share/licenses/ketplus/AppImage-runtime.txt",
+  "mimallocNamedInInstalledRuntimeNotice": false,
+  "noticeSha256": "aa154fc9070614bbe7921f89db11efd1dba7a1f3a41685958110e2230f9c0ca1",
+  "prefixBytes": 936456,
+  "prefixSha256": "9a72a744d221576c9347ec074243acc5c3c7568896b12714e0e82e9f0bf47900",
+  "preparedSourceArchiveSha256": "a1601c596b81768626afca9abecf0137092d2d7b281bb6c4b9067d2c79e44a21",
+  "publicationAuthorized": false,
+  "recipeAlpineBaseRelease": "3.21.0",
+  "recipeDeclaredStaticInputs": [
+    "musl",
+    "libfuse3",
+    "squashfuse",
+    "zstd",
+    "zlib",
+    "mimalloc"
+  ],
+  "recipeEvidence": [
+    "scripts/chroot/build.sh",
+    "scripts/chroot/chroot_build.sh",
+    "src/runtime/Makefile"
+  ],
+  "source": "https://github.com/AppImage/type2-runtime/tree/fedfad51acc2860b2916a1eef32ba4a500ff31ef",
+  "sourceCommit": "fedfad51acc2860b2916a1eef32ba4a500ff31ef",
+  "sourceOfferAccepted": false
+}

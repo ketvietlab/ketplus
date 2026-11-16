@@ -86,6 +86,10 @@ Linux Pro engineering packages dynamically deploy the Qt 6.11.1 SDK, including
 WebView/WebEngine, and add the pinned AppImage type2 runtime. The runtime's full
 upstream license inventory is in `AppImage-runtime.txt`; its MIT license does not
 replace the licenses of statically linked musl, libfuse, squashfuse, zstd and zlib.
+The pinned runtime's build recipe also declares mimalloc and links fuse3; its
+installed notice does not name mimalloc. Recover the exact build's package
+identities and complete notices rather than treating that list as a closed SBOM;
+see the [AppImage evidence](security-audit/artifacts/t10-appimage-arm64-0.1.52/README.md).
 Before public binary distribution, provide the exact Qt/Chromium third-party
 notices and source offer and satisfy the runtime's static dependency source and
 relink requirements. The preliminary SPDX inventory deliberately records these
@@ -208,6 +212,17 @@ dependencies, so it adds no third-party notices.
 © KETVIET JSC under MIT; each ships with its `LICENSE`.
 
 ### Bundled Claude Agent SDK sidecar
+
+The actual ARM64 engineering artifact reconciliation records both SDK packages'
+`SEE LICENSE IN ...` declarations and restrictive upstream legal-agreement notices.
+Matching lock-pinned package bytes does not establish redistribution permission;
+the release owner must supply the applicable terms determination and native
+embedded-dependency/notice inventory before release. See the
+[component-specific evidence and material requests](security-audit/artifacts/t10-deb-arm64-0.1.52/README.md).
+Its `standardwebhooks@1.1.1` transitive npm tarball omits LICENSE. Linux assembly
+now supplements the exact MIT library notice from that version's upstream source,
+with package/notice digests pinned in `packaging/linux/npm-notice-supplements.json`.
+An older artifact remains incomplete until rebuilt and audited.
 
 Every macOS build copies
 `apps/daemon/providers/claude-sidecar` production dependencies into

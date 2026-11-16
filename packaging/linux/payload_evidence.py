@@ -2,6 +2,7 @@
 # SPDX-License-Identifier: MPL-2.0
 """Collect final package payloads through offline extraction, never execution."""
 import json
+import stat
 from artifact_inventory import digest, encoded
 
 
@@ -50,7 +51,11 @@ def extract_payload(artifact, destination, kind, run, runtime=None):
             remaining -= len(block)
     if digest(prefix) != digest(runtime):
         raise ValueError("AppImage prefix differs from the verified runtime")
+    prefix.chmod(stat.S_IMODE(artifact.stat().st_mode))
     # Unlike invoking AppImage --appimage-extract, unsquashfs does not run bytes
     # from the package. AppRun/desktop entries/icons are part of this rootfs.
-    run("unsquashfs", "-o", str(size), "-no-progress", "-d", destination / "rootfs", artifact)
+    # Non-root unsquashfs creates ordinary files through the caller's umask.
+    # Preserve recorded permissions in this new private extraction directory;
+    # this changes only the child, never the packaging process/user's umask.
+    run("unsquashfs", "-o", str(size), "-no-progress", "-d", destination / "rootfs", artifact, umask=0)
     return {"format": "appimage-prefix-and-squashfs", "runtimePrefixBytes": size}

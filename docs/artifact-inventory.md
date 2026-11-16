@@ -36,6 +36,39 @@ The output contains:
   source-availability conclusions. Credential-bearing and unknown-host repository
   URLs are not copied into the hints.
 
+For stronger npm provenance, collect the exact published tarballs named by the
+matching source revision's production lockfiles. Check the HTTPS registry origin;
+save each archive as `SHA256(resolved URL).tgz` in an external archive directory.
+The offline comparator verifies the lock's SHA-512 before reading bounded tar
+members, without extracting or executing them:
+
+```sh
+python3 packaging/npm_payload_evidence.py --stage "$STAGE" \
+  --inventory "$EVIDENCE/STAGED-INVENTORY.json" --archives "$NPM_ARCHIVES" \
+  --lock "opt/ketplus-pro/lib/ketplus/ketplus-browser=$SOURCE/apps/browser/package-lock.json" \
+  --lock "opt/ketplus-pro/lib/ketplus/claude-sidecar=$SOURCE/apps/daemon/providers/claude-sidecar/package-lock.json" \
+  --out "$EVIDENCE/NPM-PAYLOAD-EVIDENCE.json"
+```
+
+Lock roots are relative to the actual extracted stage (use `rootfs/usr/...` for
+AppImage). Each installed component retains ownership of its own files, including
+nested packages. Missing archives, lock/manifest inconsistencies and differing
+files produce a nonzero exit. `allNpmFilesMatch` establishes byte correspondence,
+not license sufficiency, SDK redistribution permission or dependency-audit approval.
+Reports contain public registry URLs/digests and relative paths; rejected URL
+credentials and parser input are not echoed. Network collection is separate from
+this offline tool and its fixture tests.
+
+Linux packaging supplements the MIT notice omitted from the published
+`standardwebhooks@1.1.1` archive using the exact upstream **library** license in
+`packaging/licenses/standardwebhooks-MIT.txt`. Its source commit, package manifest
+digest and notice digest are pinned in `packaging/linux/npm-notice-supplements.json`.
+Package changes require re-review; a different existing LICENSE is never overwritten.
+The notice is installed inside that package before assembly, so the final payload
+inventory and npm notice mapping cover it. This fixes future assembly; it does not
+change or retroactively accept an older package. The upstream specification's root
+Apache license is not substituted for the JavaScript library's MIT license.
+
 The Linux assembler first completes both packages, then extracts each final
 artifact without executing it. `dpkg-deb --raw-extract` includes control metadata,
 maintainer scripts and all data, including wrappers outside `/opt/ketplus-pro`.
@@ -43,6 +76,11 @@ AppImage collection uses `unsquashfs` at the verified runtime offset and preserv
 the actual binary prefix as `runtime-prefix`, alongside the complete `rootfs/`
 (AppRun, desktop entries, icons and installed product). A prefix-only inventory
 cannot pass the Linux distribution gate.
+The extractor sets a child-only umask of zero for unsquashfs so non-root extraction
+does not mask ordinary recorded file modes. The runtime-prefix file inherits the
+AppImage artifact's mode. Inventory modes describe the extracted filesystem;
+archive ownership, timestamps, xattrs and cross-platform symlink-mode semantics
+require separate native verification. They are not established by this scanner.
 
 Each format gets its own `deb-evidence/` or `appimage-evidence/` directory containing
 inventory, candidate SPDX, review template and `ARTIFACT-EVIDENCE.json` with its

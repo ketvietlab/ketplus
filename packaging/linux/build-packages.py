@@ -21,6 +21,7 @@ sys.path.insert(0, str(HERE.parent))
 sys.path.insert(0, str(HERE))
 from artifact_inventory import bind_artifacts, encoded, write_evidence
 from payload_evidence import extract_payload, reconcile_recipe_sources
+from notice_supplements import install_supplements
 
 
 def run(*args, **kwargs):
@@ -232,6 +233,7 @@ def main():
     prefix.mkdir(parents=True)
     run("cmake", "--install", build, "--prefix", prefix)
     validate_prefix(prefix)
+    install_supplements(prefix, REPO, json.loads((HERE / "npm-notice-supplements.json").read_text()))
     info = build_info(prefix, args.expected_control_url)
     if info.get("product_version") != args.version:
         raise ValueError("Installed daemon version differs from the package version")

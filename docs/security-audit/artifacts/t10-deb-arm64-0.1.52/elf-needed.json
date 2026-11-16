@@ -1,0 +1,1903 @@
+[
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libGLX.so.0",
+      "libOpenGL.so.0",
+      "libQt6Core.so.6",
+      "libQt6Core5Compat.so.6",
+      "libQt6Gui.so.6",
+      "libQt6Network.so.6",
+      "libQt6PrintSupport.so.6",
+      "libQt6Qml.so.6",
+      "libQt6Quick.so.6",
+      "libQt6Sql.so.6",
+      "libQt6Svg.so.6",
+      "libQt6SvgWidgets.so.6",
+      "libQt6WebView.so.6",
+      "libQt6Widgets.so.6",
+      "libc.so.6",
+      "libcrypto.so.3",
+      "libgcc_s.so.1",
+      "libm.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/bin/KetPlus",
+    "sha256": "c407b9cfeef91781976dac2ca00f5bc1fe1a5bf7f2c52250c54fa3789908cc65",
+    "soname": null
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libGLX.so.0",
+      "libOpenGL.so.0",
+      "libQt6Core.so.6",
+      "libQt6Gui.so.6",
+      "libQt6Network.so.6",
+      "libQt6Sql.so.6",
+      "libQt6WebSockets.so.6",
+      "libc.so.6",
+      "libcrypto.so.3",
+      "libgcc_s.so.1",
+      "libm.so.6",
+      "libssl.so.3",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/bin/ketplus_daemon",
+    "sha256": "c2d3e54e40ab3660db35b457f922a5f7db714fc0b1c0108897c8f156f9da6514",
+    "soname": null
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6Network.so.6",
+      "libc.so.6",
+      "libgcc_s.so.1",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/bin/ketplusctl",
+    "sha256": "313e4f53b5421763632b37968d8a54beb7044b3ceeebc382a21f807262b2cb6c",
+    "soname": null
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libc.so.6",
+      "libdl.so.2",
+      "libm.so.6",
+      "libpthread.so.0",
+      "librt.so.1"
+    ],
+    "path": "opt/ketplus-pro/lib/ketplus/claude-sidecar/node_modules/@anthropic-ai/claude-agent-sdk-linux-arm64/claude",
+    "sha256": "f220ca50ea4f3222043ff83cc224a1262e0196e9897acc0871efa94235b0c1fd",
+    "soname": null
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libc.so.6",
+      "libdl.so.2",
+      "libgcc_s.so.1",
+      "libm.so.6",
+      "libpthread.so.0",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/lib/ketplus/ketplus-browser/bin/node",
+    "sha256": "0f8949d1028f6d61506b2d5bc57e7e6fe893d7b1997509b7847294fc9c616584",
+    "soname": null
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libc.so.6",
+      "libgcc_s.so.1",
+      "libglib-2.0.so.0",
+      "libicui18n.so.73",
+      "libicuuc.so.73",
+      "libm.so.6",
+      "libstdc++.so.6",
+      "libz.so.1",
+      "libzstd.so.1"
+    ],
+    "path": "opt/ketplus-pro/lib/libQt6Core.so.6.11.1",
+    "sha256": "34ce9b786bc1db54ba3c7d1fcfd2eb60cfd23c8e6c2d8fff0f6d47e4a51edef0",
+    "soname": "libQt6Core.so.6"
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libc.so.6",
+      "libicuuc.so.73",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/lib/libQt6Core5Compat.so.6.11.1",
+    "sha256": "257f89a602fa19bdca8527d2f8dfa3cecf2ef3bcba92bddafca8ab8bd85dce5c",
+    "soname": "libQt6Core5Compat.so.6"
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libc.so.6",
+      "libdbus-1.so.3",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/lib/libQt6DBus.so.6.11.1",
+    "sha256": "6063bf319de044687fbef911aa1c3bf6fc41eeec6367cba9d6affb42e77f11ca",
+    "soname": "libQt6DBus.so.6"
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libEGL.so.1",
+      "libGL.so.1",
+      "libQt6Core.so.6",
+      "libQt6Gui.so.6",
+      "libQt6OpenGL.so.6",
+      "libc.so.6",
+      "libm.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/lib/libQt6EglFSDeviceIntegration.so.6.11.1",
+    "sha256": "855dd1a21263c938c02c9a57f9e02111d568e98299f9fab7a92f2a62ac76f1b8",
+    "soname": "libQt6EglFSDeviceIntegration.so.6"
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libEGL.so.1",
+      "libQt6Core.so.6",
+      "libQt6EglFSDeviceIntegration.so.6",
+      "libQt6EglFsKmsSupport.so.6",
+      "libQt6Gui.so.6",
+      "libc.so.6",
+      "libdrm.so.2",
+      "libgbm.so.1",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/lib/libQt6EglFsKmsGbmSupport.so.6.11.1",
+    "sha256": "ff3ee57bfd64a1ebe0f1c7e69caa63f77493ffcc1fcae8212b1cb3569def653d",
+    "soname": "libQt6EglFsKmsGbmSupport.so.6"
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6EglFSDeviceIntegration.so.6",
+      "libQt6Gui.so.6",
+      "libc.so.6",
+      "libdrm.so.2",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/lib/libQt6EglFsKmsSupport.so.6.11.1",
+    "sha256": "22d9b5284cde1f095416cf0640f3bb2e764ac8ad497363c8428078b2da5d9e96",
+    "soname": "libQt6EglFsKmsSupport.so.6"
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libEGL.so.1",
+      "libGL.so.1",
+      "libQt6Core.so.6",
+      "libQt6DBus.so.6",
+      "libX11.so.6",
+      "libc.so.6",
+      "libfontconfig.so.1",
+      "libfreetype.so.6",
+      "libglib-2.0.so.0",
+      "libm.so.6",
+      "libstdc++.so.6",
+      "libxkbcommon.so.0",
+      "libz.so.1"
+    ],
+    "path": "opt/ketplus-pro/lib/libQt6Gui.so.6.11.1",
+    "sha256": "d41f8146b927f29d2545c920a9caa7ee3ad228fc6d115bb9ed4231a496b6519d",
+    "soname": "libQt6Gui.so.6"
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libbrotlidec.so.1",
+      "libc.so.6",
+      "libstdc++.so.6",
+      "libz.so.1",
+      "libzstd.so.1"
+    ],
+    "path": "opt/ketplus-pro/lib/libQt6Network.so.6.11.1",
+    "sha256": "89eed29bcbc94299cec4347834ae90399efa0274cc1ee6b937b64397f8fff46f",
+    "soname": "libQt6Network.so.6"
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libGL.so.1",
+      "libQt6Core.so.6",
+      "libQt6Gui.so.6",
+      "libc.so.6",
+      "libm.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/lib/libQt6OpenGL.so.6.11.1",
+    "sha256": "be0574e1319849f21849b681d9985013e74f830cf3e98ef9f47bcec4836e395b",
+    "soname": "libQt6OpenGL.so.6"
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libc.so.6",
+      "libgcc_s.so.1",
+      "libm.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/lib/libQt6Positioning.so.6.11.1",
+    "sha256": "d4a8fd14eb2106ecd76578b327b203ff1e3a02d168b3ca101ba59ca94f231570",
+    "soname": "libQt6Positioning.so.6"
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6Gui.so.6",
+      "libQt6Widgets.so.6",
+      "libc.so.6",
+      "libm.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/lib/libQt6PrintSupport.so.6.11.1",
+    "sha256": "1f3e0a68634f1486b64f35b5120109c21c088fc138b7c0d69f9e5c9248240043",
+    "soname": "libQt6PrintSupport.so.6"
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6Network.so.6",
+      "libc.so.6",
+      "libgcc_s.so.1",
+      "libm.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/lib/libQt6Qml.so.6.11.1",
+    "sha256": "125f57c4bd8508593652a2af70510f07ad5dc14253934e88e67dec8be3fa65ba",
+    "soname": "libQt6Qml.so.6"
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6Qml.so.6",
+      "libQt6QmlModels.so.6",
+      "libQt6QmlWorkerScript.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/lib/libQt6QmlMeta.so.6.11.1",
+    "sha256": "bedbdbaf6836ffa4350b9fa498240bd96d7da4546b080f732e3963c0e55ba029",
+    "soname": "libQt6QmlMeta.so.6"
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6Qml.so.6",
+      "libc.so.6",
+      "libm.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/lib/libQt6QmlModels.so.6.11.1",
+    "sha256": "4787c969f434322983c6f4ac306a8ac9180e0a03db8206ba6e57e81d28004541",
+    "soname": "libQt6QmlModels.so.6"
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6Qml.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/lib/libQt6QmlWorkerScript.so.6.11.1",
+    "sha256": "f6a19bb35ec99e3824ef864b9e7085a34f09ac1c5a84c9bd58aa8d9d310dcf65",
+    "soname": "libQt6QmlWorkerScript.so.6"
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6Gui.so.6",
+      "libQt6Network.so.6",
+      "libQt6OpenGL.so.6",
+      "libQt6Qml.so.6",
+      "libQt6QmlMeta.so.6",
+      "libQt6QmlModels.so.6",
+      "libc.so.6",
+      "libm.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/lib/libQt6Quick.so.6.11.1",
+    "sha256": "2697f0e194dd9f81614e03a5cdf76be4fd87fda7f431afe7ef91eaf039fd6b0a",
+    "soname": "libQt6Quick.so.6"
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6Gui.so.6",
+      "libQt6Qml.so.6",
+      "libQt6Quick.so.6",
+      "libQt6QuickTemplates2.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/lib/libQt6QuickControls2.so.6.11.1",
+    "sha256": "0c26e103b99fb46470d664bffa71d85f4e30cbb5725af0535b8fca8115b899e5",
+    "soname": "libQt6QuickControls2.so.6"
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6Gui.so.6",
+      "libQt6Qml.so.6",
+      "libQt6Quick.so.6",
+      "libQt6QuickControls2.so.6",
+      "libQt6QuickTemplates2.so.6",
+      "libc.so.6",
+      "libm.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/lib/libQt6QuickControls2Basic.so.6.11.1",
+    "sha256": "a1c68d18d34f1b2775dd397ce734c779c93b7c15484f44537a6c887a16fecb5c",
+    "soname": "libQt6QuickControls2Basic.so.6"
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6Gui.so.6",
+      "libQt6Qml.so.6",
+      "libQt6Quick.so.6",
+      "libQt6QuickControls2Impl.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/lib/libQt6QuickControls2BasicStyleImpl.so.6.11.1",
+    "sha256": "b8ee3c7dcb9aa449b87cb539f6beaf74a973d680bbba1dc522e52f27753b03b7",
+    "soname": "libQt6QuickControls2BasicStyleImpl.so.6"
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6Gui.so.6",
+      "libQt6Qml.so.6",
+      "libQt6Quick.so.6",
+      "libQt6QuickTemplates2.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/lib/libQt6QuickControls2FluentWinUI3StyleImpl.so.6.11.1",
+    "sha256": "29054cb404b93d10cd67d4ffb46bd826e89406d32919f18341abe8f56466dc63",
+    "soname": "libQt6QuickControls2FluentWinUI3StyleImpl.so.6"
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6Gui.so.6",
+      "libQt6Qml.so.6",
+      "libQt6Quick.so.6",
+      "libc.so.6",
+      "libm.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/lib/libQt6QuickControls2Fusion.so.6.11.1",
+    "sha256": "f149f51a10cec4f0b2cb437645749be35042210073d440f1d3d5ad777710db66",
+    "soname": "libQt6QuickControls2Fusion.so.6"
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6Gui.so.6",
+      "libQt6Qml.so.6",
+      "libQt6Quick.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/lib/libQt6QuickControls2FusionStyleImpl.so.6.11.1",
+    "sha256": "d01462e768dcb259ed4e141c30327059b4d6f60e867c0ba3cec63f8c46fc4b69",
+    "soname": "libQt6QuickControls2FusionStyleImpl.so.6"
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6Gui.so.6",
+      "libQt6Qml.so.6",
+      "libQt6QuickControls2.so.6",
+      "libQt6QuickTemplates2.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/lib/libQt6QuickControls2Imagine.so.6.11.1",
+    "sha256": "3dc6813dbce4f7fa184b136d6047a3e1ca4cd3bb176a45c9ab2c78e3caf93473",
+    "soname": "libQt6QuickControls2Imagine.so.6"
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6Qml.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/lib/libQt6QuickControls2ImagineStyleImpl.so.6.11.1",
+    "sha256": "f2721118952ed88cb1ada1be3e53e95f21892fda716242072ad2fb3a1cd5c7e0",
+    "soname": "libQt6QuickControls2ImagineStyleImpl.so.6"
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6Gui.so.6",
+      "libQt6Qml.so.6",
+      "libQt6Quick.so.6",
+      "libQt6QuickTemplates2.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/lib/libQt6QuickControls2Impl.so.6.11.1",
+    "sha256": "aab6fe2f999a3a255c621bf86f371e9972a43fa9a7588968f82164b6bf60e228",
+    "soname": "libQt6QuickControls2Impl.so.6"
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6Gui.so.6",
+      "libQt6Qml.so.6",
+      "libQt6QuickControls2.so.6",
+      "libQt6QuickTemplates2.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/lib/libQt6QuickControls2Material.so.6.11.1",
+    "sha256": "1cfb31ce17013552bf40858d07f25118f198bf96dcdb5c73ddf622e876cc8851",
+    "soname": "libQt6QuickControls2Material.so.6"
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6Gui.so.6",
+      "libQt6Qml.so.6",
+      "libQt6Quick.so.6",
+      "libQt6QuickControls2Impl.so.6",
+      "libQt6QuickTemplates2.so.6",
+      "libc.so.6",
+      "libm.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/lib/libQt6QuickControls2MaterialStyleImpl.so.6.11.1",
+    "sha256": "834cfc6a4333121ef6d8effcf4f11751db58207522671af0ef4c69c15ba6baab",
+    "soname": "libQt6QuickControls2MaterialStyleImpl.so.6"
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6Gui.so.6",
+      "libQt6Qml.so.6",
+      "libQt6QuickControls2.so.6",
+      "libQt6QuickTemplates2.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/lib/libQt6QuickControls2Universal.so.6.11.1",
+    "sha256": "dc0d97c060093a41d903b7168eb466de3d1d6e2ab19ba91ce8694e0d570afb18",
+    "soname": "libQt6QuickControls2Universal.so.6"
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6Gui.so.6",
+      "libQt6Qml.so.6",
+      "libQt6Quick.so.6",
+      "libQt6QuickControls2Impl.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/lib/libQt6QuickControls2UniversalStyleImpl.so.6.11.1",
+    "sha256": "27b19d46ad5954df78af9c24d4c45c7e9ca3fe91a79e669df462c3928aec680e",
+    "soname": "libQt6QuickControls2UniversalStyleImpl.so.6"
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6Gui.so.6",
+      "libQt6Qml.so.6",
+      "libQt6Quick.so.6",
+      "libc.so.6",
+      "libm.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/lib/libQt6QuickEffects.so.6.11.1",
+    "sha256": "bca768814cde5ac6fc900ab86a86cda66908591859df9dbccb39ba71c93d2902",
+    "soname": "libQt6QuickEffects.so.6"
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6Gui.so.6",
+      "libQt6Qml.so.6",
+      "libQt6Quick.so.6",
+      "libc.so.6",
+      "libm.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/lib/libQt6QuickLayouts.so.6.11.1",
+    "sha256": "437c0bef95d8574b643f732025db964367e0c98f25aa4a3c397eda90e6d73b06",
+    "soname": "libQt6QuickLayouts.so.6"
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6Gui.so.6",
+      "libQt6Qml.so.6",
+      "libQt6Quick.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/lib/libQt6QuickShapes.so.6.11.1",
+    "sha256": "de822052232668d5f7c9f1fc3793974e54baf42fae314b74536b5ef78bcf849a",
+    "soname": "libQt6QuickShapes.so.6"
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6Gui.so.6",
+      "libQt6Qml.so.6",
+      "libQt6QmlModels.so.6",
+      "libQt6Quick.so.6",
+      "libc.so.6",
+      "libm.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/lib/libQt6QuickTemplates2.so.6.11.1",
+    "sha256": "3c09b31efdfc59fe393edfdbe9da9b28812613dd227a301f89ef0d9928f2bc7b",
+    "soname": "libQt6QuickTemplates2.so.6"
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/lib/libQt6Sql.so.6.11.1",
+    "sha256": "8664d9fb2099e397ea468bf50de9b96bf7edf764427c3ca1dc81f4ac4fbb5ca3",
+    "soname": "libQt6Sql.so.6"
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6Gui.so.6",
+      "libc.so.6",
+      "libm.so.6",
+      "libstdc++.so.6",
+      "libz.so.1"
+    ],
+    "path": "opt/ketplus-pro/lib/libQt6Svg.so.6.11.1",
+    "sha256": "6b978e8aad726e642228f7f8d08ff22002f0d038cab184ca5dbce3d2379abc88",
+    "soname": "libQt6Svg.so.6"
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6Gui.so.6",
+      "libQt6Svg.so.6",
+      "libQt6Widgets.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/lib/libQt6SvgWidgets.so.6.11.1",
+    "sha256": "fdac9519ebb2eddef11e37a17de7108de3688229d3b45060f6a4a30c0ed16b47",
+    "soname": "libQt6SvgWidgets.so.6"
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6Gui.so.6",
+      "libc.so.6",
+      "libstdc++.so.6",
+      "libwayland-client.so.0",
+      "libwayland-cursor.so.0",
+      "libxkbcommon.so.0"
+    ],
+    "path": "opt/ketplus-pro/lib/libQt6WaylandClient.so.6.11.1",
+    "sha256": "44bbd16f7c52fae2ff4c64bf39af9238b5ba92e2c69ba918722941461ba71daa",
+    "soname": "libQt6WaylandClient.so.6"
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6Qml.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/lib/libQt6WebChannel.so.6.11.1",
+    "sha256": "82a5d970f8f9b1c97410d8e86a18d473982cb03c5523513348612d90aaa17fee",
+    "soname": "libQt6WebChannel.so.6"
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6Qml.so.6",
+      "libQt6WebChannel.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/lib/libQt6WebChannelQuick.so.6.11.1",
+    "sha256": "3dddba9a3a96970d7d38e5f672fc1fea1b45b3d5049209d47b69729f7e0b4524",
+    "soname": "libQt6WebChannelQuick.so.6"
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libGL.so.1",
+      "libQt6Core.so.6",
+      "libQt6Gui.so.6",
+      "libQt6Network.so.6",
+      "libQt6Positioning.so.6",
+      "libQt6Qml.so.6",
+      "libQt6Quick.so.6",
+      "libQt6WebChannel.so.6",
+      "libX11.so.6",
+      "libXcomposite.so.1",
+      "libXdamage.so.1",
+      "libXext.so.6",
+      "libXfixes.so.3",
+      "libXrandr.so.2",
+      "libXtst.so.6",
+      "libasound.so.2",
+      "libc.so.6",
+      "libdbus-1.so.3",
+      "libexpat.so.1",
+      "libfontconfig.so.1",
+      "libfreetype.so.6",
+      "libgbm.so.1",
+      "libgcc_s.so.1",
+      "liblcms2.so.2",
+      "libm.so.6",
+      "libminizip.so.1",
+      "libnspr4.so",
+      "libnss3.so",
+      "libnssutil3.so",
+      "libopus.so.0",
+      "libsmime3.so",
+      "libsnappy.so.1",
+      "libstdc++.so.6",
+      "libudev.so.1",
+      "libwebp.so.7",
+      "libwebpdemux.so.2",
+      "libwebpmux.so.3",
+      "libxcb-dri3.so.0",
+      "libxcb.so.1",
+      "libxkbcommon.so.0",
+      "libxkbfile.so.1",
+      "libz.so.1"
+    ],
+    "path": "opt/ketplus-pro/lib/libQt6WebEngineCore.so.6.11.1",
+    "sha256": "bc4a9251a97fbf9e335110768f1bf1826cf12496cf8eea89f3caa0f36345a7f0",
+    "soname": "libQt6WebEngineCore.so.6"
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6Gui.so.6",
+      "libQt6Network.so.6",
+      "libQt6Qml.so.6",
+      "libQt6Quick.so.6",
+      "libQt6WebChannelQuick.so.6",
+      "libQt6WebEngineCore.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/lib/libQt6WebEngineQuick.so.6.11.1",
+    "sha256": "4f3034a12166d221fdc7842ed3f225764e181761c4358135959f2ad29c6053ca",
+    "soname": "libQt6WebEngineQuick.so.6"
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6Network.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/lib/libQt6WebSockets.so.6.11.1",
+    "sha256": "8afccca81c32e283663ae273e89c6ae80f6e88c09a2761b695a1731f9b7abde7",
+    "soname": "libQt6WebSockets.so.6"
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6Gui.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/lib/libQt6WebView.so.6.11.1",
+    "sha256": "bce40e48ace563b1faafd0c2bdc28e0e94d73545ab6458346ad58982271822c7",
+    "soname": "libQt6WebView.so.6"
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6Gui.so.6",
+      "libc.so.6",
+      "libm.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/lib/libQt6Widgets.so.6.11.1",
+    "sha256": "4a2a8500e2c9cf24aa2aba6fa2aeb2001f28b75382e60b4c31bd9a59204bbad5",
+    "soname": "libQt6Widgets.so.6"
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6Gui.so.6",
+      "libQt6WaylandClient.so.6",
+      "libc.so.6",
+      "libstdc++.so.6",
+      "libwayland-client.so.0"
+    ],
+    "path": "opt/ketplus-pro/lib/libQt6WlShellIntegration.so.6.11.1",
+    "sha256": "e2d13638c24fe88e77bf4e03471577523d2d94d5afad68bd32f2993f55d11465",
+    "soname": "libQt6WlShellIntegration.so.6"
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libICE.so.6",
+      "libQt6Core.so.6",
+      "libQt6Gui.so.6",
+      "libSM.so.6",
+      "libX11-xcb.so.1",
+      "libX11.so.6",
+      "libc.so.6",
+      "libglib-2.0.so.0",
+      "libm.so.6",
+      "libstdc++.so.6",
+      "libxcb-cursor.so.0",
+      "libxcb-icccm.so.4",
+      "libxcb-image.so.0",
+      "libxcb-keysyms.so.1",
+      "libxcb-randr.so.0",
+      "libxcb-render-util.so.0",
+      "libxcb-render.so.0",
+      "libxcb-shape.so.0",
+      "libxcb-shm.so.0",
+      "libxcb-sync.so.1",
+      "libxcb-xfixes.so.0",
+      "libxcb-xkb.so.1",
+      "libxcb.so.1",
+      "libxkbcommon-x11.so.0",
+      "libxkbcommon.so.0"
+    ],
+    "path": "opt/ketplus-pro/lib/libQt6XcbQpa.so.6.11.1",
+    "sha256": "09cf88f3175bdc7893bd5328a139927d52969a98a2414a887e1eecaecdc72bca",
+    "soname": "libQt6XcbQpa.so.6"
+  },
+  {
+    "needed": [],
+    "path": "opt/ketplus-pro/lib/libicudata.so.73.2",
+    "sha256": "4c071749d8964d4ea4b1066f44dcc7956db9d6c4221c797c6421ed04b81bdebc",
+    "soname": "libicudata.so.73"
+  },
+  {
+    "needed": [
+      "libc.so.6",
+      "libgcc_s.so.1",
+      "libicuuc.so.73",
+      "libm.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/lib/libicui18n.so.73.2",
+    "sha256": "ef4973f53c366e405290b3298df9fc29873c4b1523071946ca0f87a7e90d03ec",
+    "soname": "libicui18n.so.73"
+  },
+  {
+    "needed": [
+      "libc.so.6",
+      "libdl.so.2",
+      "libgcc_s.so.1",
+      "libicudata.so.73",
+      "libm.so.6",
+      "libpthread.so.0",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/lib/libicuuc.so.73.2",
+    "sha256": "855483047d925a64b333d150153267b2f6e72aa71e94fe1b579d70764fbd84e4",
+    "soname": "libicuuc.so.73"
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6WebEngineCore.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/libexec/QtWebEngineProcess",
+    "sha256": "eb6f71cc1638329766597f10d305c522f4a555b03e25f180809c70f3ec89d653",
+    "soname": null
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libEGL.so.1",
+      "libQt6Core.so.6",
+      "libQt6EglFSDeviceIntegration.so.6",
+      "libQt6Gui.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/plugins/egldeviceintegrations/libqeglfs-emu-integration.so",
+    "sha256": "3908ebca8b129ce3e3f7cb71786add72b3b5495c9430637962bfe8bee3b410a2",
+    "soname": null
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libEGL.so.1",
+      "libQt6Core.so.6",
+      "libQt6EglFSDeviceIntegration.so.6",
+      "libQt6EglFsKmsSupport.so.6",
+      "libQt6Gui.so.6",
+      "libc.so.6",
+      "libdrm.so.2",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/plugins/egldeviceintegrations/libqeglfs-kms-egldevice-integration.so",
+    "sha256": "93c5530d4b47d1f4e28a2fdf7b36475c5ff35591178b5468a7ff886b89e16535",
+    "soname": null
+  },
+  {
+    "needed": [
+      "libQt6Core.so.6",
+      "libQt6EglFSDeviceIntegration.so.6",
+      "libQt6EglFsKmsGbmSupport.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/plugins/egldeviceintegrations/libqeglfs-kms-integration.so",
+    "sha256": "822eced372b971a9a36bc3c2af7aa7988c85229d5206bc905b80fb6a7feb9d9a",
+    "soname": null
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6EglFSDeviceIntegration.so.6",
+      "libQt6Gui.so.6",
+      "libX11-xcb.so.1",
+      "libX11.so.6",
+      "libc.so.6",
+      "libstdc++.so.6",
+      "libxcb.so.1"
+    ],
+    "path": "opt/ketplus-pro/plugins/egldeviceintegrations/libqeglfs-x11-integration.so",
+    "sha256": "aa19f09b1e403460cf051ab80364c71d51d6ce56638df01b47e324308ea6e159",
+    "soname": null
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6Gui.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/plugins/generic/libqevdevkeyboardplugin.so",
+    "sha256": "a7815b62fa8b66b7b814124aa9c00b023da4c3d56db943b0bcaa3abfc6fe1bf3",
+    "soname": null
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6Gui.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/plugins/generic/libqevdevmouseplugin.so",
+    "sha256": "005261b76128820a597eb775a6154f0bd7f7d004a2c7a111fa30b0f2f987dbf9",
+    "soname": null
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6Gui.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/plugins/generic/libqevdevtabletplugin.so",
+    "sha256": "3d01208bbf422f391cca79016092cecc9b45995362c4a2c07b7bb367b72262f5",
+    "soname": null
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6Gui.so.6",
+      "libc.so.6",
+      "libm.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/plugins/generic/libqevdevtouchplugin.so",
+    "sha256": "1499dd8121ebb12880343e9d2863349f45f0844f938c709438f12eeb59ba4332",
+    "soname": null
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6Gui.so.6",
+      "libQt6Network.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/plugins/generic/libqtuiotouchplugin.so",
+    "sha256": "29dd9c9b79fdb9bd16d07e7812d258953d86f61175b78bb130c07f97e4af1ddf",
+    "soname": null
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6Gui.so.6",
+      "libQt6Svg.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/plugins/iconengines/libqsvgicon.so",
+    "sha256": "82f2055515ec85e939a173735df0b45b50d6d7731c4a3226c76415076bb11d15",
+    "soname": null
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6Gui.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/plugins/imageformats/libqgif.so",
+    "sha256": "ba37d6e25243a4aeb9acaa6e9433f1db3a257fa1a346db694eabc810f8f1f7f8",
+    "soname": null
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6Gui.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/plugins/imageformats/libqico.so",
+    "sha256": "8dd9e3e5d47a3f73451503b1e79b3ad1bc553f9f690600509100b20282745068",
+    "soname": null
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6Gui.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/plugins/imageformats/libqjpeg.so",
+    "sha256": "c806570da92f7e5bda038353f59ee2f24f4fe23d28ab13849d9532fa861f417d",
+    "soname": null
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6Gui.so.6",
+      "libQt6Svg.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/plugins/imageformats/libqsvg.so",
+    "sha256": "4677568bdaef3a6b12f43f75d87ffc33de2ccfe645de7d9802a279f8fb2b9d29",
+    "soname": null
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6DBus.so.6",
+      "libQt6Network.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/plugins/networkinformation/libqconnman.so",
+    "sha256": "60ccfb6608e63e65a5dfbbc829a75f3c8696cf0321028c8ebfb2e77d833481df",
+    "soname": null
+  },
+  {
+    "needed": [
+      "libQt6Core.so.6",
+      "libQt6Network.so.6",
+      "libc.so.6",
+      "libgio-2.0.so.0",
+      "libgobject-2.0.so.0",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/plugins/networkinformation/libqglib.so",
+    "sha256": "84c13aeee166369ea9cec263a81e16d52d9edc366ed93f1d2aa3daef8dc10655",
+    "soname": null
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6DBus.so.6",
+      "libQt6Network.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/plugins/networkinformation/libqnetworkmanager.so",
+    "sha256": "211c2a8ff3cc8a2f80992e76a9364098d1c6c9bcd432c39c042d8a7ece2aa23b",
+    "soname": null
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6Gui.so.6",
+      "libc.so.6",
+      "libstdc++.so.6",
+      "libxkbcommon.so.0"
+    ],
+    "path": "opt/ketplus-pro/plugins/platforminputcontexts/libcomposeplatforminputcontextplugin.so",
+    "sha256": "8d66dbcb2d2310318dbdd5e8b0eefe30539bbffe16adda7928015daa6335d293",
+    "soname": null
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6DBus.so.6",
+      "libQt6Gui.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/plugins/platforminputcontexts/libibusplatforminputcontextplugin.so",
+    "sha256": "4aa8d30210b7b8c7008282a4636e9c294f6151bb1a85518815c7dbb79abb2289",
+    "soname": null
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libGL.so.1",
+      "libQt6Core.so.6",
+      "libQt6Gui.so.6",
+      "libX11.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/plugins/platforms/libqoffscreen.so",
+    "sha256": "d282d4e30bb54c5243a26e620858372b23bbd8cc586d801fba40784acc4015d0",
+    "soname": null
+  },
+  {
+    "needed": [
+      "libQt6Core.so.6",
+      "libQt6Gui.so.6",
+      "libQt6XcbQpa.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/plugins/platforms/libqxcb.so",
+    "sha256": "0ac87416387b318634a1fb96b59ec3191b00d177f9a512ca0b330c90e4722652",
+    "soname": null
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6Gui.so.6",
+      "libX11.so.6",
+      "libc.so.6",
+      "libgdk-3.so.0",
+      "libgdk_pixbuf-2.0.so.0",
+      "libgio-2.0.so.0",
+      "libglib-2.0.so.0",
+      "libgobject-2.0.so.0",
+      "libgtk-3.so.0",
+      "libpango-1.0.so.0",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/plugins/platformthemes/libqgtk3.so",
+    "sha256": "fd0305268dd3df96839988c5f08c128681b2ee4c75032b625f5c91bf044e8dcc",
+    "soname": null
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6DBus.so.6",
+      "libQt6Gui.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/plugins/platformthemes/libqxdgdesktopportal.so",
+    "sha256": "ae4b30189b03e32a9283a3de5e4c71e4a2845d463771aa34604a7b3bf33d9ba0",
+    "soname": null
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6DBus.so.6",
+      "libQt6Positioning.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/plugins/position/libqtposition_geoclue2.so",
+    "sha256": "6132df063902b45ccbff3b48d72494baf1c91874d65154a36db756dcfea1b108",
+    "soname": null
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6Positioning.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/plugins/position/libqtposition_positionpoll.so",
+    "sha256": "5c58a291baf2260822049c018db8d158e9585bfc365ede1236fd1ec82cae330e",
+    "soname": null
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6Gui.so.6",
+      "libQt6PrintSupport.so.6",
+      "libQt6Widgets.so.6",
+      "libc.so.6",
+      "libcups.so.2",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/plugins/printsupport/libcupsprintersupport.so",
+    "sha256": "e5793c52e05e870675b3bea2a8c7f39bfe0e43ad4b51a49f3f36f86113545056",
+    "soname": null
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6Qml.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/plugins/qmltooling/libqmldbg_debugger.so",
+    "sha256": "88419ba35968d00c8d986bc05a3dca62a697a34d20fc125375dbb34d0778ba6d",
+    "soname": null
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6Gui.so.6",
+      "libQt6Qml.so.6",
+      "libQt6Quick.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/plugins/qmltooling/libqmldbg_inspector.so",
+    "sha256": "6811b76e8581a0ab51dacdb018732f34d1fff19ce94f62570a797ec0b2aa11d4",
+    "soname": null
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6Network.so.6",
+      "libQt6Qml.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/plugins/qmltooling/libqmldbg_local.so",
+    "sha256": "45072c08de77e575a66fb882e2eae8099fa3ea422ea59d63b51fea19e424a7bf",
+    "soname": null
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6Qml.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/plugins/qmltooling/libqmldbg_messages.so",
+    "sha256": "39c5cda0d72b1db2670fd328477578c8e77035ecce1071fd6a180a84626ebc23",
+    "soname": null
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6Qml.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/plugins/qmltooling/libqmldbg_native.so",
+    "sha256": "ffa9e30ad2c2c2c5ad178b41784c2241dc27dfa6ea2bc250f721c07be79dbf39",
+    "soname": null
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6Qml.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/plugins/qmltooling/libqmldbg_nativedebugger.so",
+    "sha256": "0614f147f6ab91b3cfecb6912a78ef94b9be3f5936764008c63cb17cb3ec5c81",
+    "soname": null
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6Gui.so.6",
+      "libQt6Qml.so.6",
+      "libQt6Quick.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/plugins/qmltooling/libqmldbg_preview.so",
+    "sha256": "c962908ff1821ba75cee05af28991b2af63069c9c1ee6c0f2ef525c850c60912",
+    "soname": null
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6Qml.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/plugins/qmltooling/libqmldbg_profiler.so",
+    "sha256": "943ee30a51490f2bf7fd35a2c48913d94679f0d0d8a64cf293481d8398ebf4a9",
+    "soname": null
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6Gui.so.6",
+      "libQt6Qml.so.6",
+      "libQt6Quick.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/plugins/qmltooling/libqmldbg_quickeventreplay.so",
+    "sha256": "8a936060a6a8169b125588fa4b3bef1f04753d0cfddcf8b48540b1d43f5443b8",
+    "soname": null
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6Qml.so.6",
+      "libQt6Quick.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/plugins/qmltooling/libqmldbg_quickprofiler.so",
+    "sha256": "e1601a014493777165e6d64530b4e86fcb1762899503b1bab5b83e6f77a8491b",
+    "soname": null
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6Qml.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/plugins/qmltooling/libqmldbg_server.so",
+    "sha256": "caa7fb94ef2c3160ad280f9db51580f443ee3dce465e146bf502aba88706fcc8",
+    "soname": null
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6Network.so.6",
+      "libQt6Qml.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/plugins/qmltooling/libqmldbg_tcp.so",
+    "sha256": "2b1dd2e097414bd40bb6af280a8a58112bc42a2723fd173283799006e6472415",
+    "soname": null
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6Sql.so.6",
+      "libc.so.6",
+      "libm.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/plugins/sqldrivers/libqsqlite.so",
+    "sha256": "f96a5974de5dd5c484124808bc99bbc00b91149b38ff4f10609edd425bdb00e3",
+    "soname": null
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6Network.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/plugins/tls/libqcertonlybackend.so",
+    "sha256": "67e3916674653136d6493c281958e4211125d5d0e885bb2f7c474761da32bd28",
+    "soname": null
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6Network.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/plugins/tls/libqopensslbackend.so",
+    "sha256": "1136f3f40a2820caafacf885d86c927537847232025048003a60a95d60858d74",
+    "soname": null
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6DBus.so.6",
+      "libQt6Gui.so.6",
+      "libQt6Svg.so.6",
+      "libQt6WaylandClient.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/plugins/wayland-decoration-client/libadwaita.so",
+    "sha256": "63120bd85c1d2eeb6d6f9259b4628c77f44e670172960cf7bbbbee95a84ae3e4",
+    "soname": null
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6Gui.so.6",
+      "libQt6WaylandClient.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/plugins/wayland-decoration-client/libbradient.so",
+    "sha256": "292259e1d24d068a7e89f17171224294d8843bca6a8b03b4ae2222669ba84fe5",
+    "soname": null
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libEGL.so.1",
+      "libGL.so.1",
+      "libQt6Core.so.6",
+      "libQt6Gui.so.6",
+      "libQt6OpenGL.so.6",
+      "libQt6WaylandClient.so.6",
+      "libc.so.6",
+      "libstdc++.so.6",
+      "libwayland-client.so.0"
+    ],
+    "path": "opt/ketplus-pro/plugins/wayland-graphics-integration-client/libdmabuf-server.so",
+    "sha256": "e9f668865a8d8cb2ca3053789bee3ccf9cd2b15d030f559a31849798e269daf4",
+    "soname": null
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libEGL.so.1",
+      "libGL.so.1",
+      "libQt6Core.so.6",
+      "libQt6Gui.so.6",
+      "libQt6OpenGL.so.6",
+      "libQt6WaylandClient.so.6",
+      "libc.so.6",
+      "libstdc++.so.6",
+      "libwayland-client.so.0"
+    ],
+    "path": "opt/ketplus-pro/plugins/wayland-graphics-integration-client/libdrm-egl-server.so",
+    "sha256": "132a879a87ba7436cba9a0378639cc10bb2c92af4682ebfd979b2ad2493b56da",
+    "soname": null
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libEGL.so.1",
+      "libGL.so.1",
+      "libQt6Core.so.6",
+      "libQt6Gui.so.6",
+      "libQt6OpenGL.so.6",
+      "libQt6WaylandClient.so.6",
+      "libc.so.6",
+      "libstdc++.so.6",
+      "libwayland-client.so.0",
+      "libwayland-egl.so.1"
+    ],
+    "path": "opt/ketplus-pro/plugins/wayland-graphics-integration-client/libqt-plugin-wayland-egl.so",
+    "sha256": "93a6d3d1758e0e867b930874208d5ce59457efc47490c34a82d12a20eb7c5601",
+    "soname": null
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6Gui.so.6",
+      "libQt6OpenGL.so.6",
+      "libQt6WaylandClient.so.6",
+      "libc.so.6",
+      "libstdc++.so.6",
+      "libwayland-client.so.0"
+    ],
+    "path": "opt/ketplus-pro/plugins/wayland-graphics-integration-client/libshm-emulation-server.so",
+    "sha256": "8e15abb4fd1b6df3591e064b6887792c46ed27dc246da2073842528813bb93d6",
+    "soname": null
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6Gui.so.6",
+      "libQt6OpenGL.so.6",
+      "libQt6WaylandClient.so.6",
+      "libc.so.6",
+      "libstdc++.so.6",
+      "libwayland-client.so.0"
+    ],
+    "path": "opt/ketplus-pro/plugins/wayland-graphics-integration-client/libvulkan-server.so",
+    "sha256": "ce2be9ad54a5b9087aed369d531c11afcaaaeb4625048eeadbbb29bba2d96374",
+    "soname": null
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6WaylandClient.so.6",
+      "libc.so.6",
+      "libstdc++.so.6",
+      "libwayland-client.so.0"
+    ],
+    "path": "opt/ketplus-pro/plugins/wayland-shell-integration/libfullscreen-shell-v1.so",
+    "sha256": "53f9e5cd1802d2a2814b1443257d98a2259344bfd548398245b762fcc15e4c1d",
+    "soname": null
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6Gui.so.6",
+      "libQt6WaylandClient.so.6",
+      "libc.so.6",
+      "libstdc++.so.6",
+      "libwayland-client.so.0"
+    ],
+    "path": "opt/ketplus-pro/plugins/wayland-shell-integration/libivi-shell.so",
+    "sha256": "f60712d74fe0b76fa72ff3e396c1d6a0ff054110c7581765464947136f5ecde4",
+    "soname": null
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6Gui.so.6",
+      "libQt6WaylandClient.so.6",
+      "libc.so.6",
+      "libstdc++.so.6",
+      "libwayland-client.so.0"
+    ],
+    "path": "opt/ketplus-pro/plugins/wayland-shell-integration/libqt-shell.so",
+    "sha256": "7200759be4ec994a3a3e48dcd0266d5391194f186cc2d6d53fa7dd58b3fc2a98",
+    "soname": null
+  },
+  {
+    "needed": [
+      "libQt6Core.so.6",
+      "libQt6WaylandClient.so.6",
+      "libQt6WlShellIntegration.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/plugins/wayland-shell-integration/libwl-shell-plugin.so",
+    "sha256": "4d9962149d0edbbe5ca5cbe246c5f80d912bb4f208de2b7edd53f7fb6a60c04d",
+    "soname": null
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6Gui.so.6",
+      "libQt6WaylandClient.so.6",
+      "libc.so.6",
+      "libstdc++.so.6",
+      "libwayland-client.so.0"
+    ],
+    "path": "opt/ketplus-pro/plugins/wayland-shell-integration/libxdg-shell.so",
+    "sha256": "de825c8fb416ab0f0db5d77b7d3df375dbeab03eba500bd51c4509034e399ed8",
+    "soname": null
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6Gui.so.6",
+      "libQt6Network.so.6",
+      "libQt6Qml.so.6",
+      "libQt6Quick.so.6",
+      "libQt6WebEngineCore.so.6",
+      "libQt6WebEngineQuick.so.6",
+      "libQt6WebView.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/plugins/webview/libqtwebview_webengine.so",
+    "sha256": "0f29cce57279402489d6e46ff682c6e5af31eec59a2ac0ebaac961fdd3f241bc",
+    "soname": null
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libEGL.so.1",
+      "libQt6Core.so.6",
+      "libQt6Gui.so.6",
+      "libQt6XcbQpa.so.6",
+      "libc.so.6",
+      "libstdc++.so.6",
+      "libxcb.so.1"
+    ],
+    "path": "opt/ketplus-pro/plugins/xcbglintegrations/libqxcb-egl-integration.so",
+    "sha256": "389f10f7194489c4977165afad1f8c6197bf3a1f1715380cf1519cf385899e21",
+    "soname": null
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libGL.so.1",
+      "libQt6Core.so.6",
+      "libQt6Gui.so.6",
+      "libQt6XcbQpa.so.6",
+      "libX11.so.6",
+      "libc.so.6",
+      "libstdc++.so.6",
+      "libxcb-glx.so.0",
+      "libxcb.so.1"
+    ],
+    "path": "opt/ketplus-pro/plugins/xcbglintegrations/libqxcb-glx-integration.so",
+    "sha256": "5fa367f7b64bf627b41fffb42f430d63f9d8598774da32ba5e4fce46c4a2cfd4",
+    "soname": null
+  },
+  {
+    "needed": [
+      "libQt6Core.so.6",
+      "libQt6Qml.so.6",
+      "libQt6QmlModels.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/qml/QtQml/Models/libmodelsplugin.so",
+    "sha256": "aebfeddf9c3674ee6435c8eeae66eb428a50c447b4e1ab66191f46dbc56b13f5",
+    "soname": null
+  },
+  {
+    "needed": [
+      "libQt6Core.so.6",
+      "libQt6Qml.so.6",
+      "libQt6QmlWorkerScript.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/qml/QtQml/WorkerScript/libworkerscriptplugin.so",
+    "sha256": "f64e584cb5570eb4fbb8ed9877fff5a6c766c7c2e8e3c358c4de811d5fecb861",
+    "soname": null
+  },
+  {
+    "needed": [
+      "libQt6Core.so.6",
+      "libQt6Qml.so.6",
+      "libQt6QmlMeta.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/qml/QtQml/libqmlplugin.so",
+    "sha256": "6a8946d406dec2bcbf88a4914e62de0f72d504ab215027bc8c1d11112395d2e9",
+    "soname": null
+  },
+  {
+    "needed": [
+      "libQt6Core.so.6",
+      "libQt6Qml.so.6",
+      "libQt6QuickControls2BasicStyleImpl.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/qml/QtQuick/Controls/Basic/impl/libqtquickcontrols2basicstyleimplplugin.so",
+    "sha256": "9d7b9d6eca6e2abdd346c64a413b6a3af39333d26d88564bdaa36dfad2ec939a",
+    "soname": null
+  },
+  {
+    "needed": [
+      "libQt6Core.so.6",
+      "libQt6Qml.so.6",
+      "libQt6QuickControls2.so.6",
+      "libQt6QuickControls2Basic.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/qml/QtQuick/Controls/Basic/libqtquickcontrols2basicstyleplugin.so",
+    "sha256": "f48327d7381a1a36f8c6fc52ea1bb4620b81bdc7902acc610a21c0a38979e5ab",
+    "soname": null
+  },
+  {
+    "needed": [
+      "libQt6Core.so.6",
+      "libQt6Qml.so.6",
+      "libQt6QuickControls2FluentWinUI3StyleImpl.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/qml/QtQuick/Controls/FluentWinUI3/impl/libqtquickcontrols2fluentwinui3styleimplplugin.so",
+    "sha256": "ba7b2d205f8e9fe4c2a56149351d972e5e73489d3ec9b7ff3b4ee1163f40edfc",
+    "soname": null
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6Gui.so.6",
+      "libQt6Qml.so.6",
+      "libQt6QuickControls2.so.6",
+      "libQt6QuickControls2FluentWinUI3StyleImpl.so.6",
+      "libQt6QuickTemplates2.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/qml/QtQuick/Controls/FluentWinUI3/libqtquickcontrols2fluentwinui3styleplugin.so",
+    "sha256": "0ca04a6382b890ba8d85cd5c7efcca7ea3b38af285c29ff43362e6e11b9f3e7b",
+    "soname": null
+  },
+  {
+    "needed": [
+      "libQt6Core.so.6",
+      "libQt6Qml.so.6",
+      "libQt6QuickControls2FusionStyleImpl.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/qml/QtQuick/Controls/Fusion/impl/libqtquickcontrols2fusionstyleimplplugin.so",
+    "sha256": "78499c533b479baadba530d5ec12dc8162a9fdaef1dba1d6b4c69c7e51857fde",
+    "soname": null
+  },
+  {
+    "needed": [
+      "libQt6Core.so.6",
+      "libQt6Qml.so.6",
+      "libQt6QuickControls2.so.6",
+      "libQt6QuickControls2Fusion.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/qml/QtQuick/Controls/Fusion/libqtquickcontrols2fusionstyleplugin.so",
+    "sha256": "2ddf2805c5bb135f4ce10911ef68f16b64761b7f6c712823b66a9dfa3a491249",
+    "soname": null
+  },
+  {
+    "needed": [
+      "libQt6Core.so.6",
+      "libQt6Qml.so.6",
+      "libQt6QuickControls2ImagineStyleImpl.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/qml/QtQuick/Controls/Imagine/impl/libqtquickcontrols2imaginestyleimplplugin.so",
+    "sha256": "dd42a8503403cfd1f8efe3054ca8f23bd63c0f9d8816853444850588df37c857",
+    "soname": null
+  },
+  {
+    "needed": [
+      "libQt6Core.so.6",
+      "libQt6Qml.so.6",
+      "libQt6QuickControls2.so.6",
+      "libQt6QuickControls2Imagine.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/qml/QtQuick/Controls/Imagine/libqtquickcontrols2imaginestyleplugin.so",
+    "sha256": "d77682e61aae26472d6d2ea0df0d4505f8fd8d0ade3a2649fd7e065c7785601b",
+    "soname": null
+  },
+  {
+    "needed": [
+      "libQt6Core.so.6",
+      "libQt6Qml.so.6",
+      "libQt6QuickControls2MaterialStyleImpl.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/qml/QtQuick/Controls/Material/impl/libqtquickcontrols2materialstyleimplplugin.so",
+    "sha256": "4bb52db49ba33c1d9714d74e0dc360666da8aa6e29e6288debdff1d8bbef8e47",
+    "soname": null
+  },
+  {
+    "needed": [
+      "libQt6Core.so.6",
+      "libQt6Qml.so.6",
+      "libQt6QuickControls2.so.6",
+      "libQt6QuickControls2Material.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/qml/QtQuick/Controls/Material/libqtquickcontrols2materialstyleplugin.so",
+    "sha256": "b19e3947f8fc44ef687b967bbbd829900440487f300a8e3485ae0d3ca3446c8b",
+    "soname": null
+  },
+  {
+    "needed": [
+      "libQt6Core.so.6",
+      "libQt6Qml.so.6",
+      "libQt6QuickControls2UniversalStyleImpl.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/qml/QtQuick/Controls/Universal/impl/libqtquickcontrols2universalstyleimplplugin.so",
+    "sha256": "a094c4089963008116dd9d240c258c895d53faa776935a29a0a8e6e2b4873692",
+    "soname": null
+  },
+  {
+    "needed": [
+      "libQt6Core.so.6",
+      "libQt6Qml.so.6",
+      "libQt6QuickControls2.so.6",
+      "libQt6QuickControls2Universal.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/qml/QtQuick/Controls/Universal/libqtquickcontrols2universalstyleplugin.so",
+    "sha256": "1610ed85458df1b45b0cd46f5019a5b00c5fbb660d26149ac75b53782f0f5ed6",
+    "soname": null
+  },
+  {
+    "needed": [
+      "libQt6Core.so.6",
+      "libQt6Qml.so.6",
+      "libQt6QuickControls2Impl.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/qml/QtQuick/Controls/impl/libqtquickcontrols2implplugin.so",
+    "sha256": "dd5d770ada0e01971b9de7d6e3ed41bb378169ff7d3f36840be7d014ff022d47",
+    "soname": null
+  },
+  {
+    "needed": [
+      "ld-linux-aarch64.so.1",
+      "libQt6Core.so.6",
+      "libQt6Qml.so.6",
+      "libQt6QuickControls2.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/qml/QtQuick/Controls/libqtquickcontrols2plugin.so",
+    "sha256": "dba713ba7415fa63d12488a5afaa1e5d4e6482cee023c25b3ff43fa668b12d89",
+    "soname": null
+  },
+  {
+    "needed": [
+      "libQt6Core.so.6",
+      "libQt6Qml.so.6",
+      "libQt6QuickEffects.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/qml/QtQuick/Effects/libeffectsplugin.so",
+    "sha256": "8b48881349f3b0ca05b4a4445542b8c3382d84eac9374ad72719d7a10382d6f9",
+    "soname": null
+  },
+  {
+    "needed": [
+      "libQt6Core.so.6",
+      "libQt6Qml.so.6",
+      "libQt6QuickLayouts.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/qml/QtQuick/Layouts/libqquicklayoutsplugin.so",
+    "sha256": "0b83a707079bdec9141c6387ed323a6aecab498e920f99999bd2f567a7b585c8",
+    "soname": null
+  },
+  {
+    "needed": [
+      "libQt6Core.so.6",
+      "libQt6Qml.so.6",
+      "libQt6QuickShapes.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/qml/QtQuick/Shapes/libqmlshapesplugin.so",
+    "sha256": "067a927483fa13e8d2e562715fcef18284439a0f547bcee5cf9748604d6a5e3a",
+    "soname": null
+  },
+  {
+    "needed": [
+      "libQt6Core.so.6",
+      "libQt6Qml.so.6",
+      "libQt6Quick.so.6",
+      "libQt6QuickTemplates2.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/qml/QtQuick/Templates/libqtquicktemplates2plugin.so",
+    "sha256": "0311856d2f3b639aedb4f5da4b74f53fcbba0d1946c4db3248b07c4c7daf971d",
+    "soname": null
+  },
+  {
+    "needed": [
+      "libQt6Core.so.6",
+      "libQt6Qml.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/qml/QtQuick/Window/libquickwindowplugin.so",
+    "sha256": "717b2e29ea5e47f7981cb3d54934ac820160610fa27cad459b1381de8cfb8bc8",
+    "soname": null
+  },
+  {
+    "needed": [
+      "libQt6Core.so.6",
+      "libQt6Qml.so.6",
+      "libQt6Quick.so.6",
+      "libc.so.6",
+      "libstdc++.so.6"
+    ],
+    "path": "opt/ketplus-pro/qml/QtQuick/libqtquick2plugin.so",
+    "sha256": "aa78824d5985953855aac4f5d0ca705eb907c99ac2d3f7fde02c5aaec1193e1f",
+    "soname": null
+  }
+]

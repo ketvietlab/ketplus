@@ -59,7 +59,7 @@ def check(stage, inv, review, evidence, artifacts_dir):
 
     def concluded(value):
         return (isinstance(value, str) and value.strip() == value and bool(value)
-                and not re.search(r"NOASSERTION|\bNONE\b|\bTODO\b|\bUNKNOWN\b", value, re.I))
+                and not re.search(r"NOASSERTION|\bNONE\b|\bTODO\b|\bUNKNOWN\b|SEE LICENSE IN", value, re.I))
 
     components = review.get("components")
     if not isinstance(components, list) or not components:

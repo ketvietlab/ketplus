@@ -1,0 +1,210 @@
+{
+  "node": {
+    "archive": "https://nodejs.org/dist/v24.21.0/node-v24.21.0-linux-arm64.tar.gz",
+    "archiveSha256": "724282c3b43aec998aa9527380465b45d229e021b58035f5f4f63095eabfe5d5",
+    "binary": "opt/ketplus-pro/lib/ketplus/ketplus-browser/bin/node",
+    "binaryMatches": true,
+    "binarySha256": "0f8949d1028f6d61506b2d5bc57e7e6fe893d7b1997509b7847294fc9c616584",
+    "embeddedInventoryComplete": false,
+    "notice": "opt/ketplus-pro/lib/ketplus/ketplus-browser/licenses/Node.js-LICENSE",
+    "noticeMatches": true,
+    "noticeSha256": "5888dbb9a1d2b18f2c3e6c5f6af1b39de658372b402a0577b002777f14c62ace",
+    "version": "v24.21.0"
+  },
+  "staticLibraries": [
+    {
+      "archive": "Scintilla-a1c86144eed9e3d2187e3a8b391d11ca909f00d2.tar.gz",
+      "archiveSha256": "805ee934fe8c4f7bb50754d54ebcdd3c15998146a87a16f607e6ead59532531f",
+      "binaryLinkageVerified": false,
+      "installedNotice": "opt/ketplus-pro/share/licenses/ketplus/Scintilla.txt",
+      "name": "Scintilla",
+      "noticeSha256": "ac32743bd464c837e481beae20df65a9207f84d3ff1912f6003000343e9c753d",
+      "source": "https://github.com/mirror/scintilla/tree/a1c86144eed9e3d2187e3a8b391d11ca909f00d2",
+      "sourceCommit": "a1c86144eed9e3d2187e3a8b391d11ca909f00d2",
+      "upstreamNoticeByteMatches": [
+        "License.txt"
+      ],
+      "upstreamNoticeMatches": [
+        {
+          "comparison": "byte-identical",
+          "path": "License.txt",
+          "sha256": "ac32743bd464c837e481beae20df65a9207f84d3ff1912f6003000343e9c753d"
+        }
+      ]
+    },
+    {
+      "archive": "KetPlus-Syntax-cb7435c1e9237ee32d3459a58917b0e84b8b6025.tar.gz",
+      "archiveSha256": "657fcd9c9a84ccf873d7ed13eca8c4a830236529e9c4780c18ff8117a6b3c4eb",
+      "binaryLinkageVerified": false,
+      "installedNotice": "opt/ketplus-pro/share/licenses/ketplus/KetPlus-Syntax-MPL-2.0.txt",
+      "name": "KetPlus-Syntax",
+      "noticeSha256": "1f256ecad192880510e84ad60474eab7589218784b9a50bc7ceee34c2b91f1d5",
+      "source": "https://github.com/ketvietlab/ketplus-syntax/tree/cb7435c1e9237ee32d3459a58917b0e84b8b6025",
+      "sourceCommit": "cb7435c1e9237ee32d3459a58917b0e84b8b6025",
+      "upstreamNoticeByteMatches": [
+        "LICENSE"
+      ],
+      "upstreamNoticeMatches": [
+        {
+          "comparison": "byte-identical",
+          "path": "LICENSE",
+          "sha256": "1f256ecad192880510e84ad60474eab7589218784b9a50bc7ceee34c2b91f1d5"
+        }
+      ]
+    },
+    {
+      "archive": "Lexilla-3e6f317eed854bc312b4c4453206189d381c7ae7.tar.gz",
+      "archiveSha256": "8dbaa9a46f70125e207c8398b81e54b9de1b8f188f6c91d487fe3ec5da4920aa",
+      "binaryLinkageVerified": false,
+      "installedNotice": "opt/ketplus-pro/share/licenses/ketplus/Lexilla.txt",
+      "name": "Lexilla",
+      "noticeSha256": "ac32743bd464c837e481beae20df65a9207f84d3ff1912f6003000343e9c753d",
+      "source": "https://github.com/ScintillaOrg/lexilla/tree/3e6f317eed854bc312b4c4453206189d381c7ae7",
+      "sourceCommit": "3e6f317eed854bc312b4c4453206189d381c7ae7",
+      "upstreamNoticeByteMatches": [
+        "License.txt"
+      ],
+      "upstreamNoticeMatches": [
+        {
+          "comparison": "byte-identical",
+          "path": "License.txt",
+          "sha256": "ac32743bd464c837e481beae20df65a9207f84d3ff1912f6003000343e9c753d"
+        }
+      ]
+    },
+    {
+      "archive": "libvterm-9d6d2112335080312ef8c36667fa717ded4f7daf.tar.gz",
+      "archiveSha256": "582ac3f0e1337ea6f3edace67f8916e7627e7793b563bf94474f4ccdf6dfb0ee",
+      "binaryLinkageVerified": false,
+      "installedNotice": "opt/ketplus-pro/share/licenses/ketplus/libvterm-MIT.txt",
+      "name": "libvterm",
+      "noticeSha256": "66c627cf44f0c59daf81ba442e62e9b3d3cd1091a41e116de5ea9058a57bbba7",
+      "source": "https://github.com/neovim/libvterm/tree/9d6d2112335080312ef8c36667fa717ded4f7daf",
+      "sourceCommit": "9d6d2112335080312ef8c36667fa717ded4f7daf",
+      "upstreamNoticeByteMatches": [
+        "LICENSE"
+      ],
+      "upstreamNoticeMatches": [
+        {
+          "comparison": "byte-identical",
+          "path": "LICENSE",
+          "sha256": "66c627cf44f0c59daf81ba442e62e9b3d3cd1091a41e116de5ea9058a57bbba7"
+        }
+      ]
+    },
+    {
+      "archive": "miniz-77d0dce8627735138c51770d1799a1ef48f2117d.tar.gz",
+      "archiveSha256": "2cd1033cbf995e1db2b4ab31535a3dd5ac706c44e0ab091624e812c9a3c80c51",
+      "binaryLinkageVerified": false,
+      "installedNotice": "opt/ketplus-pro/share/licenses/ketplus/miniz-MIT.txt",
+      "name": "miniz",
+      "noticeSha256": "6f20fa7672b00e2e975c291df737cf227addf3ad32e36fef3fe0f416e4664d3d",
+      "source": "https://github.com/richgel999/miniz/tree/77d0dce8627735138c51770d1799a1ef48f2117d",
+      "sourceCommit": "77d0dce8627735138c51770d1799a1ef48f2117d",
+      "upstreamNoticeByteMatches": [],
+      "upstreamNoticeMatches": [
+        {
+          "comparison": "equal-after-line-endings-and-trailing-whitespace",
+          "path": "LICENSE",
+          "sha256": "0115478d567121238cf6cc1c0c361926cf07a49d9e4c9e66da97fac6a01646b3"
+        }
+      ]
+    },
+    {
+      "archive": "KetQt-cf3ac4e97b1db4566568887e02bdf681012373d5.tar.gz",
+      "archiveSha256": "459145ea601a4f9c53fb0956fa3a09b23e9ced18a854740ebdd71985dc9c9b64",
+      "binaryLinkageVerified": false,
+      "installedNotice": "opt/ketplus-pro/share/licenses/ketplus/KetQt-MPL-2.0.txt",
+      "name": "KetQt",
+      "noticeSha256": "1f256ecad192880510e84ad60474eab7589218784b9a50bc7ceee34c2b91f1d5",
+      "source": "https://github.com/ketvietlab/ket-qt/tree/cf3ac4e97b1db4566568887e02bdf681012373d5",
+      "sourceCommit": "cf3ac4e97b1db4566568887e02bdf681012373d5",
+      "upstreamNoticeByteMatches": [
+        "LICENSE"
+      ],
+      "upstreamNoticeMatches": [
+        {
+          "comparison": "byte-identical",
+          "path": "LICENSE",
+          "sha256": "1f256ecad192880510e84ad60474eab7589218784b9a50bc7ceee34c2b91f1d5"
+        }
+      ]
+    },
+    {
+      "archive": "libdatachannel-6b1e2e620f1e37f0eafeee702eaea0043cb305fd.tar.gz",
+      "archiveSha256": "dcf4ee7ab9ac219ebc25bab068d0e26092bfb7846f0a1ffbfffd6bdc60706c4c",
+      "binaryLinkageVerified": false,
+      "installedNotice": "opt/ketplus-pro/share/licenses/ketplus/libdatachannel-MPL-2.0.txt",
+      "name": "libdatachannel",
+      "noticeSha256": "1f256ecad192880510e84ad60474eab7589218784b9a50bc7ceee34c2b91f1d5",
+      "source": "https://github.com/paullouisageneau/libdatachannel/tree/6b1e2e620f1e37f0eafeee702eaea0043cb305fd",
+      "sourceCommit": "6b1e2e620f1e37f0eafeee702eaea0043cb305fd",
+      "upstreamNoticeByteMatches": [],
+      "upstreamNoticeMatches": [
+        {
+          "comparison": "equal-after-line-endings-and-trailing-whitespace",
+          "path": "LICENSE",
+          "sha256": "fab3dd6bdab226f1c08630b1dd917e11fcb4ec5e1e020e2c16f83a0a13863e85"
+        }
+      ]
+    },
+    {
+      "archive": "libjuice-cb523763255f241442da1fbdd72c498f33a54b35.tar.gz",
+      "archiveSha256": "b5acbd6083301c7a88a7a48aee0852a7d4008464506dbebd5ada856403a9d5e8",
+      "binaryLinkageVerified": false,
+      "installedNotice": "opt/ketplus-pro/share/licenses/ketplus/libjuice-MPL-2.0.txt",
+      "name": "libjuice",
+      "noticeSha256": "1f256ecad192880510e84ad60474eab7589218784b9a50bc7ceee34c2b91f1d5",
+      "source": "https://github.com/paullouisageneau/libjuice/tree/cb523763255f241442da1fbdd72c498f33a54b35",
+      "sourceCommit": "cb523763255f241442da1fbdd72c498f33a54b35",
+      "upstreamNoticeByteMatches": [],
+      "upstreamNoticeMatches": [
+        {
+          "comparison": "equal-after-line-endings-and-trailing-whitespace",
+          "path": "LICENSE",
+          "sha256": "fab3dd6bdab226f1c08630b1dd917e11fcb4ec5e1e020e2c16f83a0a13863e85"
+        }
+      ]
+    },
+    {
+      "archive": "usrsctp-fec583d54493f879d2ae44a743423bf8a04371ab.tar.gz",
+      "archiveSha256": "786b0a876baad225ab7574ffebf9478d7c211c813057ca3da9568af34bddc292",
+      "binaryLinkageVerified": false,
+      "installedNotice": "opt/ketplus-pro/share/licenses/ketplus/usrsctp-BSD-3-Clause.txt",
+      "name": "usrsctp",
+      "noticeSha256": "fa53711b25af4b9a9b8dadfea3cb38166ec4b96760c8d62b284055554537d9ef",
+      "source": "https://github.com/sctplab/usrsctp/tree/fec583d54493f879d2ae44a743423bf8a04371ab",
+      "sourceCommit": "fec583d54493f879d2ae44a743423bf8a04371ab",
+      "upstreamNoticeByteMatches": [
+        "LICENSE.md"
+      ],
+      "upstreamNoticeMatches": [
+        {
+          "comparison": "byte-identical",
+          "path": "LICENSE.md",
+          "sha256": "fa53711b25af4b9a9b8dadfea3cb38166ec4b96760c8d62b284055554537d9ef"
+        }
+      ]
+    },
+    {
+      "archive": "plog-94899e0b926ac1b0f4750bfbd495167b4a6ae9ef.tar.gz",
+      "archiveSha256": "652aadc539ef5949514a6e8923ebae7633bc2764cbb017d09c3b4140bb7330ba",
+      "binaryLinkageVerified": false,
+      "installedNotice": "opt/ketplus-pro/share/licenses/ketplus/plog-MIT.txt",
+      "name": "plog",
+      "noticeSha256": "e4d01796524cbc13b1571a1f0914823c6a23b316ba039e7014f47a4eef7fd4c3",
+      "source": "https://github.com/SergiusTheBest/plog/tree/94899e0b926ac1b0f4750bfbd495167b4a6ae9ef",
+      "sourceCommit": "94899e0b926ac1b0f4750bfbd495167b4a6ae9ef",
+      "upstreamNoticeByteMatches": [
+        "LICENSE"
+      ],
+      "upstreamNoticeMatches": [
+        {
+          "comparison": "byte-identical",
+          "path": "LICENSE",
+          "sha256": "e4d01796524cbc13b1571a1f0914823c6a23b316ba039e7014f47a4eef7fd4c3"
+        }
+      ]
+    }
+  ]
+}
