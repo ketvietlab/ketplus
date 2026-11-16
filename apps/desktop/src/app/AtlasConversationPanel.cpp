@@ -195,7 +195,7 @@ void AtlasConversationPanel::addAtlasRow(QVBoxLayout* layout, const AtlasDescrip
         open->setObjectName(QStringLiteral("conversationAtlasOpen"));
         open->setEnabled(!active || ready);
         connect(open, &QAbstractButton::clicked, this,
-                [atlas] { ManagedAtlasViewers::instance()->open(atlas); });
+                [this, atlas] { ManagedAtlasViewers::instance()->open(atlas, this); });
         actions->addWidget(open);
     }
     if (active) {
@@ -241,7 +241,7 @@ void AtlasConversationPanel::installCli(const AtlasDescriptor& atlas) {
                 const auto cli = QFileInfo(npm).absoluteDir().filePath(QStringLiteral("ketatlas"));
                 if (QFileInfo(cli).isExecutable())
                     QSettings().setValue(QStringLiteral("atlas/cliPath"), cli);
-                ManagedAtlasViewers::instance()->open(atlas);
+                ManagedAtlasViewers::instance()->open(atlas, this);
             });
     connect(process, &QProcess::errorOccurred, this, [this, process](QProcess::ProcessError error) {
         if (error == QProcess::FailedToStart) {
