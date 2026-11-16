@@ -3,14 +3,22 @@
 Plan date: 2026-11-16. Task: T-3. Status: proposed work and pending decisions;
 publication readiness is **not established** by this document.
 
-The input is [T-2's accepted public-surface audit](public-surfaces.md), report
-head `05ee9a8ad4adb57870b610f659052c6e03a024d1`, accepted in
+This plan uses two accepted reports.
+[T-2's public-surface audit](public-surfaces.md), report head
+`05ee9a8ad4adb57870b610f659052c6e03a024d1`, was accepted in
 [review round 2](https://github.com/ketvietlab/ketplus/pull/705#issuecomment-6909286234).
 [PR #705](https://github.com/ketvietlab/ketplus/pull/705) merged into `integration`
-at `769e45b75157a82e45d9c5abf2b5cfcb4dc83ef3`. Its audited implementation baseline
-is `7c12c773372b1d63eae867b7a6f8dcfefb6cdbbb`; accepting or merging the report did
-not fix product behavior or clear publication gates. The plan starts from the
-merged integration snapshot and does not attest intervening implementation changes.
+at `769e45b75157a82e45d9c5abf2b5cfcb4dc83ef3`.
+
+[T-1's accepted daemon/agent audit](https://github.com/ketvietlab/ketplus/blob/9cf3a535d1eeadcb3c70c78ad61455a179648cbb/docs/security-audit/daemon-agent.md),
+English report head `9cf3a535d1eeadcb3c70c78ad61455a179648cbb`, was accepted in
+[review round 1](https://github.com/ketvietlab/ketplus/pull/706#issuecomment-6909585411).
+[PR #706](https://github.com/ketvietlab/ketplus/pull/706) merged into `integration`
+at `eaafe6b32fb3550b02e8aaca7dbab04cb0da58b8`.
+Both reports audit implementation baseline
+`7c12c773372b1d63eae867b7a6f8dcfefb6cdbbb`; accepting or merging them did not fix
+product behavior or clear publication gates. This plan uses those accepted
+reports and does not attest intervening implementation changes.
 
 This task changes only this plan. It does not implement the proposals, create
 remediation tasks, choose product/history policies, rewrite Git history, repeat
@@ -21,12 +29,12 @@ The leader assigns follow-up tasks after the relevant decisions are recorded.
 
 ## Disposition register
 
-All six findings remain **open for disposition** in this plan. “Accepted report”
+All nine findings remain **open for disposition** in this plan. “Accepted report”
 means that its evidence and limits passed documentation review, not that a risk
 was accepted for release. Future closure needs an implementation or an approved,
 verified scope restriction, evidence at the release candidate, and reviewer signoff.
 
-| Finding | Priority carried from T-2 | Owning module or role | Proposed work package | Decision dependency |
+| Finding | Priority carried from accepted audit | Owning module or role | Proposed work package | Decision dependency |
 | --- | --- | --- | --- | --- |
 | PS-01: implicit Atlas renderer execution | High | `modules/atlas`; `apps/desktop` entry points | A-01: separate viewing from renderer authorization | D-01 |
 | PS-02: historical publication boundary | High | Repository maintainers; public-tree guard and publication workflow owners | A-02: exact-ref inventory, private triage and publication-safe history | D-02 |
@@ -34,10 +42,15 @@ verified scope restriction, evidence at the release candidate, and reviewer sign
 | PS-04: browser download integrity | Medium | `apps/browser` installer/engine; `modules/browser` host settings | A-04: enforce the selected executable provenance policy | D-04 |
 | PS-05: incomplete binary distribution evidence | Medium | Packaging/release maintainers; desktop/core notice surfaces; licensing reviewer | A-05: per-artifact dependency, notice and source-offer gates | Existing distribution policy; release scope still needs explicit approval |
 | PS-06: disabled Chromium sandbox | Medium | `apps/browser` launch policy; `modules/browser` host integration | A-06: sandboxed launches and supported-runtime acceptance | D-05 |
+| DA-01: key distribution after sign-out | High | `apps/daemon` cloud-control lifecycle, pins and key distribution | A-07: fence stale callbacks and explicit legacy adoption | Existing sign-out/pin trust boundary; no new product policy required |
+| DA-02: sender-key cache survives enrollment reset | High | `apps/daemon` sender-key cache and command authorization | A-08: invalidate caches and recheck current authorization | Existing enrollment/pairing boundary; no new product policy required |
+| DA-03: credential-storage contract mismatch | Informational | `modules/remote` credential store; architecture/ADR owners | A-09: reconcile the storage policy and implementation | D-06 |
 
 The finding IDs, severities, conditions and original source locations are retained
-in [the accepted report](public-surfaces.md#findings). This register proposes work;
-it does not expand conditional findings into claims of an unauthenticated exploit.
+in [T-2's accepted report](public-surfaces.md#findings) and
+[T-1's accepted report](https://github.com/ketvietlab/ketplus/blob/9cf3a535d1eeadcb3c70c78ad61455a179648cbb/docs/security-audit/daemon-agent.md).
+This register proposes work; it does not expand conditional findings into claims
+of an unauthenticated exploit.
 
 ## Decisions reserved for the user and repository owners
 
@@ -53,6 +66,7 @@ repository owners. Approval of this planning document does not select an option.
 | D-03: automatic Git behavior | Keep executable helpers disabled for automatic inspection in every workspace; or introduce explicit workspace trust before enabling those helpers | Possible performance/feature changes versus a new grant/revocation lifecycle. Define the default for extracted repositories, canonical worktree identity, shared Lite/Pro behavior and intentional mutation hooks. Ordinary fresh clones do not inherit another repository's local Git config. |
 | D-04: browser provisioning | Retain managed downloads with independently trusted artifact identities and cache validation; or require supported installed browsers and disable fallback downloads | Managed provisioning needs maintained version/platform pins and an update process; installed-only mode can leave browser tools unavailable until the user installs a supported browser. Preserve clear readiness errors and specify who owns browser updates. |
 | D-05: sandbox compatibility | Require sandboxed startup for every supported browser/platform combination; or narrow the supported combinations/capability availability to those with verified sandboxing | Stricter startup may expose host configuration requirements; a narrower support matrix removes capability on excluded hosts. Define failure messaging and support scope. Silent fallback to `--no-sandbox` does not satisfy A-06 under either alternative. |
+| D-06: credential-storage model | Implement the documented OS credential-store model on supported platforms; or explicitly approve file-backed storage and revise the architecture/ADR contract with verified platform controls | OS storage needs signing/access-prompt, headless and migration acceptance. File permissions do not provide encryption or protection from every process under the same OS user; define backup handling, ACLs and the residual at-rest exposure. DA-03 establishes a contract discrepancy, not a demonstrated cross-user bypass. Neither choice is made here. |
 
 Choosing a delay or narrower release scope does not close an unresolved finding
 for excluded capabilities or waive the applicable
@@ -162,19 +176,77 @@ engine versions and results without provider calls or hostile exploits. Merely
 removing an argument, checking an option, or passing the proxy tests is insufficient
 to attest effective runtime containment.
 
+### A-07: fence account-transition callbacks (DA-01)
+
+Preserve the existing sign-out and device-pin trust boundary in `apps/daemon`.
+Capture the account epoch and machine/workspace identity for asynchronous work;
+reject stale or unenrolled callbacks before every mutation, pin adoption, wrap,
+refresh or upload. Missing pins alone must not authorize legacy adoption; require
+explicit migration state. Include the related pairing approval/revocation
+callbacks and fallback sender-key adoption identified by T-1.
+
+Acceptance evidence: fake transport holds a device-list reply, completes sign-out,
+then returns a synthetic list; assert no new pin, key wrap, device refresh or
+key-upload request. Also cover sign-out followed by a different enrollment before
+the old reply, and a genuine permitted migration. No real account, provider or
+network is needed. Record the native regression target, exact fix commit and
+reviewer result. T-1's source analysis and reviewer verification confirm the
+reported condition; they do not demonstrate closure at a release candidate.
+
+### A-08: bind sender-key caches to current authorization (DA-02)
+
+Clear the cache on every account transition, fence delayed lookups by account
+epoch, and recheck the current pin on cache hits. Retain revocation invalidation;
+a cached key must not substitute for current pairing authority. This preserves
+the existing policy rather than requiring a new user-selected trust model.
+
+Acceptance evidence: pair device D and warm its cache, sign out, enroll again in
+the same workspace within the cache TTL, then require lookup D to fail until new
+pairing approval. Cover delayed lookup replies across sign-out and revocation,
+and normal authorized cache reuse without unnecessary network requests. Attach
+native regression and command-authorization results at the exact fix commit;
+distinguish key-lookup assertions from any end-to-end command-execution evidence.
+Do not expand the finding into arbitrary signature forgery, cross-workspace key
+reuse or a demonstrated provider sandbox escape.
+
+### A-09: reconcile the credential-storage contract (DA-03)
+
+After D-06, make the architecture/ADR, implementation and user-facing protection
+claims agree. `modules/remote` owns the store; architecture and platform owners
+review the selected model. An OS-store implementation needs an explicit existing
+credential migration/recovery plan and supported desktop/headless behavior. If
+file-backed storage is approved, document its actual protection and limits;
+base64 serialization must not be described as encryption.
+
+Acceptance evidence: an approved storage decision and matching documentation,
+plus platform-specific ACL, backup and access-behavior checks. Where storage
+changes, use synthetic credentials to verify migration, failure/retry, sign-out
+and intended access-prompt behavior without exposing real values. A documentation
+correction alone cannot establish the promised OS-store protection. Retain the
+Informational classification unless separate evidence justifies a different
+finding; no storage-policy choice or implementation is made by this plan.
+
 ## Audit and verification gaps
 
-At the 2026-11-16 06:41 UTC task-status snapshot, T-1 has been handed to Dev 3 and
-is **in review**, not blocked by the earlier provider interruption.
-[PR #706](https://github.com/ketvietlab/ketplus/pull/706), head
-`ec04a87ba1ff2cb44ba8a718beafdf4a9c9c64b4`, is awaiting reviewer disposition.
-Its scope is
+As of the 2026-11-16 disposition update, T-1 is **accepted and merged** at the
+English report head and integration merge recorded above. Its accepted scope is
 `apps/daemon`, `modules/remote` and `modules/ai`: authentication/IPC, credential
-lifecycle, transport, tool authorization and conversation isolation. T-3 does not
-repeat that investigation or treat preliminary task notes as accepted findings.
-No final accepted T-1 report is used as evidence here. Before a readiness decision,
-the leader must reconcile the latest T-1 verdict/report and resulting work with
-this register; completion of T-2 alone leaves this audit stream unresolved.
+lifecycle, transport, tool authorization and conversation isolation. DA-01/DA-02
+remain High findings requiring A-07/A-08 evidence; DA-03 requires the D-06/A-09
+storage disposition. T-3 derives these work items from the accepted report and
+verdict without repeating T-1's code investigation. Report acceptance closes the
+documentation-review dependency, not remediation or release verification.
+
+T-1's six fake-SDK sidecar checks are not DA-01/DA-02 regression tests or proof of
+real provider sandbox enforcement. The accepted review's synthetic verification
+is not a full native-suite or end-to-end command-execution result. The audit did
+not execute `AgentMessagingTest`, `DaemonProtocolTest` or
+`cloud-privacy/CloudPrivacyTest`, or a native build/full ctest. Its complete
+team/schedule role matrix, every filesystem/attachment operation, WebRTC/native
+transport, every adapter extension and the entire legacy direct transport were
+not deeply audited. Cryptographic, OS sandbox and hosted-authorization behavior
+beyond the reviewed code remains unverified; acceptance of T-1 is not clearance
+of those limits.
 
 T-2's [coverage and executed-check limits](public-surfaces.md#executed-checks-and-handoff)
 remain applicable to its pinned source. The 99 deterministic tests, harmless
@@ -183,7 +255,9 @@ validate a release artifact or certify later commits. In particular:
 
 | Outstanding evidence | Proposed owner | Required before the applicable readiness conclusion |
 | --- | --- | --- |
-| T-1 accepted report and disposition | Dev 3, reviewer, then leader | Final reviewed scope/results and separate follow-ups; no assumed daemon/provider clearance |
+| DA-01/DA-02 remediation and trust-transition regressions | Daemon owner and reviewer | A-07/A-08 closure at the fix/candidate commit; accepted report and synthetic review evidence do not establish a fixed daemon |
+| Credential-storage policy and platform protection | Remote/platform owners and user | D-06/A-09 decision and verified implementation/contract; no assumed OS credential-store protection |
+| T-1's unexecuted native checks and coverage limits | Daemon/remote/AI owners and release maintainer | Candidate-specific required native matrix and separately scoped assurance for the limits above; no assumed provider or hosted-service clearance |
 | Chromium-dependent security suites and actual sandbox behavior | Browser owner | Runtime-backed tests under the authorized browser workflow; A-04/A-06 evidence |
 | Computer permission, capture, input and stop behavior | Computer owner | Native TCC/AX/HID/grant/remote-turn acceptance on supported macOS versions; protocol/no-op tests alone do not cover it |
 | Atlas WebView/profile/navigation and external serving boundaries | Atlas owner | Explicit isolation/ownership evidence; managed selected-port readiness follow-up; do not extend the browser proxy's guarantee to WebView |
@@ -206,15 +280,16 @@ work completed elsewhere.
 
 | Gate | Evidence currently used | Remaining proof and owner |
 | --- | --- | --- |
-| Audit report acceptance | T-2 review round 2 and merge above: verified | Leader obtains/reconciles T-1's final accepted report and reviews the release-candidate delta |
-| Product remediation/disposition | Six accepted T-2 findings: recorded; closure unverified | User/owners decide D-01–D-05; leader assigns work; module owners supply A-01/A-03/A-04/A-06 evidence and reviewer accepts it |
+| Audit report acceptance | T-2 round 2 and T-1 round 1 accepted reports and merges above: verified | Leader reviews the release-candidate delta and scopes remaining assurance; accepted reports do not certify later changes |
+| Product remediation/disposition | Six accepted T-2 findings and three accepted T-1 findings: recorded; closure unverified | User/owners decide D-01–D-06; leader assigns work; module owners supply A-01/A-03/A-04/A-06/A-07/A-08/A-09 evidence and reviewer accepts it |
 | Source publication | T-2 historical boundary finding: open | Repository owners approve and verify A-02; complete applicable source licensing/secret/transcript review for the exact publication contents |
 | Binary distribution | T-2 engineering fixtures: verified only for their stated scope; artifact acceptance unverified | Release/licensing owners complete A-05 and all supported artifact/runtime checks in the release process |
 | Publish/deploy authorization | None requested or granted by this plan | User/release owner explicitly authorizes the concrete candidate through the existing release flow after applicable gates hold |
 
-The leader can create the six work packages independently where their decision
+The leader can create the nine work packages independently where their decision
 dependencies permit, but should reconcile browser provenance and sandboxing on the
-same candidate. Repository-owner history decisions must precede any history
+same candidate and verify the interacting DA-01/DA-02 account transitions together.
+Repository-owner history decisions must precede any history
 mutation. No release conclusion may be inferred from merging these documents.
 
 For every follow-up, retain the finding ID, selected decision, accountable owner,
