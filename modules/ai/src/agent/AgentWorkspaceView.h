@@ -304,18 +304,19 @@ class AgentWorkspaceView final : public QWidget {
     // Assigns conversation #number, starts a new reviewer with newProvider, or clears it.
     Q_INVOKABLE void chooseReviewer(const QString& number, const QString& newProvider);
     void acceptReviewerState(const QVariantMap& value);
-    Q_INVOKABLE void stopBackgroundTask(const QString& taskId) {
-        emit backgroundTaskStopRequested(taskId);
-    }
-    Q_INVOKABLE void requestBackgroundTaskOutput(const QString& taskId) {
-        // A refresh of the open task keeps the tail it already shows until the new one arrives.
-        if (backgroundTaskOutput_.value(QStringLiteral("taskId")).toString() != taskId)
-            backgroundTaskOutput_ = {{QStringLiteral("taskId"), taskId}};
-        backgroundTaskOutput_.insert(QStringLiteral("loading"), true);
-        emit backgroundTaskOutputChanged();
-        emit backgroundTaskOutputRequested(taskId);
-    }
+    Q_PROPERTY(
+        QVariantMap backgroundTaskState READ backgroundTaskState NOTIFY backgroundTaskStateChanged)
+    Q_PROPERTY(QVariantMap backgroundTaskActions READ backgroundTaskActions NOTIFY
+                   backgroundTaskOutputChanged)
+    QVariantMap backgroundTaskState() const { return backgroundTaskState_; }
+    QVariantMap backgroundTaskActions() const { return backgroundTaskActions_; }
+    void setBackgroundTaskState(const QVariantMap& value);
+    Q_INVOKABLE void loadBackgroundTasks(bool more = false) { emit backgroundTasksRequested(more); }
+    Q_INVOKABLE void stopBackgroundTask(const QString& taskId);
+    Q_INVOKABLE void resolveBackgroundTaskCleanup(const QString& taskId, qint64 revision);
+    Q_INVOKABLE void requestBackgroundTaskOutput(const QString& taskId);
     Q_INVOKABLE void closeBackgroundTaskOutput() {
+        ++backgroundTaskRequest_;
         backgroundTaskOutput_.clear();
         emit backgroundTaskOutputChanged();
     }
@@ -620,6 +621,7 @@ class AgentWorkspaceView final : public QWidget {
     void usageSnapshotChanged();
     void claudeAccountUsageChanged();
     void backgroundTasksChanged();
+    void backgroundTaskStateChanged();
     void backgroundTaskOutputChanged();
     void atlasResultsChanged();
     void atlasResultOpenRequested(const QString& path, const QString& root, bool inBrowser);
@@ -630,7 +632,10 @@ class AgentWorkspaceView final : public QWidget {
     void reviewerRequested();
     void reviewerChangeRequested(const QString& number, const QString& newProvider);
     void backgroundTaskStopRequested(const QString& taskId);
-    void backgroundTaskOutputRequested(const QString& taskId);
+    void backgroundTaskOutputRequested(const QString& taskId, const QString& cursor,
+                                       quint64 request);
+    void backgroundTaskCleanupResolutionRequested(const QString& taskId, qint64 revision);
+    void backgroundTasksRequested(bool more);
     void backgroundTaskFailed(const QString& message);
     void weeklyLimitRequested();
     void attachmentsChanged();
@@ -784,6 +789,9 @@ class AgentWorkspaceView final : public QWidget {
     UsageRequester claudeUsageRequester_;
     TurnGuide turnGuide_;
     QVariantList backgroundTasks_;
+    QVariantMap backgroundTaskState_;
+    QVariantMap backgroundTaskActions_;
+    quint64 backgroundTaskRequest_{0};
     AtlasResultInspector atlasResultInspector_;
     QVariantMap heldMessageStates_;
     QString heldMessageScope_;

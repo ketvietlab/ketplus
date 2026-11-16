@@ -358,10 +358,7 @@ void AgentSessionManager::handleNotification(const QString& method, const QJsonO
 
     if (method == QStringLiteral("thread/backgroundTasks/updated")) {
         const QVariantList tasks = params.value(QStringLiteral("tasks")).toArray().toVariantList();
-        if (session->backgroundTasks == tasks)
-            return;
-        session->backgroundTasks = tasks;
-        emitBackgroundTasks(session);
+        updateBackgroundTaskProjection(session, tasks);
         return;
     }
 

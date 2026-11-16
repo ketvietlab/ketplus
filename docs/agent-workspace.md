@@ -1074,24 +1074,48 @@ can also miss an intermittent frame.
 
 ## Background tasks
 
-Claude can leave shells (`Bash` with `run_in_background`) and subagents running after a
-turn ends. The sidecar keeps the SDK query open while any such task is live, so the
-next user turn reuses it instead of killing the tasks; a model run the agent starts on
-its own after a task notification becomes a turn of its own. Stopping a turn interrupts
-the model, not its background tasks. A different launch (worktree, MCP servers,
-readable directories) replaces the query and reports its tasks as ended.
+Daemon-managed process and agent jobs use the shared registry in
+[ADR 0127](decisions/0127-daemon-background-tasks.md). The desktop task bar reads
+that registry independently of the conversation provider. Provider tool registration
+and blocking native SDK background execution are separate adapter responsibilities.
+Legacy Claude snapshots remain readable through the drain-only compatibility route.
 
-The sidecar reports the visible set as `tasks.changed` (full snapshot, progress
-throttled to 2 s). The daemon bounds it to 16 rows, journals the latest snapshot per
-session generation and lists it in `session.list` as `background_tasks`. A provider
-exit or daemon restart marks live rows `stopped` with reason `worker_restart`.
-`session.task.stop` and `session.task.output` (last 8 KiB) accept only listed task ids;
-the relay maps them to the existing interrupt and output-read grants.
+The bar above the composer shows queued, starting, running, stopping and terminal
+jobs, elapsed time, result/error metadata, and completion delivery as pending,
+delivered or suppressed. It combines the event projection with paged
+`session.task.list` reads. The 16-row event projection is not a membership or Stop
+limit: Load more tasks follows opaque registry cursors. Task rows scroll inside a
+bounded region so large queues leave the composer reachable; keyboard focus reveals
+the focused action. A stale cursor refetches
+the first page; list failures remain visible with Retry. Conversation activation,
+snapshot updates and reconnect refresh the registry; results are fenced to their
+owner and generation. Nonterminal jobs cannot be dismissed locally.
 
-The desktop shows a collapsible bar above the composer with one row per task, a
-confirmation before Stop, and an output pane that refreshes every 2 s while a shell
-runs. Offline, rows show the last known state and Stop is disabled. Codex and Cursor
-report no background tasks.
+Stop task requests cancellation of that job and disables duplicate requests while
+waiting. It does not stop the foreground conversation. The server reports the
+subsequent stopping/terminal state. Read and mutation availability use the daemon's
+connection and negotiated session permissions, with server authorization on each
+request. Offline, mutations and live reads are disabled while the snapshot and
+already loaded output remain available. The UI does not infer permissions from
+Codex, Claude or Cursor identity.
+
+On native macOS, the bar labels the assurance as best effort, including
+`best_effort_complete`; this never claims absence of unobserved descendants.
+`needs_attention` is a warning banner with `cleanup_unverified`, retained root exit
+code and manual-check guidance. A root exit code of zero does not turn that warning
+into success. Retry cleanup uses Stop without replaying the command. Only an
+explicit user confirmation calls `session.task.resolve_cleanup`, with the revision
+captured when the confirmation opened. A conflict keeps the warning and asks for a
+fresh decision. Acknowledgement remains labelled as unverified user acknowledgement;
+the UI never automatically resolves cleanup or starts a follow-up agent.
+
+Output is plain text for both managed process and agent jobs. Reads return at most
+8 KiB and the UI passes `next_cursor` back unchanged. Read more/Refresh and live
+polling append pages to a bounded 64K-character display; spool truncation and display
+truncation are identified separately. Copy preserves that displayed text. Failed
+reads keep previously loaded output and offer Retry; a late answer after closing,
+reopening, or changing the conversation cannot replace the current pane. Legacy
+Claude output keeps its bounded-tail refresh behavior.
 
 ## Provider transcript and permission lifecycle
 

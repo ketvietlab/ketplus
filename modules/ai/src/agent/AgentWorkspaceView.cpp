@@ -273,6 +273,7 @@ void AgentWorkspaceView::setActivePath(const QString& path) {
     if (executionPath() != previousExecutionPath)
         executionCheckoutChanged();
     // The next conversation's report replaces these; another worktree's tasks never show here.
+    setBackgroundTaskState({});
     setBackgroundTasks({});
     setComposerScope(activePath_);
     loadEnabledSkills();
@@ -1040,28 +1041,6 @@ QVariantList AgentWorkspaceView::loadAttachmentDraft(const QString& scope) const
 
 QVariantList AgentWorkspaceView::permissions() const {
     return CodexAppServer::permissionProfiles();
-}
-
-void AgentWorkspaceView::acceptBackgroundTaskResult(const QString& taskId, const QString& action,
-                                                    const QVariantMap& result) {
-    const QString error = result.value(QStringLiteral("error")).toString();
-    if (action == QStringLiteral("stop")) {
-        // A stop that worked shows up in the next task report.
-        if (!error.isEmpty())
-            emit backgroundTaskFailed(error);
-        return;
-    }
-    // A pane closed or switched to another task while this read was in flight keeps its state.
-    if (backgroundTaskOutput_.value(QStringLiteral("taskId")).toString() != taskId)
-        return;
-    backgroundTaskOutput_ = {
-        {QStringLiteral("taskId"), taskId},
-        {QStringLiteral("loading"), false},
-        {QStringLiteral("output"), result.value(QStringLiteral("output"))},
-        {QStringLiteral("totalBytes"), result.value(QStringLiteral("total_bytes"))},
-        {QStringLiteral("truncated"), result.value(QStringLiteral("truncated"))},
-        {QStringLiteral("error"), error}};
-    emit backgroundTaskOutputChanged();
 }
 
 } // namespace ketplus

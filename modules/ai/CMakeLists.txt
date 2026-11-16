@@ -50,6 +50,7 @@ add_library(ketplus_ai STATIC
     src/agent/AgentSessionNotifications.cpp
     src/agent/ReasoningHeading.cpp
     src/agent/ReasoningHeading.h
+    src/agent/AgentBackgroundTasks.cpp
     src/agent/AgentSessionState.cpp
     src/agent/AgentSessionState.h
     src/agent/AgentSessionTurns.cpp
@@ -90,6 +91,7 @@ add_library(ketplus_ai STATIC
     src/agent/AgentWorkspaceStreaming.cpp
     src/agent/AgentWorkspaceTranscriptOnly.cpp
     src/agent/AgentWorkspaceUsage.cpp
+    src/agent/AgentWorkspaceBackgroundTasks.cpp
     src/agent/AgentWorkspaceView.cpp
     src/agent/AgentWorkspaceToast.cpp
     src/agent/AgentWorkspaceViewTeams.cpp
@@ -102,6 +104,7 @@ add_library(ketplus_ai STATIC
     src/agent/CodexAppServer.cpp
     src/agent/CodexAppServer.h
     src/agent/CodexAppServerDaemonEvents.cpp
+    src/agent/CodexDaemonTasks.cpp
     src/agent/CodexAppServerDaemonSessions.cpp
     src/agent/CodexAppServerProcess.cpp
     src/agent/CodexDaemonTranscript.cpp
@@ -157,7 +160,7 @@ set_source_files_properties(
     PROPERTIES QT_RESOURCE_ALIAS "AgentProductNavigation.qml"
 )
 foreach(component AgentWorkspaceHeader AgentRunStatus AgentScopeNotice AgentEmptyState
-        BackgroundTaskBar AgentComposer AgentComposerAction AgentPermissionMenu AgentSkillsMenu AgentAttachmentChip)
+        BackgroundTaskBar BackgroundTaskItem AgentComposer AgentComposerAction AgentPermissionMenu AgentSkillsMenu AgentAttachmentChip)
     set_source_files_properties(src/agent/qml/${component}.qml
         PROPERTIES QT_RESOURCE_ALIAS "${component}.qml"
     )
@@ -292,6 +295,7 @@ qt_add_resources(ketplus_ai "ketplus_ai_resources"
         src/agent/qml/AgentRunStatus.qml
         src/agent/qml/AgentScopeNotice.qml
         src/agent/qml/AgentEmptyState.qml
+        src/agent/qml/BackgroundTaskItem.qml
         src/agent/qml/BackgroundTaskBar.qml
         src/agent/qml/AgentComposer.qml
         src/agent/qml/AgentComposerAction.qml

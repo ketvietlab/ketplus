@@ -64,6 +64,9 @@ target_link_libraries(ketplus_interface_font_tests PRIVATE
     ketplus_typography
 )
 
+ketplus_add_gui_test(ketplus_background_task_transport_tests AgentBackgroundTaskTransportTest.cpp)
+target_link_libraries(ketplus_background_task_transport_tests PRIVATE Qt6::Test ketplus_ai)
+
 ketplus_add_gui_test(ketplus_agent_tests
     AgentWorkspaceHistoryTest.cpp
     TranscriptInteractionTest.cpp
@@ -76,6 +79,7 @@ ketplus_add_gui_test(ketplus_agent_tests
     AgentProviderSetupTest.cpp
     TranscriptTrimmedDetailTest.cpp
     AgentWorkspaceInteractionTest.cpp
+    AgentBackgroundTaskUiTest.cpp
     AgentUsageCostDetailsTest.cpp
     AgentWorkspaceAtlasResultTest.cpp
     AgentWorkspaceRenderingTest.cpp
