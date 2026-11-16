@@ -449,17 +449,8 @@ void CodexAppServer::daemonCall(const QString& method, const QJsonObject& params
         daemon_->call(operation, {}, sessionId, found->generation, std::move(callback));
         return;
     }
-    if (method == QStringLiteral("task/stop") || method == QStringLiteral("task/output")) {
-        const QString sessionId = params.value(QStringLiteral("threadId")).toString();
-        auto found = daemonSessions_.find(sessionId);
-        if (found == daemonSessions_.end()) {
-            callback({}, QStringLiteral("Unknown daemon session."));
-            return;
-        }
-        daemon_->call(method == QStringLiteral("task/stop") ? QStringLiteral("session.task.stop")
-                                                            : QStringLiteral("session.task.output"),
-                      {{QStringLiteral("task_id"), params.value(QStringLiteral("taskId"))}},
-                      sessionId, found->generation, std::move(callback));
+    if (method.startsWith(QStringLiteral("task/"))) {
+        callDaemonBackgroundTask(method, params, std::move(callback));
         return;
     }
     callback({}, QStringLiteral("KetPlus Daemon does not support %1 yet.").arg(method));

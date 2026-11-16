@@ -1,3 +1,4 @@
+#include "KetDialog.h"
 #include "KetIcons.h"
 #include "KetTokens.h"
 #include "agent/AgentWorkspaceView.h"
@@ -6,6 +7,7 @@
 #include "app/AtlasConversationPanel.h"
 #include "app/MainWindow.h"
 #include "atlas/AtlasTab.h"
+#include "atlas/ManagedAtlasViewers.h"
 #include "ui/Theme.h"
 #include "workspace/ActivityBar.h"
 #include "workspace/AtlasIndex.h"
@@ -50,6 +52,82 @@ class AtlasWorkspaceTest final : public QObject {
     }
 
   private slots:
+    void bothBrowserEntryPointsRequestRendererConsent() {
+#ifndef Q_OS_UNIX
+        QSKIP("The harmless CLI fixture uses a Unix shell.");
+#else
+        QTemporaryDir settings;
+        QTemporaryDir workspace;
+        const auto path = workspace.filePath("sample.ketatlas/atlas.json");
+        QVERIFY(writeAtlas(path, "Sample Atlas"));
+        QFile sidecar(workspace.filePath("sample.ketatlas/atlas.renderer.json"));
+        QVERIFY(sidecar.open(QIODevice::WriteOnly));
+        sidecar.write(R"({"version":1,"framework":"fixture","command":["/bin/echo","fixture"]})");
+        sidecar.close();
+        QFile cli(workspace.filePath("fake-atlas"));
+        QVERIFY(cli.open(QIODevice::WriteOnly));
+        cli.write("#!/bin/sh\nprintf unexpected > unexpected-launch\nexit 1\n");
+        cli.close();
+        QVERIFY(cli.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner |
+                                   QFileDevice::ExeOwner));
+        const auto oldCli = qgetenv("KETPLUS_KETATLAS_CLI");
+        const auto restore = qScopeGuard([&] {
+            oldCli.isNull() ? qunsetenv("KETPLUS_KETATLAS_CLI")
+                            : qputenv("KETPLUS_KETATLAS_CLI", oldCli);
+        });
+        qputenv("KETPLUS_KETATLAS_CLI", cli.fileName().toUtf8());
+        QSettings::setDefaultFormat(QSettings::IniFormat);
+        QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settings.path());
+        ketplus::ThemeManager theme(*qApp);
+        ketplus::MainWindow window(theme);
+        window.openFolder(workspace.path());
+        window.resize(1000, 720);
+        if (QGuiApplication::platformName() == "cocoa") {
+            const auto screens = QGuiApplication::screens();
+            if (screens.size() < 2)
+                QSKIP("Native consent acceptance requires the secondary work display.");
+            window.setScreen(screens.at(1));
+            window.move(screens.at(1)->availableGeometry().topLeft() + QPoint(24, 24));
+        }
+        window.show();
+        auto* bar = window.findChild<ketplus::ActivityBar*>();
+        QVERIFY(bar);
+        auto* agent = bar->findChild<QAbstractButton*>("agentWorkspaceActivityButton");
+        QVERIFY(agent);
+        agent->click();
+        auto* chat = window.findChild<ketplus::AgentWorkspaceView*>();
+        QVERIFY(chat);
+        chat->setActivePath(workspace.path());
+        chat->setExecutionBranch("main", workspace.path(), 1);
+        chat->requestProductNavigation("atlas");
+        auto* panel = window.findChild<ketplus::AtlasConversationPanel*>("conversationAtlasPanel");
+        QVERIFY(panel);
+        QTRY_VERIFY(panel->findChild<QAbstractButton*>("conversationAtlasOpen"));
+        auto* registry = ketplus::ManagedAtlasViewers::instance();
+        const auto canonical = QFileInfo(path).canonicalFilePath();
+        const auto stop = qScopeGuard([&] { registry->stop(canonical); });
+        panel->findChild<QAbstractButton*>("conversationAtlasOpen")->click();
+        auto* dialog = window.findChild<ket::Dialog*>("atlasRendererPermission");
+        QVERIFY(dialog && dialog->isOpen());
+        const auto capture = [&](const QString& entry) {
+            const auto dir = qEnvironmentVariable("KETPLUS_ATLAS_PERMISSION_ENTRY_CAPTURE_DIR");
+            if (dir.isEmpty())
+                return true;
+            QCoreApplication::processEvents();
+            return QDir().mkpath(dir) && dialog->grab().save(dir + "/" + entry + ".png");
+        };
+        QVERIFY(capture("atlas-list"));
+        registry->stop(canonical);
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+        chat->openAtlasResult("sample.ketatlas/atlas.json", true);
+        dialog = window.findChild<ket::Dialog*>("atlasRendererPermission");
+        QVERIFY(dialog && dialog->isOpen());
+        QVERIFY(capture("transcript-result"));
+        registry->stop(canonical);
+        QVERIFY(registry->viewers().isEmpty());
+        QVERIFY(!QFileInfo::exists(workspace.filePath("sample.ketatlas/unexpected-launch")));
+#endif
+    }
     void transcriptAtlasResultOpensExistingBuilder() {
         QTemporaryDir settings;
         QTemporaryDir workspace;

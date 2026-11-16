@@ -68,7 +68,12 @@ class AgentSessionManager final : public QObject {
     // follows the conversation's later reports.
     void readWorkReport(const QString& worktreePath);
     void stopBackgroundTask(const QString& worktreePath, const QString& taskId);
-    void readBackgroundTaskOutput(const QString& worktreePath, const QString& taskId);
+    [[nodiscard]] QVariantMap backgroundTaskState(const QString& worktreePath) const;
+    void loadBackgroundTasks(const QString& worktreePath, bool more);
+    void resolveBackgroundTaskCleanup(const QString& worktreePath, const QString& taskId,
+                                      qint64 revision);
+    void readBackgroundTaskOutput(const QString& worktreePath, const QString& taskId,
+                                  const QString& cursor = {}, quint64 request = 0);
 
     void executionWorktreeCommand(const QString& path, const QString& type,
                                   const QJsonObject& payload,
@@ -364,8 +369,10 @@ class AgentSessionManager final : public QObject {
     void emitConfiguration(const SessionPtr& session);
     void emitUsageSnapshot(const SessionPtr& session);
     void emitBackgroundTasks(const SessionPtr& session);
+    void refreshBackgroundTaskMetadata(const SessionPtr& session);
+    void updateBackgroundTaskProjection(const SessionPtr& session, const QVariantList& tasks);
     void callBackgroundTask(const QString& worktreePath, const QString& taskId,
-                            const QString& action);
+                            const QString& action, const QJsonObject& parameters = {});
     int appendMessage(const SessionPtr& session, QVariantMap message);
     [[nodiscard]] int messageIndexForItem(const SessionPtr& session, const QString& itemId);
     void updateMessage(const SessionPtr& session, int index, QVariantMap message);

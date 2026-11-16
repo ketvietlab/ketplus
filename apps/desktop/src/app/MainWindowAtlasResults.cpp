@@ -36,7 +36,7 @@ void MainWindow::connectAtlasResults(AgentWorkspaceView* chat) {
                     return;
                 }
                 if (inBrowser)
-                    ManagedAtlasViewers::instance()->open(atlas);
+                    ManagedAtlasViewers::instance()->open(atlas, this);
                 else
                     editAtlasInKetPlus(atlas);
             });

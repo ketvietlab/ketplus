@@ -263,8 +263,11 @@ void MainWindow::ensureAgentWorkspace() {
             });
     connect(agentManager_, &AgentSessionManager::backgroundTasksChanged, this,
             [this](const QString& path, const QVariantList& tasks) {
-                if (normalizedPath(path) == normalizedPath(agentWorkspace_->activePath()))
+                if (normalizedPath(path) == normalizedPath(agentWorkspace_->activePath())) {
+                    agentWorkspace_->setBackgroundTaskState(
+                        agentManager_->backgroundTaskState(path));
                     agentWorkspace_->setBackgroundTasks(tasks);
+                }
             });
     connect(agentManager_, &AgentSessionManager::backgroundTaskResult, this,
             [this](const QString& path, const QString& taskId, const QString& action,
@@ -308,8 +311,18 @@ void MainWindow::ensureAgentWorkspace() {
                 agentManager_->stopBackgroundTask(agentWorkspace_->activePath(), taskId);
             });
     connect(agentWorkspace_, &AgentWorkspaceView::backgroundTaskOutputRequested, this,
-            [this](const QString& taskId) {
-                agentManager_->readBackgroundTaskOutput(agentWorkspace_->activePath(), taskId);
+            [this](const QString& taskId, const QString& cursor, quint64 request) {
+                agentManager_->readBackgroundTaskOutput(agentWorkspace_->activePath(), taskId,
+                                                        cursor, request);
+            });
+    connect(agentWorkspace_, &AgentWorkspaceView::backgroundTaskCleanupResolutionRequested, this,
+            [this](const QString& taskId, qint64 revision) {
+                agentManager_->resolveBackgroundTaskCleanup(agentWorkspace_->activePath(), taskId,
+                                                            revision);
+            });
+    connect(agentWorkspace_, &AgentWorkspaceView::backgroundTasksRequested, this,
+            [this](bool more) {
+                agentManager_->loadBackgroundTasks(agentWorkspace_->activePath(), more);
             });
     connect(
         agentWorkspace_, &AgentWorkspaceView::worktreeActivated, this, [this](const QString& path) {

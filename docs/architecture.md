@@ -144,8 +144,15 @@ Qt application shell
   down (`AtlasProcess::toolSearchPaths`).
 - A conversation header opens an Atlas list in the Agent detail tabs. The sidebar
   has no Atlas destination. `ManagedAtlasViewers` launches KetAtlas 0.6.1 in
-  managed mode for explicit external-browser viewing, starts the declared native
-  renderer only when the bundle has `atlas.renderer.json`, tracks running viewers
+  managed mode for explicit external-browser viewing. A renderer sidecar triggers
+  a per-launch permission dialog showing its resolved executable, arguments and
+  working directory; it never grants execution by its presence. Both desktop
+  entry points and the install retry use this shared gate. View static, Escape or
+  closing the dialog launches without the renderer; Stop cancels a pending launch.
+  Approval is not saved, and exact manifest/sidecar bytes and canonical paths are
+  checked again immediately before launch. See
+  [ADR 0128](decisions/0128-atlas-renderer-per-launch-consent.md).
+  The registry tracks running viewers
   across worktrees, and stops them on a browser close or KétPlus Stop command.
   Edit opens the existing in-app Atlas Builder in the current worktree.
 - Completed assistant messages can show compact Atlas result cards from explicit

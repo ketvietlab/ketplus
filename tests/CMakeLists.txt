@@ -1,3 +1,5 @@
+include("${CMAKE_CURRENT_LIST_DIR}/daemon/credential-store/FixtureDaemon.cmake")
+
 if(APPLE)
     find_package(Python3 REQUIRED COMPONENTS Interpreter)
     add_test(NAME ketplus_macos_signing_cli_tests
@@ -37,6 +39,9 @@ target_link_libraries(ketplus_spotlight_tests PRIVATE
 ketplus_add_gui_test(ketplus_atlas_tests AtlasTest.cpp)
 target_link_libraries(ketplus_atlas_tests PRIVATE Qt6::Test ketplus_atlas)
 
+ketplus_add_gui_test(ketplus_managed_atlas_viewers_tests ManagedAtlasViewersTest.cpp)
+target_link_libraries(ketplus_managed_atlas_viewers_tests PRIVATE Qt6::Test ketplus_atlas)
+
 ketplus_add_gui_test(ketplus_atlas_workspace_tests AtlasWorkspaceTest.cpp)
 target_link_libraries(ketplus_atlas_workspace_tests PRIVATE
     Qt6::Test
@@ -59,6 +64,9 @@ target_link_libraries(ketplus_interface_font_tests PRIVATE
     ketplus_typography
 )
 
+ketplus_add_gui_test(ketplus_background_task_transport_tests AgentBackgroundTaskTransportTest.cpp)
+target_link_libraries(ketplus_background_task_transport_tests PRIVATE Qt6::Test ketplus_ai)
+
 ketplus_add_gui_test(ketplus_agent_tests
     AgentWorkspaceHistoryTest.cpp
     TranscriptInteractionTest.cpp
@@ -71,6 +79,7 @@ ketplus_add_gui_test(ketplus_agent_tests
     AgentProviderSetupTest.cpp
     TranscriptTrimmedDetailTest.cpp
     AgentWorkspaceInteractionTest.cpp
+    AgentBackgroundTaskUiTest.cpp
     AgentUsageCostDetailsTest.cpp
     AgentWorkspaceAtlasResultTest.cpp
     AgentWorkspaceRenderingTest.cpp
@@ -291,8 +300,8 @@ target_link_libraries(ketplus_machine_end_to_end_tests PRIVATE
     ketplus_remote_control
 )
 target_compile_definitions(ketplus_machine_end_to_end_tests PRIVATE
-    KETPLUS_TEST_DAEMON="$<TARGET_FILE:ketplus_daemon>")
-add_dependencies(ketplus_machine_end_to_end_tests ketplus_daemon)
+    KETPLUS_TEST_DAEMON="$<TARGET_FILE:ketplus_fixture_daemon>")
+add_dependencies(ketplus_machine_end_to_end_tests ketplus_fixture_daemon)
 
 ketplus_add_gui_test(ketplus_linux_machines_tests LinuxMachinesSectionTest.cpp)
 target_include_directories(ketplus_linux_machines_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})

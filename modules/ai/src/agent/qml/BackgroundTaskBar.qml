@@ -3,7 +3,7 @@ import Ket
 import QtQuick.Controls
 import QtQuick.Layouts
 
-// Shells and subagents the provider keeps running past a turn, as the daemon reports them.
+// Daemon-managed jobs and legacy drain-only tasks share one owner-scoped strip.
 // The daemon owns the list; this only shows it, opens one task's output and asks to stop one.
 Rectangle {
     id: bar
@@ -11,21 +11,85 @@ Rectangle {
 
     property var dismissedTasks: []
     function taskKey(task) {
-        return workspace.transcriptScope + ":" + String(task.task_id) + ":" + String(task.started_at || "") + ":" + String(task.ended_at || "");
+        return taskScope + ":" + String(task.task_id) + ":" + String(task.started_at || "") + ":" + String(task.ended_at || "");
     }
     readonly property var tasks: (agentHost.backgroundTasks || []).filter(task => live(task) || dismissedTasks.indexOf(taskKey(task)) < 0)
     readonly property var barRecipe: KetTheme.taskBarRecipe(KetTheme.dark, KetTheme.zoom, false, false, true, false)
     readonly property var pane: agentHost.backgroundTaskOutput || ({})
-    readonly property bool offline: agentHost.presentationState.connection === "unavailable"
+    readonly property bool offline: registry.connected === false || agentHost.presentationState.connection === "unavailable"
     readonly property int liveCount: tasks.filter(task => bar.live(task)).length
     property bool collapsed: false
     property string confirmingStop: ""
     property real now: Date.now()
-    readonly property bool windowVisible: visible && Window.window !== null
-        && Window.window.visible && Window.window.visibility !== Window.Minimized
+    readonly property bool windowVisible: visible && Window.window !== null && Window.window.visible && Window.window.visibility !== Window.Minimized
 
+    readonly property var registry: agentHost.backgroundTaskState || ({})
+    readonly property string taskScope: String(registry.scope || workspace.transcriptScope || "")
+    property string confirmationScope: ""
+    onRegistryChanged: {
+        const scope = String(registry.scope || "");
+        if (scope !== confirmationScope) {
+            confirmingStop = "";
+            if (cleanupDialog.visible)
+                cleanupDialog.reject();
+            confirmationScope = scope;
+        }
+    }
+    readonly property bool canRead: registry.canRead !== false
+    readonly property bool canControl: registry.canControl !== false
+    readonly property bool canResolve: registry.canResolve === true
+    readonly property int tickingCount: tasks.filter(task => live(task) && !attention(task)).length
+    readonly property int attentionCount: tasks.filter(task => attention(task)).length
+    function state(task) {
+        return task.state || task.status || "unknown";
+    }
+    function attention(task) {
+        return state(task) === "needs_attention";
+    }
     function live(task) {
-        return task.status === "running" || task.status === "stopping";
+        return ["queued", "starting", "running", "stopping", "needs_attention"].indexOf(state(task)) >= 0;
+    }
+    function canStop(task) {
+        return !offline && canControl && ["queued", "starting", "running"].indexOf(state(task)) >= 0;
+    }
+    function rowStatus(task) {
+        if (attention(task) || (live(task) && !canStop(task)))
+            return KetTheme.TaskStatus.Stopping;
+        return ({
+                queued: KetTheme.TaskStatus.Running,
+                starting: KetTheme.TaskStatus.Running,
+                running: KetTheme.TaskStatus.Running,
+                stopping: KetTheme.TaskStatus.Stopping,
+                completed: KetTheme.TaskStatus.Completed,
+                failed: KetTheme.TaskStatus.Failed,
+                timed_out: KetTheme.TaskStatus.Failed
+            })[state(task)] ?? KetTheme.TaskStatus.Stopped;
+    }
+    function details(task) {
+        const lines = [];
+        if (task.containment_mode === "native_best_effort")
+            lines.push(task.cleanup_status === "best_effort_complete" ? "Native macOS · best effort complete. Unobserved descendants may remain." : "Native macOS · best effort. Cleanup is not guaranteed.");
+        if (attention(task)) {
+            lines.push("Cleanup unverified. " + (task.manual_guidance || "Check the command and its descendants, then retry cleanup or acknowledge your manual check."));
+            if (task.exit_code !== undefined && task.exit_code !== null)
+                lines.push("Root exit code: " + task.exit_code + " · cleanup remains unverified");
+        } else if (task.reason === "cleanup_acknowledged")
+            lines.push("Cleanup acknowledged by user · assurance remains unverified");
+        const completion = task.completion || ({});
+        if (completion.status)
+            lines.push(({
+                    pending: "Agent follow-up pending",
+                    delivered: "Agent follow-up delivered",
+                    suppressed: "Agent follow-up suppressed"
+                })[completion.status] + (completion.reason ? " · " + completion.reason : ""));
+        if (task.schema_version !== undefined)
+            lines.push("Task " + task.task_id);
+        return lines.join("\n");
+    }
+    function confirmCleanup(task) {
+        cleanupDialog.taskId = task.task_id;
+        cleanupDialog.taskRevision = task.revisionToken || String(task.revision);
+        cleanupDialog.open();
     }
     function plural(count, word) {
         return count + " " + word + (count === 1 ? "" : "s");
@@ -39,8 +103,14 @@ Rectangle {
         return count >= 1000 ? Math.round(count / 1000) + "k" : String(count);
     }
     function meta(task) {
-        if (task.status === "stopping")
+        if (state(task) === "stopping")
             return "Stopping…";
+        if (attention(task))
+            return "Cleanup unverified · action needed";
+        if (state(task) === "queued")
+            return "Queued · waiting to start";
+        if (state(task) === "starting")
+            return "Starting…";
         if (!live(task)) {
             // As the mock words a finished task: what it reported, else how long it took.
             const reported = task.reason === "worker_restart" ? "KetPlus restarted while it ran" : task.reason === "session_closed" ? "Ended with its conversation" : task.error || task.result || "";
@@ -49,8 +119,11 @@ Rectangle {
             return ({
                     completed: "Completed in ",
                     failed: "Failed after ",
-                    stopped: "Stopped after "
-                })[task.status] + elapsed(task);
+                    stopped: "Stopped after ",
+                    cancelled: "Cancelled after ",
+                    timed_out: "Timed out after ",
+                    interrupted: "Interrupted after "
+                })[state(task)] + elapsed(task);
         }
         if (task.kind === "agent")
             return "Subagent · " + plural(task.tool_uses || 0, "tool") + " · " + tokens(task.total_tokens || 0) + " tokens · " + elapsed(task);
@@ -64,8 +137,12 @@ Rectangle {
                 stopping: KetTheme.t.warning,
                 completed: KetTheme.t.positive,
                 failed: KetTheme.t.danger,
-                stopped: KetTheme.t.textMuted
-            })[task.status] || KetTheme.t.textMuted;
+                stopped: KetTheme.t.textMuted,
+                cancelled: KetTheme.t.textMuted,
+                timed_out: KetTheme.t.danger,
+                interrupted: KetTheme.t.warning,
+                needs_attention: KetTheme.t.warning
+            })[state(task)] || KetTheme.t.textMuted;
     }
     function openTask(task) {
         if (pane.taskId === task.task_id)
@@ -75,31 +152,56 @@ Rectangle {
     }
     readonly property var openedTask: tasks.find(task => task.task_id === pane.taskId)
     // The kit's toggle (`.bg-toggle`) counts every task; the rows show which still run.
-    readonly property string headline: offline ? plural(liveCount, "background task") + " · last known" : liveCount > 0 ? (agentHost.sessionRunning ? "" : "Turn finished · ") + plural(tasks.length, "background task") : "Background tasks finished"
+    readonly property string headline: attentionCount > 0 ? plural(attentionCount, "task") + " · cleanup needs attention" : offline ? plural(liveCount, "background task") + " · last known" : liveCount > 0 ? (agentHost.sessionRunning ? "" : "Turn finished · ") + plural(tasks.length, "background task") : "Background tasks finished"
 
     objectName: "backgroundTaskBar"
-    visible: tasks.length > 0
+    visible: tasks.length > 0 || !!registry.error || !!registry.loading
     implicitHeight: visible ? column.implicitHeight : 0
     // The mock's strip has no panel of its own: the toggle, then one row per task.
     color: "transparent"
     Accessible.role: Accessible.Grouping
     Accessible.name: "Background tasks"
 
+    function revealTaskFocus() {
+        const hostWindow = bar.Window.window;
+        const focused = hostWindow ? hostWindow.activeFocusItem : null;
+        let ancestor = focused;
+        while (ancestor && ancestor !== taskRows)
+            ancestor = ancestor.parent;
+        if (!ancestor)
+            return;
+        const flick = taskScroll.contentItem;
+        const top = focused.mapToItem(taskRows, 0, 0).y;
+        const bottom = top + focused.height;
+        const desired = top < flick.contentY ? top : bottom > flick.contentY + flick.height ? bottom - flick.height : flick.contentY;
+        flick.contentY = Math.max(0, Math.min(desired, flick.contentHeight - flick.height));
+    }
+    Connections {
+        target: bar.Window.window
+        function onActiveFocusItemChanged() {
+            Qt.callLater(bar.revealTaskFocus);
+        }
+    }
+
     Timer {
         // Elapsed time ticks locally; the daemon reports progress only every few seconds.
         objectName: "backgroundTaskElapsedTimer"
-        running: bar.windowVisible && bar.liveCount > 0 && !bar.offline
+        running: bar.windowVisible && bar.tickingCount > 0 && !bar.offline
         interval: 1000
         repeat: true
         onTriggered: bar.now = Date.now()
     }
     Timer {
-        running: bar.windowVisible && !bar.offline && bar.openedTask !== undefined && bar.openedTask.kind !== "agent" && bar.live(bar.openedTask) && !bar.pane.loading
+        running: bar.windowVisible && !bar.offline && bar.openedTask !== undefined && (bar.openedTask.kind !== "agent" || bar.openedTask.schema_version !== undefined) && bar.live(bar.openedTask) && !bar.attention(bar.openedTask) && !bar.pane.loading && !bar.pane.error
         interval: 2000
         onTriggered: agentHost.requestBackgroundTaskOutput(bar.pane.taskId)
     }
-    onTasksChanged: if (confirmingStop && !tasks.some(task => task.task_id === confirmingStop && task.status === "running"))
-        confirmingStop = ""
+    onTasksChanged: {
+        if (confirmingStop && !tasks.some(task => task.task_id === confirmingStop && bar.canStop(task)))
+            confirmingStop = "";
+        if (cleanupDialog.visible && !tasks.some(task => task.task_id === cleanupDialog.taskId && attention(task)))
+            cleanupDialog.reject();
+    }
 
     ColumnLayout {
         id: column
@@ -126,7 +228,7 @@ Rectangle {
                 spacing: toggle.recipe.spacing
                 KetIcon {
                     anchors.verticalCenter: parent.verticalCenter
-                    name: bar.liveCount > 0 ? "loading" : KetTheme.iconForLucide("circle-check")
+                    name: bar.attentionCount > 0 ? "warning" : bar.liveCount > 0 ? "loading" : KetTheme.iconForLucide("circle-check")
                     box: toggle.recipe.iconSize
                     color: toggle.recipe.text
                 }
@@ -154,111 +256,65 @@ Rectangle {
             }
         }
 
-        Repeater {
-            model: bar.collapsed ? [] : bar.tasks
-            delegate: ColumnLayout {
-                id: row
-                required property var modelData
-                readonly property bool confirming: bar.confirmingStop === modelData.task_id
-                Layout.fillWidth: true
-                spacing: KetTheme.px(4, KetTheme.zoom)
-                objectName: "backgroundTask_" + modelData.task_id
-                KetTaskRow {
-                        id: taskRow
-                        objectName: "backgroundTaskCard_" + row.modelData.task_id
-                        Layout.fillWidth: true
-                        // A row opens its output or the subagent's progress, as the mock's
-                        // current row; Stop and Dismiss stay on top of it.
-                        readonly property string openLabel: (bar.pane.taskId === row.modelData.task_id ? "Hide " : "Show ") + (row.modelData.kind === "agent" ? "progress" : "output")
-                        activeFocusOnTab: true
-                        Accessible.role: Accessible.Button
-                        Accessible.name: row.modelData.title + ", " + bar.meta(row.modelData)
-                        Accessible.description: openLabel
-                        Accessible.onPressAction: bar.openTask(row.modelData)
-                        // Only the row's own focus opens it: Return or Space on Stop or
-                        // Dismiss reaches here too and must keep that button's meaning.
-                        function activateFromKeys(event) {
-                            if (!taskRow.activeFocus) {
-                                event.accepted = false;
-                                return;
-                            }
-                            bar.openTask(row.modelData);
-                        }
-                        Keys.onReturnPressed: event => activateFromKeys(event)
-                        Keys.onSpacePressed: event => activateFromKeys(event)
-                        // The keyboard focus ring sits outside the row, apart from the
-                        // `current` border that marks the open output.
-                        Rectangle {
-                            objectName: "backgroundTaskFocusRing"
-                            anchors.fill: parent
-                            anchors.margins: -2
-                            z: 1
-                            visible: taskRow.activeFocus
-                            radius: taskRow.radius + 2
-                            color: "transparent"
-                            border.width: 2
-                            border.color: KetTheme.t.focusBorder
-                        }
-                        MouseArea {
-                            objectName: "backgroundTaskOpen"
-                            anchors.fill: parent
-                            z: -1
-                            cursorShape: Qt.PointingHandCursor
-                            onClicked: bar.openTask(row.modelData)
-                        }
-                        enabled: !bar.offline || !bar.live(row.modelData)
-                        title: row.modelData.title
-                        meta: bar.meta(row.modelData)
-                        kindIcon: row.modelData.kind === "agent" ? "bot" : "terminal"
-                        current: bar.pane.taskId === row.modelData.task_id
-                        status: ({
-                                running: KetTheme.TaskStatus.Running,
-                                stopping: KetTheme.TaskStatus.Stopping,
-                                completed: KetTheme.TaskStatus.Completed,
-                                failed: KetTheme.TaskStatus.Failed,
-                                stopped: KetTheme.TaskStatus.Stopped
-                            })[row.modelData.status] ?? KetTheme.TaskStatus.Stopped
-                        onStopRequested: if (!bar.offline && row.modelData.status === "running")
-                            bar.confirmingStop = row.modelData.task_id
-                        onDismissRequested: {
-                            if (bar.live(row.modelData))
-                                return;
-                            const key = bar.taskKey(row.modelData);
-                            if (bar.pane.taskId === row.modelData.task_id)
-                                agentHost.closeBackgroundTaskOutput();
-                            // Updating the model can destroy this delegate immediately.
-                            bar.dismissedTasks = bar.dismissedTasks.concat([key]);
-                        }
-                }
-                Text {
-                    visible: row.confirming
-                    Layout.fillWidth: true
-                    text: "Stop “" + row.modelData.title + "”? " + (row.modelData.kind === "agent" ? "The subagent stops after its current step." : "The command is terminated. Output so far stays readable.")
-                    color: KetTheme.t.textSecondary
-                    font.family: KetTheme.fontFamily
-                    font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
-                    wrapMode: Text.Wrap
-                }
-                RowLayout {
-                    visible: row.confirming
-                    KetButton {
-                        text: "Keep running"
-                        controlSize: KetTheme.ControlSize.Small
-                        onClicked: bar.confirmingStop = ""
-                    }
-                    KetButton {
-                        objectName: "confirmStopBackgroundTask"
-                        text: "Stop task"
-                        enabled: !bar.offline
-                        controlSize: KetTheme.ControlSize.Small
-                        variant: KetTheme.ButtonVariant.Danger
-                        onClicked: {
-                            bar.confirmingStop = "";
-                            agentHost.stopBackgroundTask(row.modelData.task_id);
-                        }
+        ScrollView {
+            id: taskScroll
+            objectName: "backgroundTaskRows"
+            Layout.fillWidth: true
+            Layout.preferredHeight: bar.collapsed ? 0 : Math.min(taskRows.implicitHeight, KetTheme.px(bar.openedTask ? 160 : 240, KetTheme.zoom))
+            visible: !bar.collapsed
+            clip: true
+            contentWidth: availableWidth
+            ColumnLayout {
+                id: taskRows
+                width: taskScroll.availableWidth
+                spacing: bar.barRecipe.rowGap
+                Repeater {
+                    model: bar.collapsed ? [] : bar.tasks
+                    delegate: BackgroundTaskItem {
+                        taskBar: bar
                     }
                 }
             }
+        }
+        Text {
+            Layout.fillWidth: true
+            visible: !bar.collapsed && !!bar.registry.nextCursor
+            text: (bar.registry.activeCount !== undefined ? plural(bar.registry.activeCount, "active task") + " · " : "") + plural(bar.tasks.length, "task") + " shown · more available"
+            color: KetTheme.t.textMuted
+            font.family: KetTheme.fontFamily
+            font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
+            wrapMode: Text.Wrap
+        }
+        Flow {
+            Layout.fillWidth: true
+            visible: !bar.collapsed && (!!bar.registry.nextCursor || !!bar.registry.error || !!bar.registry.loading)
+            spacing: KetTheme.px(4, KetTheme.zoom)
+            KetButton {
+                objectName: "backgroundTasksLoadMore"
+                visible: !!bar.registry.nextCursor
+                text: "Load more tasks"
+                enabled: !bar.offline && bar.canRead && !bar.registry.loading
+                controlSize: KetTheme.ControlSize.Small
+                onClicked: agentHost.loadBackgroundTasks(true)
+            }
+            KetButton {
+                objectName: "backgroundTasksRetry"
+                visible: !!bar.registry.error
+                text: "Retry task list"
+                enabled: !bar.offline && bar.canRead && !bar.registry.loading
+                controlSize: KetTheme.ControlSize.Small
+                onClicked: agentHost.loadBackgroundTasks(false)
+            }
+        }
+        Text {
+            Layout.fillWidth: true
+            visible: !bar.collapsed && (!!bar.registry.error || !!bar.registry.loading)
+            text: bar.registry.error || "Loading task registry…"
+            textFormat: Text.PlainText
+            color: bar.registry.error ? KetTheme.t.danger : KetTheme.t.textMuted
+            font.family: KetTheme.fontFamily
+            font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
+            wrapMode: Text.Wrap
         }
 
         Rectangle {
@@ -295,17 +351,19 @@ Rectangle {
                 }
                 ScrollView {
                     id: outputScroll
-                    visible: outputPane.task !== undefined && outputPane.task.kind !== "agent"
+                    visible: outputPane.task !== undefined && (outputPane.task.kind !== "agent" || outputPane.task.schema_version !== undefined)
                     Layout.fillWidth: true
                     Layout.preferredHeight: Math.min(outputText.implicitHeight, KetTheme.px(220, KetTheme.zoom))
                     clip: true
                     TextEdit {
                         id: outputText
+                        objectName: "backgroundTaskOutputText"
                         width: outputScroll.availableWidth
                         readOnly: true
+                        textFormat: TextEdit.PlainText
                         selectByMouse: true
                         wrapMode: TextEdit.WrapAnywhere
-                        text: bar.pane.error ? bar.pane.error : bar.pane.output !== undefined ? (bar.pane.output || "No output yet.") : "Loading output…"
+                        text: bar.pane.output !== undefined ? (bar.pane.output || "No output yet.") : bar.pane.loading ? "Loading output…" : "No output read."
                         color: bar.pane.error ? KetTheme.t.danger : KetTheme.t.textMain
                         font.family: agentHost.monoFontFamily
                         font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
@@ -316,16 +374,42 @@ Rectangle {
                         })
                     }
                 }
+                Text {
+                    Layout.fillWidth: true
+                    visible: !!bar.pane.error
+                    text: bar.pane.error || ""
+                    textFormat: Text.PlainText
+                    color: KetTheme.t.danger
+                    font.family: KetTheme.fontFamily
+                    font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
+                    wrapMode: Text.Wrap
+                }
+                KetButton {
+                    objectName: "backgroundTaskOutputRetry"
+                    visible: !!bar.pane.error
+                    text: "Retry output"
+                    controlSize: KetTheme.ControlSize.Small
+                    enabled: !bar.offline && bar.canRead && !bar.pane.loading
+                    onClicked: agentHost.requestBackgroundTaskOutput(bar.pane.taskId)
+                }
                 RowLayout {
-                    visible: outputScroll.visible && bar.pane.output !== undefined && !bar.pane.error
+                    visible: outputScroll.visible && bar.pane.output !== undefined
                     Layout.fillWidth: true
                     Text {
                         Layout.fillWidth: true
-                        text: (bar.pane.truncated ? "Last 8 KiB of " + Math.round((bar.pane.totalBytes || 0) / 1024) + " KiB" : "Full output") + (outputPane.task && bar.live(outputPane.task) && !bar.offline ? " · refreshes every 2 s" : "")
+                        text: (bar.pane.truncated ? "Some output is no longer retained" : bar.pane.hasMore ? "Output page · more available" : "Output read") + (bar.pane.displayTruncated ? " · showing the latest 64K characters" : "") + (outputPane.task && bar.live(outputPane.task) && !bar.offline ? " · refreshes every 2 s" : "")
                         color: KetTheme.t.textMuted
                         font.family: KetTheme.fontFamily
                         font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
                         elide: Text.ElideRight
+                    }
+                    KetButton {
+                        objectName: "backgroundTaskOutputMore"
+                        visible: !!bar.pane.nextCursor
+                        text: bar.pane.loading ? "Loading…" : bar.pane.hasMore ? "Read more" : "Refresh"
+                        enabled: !bar.offline && bar.canRead && !bar.pane.loading && !bar.pane.error
+                        controlSize: KetTheme.ControlSize.Small
+                        onClicked: agentHost.requestBackgroundTaskOutput(bar.pane.taskId)
                     }
                     KetButton {
                         variant: KetTheme.ButtonVariant.Ghost
@@ -347,5 +431,36 @@ Rectangle {
             font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
             wrapMode: Text.Wrap
         }
+    }
+    KetDialog {
+        id: cleanupDialog
+        objectName: "backgroundTaskCleanupDialog"
+        property string taskId: ""
+        property string taskRevision: ""
+        title: "Acknowledge manual cleanup?"
+        Text {
+            Layout.fillWidth: true
+            text: "Confirm only after you have checked and handled the command and its descendants. This records your acknowledgement; KetPlus cannot verify that every process stopped. It will not restart the agent."
+            color: KetTheme.t.textMain
+            font.family: KetTheme.fontFamily
+            font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
+            wrapMode: Text.Wrap
+        }
+        actions: [
+            KetButton {
+                text: "Keep warning"
+                variant: KetTheme.ButtonVariant.Ghost
+                onClicked: cleanupDialog.reject()
+            },
+            KetButton {
+                objectName: "confirmTaskCleanup"
+                text: "I've handled cleanup"
+                enabled: !bar.offline && bar.canResolve
+                onClicked: {
+                    agentHost.resolveBackgroundTaskCleanup(cleanupDialog.taskId, cleanupDialog.taskRevision);
+                    cleanupDialog.accept();
+                }
+            }
+        ]
     }
 }

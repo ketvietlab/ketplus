@@ -47,6 +47,7 @@ class CodexAppServer final : public QObject {
     [[nodiscard]] bool isReady() const noexcept;
     [[nodiscard]] QString executable() const;
     [[nodiscard]] bool usesDaemon() const noexcept { return daemon_ != nullptr; }
+    [[nodiscard]] QVariantMap backgroundTaskAccess() const;
     [[nodiscard]] bool hasCompactWindowSupport() const noexcept;
     [[nodiscard]] bool hasArchiveSupport() const noexcept;
     [[nodiscard]] bool isRestoring() const noexcept { return restoring_; }
@@ -145,6 +146,8 @@ class CodexAppServer final : public QObject {
     void consumeLine(const QByteArray& line);
     void handleServerRequest(const QJsonObject& request);
     void failPending(const QString& reason);
+    void callDaemonBackgroundTask(const QString& method, const QJsonObject& params,
+                                  ResponseCallback callback);
     void setReady(bool ready);
     void setupProcessTransport();
     void setupDaemonTransport();

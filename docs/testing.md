@@ -138,6 +138,7 @@ and local/archive includes with cycles, escapes and the 16-level boundary.
 | Settings composition | `ketplus_settings_integration_tests` | Shared appearance persistence across Pro shell surfaces; Providers page |
 | Atlas process/WebView | `ketplus_atlas_tests` | Atlas process and tab behavior; complete selected-port readiness, malformed/truncated banners, stop-time suppression and repair/restart with a synthetic CLI |
 | Atlas shell integration | `ketplus_atlas_workspace_tests` | Desktop and Atlas composition |
+| Atlas renderer consent | `ketplus_managed_atlas_viewers_tests`, `ketplus_atlas_workspace_tests` | Per-launch consent from both desktop entry points, plain-text command details, static fallback, contract/path changes, pending Stop and reopen/recreated-registry isolation; fake CLI/URL handler, no real browser/provider |
 | Agent message cards | `ketplus_agent_tests` (`incomingAgentCardsClampAndExpand`, `sentAgentMessageReadsAsTheMockNote`, team block tests) | Incoming agent/system/team and outgoing cards share a selectable four-line preview; Expand/Collapse anchors the reader, expanded team blocks keep task actions; only owner input remains a bubble |
 | Agent Workspace | `ketplus_agent_tests` | transport, sessions, rendering, interaction, history, fork menus |
 | Copilot desktop presentation | `ketplus_copilot_presentation_tests` | platform setup guides, daemon discovery/provider identity, transcript names, Teams availability, model permissions and missing/older-daemon states; native QML offscreen at wide and narrow zoomed layouts; `KETPLUS_COPILOT_CAPTURE` saves the wide picker screenshot; no provider invocation |
@@ -237,6 +238,22 @@ Example for the Atlas module:
 cmake --build build/dev --target ketplus_atlas_tests
 build/dev/ketplus_atlas_tests
 ```
+
+Managed Atlas consent regressions run in `ketplus_managed_atlas_viewers_tests`;
+the fake-CLI cases use a Unix shell and skip on other platforms. The normal
+ctest lane renders offscreen and intercepts browser URLs. For native permission
+dialog acceptance on macOS, use the secondary work display:
+
+```sh
+QT_QPA_PLATFORM=cocoa KETPLUS_DISABLE_DAEMON_AUTOSTART=1 \
+KETPLUS_ATLAS_PERMISSION_CAPTURE_DIR=build/dev/atlas-permission-captures \
+  build/dev/ketplus_managed_atlas_viewers_tests liveThemeZoomAndLayout
+```
+
+The native lane skips without a secondary display. It checks live light/dark/
+system theme, 90/100/110/125 percent zoom and narrow/wide dialog bounds, saving
+light/dark captures when requested. These checks do not start a real browser,
+project renderer, provider, or installed application bundle.
 
 Run the full suite for changes to CMake, shared UI, application composition,
 `core/`, or any cross-module interface.
@@ -770,6 +787,27 @@ steer input, and stay out of the journal; `ketplus_browser_provider_integration_
 checks that Claude, Codex and Cursor host instructions contain them exactly once. Claude/Cursor adapter fixtures retain the full provider prompt in
 their logs and strip the suffix only when dispatching test commands.
 
+### Shared background-task presentation
+
+Run `ketplus_background_task_transport_tests` and `ketplus_agent_tests` after
+changing task presentation. The transport suite uses a private local protocol peer,
+not a daemon or provider: it covers registry pages beyond 16 rows, opaque cursors,
+stale-cursor refetch, negotiated control/read permissions, cleanup revision payloads
+and offline refusal. Agent Workspace tests `backgroundTaskBar`,
+`managedTaskCleanupRequiresUserConfirmation`,
+`managedTaskOutputFencesRequestsAndKeepsCursors`,
+`managedTaskOutputRetriesAfterReadError` and `managedTaskStatesRender`
+cover legacy compatibility, non-dismissable cleanup warnings despite a successful
+root exit, explicit revision-fenced user confirmation, duplicate suppression,
+read-only/offline/recovery, keyboard focus during registry loading, live theme/zoom
+switching, output pagination/cache/request fencing, a failed output read followed
+by a real Retry click and successful recovery (disabled offline, without read
+permission or while pending), and all shared
+states with 25 tasks. The render cases use light/dark at 900px and a 390px content
+surface at 125% zoom, with the product sidebar hidden as in the embedded workspace.
+`KETPLUS_BACKGROUND_CAPTURE_DIR` saves their Qt Quick offscreen captures. These
+checks consume no provider quota and do not verify actual executor cleanup.
+
 ### Claude background tasks
 
 The shared MCP/provider surface has a narrow offline Qt target:
@@ -1050,6 +1088,43 @@ mailbox execution path: the journal stays unchanged before re-pairing and change
 This is native command-path coverage with fake transport, not a physical-device or hosted
 relay end-to-end test. Run it alongside the T-4 trust-lifecycle suite; all credentials are
 synthetic and no provider is started.
+
+## OS credential storage
+
+Run `ketplus_daemon_credential_store_tests`, `ketplus_credential_keychain_tests`
+(macOS), and `ketplus_credential_secret_service_tests` (Qt DBus and `dbus-daemon`
+required). The focused standalone build is:
+
+```sh
+cmake -S tests/daemon/credential-store -B build/credential-store -G Ninja -DCMAKE_BUILD_TYPE=Release
+cmake --build build/credential-store
+QT_QPA_PLATFORM=offscreen ctest --test-dir build/credential-store --output-on-failure
+```
+
+Keychain tests create and delete only a disposable keychain with synthetic values;
+a second executable must be denied without prompting. Secret Service tests start
+and stop their own private Unix bus and fake service; they never use the user's
+session service. They verify missing/locked/denied stores, prompt dismissal and retry.
+Migration tests preserve unsafe/corrupt sources, verify writes before cleanup, retry
+after write/read-back failure, reject conflicting backups and preserve atomic removal.
+Production storage refuses access in ordinary QStandardPaths test mode; fixtures
+explicitly inject their backend. Also run the cloud trust-lifecycle, sender-cache,
+remote-control client/projection/backend and WebRTC host phase 3 suites for account
+and sign-out interactions. No provider quota or real user credentials are used.
+Desktop session discovery links the same in-memory credential fixture and resets
+it before each case so its synthetic daemon identity never accesses an OS store.
+Tests that start a daemon subprocess use `ketplus_fixture_daemon`: the production
+entry point linked with a test-only persistent credential backend. Its synthetic
+records live beneath the explicitly supplied temporary `KETPLUS_DAEMON_DATA_DIR`,
+so restart/fingerprint checks work without accessing a native OS store. The fixture
+is neither installed nor bundled, and production has no environment switch to
+enable this backend. A data-directory override alone does not isolate native
+credential namespaces and must not be used as that isolation boundary.
+
+The normal test configuration warns if the optional Secret Service fixture tools
+are unavailable on the build host; do not claim that coverage in that case. Fake
+D-Bus tests on macOS do not verify a Linux keyring's ACLs, backup or desktop prompts.
+Native signed upgrades and platform packaging remain separate acceptance checks.
 
 ## Conversation deletion and next-turn defaults
 

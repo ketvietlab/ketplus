@@ -1091,6 +1091,8 @@ void AgentWorkspaceViewTest::backgroundTaskBar() {
     QCOMPARE(stops.count(), 1);
     QCOMPARE(stops.constFirst().at(0).toString(), QStringLiteral("build"));
     QVERIFY(bar->property("confirmingStop").toString().isEmpty());
+    view.acceptBackgroundTaskResult(QStringLiteral("build"), QStringLiteral("stop"),
+                                    {{"ok", true}});
 
     // The output pane shows the read tail, ignores answers for a task it no longer shows,
     // and closes when its task leaves the report.

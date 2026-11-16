@@ -2,6 +2,8 @@ add_library(ketplus_atlas STATIC
     src/atlas/AtlasProcess.cpp
     src/atlas/ManagedAtlasViewers.cpp
     src/atlas/ManagedAtlasViewers.h
+    src/atlas/AtlasRendererPermission.cpp
+    src/atlas/AtlasRendererPermission.h
     src/atlas/AtlasProcess.h
     src/atlas/AtlasThumbnailCache.cpp
     src/atlas/AtlasThumbnailCache.h
