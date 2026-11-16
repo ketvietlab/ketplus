@@ -197,6 +197,26 @@ void AgentWorkspaceViewTest::turnEndShowsTheTurnsWorkReport() {
         QTest::qWait(120);
         QVERIFY(view.quickView()->grabWindow().save(capture));
     }
+    // Done items never turn a failed/interrupted provider end into a success badge.
+    const QJsonObject doneReport{{"turn", 2},
+                                 {"items", QJsonArray{reportItem("done", "Work", "done", 2, 2)}}};
+    for (const auto& status : {QStringLiteral("failed"), QStringLiteral("interrupted"),
+                               QStringLiteral("stopped"), QStringLiteral("completed")}) {
+        view.resetMessages(
+            ketplus::agent_message::daemonWindowMessages(
+                {{"events",
+                  QJsonArray{journalEvent(1, 2, "turn.completed",
+                                          {{"status", status}, {"work_report", doneReport}})}}}),
+            "terminal-report-" + status);
+        QTRY_VERIFY((card = findVisibleItem(root, "transcriptWorkReport")) != nullptr);
+        QTRY_COMPARE(card->property("terminalStatus").toString(), status);
+        auto* badge = findVisibleItem(card, "workReportStatus");
+        QVERIFY(badge != nullptr);
+        QCOMPARE(badge->property("text").toString(),
+                 status == "failed"      ? QStringLiteral("Turn failed")
+                 : status == "completed" ? QStringLiteral("All done")
+                                         : QStringLiteral("Turn stopped"));
+    }
 }
 
 // ADR 0106: turn.completed repeats the report, so a page that begins after the turn's
@@ -439,8 +459,17 @@ void AgentWorkspaceViewTest::workReportPaneFollowsItsConversation() {
     QTRY_VERIFY((card = findVisibleItem(root, "workReportLedger")) != nullptr);
     QVERIFY(card->property("ledger").toBool());
     QCOMPARE(card->property("finished").toInt(), 1);
+    auto* auditNotice = findVisibleItem(root, "workReportAuditNotice");
+    QVERIFY(auditNotice != nullptr);
+    QVERIFY(auditNotice->property("text").toString().contains("including pending updates"));
+    QVERIFY(auditNotice->property("text").toString().contains("does not mark the end of a turn"));
+    auto* ledgerBadge = findVisibleItem(card, "workReportStatus");
+    QVERIFY(ledgerBadge != nullptr);
+    QCOMPARE(ledgerBadge->property("text").toString(), QStringLiteral("Work ledger"));
     // The ledger view has no footer link back to itself.
     QVERIFY(!findVisibleItem(card, "workReportFooter")->property("opens").toBool());
+    QCOMPARE(findVisibleItem(card, "workReportFooter")->property("label").toString(),
+             QStringLiteral("No outstanding recorded items"));
     if (const auto capture = qEnvironmentVariable("KETPLUS_WORK_REPORT_PANE_CAPTURE");
         !capture.isEmpty()) {
         QTest::qWait(120);

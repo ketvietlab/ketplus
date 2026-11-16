@@ -712,7 +712,10 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   task/status/evidence/next-action matrix. The header's Work report button and the
   card's footer open one Report tab in the right pane. It shows the selected
   conversation's whole ledger (`session.work_report.read`), with Open and All filters,
-  and follows its live `work_report.updated` events. Steered questions or added tasks resume the prior
+  and follows scope refreshes and terminal snapshots. Its Work ledger label and
+  pending-update notice distinguish audit entries from turn completion; failed or
+  stopped terminal cards retain that status even if all items are done.
+  Steered questions or added tasks resume the prior
   unfinished objective afterward unless the user cancels, pauses or replaces it.
   After compaction, agents are instructed to verify and announce repository,
   absolute worktree path, branch and next task before resuming mutations.

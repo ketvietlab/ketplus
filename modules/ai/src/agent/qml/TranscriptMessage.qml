@@ -399,6 +399,7 @@ Item {
                 visible: !!turnReport && !!turnReport.items && turnReport.items.length > 0
                 height: visible ? implicitHeight : 0
                 report: visible ? turnReport : ({})
+                terminalStatus: messageDelegate.status
                 onOpenRequested: agentHost.requestWorkReport()
             }
             TranscriptAgentNote {

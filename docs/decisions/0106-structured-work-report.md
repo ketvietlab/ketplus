@@ -80,7 +80,10 @@ cannot count it, filter it or show it anywhere else.
     its matching end row, but never creates a running card.
   - Accepted direct input still publishes T-126's scope refresh for the Report
     pane. An explicit local Report-pane read is an audit read of the durable
-    ledger, including pending edits; it is not a terminal transcript card.
+    ledger, including pending edits; it is not a terminal transcript card. The
+    pane labels this as a Work ledger with an explicit pending-update notice,
+    never an All done badge. Terminal cards retain the provider's failed/stopped
+    status even when every ledger item was reported done.
   - Failure to persist returns an error. Success acknowledges persistence, not
     that a card is already visible or the turn finished.
 - **Guidance.**

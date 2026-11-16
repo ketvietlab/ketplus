@@ -32,6 +32,19 @@ Rectangle {
             y: pane.px(16)
             width: scroll.availableWidth - 2 * x
             bottomPadding: pane.px(16)
+            spacing: pane.px(12)
+
+            Text {
+                objectName: "workReportAuditNotice"
+                visible: pane.hasItems
+                width: parent.width
+                wrapMode: Text.Wrap
+                textFormat: Text.PlainText
+                text: qsTr("Recorded work, including pending updates. Entries may change while the agent works; this ledger does not mark the end of a turn.")
+                color: KetTheme.t.textSecondary
+                font.family: KetTheme.fontFamily
+                font.pixelSize: pane.px(13)
+            }
 
             TranscriptWorkReport {
                 id: ledgerCard

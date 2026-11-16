@@ -18,8 +18,9 @@ Rectangle {
     signal openRequested()
     // The details pane shows the current request projection without a frame of its own.
     property bool ledger: false
-    // While its turn runs the card closes the live transcript: a Running badge, and the
-    // footer shows the turn's live activity instead of the next step.
+    // Item completion is not proof that the provider turn succeeded.
+    property string terminalStatus: ""
+    // Compatibility display state; the live transcript uses AgentRunStatus, not this card.
     property bool running: false
     property string activity
     property bool animate: running
@@ -161,12 +162,19 @@ Rectangle {
             }
             Kit.KetBadge {
                 id: badge
+                objectName: "workReportStatus"
                 readonly property bool allDone: card.total > 0 && card.finished === card.total
+                readonly property bool failed: card.terminalStatus === "failed"
+                readonly property bool stopped: card.terminalStatus === "interrupted" || card.terminalStatus === "stopped"
                 anchors.right: parent.right
                 anchors.verticalCenter: parent.verticalCenter
-                text: card.running ? qsTr("Running") : allDone ? qsTr("All done")
+                text: card.ledger ? qsTr("Work ledger")
+                    : failed ? qsTr("Turn failed") : stopped ? qsTr("Turn stopped")
+                    : card.running ? qsTr("Running") : allDone ? qsTr("All done")
                     : card.needsYou ? qsTr("Needs you") : qsTr("Turn %1").arg(card.turn)
-                tone: card.running ? KetTheme.BadgeTone.Accent
+                tone: card.ledger ? KetTheme.BadgeTone.Neutral
+                    : failed || stopped ? KetTheme.BadgeTone.Warning
+                    : card.running ? KetTheme.BadgeTone.Accent
                     : allDone ? KetTheme.BadgeTone.Success
                     : card.needsYou ? KetTheme.BadgeTone.Warning : KetTheme.BadgeTone.Neutral
             }
@@ -494,7 +502,9 @@ Rectangle {
             readonly property bool opens: !card.ledger && !card.running
             readonly property string label: card.running ? (card.activity || qsTr("Agent is working…"))
                 : next ? qsTr("Next · %1 · %2").arg(next.next.action).arg(card.owner(next.next.owner))
-                : card.total > 0 && card.finished === card.total ? qsTr("Nothing left to do") : ""
+                : card.total > 0 && card.finished === card.total
+                    ? (card.ledger || badge.failed || badge.stopped
+                        ? qsTr("No outstanding recorded items") : qsTr("Nothing left to do")) : ""
             objectName: "workReportFooter"
             width: parent.width
             height: card.px(card.ledger ? 20 : 28)
