@@ -7,11 +7,17 @@
   "cftRevision": "1681091",
   "browserVersion": "153.0.8010.12",
   "identityEnrolled": false,
+  "componentRevisions": { "chromium": "1243", "chromium-headless-shell": "1243", "ffmpeg": "1011", "winldd": "1007" },
+  "helperMirrors": [
+    "https://cdn.playwright.dev/dbazure/download/playwright",
+    "https://playwright.download.prss.microsoft.com/dbazure/download/playwright",
+    "https://cdn.playwright.dev"
+  ],
   "mappings": [
-    { "hostPlatform": "mac15-arm64", "cftPlatform": "mac-arm64", "archive": "chrome-mac-arm64.zip" },
-    { "hostPlatform": "mac15", "cftPlatform": "mac-x64", "archive": "chrome-mac-x64.zip" },
-    { "hostPlatform": "ubuntu24.04-x64", "cftPlatform": "linux64", "archive": "chrome-linux64.zip" },
-    { "hostPlatform": "ubuntu24.04-arm64", "cftPlatform": "linux-arm64", "archive": "chrome-linux-arm64.zip" },
-    { "hostPlatform": "win64", "cftPlatform": "win64", "archive": "chrome-win64.zip" }
+    { "hostPlatform": "mac15-arm64", "cftPlatform": "mac-arm64", "archive": "chrome-mac-arm64.zip", "headlessArchive": "chrome-headless-shell-mac-arm64.zip", "ffmpegArchive": "ffmpeg-mac-arm64.zip", "winlddArchive": null },
+    { "hostPlatform": "mac15", "cftPlatform": "mac-x64", "archive": "chrome-mac-x64.zip", "headlessArchive": "chrome-headless-shell-mac-x64.zip", "ffmpegArchive": "ffmpeg-mac.zip", "winlddArchive": null },
+    { "hostPlatform": "ubuntu24.04-x64", "cftPlatform": "linux64", "archive": "chrome-linux64.zip", "headlessArchive": "chrome-headless-shell-linux64.zip", "ffmpegArchive": "ffmpeg-linux.zip", "winlddArchive": null },
+    { "hostPlatform": "ubuntu24.04-arm64", "cftPlatform": "linux-arm64", "archive": "chrome-linux-arm64.zip", "headlessArchive": "chrome-headless-shell-linux-arm64.zip", "ffmpegArchive": "ffmpeg-linux-arm64.zip", "winlddArchive": null },
+    { "hostPlatform": "win64", "cftPlatform": "win64", "archive": "chrome-win64.zip", "headlessArchive": "chrome-headless-shell-win64.zip", "ffmpegArchive": "ffmpeg-win64.zip", "winlddArchive": "winldd-win64.zip" }
   ]
 }

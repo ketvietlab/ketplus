@@ -25,6 +25,9 @@ The [bounded source review and proposed enrollment route](engine-provenance-rese
 records exact-version metadata, platform-specific signing gaps and the separate
 responsibilities for artifact authentication, manifest signing and revocation.
 Neither that review nor its distribution fixture enrolls a production identity.
+The current preparation follows [Route A: an immutable manifest bundled with an
+authenticated application release](engine-release-manifest.md). Its app-release
+trust chain and initial artifact enrollment remain unverified prerequisites.
 
 | Playwright platform | Browser version / revision | Enrolled independent identity | Runtime acceptance |
 | --- | --- | --- | --- |
@@ -80,6 +83,12 @@ platform's tree hash can be published.
 4. On concurrent publication, verify the winning tree. A rename collision is not
    evidence of identity. A corrupt published cache fails explicitly.
 
+`src/engine-release.mjs` prepares release/package/host-bound inventory selection
+and an integration seam for this store and a launcher. It checks every declared
+browser flavor/helper before side effects, applies bundled revocations, and
+rechecks the selected trees before its launch callback. The callback is fake in
+tests; production launch paths and implicit Playwright helpers are not wired.
+
 On POSIX, the prepared store also requires a real cache directory owned by the
 current user with no group/other permissions. Windows ACL validation remains
 unimplemented. These checks address persistent cache substitution, not a hostile
@@ -128,7 +137,7 @@ Run these offline tests with:
 
 ```sh
 cd apps/browser
-node --test test/engine-integrity.test.mjs test/engine-store.test.mjs
+node --test test/engine-integrity.test.mjs test/engine-store.test.mjs test/engine-release.test.mjs test/engine-distribution.test.mjs
 ```
 
 Only macOS ARM64 preparation checks have run so far. No Windows/Linux runtime,

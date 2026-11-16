@@ -58,61 +58,25 @@ or every DLL. These are future enrollment requirements, not completed checks.
 
 ## Proposed project-controlled release manifest
 
-This route is a proposal for reviewer evaluation. It does not authorize key
-creation, signing, artifact enrollment or a weaker interpretation of authenticity.
+The task now prepares only [Route A: an immutable inventory in an authenticated
+app release](engine-release-manifest.md). There is no TUF, online manifest service,
+separate manifest signing key or remote revocation fetch in this preparation.
+This is not approval of project authority as a substitute for independent
+publisher identity: that decision remains pending, and the existing policy stands.
 
-1. **Authenticate the initial artifact.** A designated browser-runtime release
-   maintainer obtains a publisher-signed digest/attestation or a documented,
-   independently authenticated statement from the upstream release authority
-   binding the exact artifact bytes, version and platform. A separate security
-   reviewer verifies the authority, signature/statement, scope and retained
-   evidence. Then verify the archive and derive the installed-tree hash through
-   clean bounded extraction. Self-calculated hashes, two downloads/mirrors, issue
-   comments and a project signature over unexplained bytes do not complete this
-   step. No sufficient initial authentication evidence is available yet.
-2. **Record the release.** Use a versioned manifest containing engine/package and
-   registry versions, CfT revision separately, platform/architecture, artifact URL,
-   archive SHA-256/size, installed-tree SHA-256/layout, executable path, enrollment
-   evidence reference/digest, reviewer approval, monotonic manifest version and
-   validity bounds. The application must authenticate this metadata before using
-   its digests; cache-local replacements and environment URLs cannot select roots.
-3. **Assign key ownership.** The project owner must designate release and security
-   custodians, independent reviewers, recovery custodians and the public-root
-   distribution channel. Proposed separation: offline/hardware-protected root
-   keys with threshold approval; a scoped release key signs only reviewed
-   browser manifests. Root public keys ship through a reviewed application
-   release. Private keys remain outside this repository and agent workspace.
-   No custodian, key, algorithm/threshold or signing infrastructure is enrolled.
-4. **Update and rotate.** Every package/revision/platform change repeats initial
-   authentication and reviewer evidence. Bind delegations to artifact/version
-   scope; publish root rotations authorized by the existing trusted threshold
-   and new-key possession, or distribute replacement roots through an explicitly
-   reviewed application update. Do not trust a new key just because the same
-   download endpoint advertises it. Custodians must settle rotation/recovery
-   procedures before production use.
-5. **Revoke and prevent rollback.** Signed, versioned revocations must identify
-   revoked keys, manifests and artifact digests. Verify monotonic versions and
-   expiry; recheck cached artifacts against applicable revocations before launch.
-   Unknown trust/freshness must fail clearly. Owners must define offline validity,
-   trusted-clock/persistent-state handling and emergency recovery; these policy
-   details have not been selected or implemented here.
-6. **Keep platform gaps visible.** Publish only entries with authenticated evidence.
-   Missing/expired/revoked entries must report a specific readiness error without
-   downloading or launching unverified bytes. Automatic managed downloads remain
-   the intended behavior for valid enrolled entries; this is not installed-only
-   operation. Production adoption requires the full relevant fixture/runtime
-   matrix and reviewer acceptance, independently of this research.
-
-The concrete prerequisite is an accountable upstream authentication route plus
-named project custodians and reviewer-approved enrollment/root lifecycle. Signing
-a manifest alone cannot manufacture the missing upstream authenticity. The
-current unsigned preparation primitives do not implement this signing lifecycle.
+The concrete prerequisites remain an accountable initial authentication route,
+named enrollment/review/release owners, and evidence that the intended app release
+authenticates the embedded inventory. Signing a project manifest or app alone
+cannot manufacture missing upstream authenticity. Every artifact/platform entry
+remains unenrolled. The Route A document records the actual source-level release
+gates, revocation and rollback limits instead of assuming those gates have passed.
 
 ## Reproducible offline checks
 
 `test/fixtures/engine-distribution.json` is a distribution-only observation, not a
 trusted identity manifest. `test/engine-distribution.test.mjs` compares its exact
-version and five URL mappings with the installed, lockfile-pinned registry in
+version and five platform mappings, including both browser flavors and helper
+archives, with the installed, lockfile-pinned registry in
 read-only child processes. It also checks that this fixture cannot pass identity
 enrollment. No test downloads or launches a browser. Native signature verification,
 archive equality, signed-manifest verification and runtime containment remain

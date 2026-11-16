@@ -30,8 +30,15 @@ for (const mapping of observed.mappings) {
     const child = spawnSync(process.execPath, ["--input-type=module", "-e", `
       import { createRequire } from "node:module";
       const require = createRequire(import.meta.url);
-      const executable = require("playwright-core/lib/coreBundle").registry.registry.findExecutable("chromium");
-      process.stdout.write(JSON.stringify({ revision: executable.revision, version: executable.browserVersion, urls: executable.downloadURLs }));
+      const registry = require("playwright-core/lib/coreBundle").registry.registry;
+      const components = Object.fromEntries(["chromium", "chromium-headless-shell", "ffmpeg", "winldd"].map((name) => {
+        const executable = registry.findExecutable(name);
+        return [name, { revision: executable.revision, version: executable.browserVersion, urls: executable.downloadURLs }];
+      }));
+      const cli = Object.fromEntries(["default", "no", "only"].map((shell) => [shell,
+        [...new Set(registry.resolveBrowsers(["chromium"], shell === "default" ? {} : { shell }).map((entry) => entry.name))].sort(),
+      ]));
+      process.stdout.write(JSON.stringify({ components, cli }));
     `], {
       cwd: appDir, encoding: "utf8", timeout: 5_000,
       env: {
@@ -44,9 +51,20 @@ for (const mapping of observed.mappings) {
     assert.equal(child.error, undefined, child.error?.message);
     assert.equal(child.status, 0, child.stderr);
     const metadata = JSON.parse(child.stdout);
-    assert.equal(metadata.revision, observed.playwrightRevision);
-    assert.equal(metadata.version, observed.browserVersion);
-    assert.deepEqual(metadata.urls, [`https://cdn.playwright.dev/builds/cft/${observed.browserVersion}/${mapping.cftPlatform}/${mapping.archive}`]);
+    for (const [name, component] of Object.entries(metadata.components)) {
+      assert.equal(component.revision, observed.componentRevisions[name]);
+    }
+    for (const [component, archive] of [["chromium", mapping.archive], ["chromium-headless-shell", mapping.headlessArchive]]) {
+      assert.equal(metadata.components[component].version, observed.browserVersion);
+      assert.deepEqual(metadata.components[component].urls, [`https://cdn.playwright.dev/builds/cft/${observed.browserVersion}/${mapping.cftPlatform}/${archive}`]);
+    }
+    for (const [component, archive] of [["ffmpeg", mapping.ffmpegArchive], ["winldd", mapping.winlddArchive]]) {
+      assert.deepEqual(metadata.components[component].urls, archive ? observed.helperMirrors.map((base) => `${base}/builds/${component}/${observed.componentRevisions[component]}/${archive}`) : []);
+    }
+    const helpers = ["ffmpeg", ...(process.platform === "win32" ? ["winldd"] : [])];
+    assert.deepEqual(metadata.cli.default, [...helpers, "chromium", "chromium-headless-shell"].sort());
+    assert.deepEqual(metadata.cli.no, [...helpers, "chromium"].sort());
+    assert.deepEqual(metadata.cli.only, [...helpers, "chromium-headless-shell"].sort());
     // This checks a distribution mapping, not archive byte equality or trust.
     assert.deepEqual(fs.readdirSync(cache), []);
   });
