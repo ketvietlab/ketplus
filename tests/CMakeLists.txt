@@ -37,6 +37,9 @@ target_link_libraries(ketplus_spotlight_tests PRIVATE
 ketplus_add_gui_test(ketplus_atlas_tests AtlasTest.cpp)
 target_link_libraries(ketplus_atlas_tests PRIVATE Qt6::Test ketplus_atlas)
 
+ketplus_add_gui_test(ketplus_managed_atlas_viewers_tests ManagedAtlasViewersTest.cpp)
+target_link_libraries(ketplus_managed_atlas_viewers_tests PRIVATE Qt6::Test ketplus_atlas)
+
 ketplus_add_gui_test(ketplus_atlas_workspace_tests AtlasWorkspaceTest.cpp)
 target_link_libraries(ketplus_atlas_workspace_tests PRIVATE
     Qt6::Test

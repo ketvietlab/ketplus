@@ -128,6 +128,7 @@ and local/archive includes with cycles, escapes and the 16-level boundary.
 | Settings composition | `ketplus_settings_integration_tests` | Shared appearance persistence across Pro shell surfaces; Providers page |
 | Atlas process/WebView | `ketplus_atlas_tests` | Atlas process and tab behavior; complete selected-port readiness, malformed/truncated banners, stop-time suppression and repair/restart with a synthetic CLI |
 | Atlas shell integration | `ketplus_atlas_workspace_tests` | Desktop and Atlas composition |
+| Atlas renderer consent | `ketplus_managed_atlas_viewers_tests`, `ketplus_atlas_workspace_tests` | Per-launch consent from both desktop entry points, plain-text command details, static fallback, contract/path changes, pending Stop and reopen/recreated-registry isolation; fake CLI/URL handler, no real browser/provider |
 | Agent message cards | `ketplus_agent_tests` (`incomingAgentCardsClampAndExpand`, `sentAgentMessageReadsAsTheMockNote`, team block tests) | Incoming agent/system/team and outgoing cards share a selectable four-line preview; Expand/Collapse anchors the reader, expanded team blocks keep task actions; only owner input remains a bubble |
 | Agent Workspace | `ketplus_agent_tests` | transport, sessions, rendering, interaction, history, fork menus |
 | Copilot desktop presentation | `ketplus_copilot_presentation_tests` | platform setup guides, daemon discovery/provider identity, transcript names, Teams availability, model permissions and missing/older-daemon states; native QML offscreen at wide and narrow zoomed layouts; `KETPLUS_COPILOT_CAPTURE` saves the wide picker screenshot; no provider invocation |
@@ -227,6 +228,22 @@ Example for the Atlas module:
 cmake --build build/dev --target ketplus_atlas_tests
 build/dev/ketplus_atlas_tests
 ```
+
+Managed Atlas consent regressions run in `ketplus_managed_atlas_viewers_tests`;
+the fake-CLI cases use a Unix shell and skip on other platforms. The normal
+ctest lane renders offscreen and intercepts browser URLs. For native permission
+dialog acceptance on macOS, use the secondary work display:
+
+```sh
+QT_QPA_PLATFORM=cocoa KETPLUS_DISABLE_DAEMON_AUTOSTART=1 \
+KETPLUS_ATLAS_PERMISSION_CAPTURE_DIR=build/dev/atlas-permission-captures \
+  build/dev/ketplus_managed_atlas_viewers_tests liveThemeZoomAndLayout
+```
+
+The native lane skips without a secondary display. It checks live light/dark/
+system theme, 90/100/110/125 percent zoom and narrow/wide dialog bounds, saving
+light/dark captures when requested. These checks do not start a real browser,
+project renderer, provider, or installed application bundle.
 
 Run the full suite for changes to CMake, shared UI, application composition,
 `core/`, or any cross-module interface.
