@@ -28,6 +28,10 @@ class AgentWorkspaceViewTest final : public QObject {
     void apiKeyUsageShowsCostDetailsOpen();
     void usageLimitsFollowConversationProvider();
     void backgroundTaskBar();
+    void managedTaskCleanupRequiresUserConfirmation();
+    void managedTaskOutputFencesRequestsAndKeepsCursors();
+    void managedTaskStatesRender_data();
+    void managedTaskStatesRender();
     void heldMessageRequiresExplicitClickAndFencesDuplicates();
     void heldMessageNoticeRendersInTranscript();
     void atlasResultsUseExplicitCompletedLinks();

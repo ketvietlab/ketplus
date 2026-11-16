@@ -770,6 +770,24 @@ steer input, and stay out of the journal; `ketplus_browser_provider_integration_
 checks that Claude, Codex and Cursor host instructions contain them exactly once. Claude/Cursor adapter fixtures retain the full provider prompt in
 their logs and strip the suffix only when dispatching test commands.
 
+### Shared background-task presentation
+
+Run `ketplus_background_task_transport_tests` and `ketplus_agent_tests` after
+changing task presentation. The transport suite uses a private local protocol peer,
+not a daemon or provider: it covers registry pages beyond 16 rows, opaque cursors,
+stale-cursor refetch, negotiated control/read permissions, cleanup revision payloads
+and offline refusal. Agent Workspace tests `backgroundTaskBar`,
+`managedTaskCleanupRequiresUserConfirmation`,
+`managedTaskOutputFencesRequestsAndKeepsCursors` and `managedTaskStatesRender`
+cover legacy compatibility, non-dismissable cleanup warnings despite a successful
+root exit, explicit revision-fenced user confirmation, duplicate suppression,
+read-only/offline/recovery, keyboard focus during registry loading, live theme/zoom
+switching, output pagination/cache/request fencing, and all shared
+states with 25 tasks. The render cases use light/dark at 900px and a 390px content
+surface at 125% zoom, with the product sidebar hidden as in the embedded workspace.
+`KETPLUS_BACKGROUND_CAPTURE_DIR` saves their Qt Quick offscreen captures. These
+checks consume no provider quota and do not verify actual executor cleanup.
+
 ### Claude background tasks
 
 The isolated storage/executor targets use temporary SQLite databases and no

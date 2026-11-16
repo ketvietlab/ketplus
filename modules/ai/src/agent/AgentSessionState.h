@@ -59,9 +59,15 @@ struct AgentSessionManager::Session final {
     // last reading stands in until the next turn. Rows: {id,label,usedPercent,resetsAt}.
     QVariantList planLimits;
     QVariantMap sessionUsage;
-    // The daemon's report of the provider's background shells and agents; never persisted,
-    // since a restarted provider no longer runs them.
+    // Owner-scoped presentation cache. The durable daemon registry owns managed jobs;
+    // a bounded event projection never replaces membership learned through pagination.
     QVariantList backgroundTasks;
+    QVariantList backgroundTaskProjection;
+    QVariantMap backgroundTaskPage;
+    QSet<QString> backgroundTaskMetadataReads;
+    bool backgroundTaskLoading{false};
+    bool backgroundTaskRefreshAgain{false};
+    int backgroundTaskCursorRetries{0};
     QString pendingPrompt;
     // Pairs the locally shown prompt with its journaled user.message echo.
     QString pendingClientMessageId;

@@ -245,8 +245,12 @@ AgentSessionManager::AgentSessionManager(CodexAppServer* server, QObject* parent
     connect(server_, &CodexAppServer::readyChanged, this, [this](const bool ready) {
         if (ready)
             loadModels();
-        for (const auto& session : sessions_)
+        for (const auto& session : sessions_) {
             emitConfiguration(session);
+            emitBackgroundTasks(session);
+            if (ready && isActiveSession(session) && !session->threadId.isEmpty())
+                loadBackgroundTasks(session->path, false);
+        }
     });
     if (server_->isReady())
         loadModels();
@@ -452,39 +456,6 @@ void AgentSessionManager::heldMessageAction(const QString& worktreePath, const Q
         });
 }
 
-void AgentSessionManager::stopBackgroundTask(const QString& worktreePath, const QString& taskId) {
-    callBackgroundTask(worktreePath, taskId, QStringLiteral("stop"));
-}
-
-void AgentSessionManager::readBackgroundTaskOutput(const QString& worktreePath,
-                                                   const QString& taskId) {
-    callBackgroundTask(worktreePath, taskId, QStringLiteral("output"));
-}
-
-void AgentSessionManager::callBackgroundTask(const QString& worktreePath, const QString& taskId,
-                                             const QString& action) {
-    const SessionPtr session = sessions_.value(normalizedPath(worktreePath));
-    const QString path = normalizedPath(worktreePath);
-    if (!session || session->threadId.isEmpty() || !server_->usesDaemon()) {
-        emit backgroundTaskResult(path, taskId, action,
-                                  {{QStringLiteral("error"),
-                                    QStringLiteral("This conversation has no background tasks.")}});
-        return;
-    }
-    server_->call(
-        QStringLiteral("task/") + action,
-        {{QStringLiteral("threadId"), session->threadId}, {QStringLiteral("taskId"), taskId}},
-        [this, path, taskId, action](const QJsonObject& result, const QString& error) {
-            QString message = error;
-            if (message.isEmpty() && !result.value(QStringLiteral("ok")).toBool(true))
-                message = result.value(QStringLiteral("error_message")).toString();
-            emit backgroundTaskResult(path, taskId, action,
-                                      message.isEmpty()
-                                          ? result.toVariantMap()
-                                          : QVariantMap{{QStringLiteral("error"), message}});
-        });
-}
-
 QVariantMap AgentSessionManager::usageSnapshot(const QString& worktreePath) const {
     const auto found = sessions_.constFind(normalizedPath(worktreePath));
     if (found == sessions_.cend())
@@ -658,6 +629,8 @@ void AgentSessionManager::activate(const QString& worktreePath, const bool loadT
     emitConfiguration(session);
     emitUsageSnapshot(session);
     emitBackgroundTasks(session);
+    if (isActiveSession(session))
+        loadBackgroundTasks(session->path, false);
     emitHistoryState(session);
     if (loadTranscript) {
         if (previous != session)
@@ -1046,6 +1019,8 @@ void AgentSessionManager::newSession(const QString& worktreePath) {
     emitConfiguration(session);
     emitUsageSnapshot(session);
     emitBackgroundTasks(session);
+    if (isActiveSession(session))
+        loadBackgroundTasks(session->path, false);
     emitHistoryState(session);
 }
 
@@ -1096,6 +1071,8 @@ void AgentSessionManager::selectConversation(const QString& worktreePath,
             updateRestoreState(session);
             emitUsageSnapshot(session);
             emitBackgroundTasks(session);
+            if (isActiveSession(session))
+                loadBackgroundTasks(session->path, false);
             hydrateConversation(session);
             return;
         }
@@ -1116,6 +1093,8 @@ void AgentSessionManager::selectConversation(const QString& worktreePath,
         emitConfiguration(session);
         emitUsageSnapshot(session);
         emitBackgroundTasks(session);
+        if (isActiveSession(session))
+            loadBackgroundTasks(session->path, false);
         emitHistoryState(session);
         reopenConversation(session);
         return;
@@ -1635,6 +1614,14 @@ void AgentSessionManager::handleDaemonSession(const QJsonObject& stored) {
         session->copying = false;
         ++session->copyGeneration;
         session->copyMessages.clear();
+    }
+    if (session->daemonGeneration != generation) {
+        session->backgroundTaskLoading = false;
+        session->backgroundTaskRefreshAgain = false;
+        session->backgroundTaskPage.clear();
+        session->backgroundTaskMetadataReads.clear();
+        session->backgroundTasks.clear();
+        session->backgroundTaskProjection.clear();
     }
     session->daemonGeneration = generation;
     if (!discovered)
