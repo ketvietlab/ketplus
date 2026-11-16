@@ -860,6 +860,12 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
 
 ## Planned
 
+- Provider-neutral, daemon-owned background jobs: proposed
+  [ADR 0127](decisions/0127-daemon-background-tasks.md) records the leader-defined
+  registry, executor/lease, transactional completion and owner-wake contract.
+  Its design fixtures are not runtime acceptance; registry/executor, provider
+  migration (including enforced Claude blocking) and shared UI remain to implement.
+
 - Agent teams ([ADR 0114](decisions/0114-agent-teams.md), epic #450): a leader, one
   to five developers and a Claude reviewer on one goal, with tasks, lanes, per-task
   review, decisions on the team page and a digest instead of status messages. Each
