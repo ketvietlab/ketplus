@@ -480,8 +480,8 @@ QJsonObject SessionHost::turnCompletion(Session& session, const QString& status)
     if (std::exchange(session.stopRequested, false) &&
         (status == QStringLiteral("interrupted") || status == QStringLiteral("stopped")))
         completed.insert(QStringLiteral("reason"), QStringLiteral("user"));
-    // The end row shows the turn's report even when a history page splits it from the turn's
-    // work_report.updated event.
+    // Only the actual end row publishes pending data. A page containing this row is
+    // self-contained, and an older turn's ledger can never become this turn's report.
     const QJsonObject report = journal_->workReport(session.stored.id, session.stored.generation);
     if (!report.isEmpty() &&
         report.value(QStringLiteral("turn")).toInteger() == session.stored.currentTurnSequence)

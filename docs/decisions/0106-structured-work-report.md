@@ -67,17 +67,22 @@ cannot count it, filter it or show it anywhere else.
   - a fork copies it;
   - deletion removes it with the other per-generation state;
   - an abandoned fork's purge removes it.
-- **Event.** Each accepted call journals `work_report.updated` with the merged ledger.
-  A turn's last such event is the report that turn ended with, so earlier turns keep
-  their own snapshot while later turns change the ledger.
-  - **Cloud:** the event's text is redacted and capped again on its way to the cloud
-    (`projectEventPayloadForCloud`), and it is relayed only where the transcript is.
-  - **Turn end:** `turn.completed` carries the stored ledger as `work_report` when the
-    ledger was last changed in that turn. The end row is then complete on its own,
-    even when a history page boundary falls between the report and the turn's end.
-  - **Failure:** when the event cannot be journaled, the tool answers with an error
-    (the ledger is saved) and the agent ends the turn with the matrix, so a report
-    is never hidden behind a success.
+- **Publication (T-129).** Accepted calls save the durable ledger and return its
+  reconciliation summary to the agent; they do not publish a transcript card.
+  Further tool calls and work may follow. `turn.completed` carries the latest
+  current-request projection only if the ledger belongs to that exact turn.
+  This includes interrupted/failed terminal statuses without representing them
+  as success. Recovery of an abandoned turn records an interrupted end with its
+  same-turn snapshot. A provider stop without a terminal row leaves data pending;
+  it is never attached to a later turn. No timer infers completion.
+  - Terminal snapshots remain self-contained across history pages and redacted
+    on cloud projection. Old `work_report.updated` history is still readable at
+    its matching end row, but never creates a running card.
+  - Accepted direct input still publishes T-126's scope refresh for the Report
+    pane. An explicit local Report-pane read is an audit read of the durable
+    ledger, including pending edits; it is not a terminal transcript card.
+  - Failure to persist returns an error. Success acknowledges persistence, not
+    that a card is already visible or the turn finished.
 - **Guidance.**
   - When a session has the ketplus_agents server (Claude, Codex and Cursor), the
     response guidance replaces the matrix: the agent records the turn's work with
@@ -95,12 +100,9 @@ cannot count it, filter it or show it anywhere else.
   - The tab reads the stored ledger with `session.work_report.read` and then applies
     the conversation's `work_report.updated` events. An older ledger version never
     replaces a newer one, so a slow read cannot undo a live update.
-  - While a turn runs, its latest report closes the live transcript, as the mock's
-    `workspace/report-running`: a Running badge, and the footer shows the turn's live
-    activity and "Now" instead of the next step. The card replaces the run line until
-    the turn ends, when the end-of-turn card takes over. The desktop marks a
-    `work_report.updated` of the running turn as current; a new turn or another
-    conversation starts without it.
+  - While a turn runs, retain its ordinary activity line. Terminal snapshot
+    delivery refreshes the Report pane and end-of-turn card, even if no report
+    event preceded it. No mid-turn report replaces the activity line.
 - **Reconciling a long conversation.** The agent cannot read the stored ledger, so after
   many turns and compactions it forgot keys: it reported the same work again under new
   keys and never closed items from early turns (a team leader had 41 open items of 74 at
@@ -177,5 +179,7 @@ required.
 
 After accepted input commits, SessionHost publishes the scoped snapshot through
 `work_report.updated`, the existing live Report-pane delivery path. This refresh
-does not depend on another agent tool call. Rejected acceptance emits no scope
+does not depend on another agent tool call. Its `scope_only` marker keeps it out
+of transcript end-row fallback, so a later turn with no report cannot promote an
+old ledger. Rejected acceptance emits no scope
 refresh; the cursor marker prevents agent-origin events from refreshing scope.

@@ -2108,41 +2108,20 @@ Flickable {
         // real gutter above it so a one-line command delegate
         // can never paint beneath the footer while its implicit
         // layout is settling during a streamed model update.
-        // ADR 0106 (mock workspace/report-running): once the running turn reports, its card
-        // closes the transcript and carries the live activity in place of the run line.
-        readonly property var runningReport: host.sessionRunning && host.turnWorkReport
-            && host.turnWorkReport.items && host.turnWorkReport.items.length > 0 ? host.turnWorkReport : null
-        // The run line and the running report start where the rows start (T-88).
+        // A tool report is pending while work continues. Keep the ordinary run line;
+        // only the actual turn-end row renders the final report card.
         readonly property real rowX: shell.transcriptRowX(width)
-        height: !host.sessionRunning ? 0
-            : runningReport ? runningCard.implicitHeight + KetTheme.px(24, KetTheme.zoom)
-            : KetTheme.px(62, KetTheme.zoom)
+        height: host.sessionRunning ? KetTheme.px(62, KetTheme.zoom) : 0
 
         AgentRunStatus {
             workspace: shell
-            visible: host.sessionRunning && !transcriptFooter.runningReport
-            // Its dots start where the rows above it start (T-88).
+            visible: host.sessionRunning
             anchors.left: parent.left
             anchors.right: parent.right
             anchors.leftMargin: transcriptFooter.rowX
             anchors.rightMargin: transcriptFooter.rowX
             anchors.top: parent.top
             anchors.topMargin: KetTheme.px(8, KetTheme.zoom)
-        }
-        TranscriptWorkReport {
-            id: runningCard
-            objectName: "runningWorkReport"
-            visible: !!transcriptFooter.runningReport
-            x: transcriptFooter.rowX
-            y: KetTheme.px(8, KetTheme.zoom)
-            width: parent.width - 2 * transcriptFooter.rowX
-            report: transcriptFooter.runningReport || ({})
-            running: true
-            activity: host.runStatus
-            animate: visible && host.workingMotionEnabled && !host.restoring
-                && Window.window !== null && Window.window.visible
-                && Window.window.visibility !== Window.Minimized
-            onOpenRequested: host.requestWorkReport()
         }
     }
 

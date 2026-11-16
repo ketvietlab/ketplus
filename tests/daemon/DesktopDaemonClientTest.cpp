@@ -1505,6 +1505,13 @@ class DesktopDaemonClientTest final : public QObject {
         QVERIFY2(reported.value("ok").toBool(),
                  QJsonDocument(reported).toJson(QJsonDocument::Compact).constData());
 
+        QTest::qWait(50);
+        QVERIFY(desktop.isRunning(worktree));
+        QVERIFY(reports.isEmpty());
+        QVERIFY(turnReports.isEmpty());
+        QVERIFY(agentRoundTrip(agent, "agents.whoami", {}).contains("number"));
+        QVERIFY(turnReports.isEmpty());
+
         const QString optionId = question.value(QStringLiteral("questions"))
                                      .toList()
                                      .first()
@@ -1536,11 +1543,8 @@ class DesktopDaemonClientTest final : public QObject {
         QCOMPARE(reports.first().at(1).toString(), conversation);
         QCOMPARE(reports.first().at(2).toMap().value(QStringLiteral("title")).toString(),
                  QStringLiteral("Live"));
-        // The turn waiting on the question is still running, so its transcript shows the card.
-        QTRY_COMPARE(turnReports.size(), 1);
-        QCOMPARE(turnReports.first().at(1).toString(), conversation);
-        QCOMPARE(turnReports.first().at(2).toMap().value(QStringLiteral("title")).toString(),
-                 QStringLiteral("Live"));
+        // Terminal delivery updates the pane and end row, never the running-card signal.
+        QVERIFY(turnReports.isEmpty());
 
         // Opening the tab reads the stored ledger.
         reports.clear();
@@ -1549,7 +1553,10 @@ class DesktopDaemonClientTest final : public QObject {
         QCOMPARE(reports.last().at(1).toString(), conversation);
         QVERIFY2(reports.last().at(3).toString().isEmpty(),
                  qPrintable(reports.last().at(3).toString()));
-        QCOMPARE(reports.last().at(2).toMap().value(QStringLiteral("version")).toInt(), 1);
+        // T-126 advances the version once at accepted request scope, then the tool does.
+        QCOMPARE(reported.value("version").toInteger(), 2);
+        QCOMPARE(reports.last().at(2).toMap().value(QStringLiteral("version")).toLongLong(),
+                 reported.value("version").toInteger());
     }
 
     void forksConversationThroughDaemon() {

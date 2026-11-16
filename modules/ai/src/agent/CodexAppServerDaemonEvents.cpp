@@ -123,12 +123,12 @@ void CodexAppServer::dispatchDaemonEvent(const QJsonObject& envelope) {
     // ADR 0106: the ledger joins the turn's end row; the Report tab follows it live.
     if (type == QStringLiteral("work_report.updated")) {
         if (sequence == found->turnSequence)
-            found->turnReport = data;
-        emit notificationReceived(
-            QStringLiteral("daemon/workReport"),
-            {{QStringLiteral("threadId"), sessionId},
-             {QStringLiteral("report"), data},
-             {QStringLiteral("currentTurn"), sequence == found->turnSequence}});
+            found->turnReport =
+                data.value(QStringLiteral("scope_only")).toBool() ? QJsonObject{} : data;
+        emit notificationReceived(QStringLiteral("daemon/workReport"),
+                                  {{QStringLiteral("threadId"), sessionId},
+                                   {QStringLiteral("report"), data},
+                                   {QStringLiteral("currentTurn"), false}});
         return;
     }
     if (type == QStringLiteral("usage.context") && sequence == found->turnSequence)
@@ -153,8 +153,13 @@ void CodexAppServer::dispatchDaemonEvent(const QJsonObject& envelope) {
                 data.contains(QStringLiteral("work_report"))
                     ? data.value(QStringLiteral("work_report")).toObject()
                     : (sequence == found->turnSequence ? found->turnReport : QJsonObject{});
-            if (!report.isEmpty())
+            if (!report.isEmpty()) {
                 notice.insert(QStringLiteral("workReport"), report.toVariantMap());
+                emit notificationReceived(QStringLiteral("daemon/workReport"),
+                                          {{QStringLiteral("threadId"), sessionId},
+                                           {QStringLiteral("report"), report},
+                                           {QStringLiteral("currentTurn"), false}});
+            }
         }
         if (daemonHasTranscriptWindow_ &&
             (!found->windowReady || sessionId != daemonRestorePrioritySession_)) {

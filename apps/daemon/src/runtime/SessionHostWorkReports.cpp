@@ -22,11 +22,12 @@ void SessionHost::publishWorkReportScope(Session& session, const qint64 accepted
         return;
     auto report = work_report::currentRequest(ledger);
     report.insert(QStringLiteral("turn"), session.stored.currentTurnSequence);
+    report.insert(QStringLiteral("scope_only"), true);
     (void)appendEvent(session, QStringLiteral("work_report.updated"), report);
 }
 
-// ADR 0106: the stored ledger is authoritative; the event carries the snapshot for the
-// transcript, so a turn shows the report it ended with even after later turns change it.
+// ADR 0106: the stored ledger is authoritative. Tool calls remain pending until the
+// actual terminal event captures this turn's latest scoped snapshot.
 QJsonObject SessionHost::recordWorkReport(const QString& sessionId, const qint64 generation,
                                           const QJsonObject& payload) {
     auto it = sessions_.find(sessionId);
@@ -40,16 +41,8 @@ QJsonObject SessionHost::recordWorkReport(const QString& sessionId, const qint64
         return failure(QStringLiteral("invalid_report"), merged.error);
     if (QString error; !journal_->storeWorkReport(sessionId, generation, merged.ledger, &error))
         return failure(QStringLiteral("journal_error"), error);
-    // The turn's end row repeats the stored ledger, but until then the transcript shows only
-    // what the event carries; the agent must not drop its table on a report nobody sees.
-    if (!appendEvent(*it, QStringLiteral("work_report.updated"), merged.ledger)) {
-        QJsonObject answer =
-            failure(QStringLiteral("journal_error"),
-                    QStringLiteral("The report is saved, but the transcript could not show it; "
-                                   "end this turn with the progress table instead."));
-        answer.insert(QStringLiteral("saved"), true);
-        return answer;
-    }
+    // Tool success acknowledges durable pending data, not the end of a turn. Only
+    // turnCompletion publishes the final snapshot; further tools/steers may still follow.
     QJsonObject answer = work_report::summary(merged);
     answer.insert(QStringLiteral("ok"), true);
     return answer;

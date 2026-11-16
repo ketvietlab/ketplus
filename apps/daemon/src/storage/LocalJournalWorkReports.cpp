@@ -8,8 +8,8 @@
 namespace ketplus::daemon {
 
 // ADR 0106: one row per conversation generation holds its current work report. Retention may
-// drop old events, so the ledger cannot be rebuilt from them; each work_report.updated event
-// carries the snapshot its turn ended with.
+// drop old events, so the ledger cannot be rebuilt from them. turn.completed carries
+// the snapshot its turn ended with; mid-turn calls update only this durable ledger.
 bool LocalJournal::initializeWorkReports() {
     QSqlQuery query(database_);
     if (query.exec(QStringLiteral(
