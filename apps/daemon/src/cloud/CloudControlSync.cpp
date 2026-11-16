@@ -444,76 +444,75 @@ void CloudControlClient::uploadSessionEvents(const QString& sessionId, const qin
         });
 }
 
-QJsonArray CloudControlClient::trustedDevices(const QJsonArray& devices) {
-    QString error;
-    if (!pins_.adopt(devices, &error))
-        lastError_ = error;
-    return pins_.trusted(devices);
-}
-
 void CloudControlClient::distributeKeys() {
-    if (machineId_.isEmpty() || daemonToken_.isEmpty())
+    const auto fence = accountFence();
+    if (!accountCurrent(fence) || daemonToken_.isEmpty())
         return;
-    request("GET", QStringLiteral("/v2/devices"), {}, daemonToken_, {},
-            [this](const int status, const QJsonValue& value, const QString& transportError) {
-                if (status != 200 || !value.isArray() || !transportError.isEmpty()) {
-                    if (!transportError.isEmpty())
-                        lastError_ = transportError;
-                    return;
-                }
-                // Only devices pinned on this Mac receive session keys (#87).
-                const QJsonArray devices = trustedDevices(value.toArray());
-                signaling_->refreshDevices(devices);
-                QJsonArray envelopes;
-                QString cryptoError;
-                for (const QJsonValue& deviceValue : devices) {
-                    const QJsonObject device = deviceValue.toObject();
-                    for (const StoredSession& session : journal_->sessions()) {
-                        if (refusedSessions_.contains(session.id))
-                            continue;
-                        const QString account =
-                            QStringLiteral("wrapped-%1-%2-%3-%4")
-                                .arg(session.id)
-                                .arg(session.generation)
-                                .arg(device.value(QStringLiteral("id")).toString())
-                                .arg(device.value(QStringLiteral("keyVersion")).toInt());
-                        QJsonObject envelope =
-                            QJsonDocument::fromJson(credentials_.read(account)).object();
-                        // A cached malformed wrap is discarded and re-created, never re-sent.
-                        if (!CloudCrypto::validWrappedSessionKey(envelope)) {
-                            envelope = crypto_.wrapSessionKey(session.id, session.generation, 1,
-                                                              device, machineId_,
-                                                              machineKeyVersion_, &cryptoError);
-                            if (envelope.isEmpty() ||
-                                !credentials_.write(
-                                    account, QJsonDocument(envelope).toJson(QJsonDocument::Compact),
-                                    &cryptoError)) {
-                                lastError_ = cryptoError;
-                                return;
-                            }
+    request(
+        "GET", QStringLiteral("/v2/devices"), {}, daemonToken_, {},
+        [this, fence](const int status, const QJsonValue& value, const QString& transportError) {
+            if (!accountCurrent(fence))
+                return;
+            if (status != 200 || !value.isArray() || !transportError.isEmpty()) {
+                if (!transportError.isEmpty())
+                    lastError_ = transportError;
+                return;
+            }
+            // Only devices pinned on this Mac receive session keys (#87).
+            const QJsonArray devices = trustedDevices(value.toArray(), fence);
+            signaling_->refreshDevices(devices);
+            QJsonArray envelopes;
+            QString cryptoError;
+            for (const QJsonValue& deviceValue : devices) {
+                const QJsonObject device = deviceValue.toObject();
+                for (const StoredSession& session : journal_->sessions()) {
+                    if (refusedSessions_.contains(session.id))
+                        continue;
+                    const QString account =
+                        QStringLiteral("wrapped-%1-%2-%3-%4")
+                            .arg(session.id)
+                            .arg(session.generation)
+                            .arg(device.value(QStringLiteral("id")).toString())
+                            .arg(device.value(QStringLiteral("keyVersion")).toInt());
+                    QJsonObject envelope =
+                        QJsonDocument::fromJson(credentials_.read(account)).object();
+                    // A cached malformed wrap is discarded and re-created, never re-sent.
+                    if (!CloudCrypto::validWrappedSessionKey(envelope)) {
+                        envelope =
+                            crypto_.wrapSessionKey(session.id, session.generation, 1, device,
+                                                   machineId_, machineKeyVersion_, &cryptoError);
+                        if (envelope.isEmpty() ||
+                            !credentials_.write(
+                                account, QJsonDocument(envelope).toJson(QJsonDocument::Compact),
+                                &cryptoError)) {
+                            lastError_ = cryptoError;
+                            return;
                         }
-                        envelopes.append(envelope);
-                        if (envelopes.size() == 500)
-                            break;
                     }
+                    envelopes.append(envelope);
                     if (envelopes.size() == 500)
                         break;
                 }
-                if (envelopes.isEmpty())
-                    return;
-                request("POST", QStringLiteral("/v2/session-keys:append"),
-                        QJsonObject{{QStringLiteral("envelopes"), envelopes}}, daemonToken_, {},
-                        [this](const int appendStatus, const QJsonValue& appendValue,
-                               const QString& appendError) {
-                            if (appendStatus != 202 || !appendError.isEmpty()) {
-                                lastError_ =
-                                    appendError.isEmpty()
-                                        ? responseCode(appendValue,
-                                                       QStringLiteral("session_key_upload_failed"))
-                                        : appendError;
-                            }
-                        });
-            });
+                if (envelopes.size() == 500)
+                    break;
+            }
+            if (envelopes.isEmpty())
+                return;
+            request("POST", QStringLiteral("/v2/session-keys:append"),
+                    QJsonObject{{QStringLiteral("envelopes"), envelopes}}, daemonToken_, {},
+                    [this, fence](const int appendStatus, const QJsonValue& appendValue,
+                                  const QString& appendError) {
+                        if (!accountCurrent(fence))
+                            return;
+                        if (appendStatus != 202 || !appendError.isEmpty()) {
+                            lastError_ =
+                                appendError.isEmpty()
+                                    ? responseCode(appendValue,
+                                                   QStringLiteral("session_key_upload_failed"))
+                                    : appendError;
+                        }
+                    });
+        });
 }
 
 } // namespace ketplus::daemon

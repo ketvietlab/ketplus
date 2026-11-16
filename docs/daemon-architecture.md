@@ -327,7 +327,14 @@ Only devices pinned on this Mac (ADR 0034) receive session keys, have their
 commands accepted or open peer links; the devices active when pins were
 introduced were adopted once; a
 closed pairing dialog revokes its outstanding ticket and paired devices can be
-revoked from Connections.
+revoked from Connections. Device distribution, sender-key fallback, pairing and peer-admission
+callbacks are fenced by account epoch, enrollment revision and machine/workspace identity.
+Enrollment advances the trust revision before resetting pins, so operations started during
+sign-in cannot survive a same-identity enrollment. Replies received after
+sign-out or another enrollment cannot adopt pins, wrap or upload session keys, or refresh the
+new enrollment's peers. Legacy adoption is an explicit, one-time permission established while
+restoring an existing enrollment without a pin record; an initialized empty set or a pin record
+removed later is not migration authority. See ADR 0034 and the native trust-lifecycle tests.
 
 Cloud identity keys, session keys, wrapped device keys and account identifiers
 are stored in one owner-only (0600) JSON file,

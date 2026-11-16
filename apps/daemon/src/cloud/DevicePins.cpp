@@ -76,12 +76,17 @@ bool DevicePins::initialized(QString* error) const {
     return readError.isEmpty() && pins.value(QStringLiteral("version")).toInt() == 1;
 }
 
-bool DevicePins::adopt(const QJsonArray& devices, QString* error) const {
+bool DevicePins::adopt(const QJsonArray& devices, bool legacyEnrollment, QString* error) const {
     QString readError;
     if (initialized(&readError) || !readError.isEmpty()) {
         if (error != nullptr)
             *error = readError;
         return readError.isEmpty();
+    }
+    if (!legacyEnrollment) {
+        if (error)
+            *error = QStringLiteral("Device adoption requires a restored legacy enrollment.");
+        return false;
     }
     QJsonObject pinned;
     for (const QJsonValue& value : devices) {
