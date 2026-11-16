@@ -2673,9 +2673,14 @@ bool SessionHost::journalEvent(Session& session, const QString& type, const QJso
     }
     if (alive.isNull())
         return true;
-    const auto current = sessions_.constFind(sessionId);
-    if (current == sessions_.cend() || current->stored.generation != generation)
+    auto current = sessions_.find(sessionId);
+    if (current == sessions_.end() || current->stored.generation != generation)
         return true;
+    if (type == QStringLiteral("user.message") || type == QStringLiteral("turn.steered")) {
+        publishWorkReportScope(*current, cursor);
+        if (alive.isNull())
+            return true;
+    }
     // Turn-scoped async questions must not survive completion, process failure or a new turn.
     // This emits the existing question.expired event, so live and replayed clients agree.
     if (type == "turn.completed" || type == "runtime.stopped" || type == "user.message")

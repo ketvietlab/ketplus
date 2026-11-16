@@ -531,7 +531,8 @@ class LocalJournal final {
     [[nodiscard]] QList<TeamUpdateRecord> teamUpdates(qint64 teamId, bool undigestedOnly, int limit,
                                                       qint64 beforeId = 0) const;
     bool markTeamUpdatesDigested(qint64 teamId, qint64 throughId);
-    // ADR 0106: the conversation's current work report ledger, empty before its first report.
+    // ADR 0106: audit ledger plus the latest accepted direct-user request marker.
+    // Before its first report the ledger can contain scope metadata without items.
     [[nodiscard]] QJsonObject workReport(const QString& sessionId, qint64 generation) const;
     // Stores a ledger whose version is newer than the stored one.
     bool storeWorkReport(const QString& sessionId, qint64 generation, const QJsonObject& ledger,
@@ -625,6 +626,8 @@ class LocalJournal final {
                                                  bool ownTransaction = true);
     bool initializeContexts();
     bool initializeWorkReports();
+    bool advanceWorkReportRequest(const QString& sessionId, qint64 generation, qint64 cursor,
+                                  const QString& type, const QJsonObject& payload, QString* error);
     [[nodiscard]] TranscriptWindow transcriptWindowImpl(const QString& sessionId, qint64 generation,
                                                         qint64 beforeCursor, qint64 snapshotCursor,
                                                         qint64 projectionRevision, int turnLimit,

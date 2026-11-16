@@ -21,6 +21,23 @@ bool LocalJournal::initializeWorkReports() {
     return false;
 }
 
+// Called inside event acceptance's transaction. Agent deliveries, scheduled work and provider
+// continuations do not start a direct-user request. Cursor distinguishes steers in one turn.
+bool LocalJournal::advanceWorkReportRequest(const QString& sessionId, const qint64 generation,
+                                            const qint64 cursor, const QString& type,
+                                            const QJsonObject& payload, QString* error) {
+    if ((type != QStringLiteral("user.message") && type != QStringLiteral("turn.steered")) ||
+        !payload.value(QStringLiteral("origin")).toString().isEmpty() ||
+        payload.contains(QStringLiteral("schedule_id")))
+        return true;
+    auto ledger = workReport(sessionId, generation);
+    ledger.insert(QStringLiteral("request_id"), cursor);
+    ledger.remove(QStringLiteral("title"));
+    ledger.insert(QStringLiteral("version"),
+                  ledger.value(QStringLiteral("version")).toInteger() + 1);
+    return storeWorkReport(sessionId, generation, ledger, error);
+}
+
 QJsonObject LocalJournal::workReport(const QString& sessionId, const qint64 generation) const {
     QSqlQuery query(database_);
     query.prepare(

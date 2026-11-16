@@ -5,6 +5,7 @@
 #include "agent/ConversationChangesPane.h"
 #include "agent/DaemonTranscriptProjection.h"
 #include "agent/WorkReportPane.h"
+#include "agent/WorkReportText.h"
 
 #include <QJsonArray>
 #include <QQuickView>
@@ -377,6 +378,35 @@ void AgentWorkspaceViewTest::workReportGroupsAcceptAnyName() {
 
 // ADR 0106: the Report tab shows one conversation's ledger; a late read or another
 // conversation's report never replaces what it shows.
+void AgentWorkspaceViewTest::workReportShowsCurrentRequestAndOutstandingItems() {
+    const QJsonObject report{
+        {"request_id", 100},
+        {"turn", 12},
+        {"version", 7},
+        {"items",
+         QJsonArray{reportItem("old-done", "Work", "done", 1, 1, {{"closed_request", 5}}),
+                    reportItem("current-done", "Work", "done", 1, 11, {{"closed_request", 100}}),
+                    reportItem("outstanding", "Work", "waiting", 1, 1),
+                    reportItem("legacy-done", "Work", "done", 1, 1)}}};
+    ketplus::WorkReportPane pane;
+    pane.resize(600, 700);
+    pane.show();
+    pane.showConversation("scope");
+    pane.acceptReport("scope", report.toVariantMap(), {});
+    QQuickItem* card = nullptr;
+    QTRY_VERIFY((card = findVisibleItem(pane.quickView()->rootObject(), "workReportLedger")) !=
+                nullptr);
+    QCOMPARE(card->property("total").toInt(), 2);
+    QCOMPARE(card->property("finished").toInt(), 1);
+    QCOMPARE(card->property("items").toList().size(), 2);
+    const auto copied = ketplus::agent_message::workReportText(report.toVariantMap());
+    QVERIFY(copied.contains("1/2 done"));
+    QVERIFY(copied.contains("current-done"));
+    QVERIFY(copied.contains("outstanding"));
+    QVERIFY(!copied.contains("old-done"));
+    QVERIFY(!copied.contains("legacy-done"));
+}
+
 void AgentWorkspaceViewTest::workReportPaneFollowsItsConversation() {
     const auto ledger = [](const qint64 version, const QString& status) {
         return QJsonObject{

@@ -39,6 +39,9 @@ bool SessionHost::journalTurnStart(Session& session, const QJsonObject& prompt,
         if (current == sessions_.end() || current->stored.generation != generation)
             return true;
     }
+    publishWorkReportScope(*current, events.first().toObject().value("cursor").toInteger());
+    if (alive.isNull())
+        return true;
     approvals_->expireAssistantQuestions(id, generation);
     if (alive.isNull())
         return true;

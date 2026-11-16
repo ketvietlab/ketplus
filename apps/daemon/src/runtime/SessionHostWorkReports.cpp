@@ -13,6 +13,18 @@ QJsonObject failure(const QString& code, const QString& message) {
 
 } // namespace
 
+// Called only after accepted input events have committed and been delivered. Use the
+// ordinary durable report event so an already-open Report pane refreshes without a tool call.
+void SessionHost::publishWorkReportScope(Session& session, const qint64 acceptedCursor) {
+    const auto ledger = journal_->workReport(session.stored.id, session.stored.generation);
+    if (!ledger.contains(QStringLiteral("items")) ||
+        ledger.value(QStringLiteral("request_id")).toInteger(-1) != acceptedCursor)
+        return;
+    auto report = work_report::currentRequest(ledger);
+    report.insert(QStringLiteral("turn"), session.stored.currentTurnSequence);
+    (void)appendEvent(session, QStringLiteral("work_report.updated"), report);
+}
+
 // ADR 0106: the stored ledger is authoritative; the event carries the snapshot for the
 // transcript, so a turn shows the report it ended with even after later turns change it.
 QJsonObject SessionHost::recordWorkReport(const QString& sessionId, const qint64 generation,
@@ -50,8 +62,8 @@ QJsonObject SessionHost::readWorkReport(const QJsonObject& request) {
     if (const auto checked = checkedSession(request, &session); !checked.isEmpty())
         return checked;
     return {{QStringLiteral("ok"), true},
-            {QStringLiteral("report"),
-             journal_->workReport(session->stored.id, session->stored.generation)}};
+            {QStringLiteral("report"), work_report::currentRequest(journal_->workReport(
+                                           session->stored.id, session->stored.generation))}};
 }
 
 } // namespace ketplus::daemon
