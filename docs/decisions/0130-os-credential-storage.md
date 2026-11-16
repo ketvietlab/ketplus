@@ -133,6 +133,16 @@ With this fixture isolation, the complete machine end-to-end, headless daemon,
 SSH daemon integration and Copilot CLI suites passed together (4/4, 15.60 seconds).
 The headless suite includes fingerprint persistence across subprocess restarts.
 
+The final full Pro Release build and unfiltered serial CTest run at
+`fab40c16ddd8850aee9c2f97fc2afa66e0950e9d` both exited successfully. All 214 suites
+were considered: 213 passed, zero failed and the Linux-only SSH transaction suite
+was skipped. CTest took 1524.03 seconds. This includes the previously failing
+journal, discovery and subprocess suites, plus the credential, trust-lifecycle
+and sender-cache suites. No test reruns were required for this final run.
+Desktop and tests remained enabled, and Computer app bundling/signing remained
+disabled. Live provider opt-ins were disabled. The following evidence-only
+documentation update does not change the tested source or build configuration.
+
 Real Linux Secret Service implementations, Linux OS-user ACLs/backups, signed
 Desktop upgrade prompts, Windows, packaging and deployment still require platform
 verification. Passing a fake D-Bus service on macOS is not Linux native acceptance.
