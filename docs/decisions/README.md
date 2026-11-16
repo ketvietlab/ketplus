@@ -28,3 +28,4 @@ decision, retain the old record and link both documents.
 - [0124: Consented user-space daemon installation over SSH](0124-consented-ssh-daemon-installation.md)
 - [0125: A team works in its leader's language](0125-team-language.md)
 - [0126: The daemon owns scheduled agent runs](0126-scheduled-agent-runs.md)
+- [0127: The daemon owns background tasks and their completion delivery](0127-daemon-background-tasks.md) (proposed)

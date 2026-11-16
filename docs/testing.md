@@ -742,6 +742,19 @@ their logs and strip the suffix only when dispatching test commands.
 
 ### Claude background tasks
 
+The proposed provider-neutral replacement is [ADR 0127](decisions/0127-daemon-background-tasks.md).
+Run its design-fixture check without a build or provider account:
+
+```sh
+node --test tests/daemon/background-task-contract.test.mjs
+```
+
+This validates the behavioral contract and required fault-matrix inventory in
+`tests/daemon/fixtures/background-tasks-v1.json`; it does **not** test a running
+registry, executor containment, SDK background blocking or completion delivery.
+The ADR names those separate implementation gates. Existing tests below remain
+legacy-behavior evidence during migration.
+
 `node --test tests/daemon/claude-sidecar/background-tasks.test.mjs` runs a fake
 SDK whose first turn starts a background shell. The turn must complete while the
 query stays open, the next user turn must reuse that query, stopping a turn must
