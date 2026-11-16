@@ -4,6 +4,9 @@ add_library(ketplus_daemon_core STATIC ${KETPLUS_DAEMON_CORE_SOURCES}
     src/providers/ClaudeCredentials.cpp src/providers/ClaudeCredentials.h
     src/providers/ClaudeAccountUsage.cpp src/providers/ClaudeAccountUsage.h
     src/providers/ClaudeKeychain.cpp)
+target_sources(ketplus_daemon_core PRIVATE
+    src/teams/TeamRiskPolicy.cpp src/teams/TeamRiskPolicy.h
+    src/teams/TeamCoordinatorRiskPolicy.cpp)
 if(APPLE)
     target_link_libraries(ketplus_daemon_core PRIVATE "-framework Security" "-framework CoreFoundation" "-framework IOKit")
 endif()

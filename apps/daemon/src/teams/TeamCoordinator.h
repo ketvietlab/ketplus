@@ -139,6 +139,13 @@ using PointDone = std::function<void(const QString&)>;
 class TeamHostPort {
   public:
     virtual ~TeamHostPort() = default;
+    // ADR 0129: trusted, immutable receipts; command payloads cannot supply these facts.
+    // The default adapter disables fast-pass until a verified receipt producer is wired.
+    [[nodiscard]] virtual std::optional<risk::VerifiedEvidence>
+    routingEvidence(const Team&, const Task&, const QString&) const {
+        return std::nullopt;
+    }
+
     // Asks git about the tasks for one check and answers `done` on the caller's thread, by task
     // id. Here it answers before it returns. The session runtime asks git off its event loop
     // and answers later, so the caller applies the answer to the team as it then is.
@@ -435,6 +442,10 @@ class TeamCoordinator : public QObject {
                           QString* taskId = nullptr);
     // title, description, lane, depends_on (leader, user); pull_request and note (owner,
     // leader, user); met: [{index, met}] (owner, user).
+    // Records a route only: no completion, reviewer verdict, merge or permission approval.
+    // Empty taskId permits non-mutating leader advice without allocating a task/worktree.
+    TeamResult decideRoute(qint64 teamId, const QString& taskId, const QJsonObject& request,
+                           const QString& actor);
     TeamResult updateTask(qint64 teamId, const QString& taskId, const QJsonObject& changes,
                           const QString& actor);
     TeamResult assignTask(qint64 teamId, const QString& taskId, const QString& owner,

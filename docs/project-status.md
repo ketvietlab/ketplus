@@ -1040,3 +1040,12 @@ begin/chunk/commit result is confirmed; Relay `queued` receipts wait for
 visible in the draft. Per-file limits match the local workspace; daemon draft quotas
 remain authoritative. Attachments require an existing conversation/session. See ADR
 0119 for lifecycle and protocol details and ADR 0007 for staging limits.
+
+## Team routing foundation (pending review)
+
+The daemon has a versioned evidence-gated risk routing model and coordinator API
+(ADR 0129). Explicit same-team leader decisions can record advisory, verified
+low-risk or reviewer routes without manufacturing reviewer verdicts or completion.
+The default trusted-evidence adapter returns unknown. Runtime receipt production,
+agent-tool/UI wiring and workflow consumption remain follow-up work; this is not
+a shipped fast-pass or resource-cleanup claim.
