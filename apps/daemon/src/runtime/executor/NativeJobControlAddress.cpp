@@ -7,7 +7,13 @@
 
 namespace ketplus::daemon::executor {
 namespace {
-QString controlDirectory() { return QStringLiteral("/private/tmp/ketplus-jobs-%1").arg(geteuid()); }
+QString controlDirectory() {
+#ifdef Q_OS_MACOS
+    return QStringLiteral("/private/tmp/ketplus-jobs-%1").arg(geteuid());
+#else
+    return QStringLiteral("/tmp/ketplus-jobs-%1").arg(geteuid());
+#endif
+}
 } // namespace
 
 QString controlAddress(const QString& directory, const QString& lease) {

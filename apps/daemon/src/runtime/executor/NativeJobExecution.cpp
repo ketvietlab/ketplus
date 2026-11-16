@@ -1,3 +1,4 @@
+#include "runtime/executor/LinuxJobContainment.h"
 #include "runtime/executor/NativeJobSupervisor.h"
 
 #include <QCoreApplication>
@@ -79,6 +80,14 @@ void NativeJobSupervisor::launch(const QJsonObject& message) {
     process_.setArguments(arguments);
     process_.setWorkingDirectory(cwd);
     process_.setProcessEnvironment(environment);
+#ifdef Q_OS_LINUX
+    // Only the trusted helper executes before namespace isolation. Supplying
+    // workload env here would permit loader injection ahead of that boundary.
+    process_.setProcessEnvironment(QProcessEnvironment::systemEnvironment());
+    process_.setProgram(QCoreApplication::applicationFilePath());
+    process_.setArguments({"--linux-launch"});
+    process_.setStandardInputFile({});
+#endif
     QString gateError;
     if (!prepareLaunchGate(&gateError)) {
         metadata_.insert("error", "handshake_failed");
@@ -87,6 +96,12 @@ void NativeJobSupervisor::launch(const QJsonObject& message) {
         return;
     }
     process_.start();
+#ifdef Q_OS_LINUX
+    auto privateExecution = execution;
+    privateExecution.insert("_base_environment", message.value("base_environment"));
+    process_.write(QJsonDocument(privateExecution).toJson(QJsonDocument::Compact));
+    process_.closeWriteChannel();
+#endif
     // Only the forked child keeps these ends. EOF on the gate means abort,
     // including an abrupt supervisor crash before committing root identity.
     close(launchIdentityPipe_[1]);
@@ -96,6 +111,16 @@ void NativeJobSupervisor::launch(const QJsonObject& message) {
 }
 
 void NativeJobSupervisor::refreshKnown() {
+#ifdef Q_OS_LINUX
+    // Discovery is display evidence only. The cgroup, rather than a sampled
+    // process list, defines membership and cleanup completeness on Linux.
+    if (root_) {
+        const auto current = inspect(root_->pid);
+        if (!current || current->birth != root_->birth || current->zombie)
+            known_.remove(root_->pid);
+    }
+    return;
+#endif
     bool changed = false;
     const auto previous = known_.values();
     for (const auto& identity : previous) {
@@ -162,6 +187,13 @@ void NativeJobSupervisor::refreshKnown() {
 }
 
 void NativeJobSupervisor::signalKnown(int signal) {
+#ifdef Q_OS_LINUX
+    if (signal == SIGKILL) {
+        if (!linuxKillBoundary(metadata_.value("linux_boundary").toObject()))
+            metadata_.insert("cleanup_issue", "cgroup_kill_failed");
+        return;
+    }
+#endif
     refreshKnown();
     // The direct child is owned by QProcess until reaped. Its original group is anchored
     // only while its birth is still valid; detached known descendants are signalled below.
@@ -197,6 +229,10 @@ void NativeJobSupervisor::requestStop(const QString& reason) {
 }
 
 void NativeJobSupervisor::tick() {
+#ifdef Q_OS_LINUX
+    linuxTick();
+    return;
+#endif
     refreshKnown();
     if (finalized_) {
         const bool stopped = process_.state() == QProcess::NotRunning && known_.isEmpty();
@@ -241,6 +277,20 @@ void NativeJobSupervisor::finish() {
     if (finalized_)
         return;
     drainOutput();
+#ifdef Q_OS_LINUX
+    if (!linuxBoundaryEmpty(metadata_.value("linux_boundary").toObject()) ||
+        process_.state() != QProcess::NotRunning) {
+        metadata_.insert("cleanup_status", "pending");
+        metadata_.insert("cleanup_pending", true);
+        metadata_.insert("cleanup_issue", "linux_cleanup_pending");
+        persist();
+        send("update", metadata_);
+        return;
+    }
+    // Cleanup uncertainty never becomes a terminal result. Kernel populated=0
+    // is the final fence; earlier lease/signal errors cannot weaken it.
+    cleanupError_ = false;
+#endif
     finalized_ = true;
     const auto state = cleanupError_            ? "needs_attention"
                        : !stopReason_.isEmpty() ? stopReason_
@@ -254,15 +304,26 @@ void NativeJobSupervisor::finish() {
                                        : metadata_.value("root_started").toBool()
                                            ? "best_effort_complete"
                                            : "not_required");
+#ifdef Q_OS_LINUX
+    metadata_.insert("cleanup_status", "verified");
+    metadata_.insert("cleanup_pending", false);
+#endif
     if (cleanupError_) {
         metadata_.insert("reason", "cleanup_unverified");
         metadata_.insert("manual_guidance", "Inspect the recorded process identities and "
                                             "descendants, then resolve cleanup in the task UI.");
     }
     if (!persist()) {
+#ifdef Q_OS_LINUX
+        finalized_ = false;
+        metadata_.remove("state");
+        metadata_.insert("cleanup_pending", true);
+        return;
+#else
         metadata_.insert("state", "needs_attention");
         metadata_.insert("cleanup_status", "unverified");
         metadata_.insert("reason", "cleanup_unverified");
+#endif
     }
     send("done", metadata_);
 }

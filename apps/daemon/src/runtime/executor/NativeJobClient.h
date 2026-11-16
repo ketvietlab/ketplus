@@ -22,6 +22,7 @@ class NativeJobClient final : public QObject {
     void stop(const QString& reason);
     // Call only after the registry has committed the receipt result durably.
     void acknowledge();
+    void setRecoveryIdentity(const QJsonObject& identity) { recoveryIdentity_ = identity; }
     [[nodiscard]] QJsonObject receipt(QString* error = nullptr) const;
 
   private:
@@ -42,13 +43,16 @@ class NativeJobClient final : public QObject {
     QElapsedTimer clock_;
     QByteArray input_;
     QJsonObject execution_;
+    QJsonObject inheritedEnvironment_;
     QJsonObject lastReceipt_;
+    QJsonObject recoveryIdentity_;
     CommitHandshake commitHandshake_;
     Event event_;
     qint64 remainingTimeout_{0};
     qint64 lastConnectionAttempt_{-1000};
     qint64 lastMessage_{0};
     qint64 recoveryStarted_{-1};
+    qint64 lastRecoveryAttempt_{-1000};
     bool launchedSupervisor_{false};
     bool sentStart_{false};
     bool authenticated_{false};

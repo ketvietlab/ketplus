@@ -781,7 +781,7 @@ ctest --test-dir build/background-output --output-on-failure
 ```
 
 The daemon build adds `ketplus_managed_task_host_tests` and
-`ketplus_managed_task_ipc_tests` on macOS. Both use the scripted FakeCodex provider
+`ketplus_managed_task_ipc_tests` on macOS and Linux. Both use the scripted FakeCodex provider
 and temporary journals; they consume no account quota. They cover independent
 child sessions/output/approval, foreground Stop fencing without cancelling process
 jobs, busy-owner durable enqueue without steering, duplicate completion/start
@@ -795,12 +795,28 @@ cmake --build build/daemon-dev --target ketplus_managed_task_host_tests ketplus_
 ctest --test-dir build/daemon-dev -R 'ketplus_managed_task_(host|ipc)_tests' --output-on-failure
 ```
 
-These tests do not verify the shared UI, SDK native-background blocking, a
-signed deployment bundle, or the Linux cgroup executor. Linux process admission
-fails closed with `containment_unavailable` until delegated cgroup v2 and migration
-isolation are implemented and tested. A system-service read-only cgroup mount
-alone is not evidence for the daemon's user-service deployment. Do not use PGID
-cleanup or same-UID delegation as proof of migration containment.
+These tests do not verify the shared UI, SDK native-background blocking or a
+signed deployment bundle. On Linux, process tests require a non-root user with
+a working systemd user manager, delegated cgroup v2/`nsdelegate`, `cgroup.kill`,
+and permission to create isolated user/mount/PID/cgroup namespaces. Missing
+capabilities reject start with `containment_unavailable`; do not lower host
+policy to make the suite pass. A read-only cgroup mount alone, PGID cleanup or
+same-UID delegation is not migration-containment evidence.
+
+The opt-in `ketplus_linux_job_executor_tests` runs the real packaged helper and
+registry. It covers missing-manager admission, durable retry/output, double-fork/
+setsid descendants and migration attempts, timeout during forks, supervisor
+SIGKILL and a separate daemon-runtime process killed before lease recovery and
+registry reopen. Run it together with the fake-provider Host and socket IPC tests
+only in an exclusively owned reference guest:
+
+```sh
+cmake --build build/daemon-dev --target ketplus_linux_job_executor_tests ketplus_managed_task_host_tests ketplus_managed_task_ipc_tests
+bash tests/daemon/linux-containment/executor-acceptance.sh build/daemon-dev
+```
+
+The script does not install dependencies or modify sysctls, mount permissions or
+AppArmor policy. A skipped opt-in suite is not Linux executor acceptance.
 
 The accepted provider-neutral contract is [ADR 0127](decisions/0127-daemon-background-tasks.md).
 Run its design-fixture check without a build or provider account:

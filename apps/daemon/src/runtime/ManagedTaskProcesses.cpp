@@ -1,4 +1,5 @@
 #include "runtime/ManagedTaskRuntime.h"
+#include "runtime/executor/LinuxJobContainment.h"
 #include "runtime/executor/NativeJobClient.h"
 
 #include <QDateTime>
@@ -26,7 +27,11 @@ void ManagedTaskRuntime::startProcess(const QString& id) {
         return;
     }
     const auto lease = QUuid::createUuid().toString(QUuid::WithoutBraces);
-    const QJsonObject identity{{"directory", path}, {"executor_lease_identity", lease}};
+    QJsonObject identity{{"directory", path}, {"executor_lease_identity", lease}};
+#ifdef Q_OS_LINUX
+    identity.insert("boot_id", executor::linuxBootId());
+    identity.insert("systemd_unit", executor::linuxJobUnit(id, lease));
+#endif
     const auto registered =
         ledger_.registerExecutor(id, live->record.value("revision").toInteger(), identity);
     if (!registered.value("ok").toBool())
@@ -34,6 +39,7 @@ void ManagedTaskRuntime::startProcess(const QString& id) {
     live->record = registered.value("task").toObject();
     auto* client = new executor::NativeJobClient(executor_, path, id, lease, this);
     live->executor = client;
+    client->setRecoveryIdentity(identity);
     const auto remaining = live->record.value("created_at").toInteger() +
                            live->record.value("timeout_ms").toInteger() -
                            QDateTime::currentMSecsSinceEpoch();
@@ -56,6 +62,10 @@ void ManagedTaskRuntime::startProcess(const QString& id) {
                 handshake.executionIdentity = identity;
                 handshake.executionIdentity.insert("supervisor_identity",
                                                    receipt.value("supervisor_identity"));
+#ifdef Q_OS_LINUX
+                handshake.executionIdentity.insert("linux_boundary",
+                                                   receipt.value("linux_boundary"));
+#endif
                 return apply(id, handshake);
             },
             [this, id](const QJsonObject& event) { observeProcess(id, event); }, &error)) {
@@ -92,7 +102,14 @@ void ManagedTaskRuntime::reconcileProcess(const QString& id) {
     if (path != directory_ + '/' + id ||
         identity.value("executor_lease_identity").toString().isEmpty()) {
         BackgroundTaskChange attention;
+#ifdef Q_OS_LINUX
+        attention.state = "stopping";
+        attention.terminalTarget = "interrupted";
+        attention.reason = "invalid_linux_executor_identity";
+        attention.cleanupPending = true;
+#else
         attention.state = "needs_attention";
+#endif
         attention.executorStopped = false;
         apply(id, attention);
         return;
@@ -100,13 +117,21 @@ void ManagedTaskRuntime::reconcileProcess(const QString& id) {
     auto* client = new executor::NativeJobClient(
         executor_, path, id, identity.value("executor_lease_identity").toString(), this);
     live->executor = client;
+    client->setRecoveryIdentity(identity);
     QString error;
     if (!client->reconnect([this, id](const QJsonObject& event) { observeProcess(id, event); },
                            &error)) {
         live->executor = nullptr;
         client->deleteLater();
         BackgroundTaskChange attention;
+#ifdef Q_OS_LINUX
+        attention.state = "stopping";
+        attention.terminalTarget = "interrupted";
+        attention.reason = "linux_executor_reconnect_failed";
+        attention.cleanupPending = true;
+#else
         attention.state = "needs_attention";
+#endif
         attention.executorStopped = false;
         apply(id, attention);
         return;
@@ -120,6 +145,17 @@ void ManagedTaskRuntime::observeProcess(const QString& id, const QJsonObject& ev
     if (!live)
         return;
     const auto type = event.value("event").toString();
+#ifdef Q_OS_LINUX
+    if (event.value("cleanup_pending").toBool()) {
+        BackgroundTaskChange stopping;
+        stopping.state = "stopping";
+        stopping.terminalTarget = live->record.value("terminal_target").toString("interrupted");
+        stopping.reason = "linux_cleanup_pending";
+        stopping.cleanupPending = true;
+        apply(id, stopping);
+        return;
+    }
+#endif
     if ((type == "running" || (type == "ready" && event.value("root_started").toBool())) &&
         live->record.value("state") == "starting") {
         auto identity = live->record.value("execution_identity").toObject();
@@ -140,7 +176,14 @@ void ManagedTaskRuntime::observeProcess(const QString& id, const QJsonObject& ev
     auto previous = live->record.value("state").toString();
     if (state == "needs_attention" || previous == "needs_attention") {
         BackgroundTaskChange attention;
+#ifdef Q_OS_LINUX
+        attention.state = "stopping";
+        attention.terminalTarget = "interrupted";
+        attention.reason = "executor_result_commit_failed";
+        attention.cleanupPending = true;
+#else
         attention.state = "needs_attention";
+#endif
         attention.executorStopped = event.value("executor_stopped").toBool();
         attention.exitCode = event.value("exit_code").toInt(-1);
         attention.errorCode = event.value("cleanup_issue").toString();
@@ -179,6 +222,14 @@ void ManagedTaskRuntime::observeProcess(const QString& id, const QJsonObject& ev
     complete.cleanupConfirmed = true;
     complete.neverLaunched = !event.value("root_started").toBool();
     complete.cleanupStatus = event.value("cleanup_status").toString();
+    complete.fullScopeVerified =
+        event.value("containment_mode") == "cgroup_v2" && complete.cleanupStatus == "verified";
+#ifdef Q_OS_LINUX
+    if (!event.value("linux_boundary").toObject().isEmpty()) {
+        complete.executionIdentity = live->record.value("execution_identity").toObject();
+        complete.executionIdentity.insert("linux_boundary", event.value("linux_boundary"));
+    }
+#endif
     complete.exitCode = event.value("exit_code").toInt(-1);
     complete.outputSize = event.value("output_size").toInteger();
     complete.outputTruncated = event.value("output_truncated").toBool();
@@ -189,7 +240,14 @@ void ManagedTaskRuntime::observeProcess(const QString& id, const QJsonObject& ev
         // A lost running/terminal commit cannot be reported as clean success.
         // Keep execution ownership and the root result available for intervention.
         BackgroundTaskChange attention;
+#ifdef Q_OS_LINUX
+        attention.state = "stopping";
+        attention.terminalTarget = "interrupted";
+        attention.reason = "executor_result_commit_failed";
+        attention.cleanupPending = true;
+#else
         attention.state = "needs_attention";
+#endif
         attention.executorStopped = event.value("executor_stopped").toBool();
         attention.exitCode = event.value("exit_code").toInt(-1);
         attention.errorCode = "executor_result_commit_failed";

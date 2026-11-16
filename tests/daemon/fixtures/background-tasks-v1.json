@@ -57,6 +57,8 @@
     "cleanup_statuses": ["not_required", "pending", "verified", "unverified", "best_effort_complete"]
   },
   "projection_examples": {
+    "linux_complete": {"task_id": "task-linux", "state": "completed", "exit_code": 0, "containment_mode": "cgroup_v2", "cleanup_status": "verified", "executor_stopped": true, "completion": {"event_id": "task-linux:5", "status": "pending", "reason": null}},
+    "linux_cleanup_pending": {"task_id": "task-linux-pending", "state": "stopping", "terminal_target": "interrupted", "cleanup_pending": true, "containment_mode": "cgroup_v2", "cleanup_status": "pending", "executor_stopped": false, "completion": null},
     "list": {
       "tasks": [{"task_id": "task-example", "state": "running", "completion": null}],
       "next_cursor": "opaque-list-page",
@@ -229,6 +231,7 @@
   },
   "linux_execution": {
     "mechanism": "cgroup_v2",
+    "containment_mode": "cgroup_v2",
     "requires": [
       "delegated_domain",
       "cgroup.kill",

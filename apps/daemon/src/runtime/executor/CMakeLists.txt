@@ -4,6 +4,9 @@ add_executable(ketplus_job_executor
     NativeJobSupervisor.cpp
     NativeJobExecution.cpp
     NativeJobLaunchGate.cpp
+    LinuxJobContainment.cpp
+    LinuxJobIsolation.cpp
+    LinuxJobSupervision.cpp
     NativeProcessIdentity.cpp
     ../../storage/BackgroundTaskOutput.cpp
 )

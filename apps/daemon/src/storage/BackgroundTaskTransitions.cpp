@@ -137,6 +137,9 @@ QJsonObject BackgroundTaskLedger::changeImpl(const QString& id, qint64 expectedR
             return fail("execution_live",
                         "A managed child's completion continuations are still pending.");
     }
+    if (record.value("containment_mode") == "cgroup_v2" && terminal(change.state) &&
+        !change.neverLaunched && (!change.fullScopeVerified || change.cleanupStatus != "verified"))
+        return fail("cleanup_pending", "The Linux domain has not been verified empty.");
     if (native && change.cleanupStatus == "verified" && !change.fullScopeVerified)
         return fail("invalid_cleanup_evidence",
                     "Native best-effort cleanup is not kernel verification.");

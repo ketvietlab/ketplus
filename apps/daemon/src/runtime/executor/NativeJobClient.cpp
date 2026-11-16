@@ -1,4 +1,5 @@
 #include "runtime/executor/NativeJobClient.h"
+#include "runtime/executor/LinuxJobContainment.h"
 #include "runtime/executor/NativeJobControlAddress.h"
 #include "runtime/executor/NativeProcessIdentity.h"
 
@@ -6,6 +7,7 @@
 #include <QFileInfo>
 #include <QJsonDocument>
 #include <QProcess>
+#include <QProcessEnvironment>
 #include <unistd.h>
 
 namespace ketplus::daemon::executor {
@@ -67,7 +69,7 @@ bool NativeJobClient::start(const QJsonObject& execution, qint64 remainingTimeou
                             CommitHandshake commitHandshake, Event event, QString* error) {
     if (timer_.isActive() || remainingTimeoutMs <= 0 || !validateDirectory(error))
         return false;
-#ifndef Q_OS_MACOS
+#if !defined(Q_OS_MACOS) && !defined(Q_OS_LINUX)
     if (error)
         *error = "Native best-effort execution is supported only on macOS.";
     return false;
@@ -79,9 +81,28 @@ bool NativeJobClient::start(const QJsonObject& execution, qint64 remainingTimeou
         return false;
     }
     execution_ = execution;
+#ifdef Q_OS_LINUX
+    const auto environment = QProcessEnvironment::systemEnvironment();
+    for (const auto& key : environment.keys())
+        inheritedEnvironment_.insert(key, environment.value(key));
+    if (QJsonDocument(inheritedEnvironment_).toJson(QJsonDocument::Compact).size() +
+            QJsonDocument(execution).toJson(QJsonDocument::Compact).size() >
+        192 * 1024) {
+        inheritedEnvironment_ = {};
+        execution_ = {};
+        if (error)
+            *error = "The inherited process environment exceeds the private launch limit.";
+        return false;
+    }
+#endif
     remainingTimeout_ = remainingTimeoutMs;
     commitHandshake_ = std::move(commitHandshake);
     event_ = std::move(event);
+#ifdef Q_OS_LINUX
+    // An ambiguous manager response must still be reconciled by the durable
+    // unit/lease identity. It is not evidence that the helper never launched.
+    linuxStartSupervisor(executable_, directory_, taskId_, lease_, error);
+#else
     QProcess supervisor;
     supervisor.setProgram(executable_);
     supervisor.setArguments({directory_, taskId_, lease_});
@@ -93,6 +114,7 @@ bool NativeJobClient::start(const QJsonObject& execution, qint64 remainingTimeou
             *error = supervisor.errorString();
         return false;
     }
+#endif
     launchedSupervisor_ = true;
     clock_.start();
     timer_.start();
@@ -117,6 +139,10 @@ void NativeJobClient::connectSocket() {
         return;
     lastConnectionAttempt_ = clock_.elapsed();
     const auto record = receipt();
+#ifdef Q_OS_LINUX
+    if (!linuxReceiptTrusted(taskId_, lease_, record))
+        return;
+#endif
     const auto self = record.value("supervisor_identity").toObject();
     const auto identity = inspect(self.value("pid").toInteger());
     if (!identity || identity->birth != self.value("birth").toString() || identity->zombie)
@@ -155,6 +181,20 @@ void NativeJobClient::message(const QJsonObject& value) {
     }
     if (value.value("task_id") != taskId_ || value.value("executor_lease_identity") != lease_)
         return;
+#ifdef Q_OS_LINUX
+    if (type == "ready" && !linuxReceiptTrusted(taskId_, lease_, value)) {
+        socket_.abort();
+        return;
+    }
+    if (type == "ready")
+        recoveryIdentity_.insert("linux_boundary", value.value("linux_boundary"));
+    const auto boundary = recoveryIdentity_.value("linux_boundary").toObject();
+    if (type == "done" &&
+        (!linuxBoundaryEmpty(boundary) || value.value("cleanup_status") != "verified")) {
+        socket_.abort();
+        return;
+    }
+#endif
     lastMessage_ = clock_.elapsed();
     lastReceipt_ = value;
     if (type == "ready") {
@@ -180,8 +220,12 @@ void NativeJobClient::message(const QJsonObject& value) {
                 stop("timed_out");
                 return;
             }
-            send({{"op", "start"}, {"execution", execution_}, {"remaining_timeout_ms", remaining}});
+            send({{"op", "start"},
+                  {"execution", execution_},
+                  {"base_environment", inheritedEnvironment_},
+                  {"remaining_timeout_ms", remaining}});
             execution_ = {}; // Secrets supplied for this launch are not retained or journaled.
+            inheritedEnvironment_ = {};
         } else if (!value.value("launch_attempted").toBool()) {
             stop("interrupted"); // A recovered pre-launch intent is never replayed.
         }
@@ -218,7 +262,10 @@ void NativeJobClient::tick() {
         socket_.abort();
     // A live supervisor gets its full lease/grace window to finish cleanup and
     // write a result. Recovery never calls start() to reconstruct a missing result.
-    if (clock_.elapsed() - lastMessage_ >= 5500)
+    if (clock_.elapsed() - lastMessage_ >= 5500 &&
+        clock_.elapsed() - lastRecoveryAttempt_ >= 1000) {
+        lastRecoveryAttempt_ = clock_.elapsed();
         recoverLostSupervisor();
+    }
 }
 } // namespace ketplus::daemon::executor

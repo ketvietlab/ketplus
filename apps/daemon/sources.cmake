@@ -32,6 +32,7 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/storage/BackgroundTaskChildren.cpp
     src/storage/LocalJournalManagedTasks.cpp
     src/runtime/executor/NativeJobClient.cpp
+    src/runtime/executor/LinuxJobContainment.cpp
     src/runtime/executor/NativeJobRecovery.cpp
     src/runtime/executor/NativeProcessIdentity.cpp
     src/runtime/executor/NativeJobControlAddress.cpp

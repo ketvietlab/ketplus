@@ -5,10 +5,12 @@ if(CMAKE_SOURCE_DIR STREQUAL CMAKE_CURRENT_SOURCE_DIR)
     find_package(Qt6 6.11 REQUIRED COMPONENTS Core Network Sql Test)
 endif()
 
+
+
 set(CMAKE_AUTOMOC ON)
 set(CMAKE_CXX_STANDARD 20)
 set(KETPLUS_BACKGROUND_OUTPUT_ROOT "${CMAKE_CURRENT_LIST_DIR}/../../..")
-if(APPLE AND NOT TARGET ketplus_job_executor)
+if((APPLE OR CMAKE_SYSTEM_NAME STREQUAL "Linux") AND NOT TARGET ketplus_job_executor)
     add_subdirectory("${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/runtime/executor" executor)
 endif()
 add_executable(ketplus_background_output_tests
@@ -99,4 +101,29 @@ if(APPLE)
         KETPLUS_JOB_EXECUTOR_PATH="$<TARGET_FILE:ketplus_job_executor>")
     add_dependencies(ketplus_managed_task_runtime_tests ketplus_job_executor)
     add_test(NAME ketplus_managed_task_runtime_tests COMMAND ketplus_managed_task_runtime_tests)
+endif()
+
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT TARGET ketplus_linux_job_executor_tests)
+    get_target_property(ketplus_ledger_fixture_sources ketplus_background_ledger_tests SOURCES)
+    list(REMOVE_ITEM ketplus_ledger_fixture_sources ../BackgroundTaskLedgerTest.cpp)
+    add_executable(ketplus_linux_job_executor_tests
+        ../LinuxJobExecutorTest.cpp
+        ${ketplus_ledger_fixture_sources}
+        "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/storage/BackgroundTaskOutput.cpp"
+        "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/runtime/ManagedTaskRuntime.cpp"
+        "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/runtime/ManagedTaskProcesses.cpp"
+        "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/runtime/ManagedTaskOutput.cpp"
+        "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/runtime/executor/NativeJobClient.cpp"
+        "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/runtime/executor/NativeJobRecovery.cpp"
+        "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/runtime/executor/NativeJobControlAddress.cpp"
+        "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/runtime/executor/NativeProcessIdentity.cpp"
+        "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/runtime/executor/LinuxJobContainment.cpp")
+    target_include_directories(ketplus_linux_job_executor_tests PRIVATE
+        "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src")
+    target_link_libraries(ketplus_linux_job_executor_tests PRIVATE
+        Qt6::Core Qt6::Network Qt6::Sql Qt6::Test)
+    target_compile_definitions(ketplus_linux_job_executor_tests PRIVATE
+        KETPLUS_JOB_EXECUTOR_PATH="$<TARGET_FILE:ketplus_job_executor>")
+    add_dependencies(ketplus_linux_job_executor_tests ketplus_job_executor)
+    add_test(NAME ketplus_linux_job_executor_tests COMMAND ketplus_linux_job_executor_tests)
 endif()

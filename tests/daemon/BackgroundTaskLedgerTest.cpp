@@ -377,6 +377,45 @@ class BackgroundTaskLedgerTest final : public QObject {
         QSqlDatabase::removeDatabase(name);
     }
 
+    void linuxTerminalRequiresPositiveCleanupEvidence() {
+        const auto name = QUuid::createUuid().toString();
+        {
+            auto db = QSqlDatabase::addDatabase("QSQLITE", name);
+            db.setDatabaseName(":memory:");
+            QVERIFY(db.open());
+            BackgroundTaskLedger ledger(db);
+            QString error;
+            QVERIFY(ledger.initialize(&error));
+            QVERIFY(seedOwner(db));
+            auto request = intent();
+            request.containmentMode = "cgroup_v2";
+            const auto id = taskId(ledger.create(request));
+            BackgroundTaskChange change;
+            change.state = "queued";
+            change.permissionApproved = true;
+            QVERIFY(ledger.change(id, 1, change).value("ok").toBool());
+            QCOMPARE(taskId(ledger.claimNext()), id);
+            change = {};
+            change.state = "running";
+            change.handshakeCommitted = true;
+            change.executionIdentity = {{"process_birth_identity", "birth"},
+                                        {"executor_lease_identity", "lease"}};
+            QVERIFY(ledger.change(id, 3, change).value("ok").toBool());
+            change = {};
+            change.state = "completed";
+            change.cleanupConfirmed = true;
+            QCOMPARE(ledger.change(id, 4, change).value("error_code"), "cleanup_pending");
+            change.cleanupStatus = "verified";
+            QCOMPARE(ledger.change(id, 4, change).value("error_code"), "cleanup_pending");
+            QVERIFY(ledger.deliveryPage(false).value("events").toArray().isEmpty());
+            change.fullScopeVerified = true;
+            const auto result = ledger.change(id, 4, change).value("task").toObject();
+            QCOMPARE(result.value("state"), "completed");
+            QCOMPARE(result.value("cleanup_status"), "verified");
+        }
+        QSqlDatabase::removeDatabase(name);
+    }
+
     void nativeNormalCompletionRetainsBestEffortAssuranceAndWakes() {
         const auto name = QUuid::createUuid().toString();
         {

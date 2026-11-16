@@ -23,6 +23,7 @@ struct BackgroundTaskIntent final {
     qint64 timeoutMs{0};
     QJsonObject executionMetadata;
     QJsonObject requestPayload{};
+    QString containmentMode{"native_best_effort"}; // Set by the trusted platform runtime.
 };
 
 QByteArray backgroundTaskFingerprint(QJsonObject request, const QJsonObject& defaults);

@@ -1,4 +1,5 @@
 #include "runtime/executor/NativeJobSupervisor.h"
+#include "runtime/executor/LinuxJobContainment.h"
 #include "runtime/executor/NativeJobControlAddress.h"
 
 #include <QCoreApplication>
@@ -35,7 +36,7 @@ NativeJobSupervisor::~NativeJobSupervisor() {
 }
 
 bool NativeJobSupervisor::initialize(QString* error) {
-#ifndef Q_OS_MACOS
+#if !defined(Q_OS_MACOS) && !defined(Q_OS_LINUX)
     *error = "Native best-effort process execution is supported only on macOS.";
     return false;
 #endif
@@ -59,6 +60,18 @@ bool NativeJobSupervisor::initialize(QString* error) {
                  {"output_size", 0},
                  {"output_truncated", false},
                  {"executor_stopped", true}};
+#ifdef Q_OS_LINUX
+    metadata_.insert("containment_mode", "cgroup_v2");
+    metadata_.insert("boot_id", linuxBootId());
+    // The deterministic service name is committed by the daemon before launch.
+    metadata_.insert("systemd_unit", linuxJobUnit(taskId_, lease_));
+    if (!persist())
+        return false;
+    const auto boundary = linuxCreateBoundary(taskId_, lease_, error);
+    if (boundary.isEmpty())
+        return false;
+    metadata_.insert("linux_boundary", boundary);
+#endif
     outputDatabase_ = QSqlDatabase::addDatabase("QSQLITE", connectionName_);
     outputDatabase_.setDatabaseName(directory_ + "/output.sqlite");
     outputDatabase_.setConnectOptions("QSQLITE_BUSY_TIMEOUT=50");
@@ -129,7 +142,7 @@ void NativeJobSupervisor::acceptConnection() {
         client_ = socket;
         input_.clear();
         authenticated_ = false;
-        client_->setReadBufferSize(128 * 1024 + 1);
+        client_->setReadBufferSize(256 * 1024 + 1);
         connect(client_, &QLocalSocket::readyRead, this, [this] { receive(); });
         connect(client_, &QLocalSocket::disconnected, this, [this, socket] {
             if (client_ == socket) {
@@ -144,7 +157,7 @@ void NativeJobSupervisor::acceptConnection() {
 
 void NativeJobSupervisor::receive() {
     input_.append(client_->readAll());
-    if (input_.size() > 128 * 1024) {
+    if (input_.size() > 256 * 1024) {
         client_->disconnectFromServer();
         return;
     }

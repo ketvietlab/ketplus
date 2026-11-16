@@ -209,6 +209,39 @@ make admission succeed. This does not claim to contain deliberate requests to
 external services. See the [kernel cgroup v2 documentation](https://docs.kernel.org/admin-guide/cgroup-v2.html)
 for delegation, migration and populated semantics.
 
+The reference Linux path uses the non-root daemon user's existing systemd user
+manager. Each supervisor is MainPID of a separate transient user service with
+`Delegate=yes`, `KillMode=control-group`, `TimeoutStopSec=3s`, and `Restart=no`.
+The daemon commits the deterministic unit/lease and boot identity before requesting
+the service. The supervisor creates a fresh `job` domain, persists its boot/device/
+inode and unit invocation identity, and places a trusted blocked launcher there
+before releasing its durable pre-exec gate. The supervisor itself stays outside
+that domain; the user manager reclaims the complete service on supervisor death.
+
+The trusted launcher enters user, mount, PID and cgroup namespaces, makes mounts
+private, mounts namespace-local proc/cgroup views, and closes every descriptor
+above stdio before applying the workload's environment or executing its program.
+This prevents a workload environment such as `LD_PRELOAD` from running before
+isolation and prevents inherited migration descriptors or namespace handles from
+crossing exec. The namespace's UID 0 maps only to the existing daemon UID.
+The daemon's inherited environment travels only in the authenticated, bounded
+private launch channel; it is applied with the explicit delta after isolation.
+It is not stored in the service unit, receipt, registry, or UI. Thus a user
+service's different default environment does not silently replace the daemon's
+environment. Oversized private launch data fails before a supervisor is spawned.
+`nsdelegate` and successful namespace setup are required by an admission probe;
+an unavailable user bus or denied namespace policy returns
+`containment_unavailable`, without creating a job. Administrators supply these
+capabilities; neither the daemon nor installer lowers host namespace policy.
+
+Linux records use `containment_mode=cgroup_v2`. `cleanup_status=verified` requires
+an identity-matching domain with `populated=0`, or verified service reclamation/
+host reboot during recovery. Otherwise the record stays `stopping`,
+`cleanup_pending=true`, and retains its slot. The native macOS acknowledgement
+action does not resolve this Linux state. This boundary contains the workload's
+own migration authority; it is not a sandbox against an independently acting
+same-UID host process or requests deliberately made to external services.
+
 Lease loss terminates contained work, then escalates to kill after a finite
 grace period. Containment includes descendants, not just the direct QProcess.
 An implementation must demonstrate the platform's containment behavior,
@@ -447,8 +480,10 @@ A parked child must reacquire a quota slot before another inference starts.
 
 Native macOS executor and fake-provider Host/IPC tests are runtime evidence;
 provider migration and shared UI acceptance remain separate gates. Linux process
-admission currently fails closed: the cgroup executor and its complete fault
-matrix are not implemented or verified. A temporary Linux reference probe found
-cgroup v2/nsdelegate and working system-service read-only control-group mounts,
-but no user bus and denied unprivileged user-namespace UID mapping. This is a
-verification limitation, not a containment claim or a product VM dependency.
+admission probes the reference user-service/namespace capabilities and fails
+closed when they are missing. The new cgroup executor's complete production fault
+matrix remains an implementation/verification gate until the real helper,
+registry, IPC and restart tests pass on that reference environment. The separate
+[T-7 evidence](0127-linux-containment-evidence.md) establishes environment
+primitives, not executor acceptance. Its guest-only namespace-policy bootstrap
+is not a product installer step or a product VM dependency.

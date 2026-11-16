@@ -5,6 +5,7 @@
 #include "storage/LocalJournal.h"
 
 #include <QJsonArray>
+#include <QProcess>
 #include <QScopeGuard>
 #include <QTemporaryDir>
 #include <QUuid>
@@ -336,6 +337,39 @@ class ManagedTaskHostTest final : public QObject {
                                         [&](const QJsonObject& value) { result = value; });
         QCOMPARE(result.value("error_code"), "forbidden");
         QCOMPARE(journal.backgroundTasks().nonterminal().value("tasks").toArray().size(), 0);
+    }
+
+    void providerExitDoesNotOwnTheProcessJobLifetime() {
+        QTemporaryDir directory;
+        const auto cwd = QFileInfo(directory.path()).canonicalFilePath();
+        const auto log = directory.filePath("provider.log");
+        QVERIFY(writeFakeCodex(directory.filePath("fake-codex"), log));
+        LocalJournal journal(directory.filePath("journal.sqlite"));
+        QVERIFY(seed(journal, cwd));
+        CodexAdapter adapter(directory.filePath("fake-codex"));
+        SessionHost host(&journal, &adapter);
+        const auto cleanup = qScopeGuard([&] { adapter.stop(); });
+        QVERIFY(command(host, "session.start_turn", {{"prompt", "hang"}}).value("ok").toBool());
+        QTRY_COMPARE(turns(log), 1);
+        const auto started = command(
+            host, "session.task.start",
+            process(cwd, {"/bin/sh", "-c", "printf started > marker; sleep 1; printf survived"}));
+        const auto id = started.value("task").toObject().value("task_id").toString();
+        QTRY_COMPARE_WITH_TIMEOUT(task(host, id).value("state"), "running", 6000);
+        QTRY_VERIFY(QFileInfo::exists(directory.filePath("marker")));
+        QProcess* fakeProvider = nullptr;
+        for (auto* process : adapter.findChildren<QProcess*>())
+            if (process->state() == QProcess::Running)
+                fakeProvider = process;
+        QVERIFY(fakeProvider);
+        fakeProvider->kill(); // The fixture owns this provider; exercise unexpected exit.
+        QVERIFY(fakeProvider->waitForFinished(2000));
+        QTRY_COMPARE_WITH_TIMEOUT(task(host, id).value("state"), "completed", 7000);
+        QCOMPARE(command(host, "session.task.output", {{"task_id", id}}).value("output"),
+                 "survived");
+        QTRY_COMPARE_WITH_TIMEOUT(task(host, id).value("completion").toObject().value("status"),
+                                  "delivered", 6000);
+        QTRY_COMPARE_WITH_TIMEOUT(turns(log), 2, 6000);
     }
 
     void failedChildCancelsDescendantsWithoutReceivingTheirWake() {

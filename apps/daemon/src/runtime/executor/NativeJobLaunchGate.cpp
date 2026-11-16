@@ -1,3 +1,4 @@
+#include "runtime/executor/LinuxJobContainment.h"
 #include "runtime/executor/NativeJobSupervisor.h"
 
 #include <QSocketNotifier>
@@ -76,7 +77,13 @@ void NativeJobSupervisor::commitLaunchIdentity() {
     } while (received < 0 && errno == EINTR);
     const auto identity =
         received == sizeof(pid) && pid == process_.processId() ? inspect(pid) : std::nullopt;
-    if (identity && !identity->zombie && identity->group == pid && !stopping_) {
+    bool contained = true;
+#ifdef Q_OS_LINUX
+    // No workload or loader-controlled code has executed: this child is blocked
+    // inside Qt's fork modifier, ahead of the trusted namespace helper exec.
+    contained = identity && linuxPlaceLauncher(metadata_.value("linux_boundary").toObject(), pid);
+#endif
+    if (identity && !identity->zombie && identity->group == pid && !stopping_ && contained) {
         root_ = identity;
         known_.insert(pid, *identity);
         metadata_.insert("root_identity", identity->json());

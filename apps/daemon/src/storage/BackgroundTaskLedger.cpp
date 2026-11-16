@@ -221,7 +221,7 @@ QJsonObject BackgroundTaskLedger::create(const BackgroundTaskIntent& intent) {
                              {"title", intent.title},
                              {"state", "queued"},
                              {"containment_mode", intent.kind == "process"
-                                                      ? QJsonValue("native_best_effort")
+                                                      ? QJsonValue(intent.containmentMode)
                                                       : QJsonValue(QJsonValue::Null)},
                              {"cleanup_status", "not_required"},
                              {"executor_stopped", true},

@@ -38,6 +38,7 @@ class NativeJobSupervisor final : public QObject {
     void signalKnown(int signal);
     void requestStop(const QString& reason);
     void tick();
+    void linuxTick();
     void finish();
 
     QString directory_;

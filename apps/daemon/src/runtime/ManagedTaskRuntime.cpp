@@ -1,4 +1,5 @@
 #include "runtime/ManagedTaskRuntime.h"
+#include "runtime/executor/LinuxJobContainment.h"
 #include "runtime/executor/NativeJobClient.h"
 
 #include <QDateTime>
@@ -144,7 +145,11 @@ QJsonObject ManagedTaskRuntime::start(const BackgroundTaskIntent& intent,
         return retry;
     // Platform and callback availability are admission errors, before accepted.
     if (intent.kind == "process") {
-#ifndef Q_OS_MACOS
+#ifdef Q_OS_LINUX
+        QString error;
+        if (!executor::linuxContainmentAvailable(executor_, &error))
+            return failure("containment_unavailable", error);
+#elif !defined(Q_OS_MACOS)
         return failure("containment_unavailable",
                        "A verified delegated cgroup v2 executor with migration isolation is "
                        "required on this platform.");
@@ -158,7 +163,12 @@ QJsonObject ManagedTaskRuntime::start(const BackgroundTaskIntent& intent,
     if (!permission_)
         return failure("permission_unavailable",
                        "The background permission broker is unavailable.");
-    const auto reply = ledger_.create(intent);
+    auto acceptedIntent = intent;
+#ifdef Q_OS_LINUX
+    if (intent.kind == "process")
+        acceptedIntent.containmentMode = "cgroup_v2";
+#endif
+    const auto reply = ledger_.create(acceptedIntent);
     if (!reply.value("ok").toBool() || reply.value("reused").toBool())
         return reply;
     const auto id = reply.value("task").toObject().value("task_id").toString();

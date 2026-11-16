@@ -1,5 +1,7 @@
 #include "runtime/executor/NativeProcessIdentity.h"
 
+#include <QFile>
+#include <QFileInfo>
 #include <QVector>
 #include <cerrno>
 #include <csignal>
@@ -11,6 +13,8 @@
 #include <libproc.h>
 #include <sys/proc.h>
 #include <sys/proc_info.h>
+#elif defined(Q_OS_LINUX)
+#include <sys/syscall.h>
 #endif
 
 namespace ketplus::daemon::executor {
@@ -30,6 +34,22 @@ std::optional<NativeProcessIdentity> inspect(qint64 pid) {
                                  QString::number(info.pbi_start_tvsec) + ":" +
                                      QString::number(info.pbi_start_tvusec),
                                  info.pbi_status == SZOMB};
+#elif defined(Q_OS_LINUX)
+    const auto path = "/proc/" + QString::number(pid);
+    if (QFileInfo(path).ownerId() != geteuid())
+        return {};
+    QFile stat(path + "/stat"), boot("/proc/sys/kernel/random/boot_id");
+    if (!stat.open(QIODevice::ReadOnly) || !boot.open(QIODevice::ReadOnly))
+        return {};
+    const auto bytes = stat.read(8192);
+    const auto close = bytes.lastIndexOf(')');
+    const auto fields = bytes.mid(close + 2).simplified().split(' ');
+    if (close < 0 || fields.size() < 20 || fields[19].isEmpty())
+        return {};
+    return NativeProcessIdentity{pid, fields[1].toLongLong(), fields[2].toLongLong(),
+                                 QString::fromLatin1(boot.read(128).trimmed()) + ':' +
+                                     QString::fromLatin1(fields[19]),
+                                 fields[0] == "Z"};
 #else
     return {};
 #endif
@@ -85,6 +105,22 @@ bool signalIdentity(const NativeProcessIdentity& identity, int signal, QString* 
             *error = "Missing process birth identity.";
         return false;
     }
+#ifdef Q_OS_LINUX
+    // Open the live handle BEFORE rechecking birth; pidfd_send_signal cannot
+    // accidentally target a replacement process between inspection and kill.
+    const int descriptor = int(syscall(SYS_pidfd_open, pid_t(identity.pid), 0));
+    if (descriptor < 0) {
+        if (errno == ESRCH)
+            return true;
+        if (error)
+            *error = "A verified pidfd is unavailable.";
+        return false;
+    }
+    struct ClosePidfd {
+        int fd;
+        ~ClosePidfd() { close(fd); }
+    } guard{descriptor};
+#endif
     const auto current = inspect(identity.pid);
     if (!current) {
         if (kill(pid_t(identity.pid), 0) != 0 && errno == ESRCH)
@@ -100,7 +136,11 @@ bool signalIdentity(const NativeProcessIdentity& identity, int signal, QString* 
     }
     if (current->zombie)
         return true;
+#ifdef Q_OS_LINUX
+    if (syscall(SYS_pidfd_send_signal, descriptor, signal, nullptr, 0) == 0 || errno == ESRCH)
+#else
     if (kill(pid_t(identity.pid), signal) == 0 || errno == ESRCH)
+#endif
         return true;
     if (error)
         *error = QString::fromLocal8Bit(strerror(errno));

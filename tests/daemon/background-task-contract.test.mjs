@@ -20,6 +20,10 @@ test("retention and Linux admission preserve dedup and containment gates", () =>
   assert.ok(fixture.linux_execution.requires.includes("pre_exec_containment_barrier"));
   assert.ok(fixture.linux_execution.requires.includes("migration_isolation"));
   assert.equal(fixture.linux_execution.terminal_cleanup, "populated_zero");
+  assert.equal(fixture.linux_execution.containment_mode, "cgroup_v2");
+  assert.equal(fixture.projection_examples.linux_complete.cleanup_status, "verified");
+  assert.equal(fixture.projection_examples.linux_cleanup_pending.state, "stopping");
+  assert.equal(fixture.projection_examples.linux_cleanup_pending.completion, null);
 });
 
 test("API, identity and admission constraints preserve the shared contract", () => {
