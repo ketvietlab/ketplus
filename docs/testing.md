@@ -287,6 +287,9 @@ columnsReflowAndKeepTheFooterReachable` with `QT_QPA_PLATFORM=offscreen`,
 `KETPLUS_DISABLE_DAEMON_AUTOSTART=1` and `KETPLUS_T15_CAPTURE` set to a local output
 directory. Keep generated captures out of the source tree.
 
+The [layout verification record](evidence/new-team-dialog-layout.md) retains the
+full Pro matrix results, initial failures, one isolated retry and platform skips.
+
 ## Minimum verification
 
 Linux Pro packaging changes run `tests/packaging/test_linux_desktop_packages.py`,
