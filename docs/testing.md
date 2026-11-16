@@ -805,13 +805,23 @@ running daemon.
 ### WebRTC host phase 3
 
 Build `ketplus_daemon_peer_transport_tests`, `ketplus_daemon_relay_wakeups_tests`,
-`ketplus_daemon_cloud_privacy_tests` and `ketplus_daemon_context_relay_tests` in a
+`ketplus_daemon_cloud_privacy_tests`, `ketplus_cloud_trust_lifecycle_tests` and
+`ketplus_daemon_context_relay_tests` in a
 Release headless tree. The peer suite uses real libdatachannel loopback with signed
 SDP, in-memory credentials, temporary SQLite and a fake provider that is never
 started. It covers transfer caps/order/expiry, strict send priority, grants,
 revocation, supersede/epochs, subscriptions, cloud-safe encryption and the same
 command retried over both paths. No user daemon or provider account is accessed.
 Physical devices/TURN require a separate explicitly configured local test stack.
+
+`ketplus_cloud_trust_lifecycle_tests` holds native fake HTTP replies across sign-out and
+re-enrollment (including the same machine/workspace), and independently changes each scope
+identifier. It verifies that stale replies cannot write pins or wrapped keys, issue follow-up
+uploads, refresh a new enrollment's pending peer, or complete pairing/revocation. It also
+checks that legitimate restored-enrollment migration works for distribution and sender-key
+fallback, while initialized empty pins and missing enrollment do not permit adoption. The
+standalone Release lane exposes the same suite as `r03_cloud_trust_lifecycle_tests`; it uses
+in-memory credentials, generated synthetic keys, a temporary journal and no provider turns.
 
 ## Conversation deletion and next-turn defaults
 

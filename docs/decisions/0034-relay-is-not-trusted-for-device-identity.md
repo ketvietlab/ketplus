@@ -35,7 +35,17 @@ add a device row with its own keys and read every session, send commands and ope
   empty set, written before the machine id. A failed write therefore never leaves an enrollment
   that a restart would take for one from before pins. Signing out removes the pins. A Mac that was already enrolled when this change shipped pins the devices active in its
   first device list (trust on first use), so existing pairings keep working. After that, a
-  device joins only through an approval on this Mac.
+  device joins only through an approval on this Mac. Migration permission is captured when
+  restoring a valid machine/workspace enrollment with no stored pin record. It is consumed
+  by adoption and cleared by sign-out, enrollment, local approval or local device revocation. An empty
+  initialized pin set, or pins disappearing later in the process, grants no migration
+  permission. Sender-key fallback lookup uses this same permission.
+- **Trust callbacks belong to one enrollment.** Device-list distribution, sender-key lookup,
+  peer admission and pairing operations capture the account epoch, machine and workspace.
+  Each asynchronous continuation checks that all three still match a nonempty enrollment
+  before adopting or changing pins, wrapping keys, refreshing peers or making a follow-up
+  request. Sign-out invalidates the epoch before removing account state; even signing into
+  the same machine/workspace cannot authorize a reply from the previous epoch.
 - **Pairing a phone with one Mac does not grant it another Mac's sessions.** Each Mac approves its
   own devices.
 

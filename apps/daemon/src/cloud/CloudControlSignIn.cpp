@@ -158,6 +158,7 @@ void CloudControlClient::redeemSignIn(const quint64 signInEpoch, const QString& 
 void CloudControlClient::enrollMachine(const quint64 signInEpoch, const QString& access,
                                        const QJsonObject& subject, const QString& installationId,
                                        const QJsonObject& keys, LocalCallback callback) {
+    legacyPinAdoptionPending_ = false;
     const QJsonObject enrollment{
         {QStringLiteral("installationId"), installationId},
         {QStringLiteral("displayName"), QHostInfo::localHostName().left(128)},

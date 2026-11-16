@@ -90,6 +90,8 @@ ketplus_add_daemon_test(ketplus_daemon_claude_worktree_tests ClaudeWorktreeTest.
 ketplus_add_daemon_test(ketplus_daemon_context_relay_tests WorktreeContextRelayTest.cpp)
 # Link in-memory credential symbols before the static core; never use the OS key store.
 target_sources(ketplus_daemon_context_relay_tests PRIVATE cloud-privacy/MemoryCredentials.cpp)
+ketplus_add_daemon_test(ketplus_cloud_trust_lifecycle_tests cloud-privacy/CloudTrustLifecycleTest.cpp)
+target_sources(ketplus_cloud_trust_lifecycle_tests PRIVATE cloud-privacy/MemoryCredentials.cpp)
 ketplus_add_daemon_test(ketplus_daemon_cloud_privacy_tests cloud-privacy/CloudPrivacyTest.cpp)
 target_sources(ketplus_daemon_cloud_privacy_tests PRIVATE cloud-privacy/MemoryCredentials.cpp)
 # Signed builds may run PCRE2 without JIT; cloud projection must stay linear there too.

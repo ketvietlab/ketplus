@@ -20,6 +20,9 @@ list(TRANSFORM KETPLUS_BROWSER_TOOLS_SOURCES PREPEND "${REPO}/modules/browser/")
 # CredentialStore.cpp (OS key storage) is replaced by MemoryCredentials.cpp.
 add_library(r03_privacy_core STATIC MemoryCredentials.cpp ${KETPLUS_DAEMON_CORE_SOURCES}
   ${KETPLUS_BROWSER_TOOLS_SOURCES} "${REPO}/modules/remote/src/DaemonPaths.cpp"
+  "${REPO}/modules/remote/src/TeamLanguage.cpp"
+  "${REPO}/modules/remote/src/TranscriptVisibility.cpp"
+  "${REPO}/modules/remote/src/Schedule.cpp"
   "${REPO}/modules/remote/src/cloud/CloudCrypto.cpp" "${REPO}/modules/remote/src/cloud/BrowserSignIn.cpp"
   "${REPO}/modules/computer/src/ComputerAgentInstructions.cpp"
   "${REPO}/modules/computer/src/ComputerToolLaunch.cpp"
@@ -56,3 +59,8 @@ add_test(NAME r03_cloud_privacy_tests COMMAND r03_cloud_privacy_tests)
 add_test(NAME r03_daemon_protocol_regression COMMAND r03_daemon_protocol_regression)
 add_test(NAME r03_daemon_transcript_window_regression
   COMMAND r03_daemon_transcript_window_regression)
+
+add_executable(r03_cloud_trust_lifecycle_tests CloudTrustLifecycleTest.cpp)
+target_link_libraries(r03_cloud_trust_lifecycle_tests PRIVATE r03_privacy_core Qt6::Test)
+ketplus_enable_warnings(r03_cloud_trust_lifecycle_tests)
+add_test(NAME r03_cloud_trust_lifecycle_tests COMMAND r03_cloud_trust_lifecycle_tests)

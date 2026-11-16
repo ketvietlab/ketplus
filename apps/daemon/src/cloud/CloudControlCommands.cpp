@@ -247,58 +247,10 @@ QByteArray CloudControlClient::commandResultAssociatedData(const QJsonObject& co
     return CloudCrypto::canonical(values);
 }
 
-void CloudControlClient::withSenderKeys(const QString& senderId, const int version,
-                                        SenderKeysCallback callback) {
-    const QString cacheKey = QStringLiteral("%1/%2").arg(senderId).arg(version);
-    const QDateTime now = QDateTime::currentDateTimeUtc();
-    if (const auto cached = senderKeys_.constFind(cacheKey);
-        cached != senderKeys_.cend() && cached->second > now) {
-        callback(cached->first, {});
-        return;
-    }
-    const QString keyPath = QStringLiteral("/v2/device-keys/%1/%2")
-                                .arg(QString::fromUtf8(QUrl::toPercentEncoding(senderId)))
-                                .arg(version);
-    request("GET", keyPath, {}, daemonToken_, {},
-            [this, senderId, version, cacheKey, callback = std::move(callback)](
-                const int status, const QJsonValue& value, const QString& transportError) mutable {
-                if (status != 200 || !transportError.isEmpty()) {
-                    callback({}, transportError.isEmpty()
-                                     ? QStringLiteral("The sender key is unavailable.")
-                                     : transportError);
-                    return;
-                }
-                const QJsonObject keys = object(value).value(QStringLiteral("keys")).toObject();
-                // The relay names the keys; only a device pinned on this Mac may use them (#87).
-                auto accept = [this, senderId, version, cacheKey, keys,
-                               callback = std::move(callback)]() {
-                    if (!pins_.trustsKeys(senderId, version, keys)) {
-                        callback({}, QStringLiteral("The sender is not paired with this Mac."));
-                        return;
-                    }
-                    if (senderKeys_.size() >= maximumCachedSenderKeys)
-                        senderKeys_.clear();
-                    senderKeys_.insert(cacheKey, {keys, QDateTime::currentDateTimeUtc().addMSecs(
-                                                            senderKeyCacheMilliseconds)});
-                    callback(keys, {});
-                };
-                if (pins_.initialized()) {
-                    accept();
-                    return;
-                }
-                // Before the first device list, the devices already active are adopted.
-                request("GET", QStringLiteral("/v2/devices"), {}, daemonToken_, {},
-                        [this, accept = std::move(accept)](const int listStatus,
-                                                           const QJsonValue& list,
-                                                           const QString& listError) {
-                            if (listStatus == 200 && list.isArray() && listError.isEmpty())
-                                (void)trustedDevices(list.toArray());
-                            accept();
-                        });
-            });
-}
-
 void CloudControlClient::executeCommand(const QJsonObject& command) {
+    const auto fence = accountFence();
+    if (!accountCurrent(fence))
+        return;
     if (command.value(QStringLiteral("machineId")).toString() != machineId_)
         return;
     const QJsonObject content = command.value(QStringLiteral("content")).toObject();
@@ -315,8 +267,10 @@ void CloudControlClient::executeCommand(const QJsonObject& command) {
     // was a large share of the relay's traffic.
     withSenderKeys(
         senderId, senderVersion,
-        [this, command, senderId, senderVersion](const QJsonObject& senderKeys,
-                                                 const QString& keyError) {
+        [this, fence, command, senderId, senderVersion](const QJsonObject& senderKeys,
+                                                        const QString& keyError) {
+            if (!accountCurrent(fence))
+                return;
             const auto peerId = command.value("_peerConnection").toString();
             if (!peerId.isEmpty() && !peers_->authorized(peerId, command))
                 return;
