@@ -370,6 +370,7 @@ void CloudControlClient::signOut(LocalCallback callback) {
     signaling_->configure({}, {}, 1, false);
     revokeAtlasAccess();
     ++accountEpoch_;
+    invalidateSenderKeys();
     legacyPinAdoptionPending_ = false;
     dropBrowserSignIn();
     signInError_.clear();

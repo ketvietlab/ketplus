@@ -336,6 +336,15 @@ new enrollment's peers. Legacy adoption is an explicit, one-time permission esta
 restoring an existing enrollment without a pin record; an initialized empty set or a pin record
 removed later is not migration authority. See ADR 0034 and the native trust-lifecycle tests.
 
+The sender-key cache is an optimization, not pairing authority: every hit checks the
+current local pin and the account epoch, enrollment revision and machine/workspace scope.
+Sign-in start/cancellation, sign-out and enrollment commit clear the cache. Successful
+pairing approval, device revocation and machine authorization revocation also clear it and
+advance a lookup revision, so an outstanding reply cannot refill the cache across those
+transitions (even if the same device is paired again). A same-workspace enrollment retains
+content keys but requires fresh pairing before an old sender can execute a command. Cache
+invalidation on relay revocation does not itself change the persisted pin policy.
+
 Cloud identity keys, session keys, wrapped device keys and account identifiers
 are stored in one owner-only (0600) JSON file,
 `Ketsuite/KetPlus/daemon/credentials-<service>.json` under the user's data

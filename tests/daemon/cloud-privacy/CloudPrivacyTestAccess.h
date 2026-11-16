@@ -171,7 +171,7 @@ class CloudPrivacyTestAccess {
     }
     static void expireSenderKeys(CloudControlClient& client) {
         for (auto& entry : client.senderKeys_)
-            entry.second = QDateTime::currentDateTimeUtc().addSecs(-1);
+            entry.expiresAt = QDateTime::currentDateTimeUtc().addSecs(-1);
     }
     // Pins a device on this Mac, as approving its pairing does.
     static void pinDevice(CloudControlClient& client, const QString& id, int version,

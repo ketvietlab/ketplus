@@ -41,28 +41,41 @@ QJsonArray CloudControlClient::trustedDevices(const QJsonArray& devices,
     return pins_.trusted(devices);
 }
 
+void CloudControlClient::invalidateSenderKeys() {
+    ++senderKeysRevision_;
+    senderKeys_.clear();
+}
+
 void CloudControlClient::withSenderKeys(const QString& senderId, const int version,
                                         SenderKeysCallback callback) {
     const auto fence = accountFence();
-    if (!accountCurrent(fence)) {
+    const auto revision = senderKeysRevision_;
+    const auto current = [this, fence, revision] {
+        return accountCurrent(fence) && revision == senderKeysRevision_;
+    };
+    if (!current()) {
         callback({}, QStringLiteral("The account changed before the operation completed."));
         return;
     }
     const QString cacheKey = QStringLiteral("%1/%2").arg(senderId).arg(version);
     const QDateTime now = QDateTime::currentDateTimeUtc();
-    if (const auto cached = senderKeys_.constFind(cacheKey);
-        cached != senderKeys_.cend() && cached->second > now) {
-        callback(cached->first, {});
-        return;
+    if (const auto cached = senderKeys_.constFind(cacheKey); cached != senderKeys_.cend()) {
+        if (cached->expiresAt > now && accountCurrent(cached->account) &&
+            pins_.trustsKeys(senderId, version, cached->keys)) {
+            const auto keys = cached->keys;
+            callback(keys, {});
+            return;
+        }
+        senderKeys_.remove(cacheKey);
     }
     const QString keyPath = QStringLiteral("/v2/device-keys/%1/%2")
                                 .arg(QString::fromUtf8(QUrl::toPercentEncoding(senderId)))
                                 .arg(version);
     request(
         "GET", keyPath, {}, daemonToken_, {},
-        [this, fence, senderId, version, cacheKey, callback = std::move(callback)](
+        [this, fence, current, senderId, version, cacheKey, callback = std::move(callback)](
             const int status, const QJsonValue& value, const QString& transportError) mutable {
-            if (!accountCurrent(fence)) {
+            if (!current()) {
                 callback({}, QStringLiteral("The account changed before the operation completed."));
                 return;
             }
@@ -75,9 +88,9 @@ void CloudControlClient::withSenderKeys(const QString& senderId, const int versi
             }
             const QJsonObject keys = object(value).value(QStringLiteral("keys")).toObject();
             // The relay names the keys; only a device pinned on this Mac may use them (#87).
-            auto accept = [this, fence, senderId, version, cacheKey, keys,
+            auto accept = [this, fence, current, senderId, version, cacheKey, keys,
                            callback = std::move(callback)]() {
-                if (!accountCurrent(fence)) {
+                if (!current()) {
                     callback({},
                              QStringLiteral("The account changed before the operation completed."));
                     return;
@@ -89,8 +102,10 @@ void CloudControlClient::withSenderKeys(const QString& senderId, const int versi
                 }
                 if (senderKeys_.size() >= maximumCachedSenderKeys)
                     senderKeys_.clear();
-                senderKeys_.insert(cacheKey, {keys, QDateTime::currentDateTimeUtc().addMSecs(
-                                                        senderKeyCacheMilliseconds)});
+                senderKeys_.insert(
+                    cacheKey,
+                    {keys, QDateTime::currentDateTimeUtc().addMSecs(senderKeyCacheMilliseconds),
+                     fence});
                 callback(keys, {});
             };
             if (pins_.initialized() || !legacyPinAdoptionPending_) {
@@ -99,10 +114,9 @@ void CloudControlClient::withSenderKeys(const QString& senderId, const int versi
             }
             // Before the first device list, the devices already active are adopted.
             request("GET", QStringLiteral("/v2/devices"), {}, daemonToken_, {},
-                    [this, fence, accept = std::move(accept)](
+                    [this, fence, current, accept = std::move(accept)](
                         const int listStatus, const QJsonValue& list, const QString& listError) {
-                        if (accountCurrent(fence) && listStatus == 200 && list.isArray() &&
-                            listError.isEmpty())
+                        if (current() && listStatus == 200 && list.isArray() && listError.isEmpty())
                             (void)trustedDevices(list.toArray(), fence);
                         accept();
                     });
@@ -331,6 +345,7 @@ void CloudControlClient::approvePairing(const QJsonObject& payload, LocalCallbac
                                                  : pinError);
                             } else {
                                 legacyPinAdoptionPending_ = false;
+                                invalidateSenderKeys();
                                 callback({{QStringLiteral("ok"), true},
                                           {QStringLiteral("ticket"), object(approveValue)}},
                                          {});
@@ -416,7 +431,6 @@ void CloudControlClient::revokeDevice(const QJsonObject& payload, LocalCallback 
                 }
                 legacyPinAdoptionPending_ = false;
                 signaling_->receive({{"type", "device.revoked"}, {"deviceId", deviceId}});
-                senderKeys_.clear();
                 QString pinError;
                 if (!pins_.unpin(deviceId, &pinError)) {
                     callback({}, pinError);

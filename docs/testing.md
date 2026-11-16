@@ -805,7 +805,8 @@ running daemon.
 ### WebRTC host phase 3
 
 Build `ketplus_daemon_peer_transport_tests`, `ketplus_daemon_relay_wakeups_tests`,
-`ketplus_daemon_cloud_privacy_tests`, `ketplus_cloud_trust_lifecycle_tests` and
+`ketplus_daemon_cloud_privacy_tests`, `ketplus_cloud_trust_lifecycle_tests`,
+`ketplus_sender_key_cache_tests` and
 `ketplus_daemon_context_relay_tests` in a
 Release headless tree. The peer suite uses real libdatachannel loopback with signed
 SDP, in-memory credentials, temporary SQLite and a fake provider that is never
@@ -826,6 +827,17 @@ checks that legitimate restored-enrollment migration works for distribution and 
 fallback, while initialized empty pins and missing enrollment do not permit adoption. The
 standalone Release lane exposes the same suite as `r03_cloud_trust_lifecycle_tests`; it uses
 in-memory credentials, generated synthetic keys, a temporary journal and no provider turns.
+
+`ketplus_sender_key_cache_tests` (standalone: `r03_sender_key_cache_tests`) warms the
+cache before sign-out and same-workspace enrollment, verifies denial until a new local
+pairing approval, and checks authorized reuse without another HTTP request. It rechecks
+removed/replaced pins and scope, sign-in/cancellation, enrollment, device/machine revocation,
+and held key replies across those transitions, including revoke/re-pair with identical keys.
+The command regression separately delivers a signed, encrypted `session.rename` through the
+mailbox execution path: the journal stays unchanged before re-pairing and changes after it.
+This is native command-path coverage with fake transport, not a physical-device or hosted
+relay end-to-end test. Run it alongside the T-4 trust-lifecycle suite; all credentials are
+synthetic and no provider is started.
 
 ## Conversation deletion and next-turn defaults
 
