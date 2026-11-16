@@ -742,6 +742,17 @@ their logs and strip the suffix only when dispatching test commands.
 
 ### Claude background tasks
 
+The isolated output-store target uses temporary SQLite databases, including
+transaction-abort injection, byte paging across UTF-8 boundaries, reopen,
+bounded 10 MiB retention, cursor gaps and short-write coalescing. It does not
+start a daemon, provider or executor:
+
+```sh
+cmake -S tests/daemon/background-output -B build/background-output -G Ninja
+cmake --build build/background-output
+ctest --test-dir build/background-output --output-on-failure
+```
+
 The proposed provider-neutral replacement is [ADR 0127](decisions/0127-daemon-background-tasks.md).
 Run its design-fixture check without a build or provider account:
 
