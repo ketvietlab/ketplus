@@ -10,19 +10,66 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLabel>
+#include <QScopeGuard>
 #include <QScrollArea>
 #include <QShortcut>
 #include <QStandardPaths>
 #include <QVBoxLayout>
+#ifdef Q_OS_UNIX
+#include <fcntl.h>
+#include <sys/stat.h>
+#include <unistd.h>
+#elif defined(Q_OS_WIN)
+#include <fcntl.h>
+#include <io.h>
+#include <qt_windows.h>
+#endif
 
 namespace ketplus {
 namespace {
 QByteArray readBounded(const QString& path, qint64 limit) {
-    QFile file(path);
-    if (!file.open(QIODevice::ReadOnly) || file.size() > limit)
+    QFile file;
+#ifdef Q_OS_UNIX
+    // A pathname check alone races replacement with a FIFO before open().
+    const int descriptor = ::open(QFile::encodeName(path).constData(),
+                                  O_RDONLY | O_NONBLOCK | O_CLOEXEC | O_NOFOLLOW | O_NOCTTY);
+    if (descriptor < 0)
         return {};
+    auto close = qScopeGuard([descriptor] { ::close(descriptor); });
+    struct stat metadata{};
+    if (::fstat(descriptor, &metadata) || !S_ISREG(metadata.st_mode) || metadata.st_size < 0 ||
+        metadata.st_size > limit)
+        return {};
+#elif defined(Q_OS_WIN)
+    const auto nativePath = QDir::toNativeSeparators(path);
+    const auto handle =
+        CreateFileW(reinterpret_cast<const wchar_t*>(nativePath.utf16()), GENERIC_READ,
+                    FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING,
+                    FILE_FLAG_OPEN_REPARSE_POINT, nullptr);
+    if (handle == INVALID_HANDLE_VALUE)
+        return {};
+    auto closeHandle = qScopeGuard([handle] { CloseHandle(handle); });
+    BY_HANDLE_FILE_INFORMATION metadata{};
+    if (GetFileType(handle) != FILE_TYPE_DISK || !GetFileInformationByHandle(handle, &metadata) ||
+        (metadata.dwFileAttributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT)) ||
+        metadata.nFileSizeHigh || metadata.nFileSizeLow > quint64(limit))
+        return {};
+    const int descriptor =
+        _open_osfhandle(reinterpret_cast<qintptr>(handle), _O_RDONLY | _O_BINARY);
+    if (descriptor < 0)
+        return {};
+    closeHandle.dismiss();
+    auto close = qScopeGuard([descriptor] { _close(descriptor); });
+#else
+    return {}; // An unsupported file API cannot grant renderer execution.
+#endif
+#if defined(Q_OS_UNIX) || defined(Q_OS_WIN)
+    if (!file.open(descriptor, QIODevice::ReadOnly, QFileDevice::AutoCloseHandle))
+        return {};
+    close.dismiss();
     const auto bytes = file.read(limit + 1);
-    return bytes.size() <= limit ? bytes : QByteArray{};
+    return file.error() == QFileDevice::NoError && bytes.size() <= limit ? bytes : QByteArray{};
+#endif
 }
 QString quoted(const QString& value) {
     QString visible;

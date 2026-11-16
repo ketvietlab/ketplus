@@ -12,12 +12,14 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QLabel>
+#include <QProcess>
 #include <QScreen>
 #include <QSettings>
 #include <QTemporaryDir>
 #include <QtTest>
 #include <memory>
 #ifdef Q_OS_UNIX
+#include <sys/stat.h>
 #include <unistd.h>
 #endif
 
@@ -216,6 +218,99 @@ class ManagedAtlasViewersTest final : public QObject {
                 QTRY_VERIFY(viewers.viewers().isEmpty());
                 QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
             }
+        }
+#endif
+    }
+    void nonRegularInputs_data() {
+        QTest::addColumn<QString>("input");
+        QTest::addColumn<QString>("kind");
+        QTest::addColumn<bool>("afterConsent");
+        QTest::newRow("sidecar-fifo") << QString("sidecar") << QString("fifo") << false;
+        QTest::newRow("sidecar-fifo-after-consent")
+            << QString("sidecar") << QString("fifo") << true;
+        QTest::newRow("sidecar-fifo-link") << QString("sidecar") << QString("fifo-link") << false;
+        QTest::newRow("sidecar-directory") << QString("sidecar") << QString("directory") << false;
+        QTest::newRow("sidecar-device") << QString("sidecar") << QString("device") << false;
+        QTest::newRow("sidecar-oversized") << QString("sidecar") << QString("oversized") << false;
+        QTest::newRow("manifest-fifo") << QString("manifest") << QString("fifo") << false;
+        QTest::newRow("manifest-fifo-after-consent")
+            << QString("manifest") << QString("fifo") << true;
+    }
+    void nonRegularInputs() {
+#ifndef Q_OS_UNIX
+        QSKIP("Non-regular input fixtures require Unix filesystem APIs.");
+#else
+        QFETCH(QString, input);
+        QFETCH(QString, kind);
+        QFETCH(bool, afterConsent);
+        if (!qEnvironmentVariableIsSet("KETPLUS_ATLAS_NONREGULAR_WORKER")) {
+            // Keep a blocking-open regression from hanging the test runner itself.
+            QProcess child;
+            auto environment = QProcessEnvironment::systemEnvironment();
+            environment.insert("KETPLUS_ATLAS_NONREGULAR_WORKER", "1");
+            environment.insert("QT_QPA_PLATFORM", "offscreen");
+            child.setProcessEnvironment(environment);
+            child.setProcessChannelMode(QProcess::MergedChannels);
+            child.start(
+                QCoreApplication::applicationFilePath(),
+                {QString("nonRegularInputs:") + QString::fromLatin1(QTest::currentDataTag())});
+            QVERIFY(child.waitForStarted());
+            const bool finished = child.waitForFinished(10000);
+            if (!finished) {
+                child.kill();
+                child.waitForFinished();
+            }
+            const auto output = child.readAll().right(6000);
+            QVERIFY2(finished, ("Non-regular input exceeded watchdog. " + output).constData());
+            QCOMPARE(child.exitStatus(), QProcess::NormalExit);
+            QVERIFY2(child.exitCode() == 0, output.constData());
+            return;
+        }
+        const auto atlas = fixture();
+        QVERIFY(!atlas.path.isEmpty());
+        QWidget window;
+        window.resize(1000, 720);
+        window.show();
+        ketplus::ManagedAtlasViewers viewers;
+        if (afterConsent) {
+            viewers.open(atlas, &window);
+            QVERIFY(pending(window));
+            QVERIFY(!QFileInfo::exists(root_->filePath("argv")));
+        }
+        const auto path =
+            input == "manifest" ? atlas.path : atlas.directory + "/atlas.renderer.json";
+        QVERIFY(QFile::remove(path));
+        if (kind == "directory")
+            QVERIFY(QDir().mkpath(path));
+        else if (kind == "device")
+            QCOMPARE(::symlink("/dev/zero", QFile::encodeName(path)), 0);
+        else if (kind == "oversized")
+            QVERIFY(write(path, QByteArray(1024 * 1024 + 1, ' ')));
+        else if (kind == "fifo-link") {
+            const auto target = root_->filePath("pipe");
+            QCOMPARE(::mkfifo(QFile::encodeName(target), 0600), 0);
+            QCOMPARE(::symlink(QFile::encodeName(target), QFile::encodeName(path)), 0);
+        } else
+            QCOMPARE(::mkfifo(QFile::encodeName(path), 0600), 0);
+        const auto permission = ketplus::AtlasRendererPermission::read(
+            atlas, QProcessEnvironment::systemEnvironment(), 43121);
+        QVERIFY(permission.present);
+        QVERIFY(!permission.error.isEmpty());
+        if (afterConsent)
+            pending(window)->findChild<ket::Button*>("atlasRendererRun")->click();
+        else
+            viewers.open(atlas, &window);
+        QVERIFY(!pending(window));
+        QVERIFY(!viewers.errorFor(atlas.path).isEmpty());
+        if (input == "manifest") {
+            QVERIFY(viewers.viewers().isEmpty());
+            QVERIFY(!QFileInfo::exists(root_->filePath("argv")));
+        } else {
+            QTRY_COMPARE(viewers.runningCount(), 1);
+            QVERIFY(!read(root_->filePath("argv")).contains("--renderer\n"));
+            QVERIFY(!QFileInfo::exists(root_->filePath("renderer")));
+            viewers.stop(atlas.path);
+            QTRY_VERIFY(viewers.viewers().isEmpty());
         }
 #endif
     }

@@ -27,7 +27,10 @@ after stopping, reopening or restarting. Focusing an already-running viewer does
 not create a new renderer process.
 
 Keep a bounded in-memory snapshot of manifest/sidecar bytes, canonical paths,
-resolved cwd/executable and expanded arguments for the pending launch. Reserve
+resolved cwd/executable and expanded arguments for the pending launch. Read only
+regular files validated on the opened descriptor; Unix opens are nonblocking so
+a FIFO cannot stall consent or static fallback. Reject devices, directories and
+oversized inputs before reading. Reserve
 the viewer and renderer ports while the dialog is open, then release them for
 the CLI. Recheck the snapshot immediately before starting; changed contracts,
 symlink destinations or cwd/executable resolution cannot inherit approval.
@@ -53,8 +56,10 @@ separate concerns. Never describe these checks as full local-process isolation.
 
 `ketplus_managed_atlas_viewers_tests` uses a harmless CLI fixture and an intercepted
 URL handler; it checks renderer opt-in, static fallback, changed contracts/paths,
-pending Stop, and fresh consent on reopen/recreated registry. It also exercises
-live light/dark/system theme and 90/100/110/125 percent zoom at narrow/wide native
+pending Stop, and fresh consent on reopen/recreated registry. Watchdog-isolated
+FIFO/device/directory regressions include replacement while consent is pending
+and verify static fallback without renderer execution. UI checks exercise live
+light/dark/system theme and 90/100/110/125 percent zoom at narrow/wide native
 widget sizes. `ketplus_atlas_workspace_tests` checks that both desktop entry
 points reach the permission dialog before launching the CLI.
 
