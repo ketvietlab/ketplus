@@ -8,14 +8,15 @@ import Ket as Kit
 // items. `report` is the daemon ledger: { title, turn, items: [{ key, group, title, status,
 // evidence, remaining, next: { action, owner }, verified, created_turn, updated_turn,
 // closed_turn, replaced_by }] }. An item another one replaced is a duplicate: never shown or
-// counted. Finished items from long ago fold under "Finished earlier" in their group.
+// counted. Request-scoped snapshots hide earlier completions; legacy audit snapshots
+// retain their original display and fold older completions.
 Rectangle {
     id: card
 
     property var report: ({})
     // In the transcript the footer opens the details pane's Report tab.
     signal openRequested()
-    // The details pane shows the whole ledger without a frame of its own.
+    // The details pane shows the current request projection without a frame of its own.
     property bool ledger: false
     // While its turn runs the card closes the live transcript: a Running badge, and the
     // footer shows the turn's live activity instead of the next step.
@@ -24,7 +25,11 @@ Rectangle {
     property bool animate: running
     property string openItem
     property bool showClosed: true
-    readonly property var items: report && report.items ? report.items.filter(item => !item.replaced_by) : []
+    readonly property var items: report && report.items ? report.items.filter(item => {
+        if (item.replaced_by) return false
+        const closed = item.status === "done" || item.status === "cancelled"
+        return !closed || report.request_id === undefined || item.closed_request === report.request_id
+    }) : []
     readonly property int turn: report && report.turn ? report.turn : 0
     readonly property var groups: {
         const order = []

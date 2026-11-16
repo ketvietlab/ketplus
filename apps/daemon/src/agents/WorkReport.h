@@ -50,6 +50,10 @@ struct Merge final {
 // first (the journal's earlier snapshots keep them); a ledger still over is rejected.
 [[nodiscard]] Merge merge(const QJsonObject& current, const QJsonObject& call, qint64 turn);
 
+// Display/tool projection: all outstanding work plus items closed during the latest
+// direct-user request. The stored ledger remains unchanged for audit and stable-key merging.
+[[nodiscard]] QJsonObject currentRequest(const QJsonObject& ledger);
+
 // The ledger for the cloud: every text field redacted again and capped.
 [[nodiscard]] QJsonObject cloudProjection(const QJsonObject& ledger);
 

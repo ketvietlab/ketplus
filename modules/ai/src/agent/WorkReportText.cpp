@@ -45,6 +45,11 @@ QString workReportText(const QVariantMap& report) {
         if (item.contains(QStringLiteral("replaced_by")))
             continue;
         const QString state = item.value(QStringLiteral("status")).toString();
+        if ((state == QStringLiteral("done") || state == QStringLiteral("cancelled")) &&
+            report.contains(QStringLiteral("request_id")) &&
+            item.value(QStringLiteral("closed_request")) !=
+                report.value(QStringLiteral("request_id")))
+            continue;
         if (state != QStringLiteral("cancelled")) {
             ++total;
             if (state == QStringLiteral("done"))

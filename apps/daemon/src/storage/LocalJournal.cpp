@@ -1255,6 +1255,12 @@ qint64 LocalJournal::appendEventWithMutation(const QString& sessionId, const qin
             *error = projectionError;
         return -1;
     }
+    if (!advanceWorkReportRequest(sessionId, generation, cursor, type, payload, &projectionError)) {
+        database_.rollback();
+        if (error)
+            *error = projectionError;
+        return -1;
+    }
     if (mutation && !mutation()) {
         database_.rollback();
         if (error != nullptr)

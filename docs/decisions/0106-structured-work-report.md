@@ -150,3 +150,27 @@ cannot count it, filter it or show it anywhere else.
   long-lived items.
 - **Let the agent send counts.** Rejected: the counts must always match the items, so
   the app computes them.
+
+## Request-scoped presentation (T-126)
+
+The durable ledger remains the audit and stable-key merge source. Current report
+counts, tool responses, the Report pane and copied text show all outstanding items
+plus items closed during the current direct-user request, never lifetime totals.
+An outstanding item carried from an earlier request and completed now belongs to
+the current request. Rewording an already completed item does not move it into a
+new request; reopening and completing it does.
+
+Acceptance of a direct `user.message` or successful direct `turn.steered` stores
+its event cursor as `request_id` in the same journal transaction. Steers in the
+same turn therefore have distinct boundaries. Agent-origin messages, scheduled
+inputs, provider continuations and failed steers do not reset it. The marker
+survives restart and journal retention; forks copy the ledger and the next direct
+input starts their own scope. No user text is interpreted to guess a boundary.
+
+Closing records `closed_request`; historical closed items remain stored but are
+hidden from current counts. Existing ledgers without request metadata show only
+closed items from their recorded latest report turn until the next direct input
+establishes the durable boundary. Legacy transcript snapshots retain their
+historical rendering; new snapshots retain full audit data with request metadata
+and render only the matching scope. No journal migration or user-data rewrite is
+required.

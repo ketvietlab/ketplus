@@ -99,7 +99,10 @@ QJsonObject workReportTool() {
              "end of the turn. Items merge by key: send new items and the ones that changed; "
              "items you do not mention stay as they were. Never include secrets, credentials, "
              "tokens or file contents. The answer has the counts the user sees, every open item "
-             "and the recently finished ones, also from earlier turns: reconcile them before "
+             "and items finished during the current direct-user request, not historical "
+             "completions. "
+             "Outstanding items carry across requests; agent continuations do not reset scope. "
+             "Reconcile them before "
              "the turn ends, and do not send finished items again unless they changed.")},
         {QStringLiteral("inputSchema"),
          schema({{QStringLiteral("title"),

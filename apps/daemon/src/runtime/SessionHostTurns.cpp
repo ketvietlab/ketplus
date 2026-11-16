@@ -1,6 +1,7 @@
 #include "runtime/SessionHost.h"
 
 #include "agents/ReviewerPolicy.h"
+#include "agents/WorkReport.h"
 #include "providers/ClaudeAdapter.h"
 #include "providers/CodexAdapter.h"
 #include "providers/CursorAdapter.h"
@@ -484,7 +485,7 @@ QJsonObject SessionHost::turnCompletion(Session& session, const QString& status)
     const QJsonObject report = journal_->workReport(session.stored.id, session.stored.generation);
     if (!report.isEmpty() &&
         report.value(QStringLiteral("turn")).toInteger() == session.stored.currentTurnSequence)
-        completed.insert(QStringLiteral("work_report"), report);
+        completed.insert(QStringLiteral("work_report"), work_report::currentRequest(report));
     // #125: a finished turn whose answer asks the user to decide ends as Waiting for you.
     const bool finished = status.isEmpty() || status == QStringLiteral("completed") ||
                           status == QStringLiteral("ready");

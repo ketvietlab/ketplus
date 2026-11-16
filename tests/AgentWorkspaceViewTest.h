@@ -169,6 +169,7 @@ class AgentWorkspaceViewTest final : public QObject {
     void turnEndReportSurvivesAHistoryPageSplit();
     void workReportGroupsAcceptAnyName();
     void workReportPaneFollowsItsConversation();
+    void workReportShowsCurrentRequestAndOutstandingItems();
     void runningTurnShowsItsWorkReport();
     void workReportCapturesMatchTheMock();
     void changesPaneListsTheWorktreeChanges();

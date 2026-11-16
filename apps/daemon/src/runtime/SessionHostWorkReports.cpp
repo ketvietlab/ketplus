@@ -50,8 +50,8 @@ QJsonObject SessionHost::readWorkReport(const QJsonObject& request) {
     if (const auto checked = checkedSession(request, &session); !checked.isEmpty())
         return checked;
     return {{QStringLiteral("ok"), true},
-            {QStringLiteral("report"),
-             journal_->workReport(session->stored.id, session->stored.generation)}};
+            {QStringLiteral("report"), work_report::currentRequest(journal_->workReport(
+                                           session->stored.id, session->stored.generation))}};
 }
 
 } // namespace ketplus::daemon
