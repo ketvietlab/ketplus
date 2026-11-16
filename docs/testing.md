@@ -862,7 +862,29 @@ missing/spoofed/expired origins, idle/drain and queued requests, accepted child
 policy snapshots, two-conversation process isolation, stale response IDs,
 history/MCP setup failure and timeout, and SDK close failure before actual exit.
 Synthetic history proves adapter behavior; it cannot prove installed-provider
-history preservation. Control-only probes for installed CLIs are explicit opt-ins:
+history preservation. Installed-provider controls remain explicit opt-ins.
+
+After the reviewed T-8 recipe, an explicit installed-Codex test uses the production
+adapter and its real process/isolation/MCP lifecycle:
+
+```sh
+cmake --build build/daemon-dev --target ketplus_codex_offline_refresh_tests
+KETPLUS_CODEX_OFFLINE_REFRESH=1 KETPLUS_CODEX_TEST_BINARY=/path/to/installed/codex \
+  ctest --test-dir build/daemon-dev -R '^ketplus_codex_offline_refresh_tests$' --output-on-failure -V
+```
+
+Without the opt-in, its body skips before launching a CLI. It uses a fresh
+child-only profile without credentials and a local model endpoint which always
+rejects requests. An allowlist excludes model-turn methods; the sentinel must
+record zero requests. The real adapter injects synthetic context through the
+public API, restores the same thread ID, confirms prior MCP exit before new
+provider launch, and discovers a new MCP epoch. Only the provider writes the
+owned rollout; the test reads its marker without editing storage. This does not
+test completed-turn history or model recall. See the
+[provider gaps](decisions/0127-provider-origin-refresh-evidence.md).
+
+The earlier empty-session controls are retained for reference, not a loop to
+repeat when their hypotheses and errors have not changed:
 
 ```sh
 python3 tests/providers/codex/refresh-offline.py --executable codex

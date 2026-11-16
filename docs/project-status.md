@@ -747,8 +747,10 @@ Linux store policy, signed upgrade prompts and platform release acceptance remai
   accepted jobs retain their effective-policy snapshot. Claude waits for actual
   SDK process exit; Codex/ACP use dedicated per-conversation processes before
   restoring history and acknowledging a fresh MCP epoch. Offline fixtures pass;
-  installed Codex/Cursor empty-history probes cannot establish non-empty history
-  restoration, and Copilot runtime verification remains unavailable. Cursor and
+  installed Codex 0.162.1 also passes the production-adapter injection/same-ID
+  resume/MCP-rotation control without inference. This preserves provider-written
+  raw context, not completed-turn history. Real Cursor history/MCP and Copilot
+  runtime verification remain unavailable. Cursor and
   Copilot therefore receive no mutation credential and expose only background
   registry read tools; direct mutation returns a capability error. Their
   foreground behavior remains available. See the
