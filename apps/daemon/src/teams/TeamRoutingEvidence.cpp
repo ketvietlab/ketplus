@@ -16,7 +16,8 @@ QString digest(const QByteArray& bytes) {
     return QString::fromLatin1(QCryptographicHash::hash(bytes, QCryptographicHash::Sha256).toHex());
 }
 
-// No shell, hooks, external diff/textconv or inherited GIT_* repository overrides.
+// No shell, hooks, external diff/textconv, replacement objects or inherited
+// GIT_* repository overrides. Every operation reads the immutable named objects.
 std::optional<QByteArray> git(const QString& directory, const QStringList& arguments) {
     QProcess process;
     process.setWorkingDirectory(directory);
@@ -29,8 +30,9 @@ std::optional<QByteArray> git(const QString& directory, const QStringList& argum
     environment.insert(QStringLiteral("GIT_OPTIONAL_LOCKS"), QStringLiteral("0"));
     process.setProcessEnvironment(environment);
     process.start(QStringLiteral("git"),
-                  QStringList{QStringLiteral("-c"), QStringLiteral("core.fsmonitor=false"),
-                              QStringLiteral("-c"), QStringLiteral("core.untrackedCache=false")} +
+                  QStringList{QStringLiteral("--no-replace-objects"), QStringLiteral("-c"),
+                              QStringLiteral("core.fsmonitor=false"), QStringLiteral("-c"),
+                              QStringLiteral("core.untrackedCache=false")} +
                       arguments);
     QElapsedTimer elapsed;
     elapsed.start();
@@ -141,19 +143,20 @@ RoutingEvidence::Result RoutingEvidence::produce(const Team& team, const Task& t
     const auto branch = git(task.worktree, {QStringLiteral("symbolic-ref"),
                                             QStringLiteral("--short"), QStringLiteral("HEAD")});
     const auto clean =
-        git(task.worktree, {QStringLiteral("status"), QStringLiteral("--porcelain=v1"),
-                            QStringLiteral("-z"), QStringLiteral("--untracked-files=all")});
+        git(task.worktree,
+            {QStringLiteral("status"), QStringLiteral("--porcelain=v1"), QStringLiteral("-z"),
+             QStringLiteral("--untracked-files=all"), QStringLiteral("--ignore-submodules=none")});
     const auto ancestor =
         git(task.worktree, {QStringLiteral("merge-base"), QStringLiteral("--is-ancestor"),
                             task.baseCommit, revision});
     if (!head || head->trimmed() != revision.toLatin1() || !branch ||
         branch->trimmed() != task.branch.toUtf8() || !clean || !clean->isEmpty() || !ancestor)
         return unknown(QStringLiteral("stale_revision"));
-    const auto paths =
-        git(task.worktree, {QStringLiteral("diff"), QStringLiteral("--no-ext-diff"),
-                            QStringLiteral("--no-textconv"), QStringLiteral("--no-renames"),
-                            QStringLiteral("--name-only"), QStringLiteral("-z"), task.baseCommit,
-                            revision, QStringLiteral("--")});
+    const auto paths = git(
+        task.worktree, {QStringLiteral("diff"), QStringLiteral("--no-ext-diff"),
+                        QStringLiteral("--no-textconv"), QStringLiteral("--no-renames"),
+                        QStringLiteral("--ignore-submodules=none"), QStringLiteral("--name-only"),
+                        QStringLiteral("-z"), task.baseCommit, revision, QStringLiteral("--")});
     if (!paths || paths->isEmpty() || !paths->endsWith('\0'))
         return unknown(QStringLiteral("scope_unknown"));
     const auto files = paths->chopped(1).split('\0');
@@ -177,14 +180,16 @@ RoutingEvidence::Result RoutingEvidence::produce(const Team& team, const Task& t
     }
     if (!git(task.worktree, {QStringLiteral("diff"), QStringLiteral("--no-ext-diff"),
                              QStringLiteral("--no-textconv"), QStringLiteral("--check"),
-                             task.baseCommit, revision, QStringLiteral("--")}))
+                             QStringLiteral("--ignore-submodules=none"), task.baseCommit, revision,
+                             QStringLiteral("--")}))
         return unknown(QStringLiteral("check_failed"));
     // Recheck after every recipe check. Concurrent edits cannot mint a clean receipt.
     const auto finalHead =
         git(task.worktree, {QStringLiteral("rev-parse"), QStringLiteral("HEAD")});
     const auto finalClean =
-        git(task.worktree, {QStringLiteral("status"), QStringLiteral("--porcelain=v1"),
-                            QStringLiteral("--untracked-files=all")});
+        git(task.worktree,
+            {QStringLiteral("status"), QStringLiteral("--porcelain=v1"),
+             QStringLiteral("--untracked-files=all"), QStringLiteral("--ignore-submodules=none")});
     if (!finalHead || *finalHead != *head || !finalClean || !finalClean->isEmpty())
         return unknown(QStringLiteral("stale_revision"));
 
@@ -244,8 +249,9 @@ std::optional<risk::VerifiedEvidence> RoutingEvidence::lookup(const Team& team, 
     const auto branch = git(task.worktree, {QStringLiteral("symbolic-ref"),
                                             QStringLiteral("--short"), QStringLiteral("HEAD")});
     const auto clean =
-        git(task.worktree, {QStringLiteral("status"), QStringLiteral("--porcelain=v1"),
-                            QStringLiteral("-z"), QStringLiteral("--untracked-files=all")});
+        git(task.worktree,
+            {QStringLiteral("status"), QStringLiteral("--porcelain=v1"), QStringLiteral("-z"),
+             QStringLiteral("--untracked-files=all"), QStringLiteral("--ignore-submodules=none")});
     if (!head || head->trimmed() != it->evidence.revision.toLatin1() || !branch ||
         branch->trimmed() != it->branch.toUtf8() || !clean || !clean->isEmpty())
         return std::nullopt;

@@ -31,6 +31,9 @@ scope. No repository scripts or provider calls run. The protected in-memory stor
 retains proof metadata and opaque references, without transcripts, secrets or raw
 outputs. Caller IDs only look up receipts. State changes/expiry/restart invalidate
 lookup; the existing policy rechecks the clean live head before recording a route.
+All proof operations disable Git replacement objects. Diff/status operations
+force submodule visibility so repository-local ignore settings cannot hide
+gitlinks from mode/scope validation.
 
 Explain routes in agent instructions: leader answers advisory work directly;
 developers submit evidence once; verified low risk can be assessed by the leader;

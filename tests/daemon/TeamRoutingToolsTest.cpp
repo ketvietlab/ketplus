@@ -48,6 +48,30 @@ QString init(const QString& directory, const QString& path = "docs/prose.md",
         return {};
     return commit(directory);
 }
+// Construct real committed deltas that ordinary Git commands can be configured
+// to conceal. The host must inspect the actual objects, not that filtered view.
+QString concealedDelta(const QString& directory, const QString& base, const QString& attack) {
+    if (attack == "ignored-gitlink") {
+        if (!git(directory, {"config", "diff.ignoreSubmodules", "all"}) ||
+            !QDir().mkpath(directory + "/docs/hidden.md") ||
+            !git(directory,
+                 {"update-index", "--add", "--cacheinfo", "160000", base, "docs/hidden.md"}))
+            return {};
+        return commit(directory);
+    }
+    if (!write(directory, "src/auth.cpp", "bool authorize() { return true; }\n"))
+        return {};
+    const QString head = commit(directory);
+    QByteArray baseTree, replacementTree;
+    if (head.isEmpty() || !git(directory, {"rev-parse", base + "^{tree}"}, &baseTree) ||
+        !write(directory, "docs/prose.md", original) || !git(directory, {"add", "docs/prose.md"}) ||
+        !git(directory, {"write-tree"}, &replacementTree) ||
+        !git(directory, {"reset", "--hard", head}) ||
+        !git(directory, {"replace", QString::fromLatin1(baseTree.trimmed()),
+                         QString::fromLatin1(replacementTree.trimmed())}))
+        return {};
+    return head;
+}
 teams::Task task(const QString& directory, const QString& base) {
     teams::Task result;
     result.id = "T-1";
@@ -199,11 +223,20 @@ class TeamRoutingToolsTest final : public QObject {
         QVERIFY(!teams::RoutingEvidence::produce(scope, work, modeHead).evidence);
     }
 
+    void authenticatedToolsUseRealProducerThenHostLookupThenPolicy_data() {
+        QTest::addColumn<QString>("attack");
+        QTest::newRow("ordinary-prose") << QString{};
+        QTest::newRow("ignored-gitlink") << QString("ignored-gitlink");
+        QTest::newRow("replaced-base-tree") << QString("replaced-base-tree");
+    }
     void authenticatedToolsUseRealProducerThenHostLookupThenPolicy() {
+        QFETCH(QString, attack);
         Fixture fixture;
         QVERIFY(fixture.open());
         const QString repository = fixture.directory.filePath("repo");
         QVERIFY(!init(repository).isEmpty());
+        QVERIFY(write(repository, "src/auth.cpp", "bool authorize() { return false; }\n"));
+        QVERIFY(!commit(repository).isEmpty());
         const auto made = fixture.host->handleCommand(
             request("team.create",
                     {{"repository", repository},
@@ -327,6 +360,56 @@ class TeamRoutingToolsTest final : public QObject {
                      .value("error_code")
                      .toString(),
                  QString("role_forbidden"));
+        if (!attack.isEmpty()) {
+            QByteArray base;
+            QVERIFY(git(worktree, {"rev-parse", head + "^"}, &base));
+            const QString baseCommit = QString::fromLatin1(base.trimmed());
+            const QString concealedHead = concealedDelta(worktree, baseCommit, attack);
+            QVERIFY(!concealedHead.isEmpty());
+            QByteArray filtered;
+            QVERIFY(git(worktree, {"diff", "--name-only", baseCommit, concealedHead}, &filtered));
+            QCOMPARE(filtered.trimmed(), QByteArray("docs/prose.md"));
+            QByteArray complete;
+            QVERIFY(git(worktree,
+                        {"--no-replace-objects", "diff", "--ignore-submodules=none", "--name-only",
+                         baseCommit, concealedHead},
+                        &complete));
+            QVERIFY(
+                complete.contains(attack == "ignored-gitlink" ? "docs/hidden.md" : "src/auth.cpp"));
+            auto proofTask = task(worktree, baseCommit);
+            proofTask.branch = readTask().value("branch").toString();
+            const auto proof = teams::RoutingEvidence::produce(team(), proofTask, concealedHead);
+            QVERIFY(!proof.evidence);
+            QCOMPARE(proof.reason, attack == "ignored-gitlink"
+                                       ? QString("unsupported_file_mode_or_content")
+                                       : QString("unsupported_semantic_scope"));
+            // The authenticated deferred tool runs the real producer. Neither
+            // hidden material delta may mint a receipt or select the low-risk route.
+            QTRY_VERIFY_WITH_TIMEOUT(!fixture.host->teamChecksPending(), 10000);
+            verify.insert("expected_team_revision", revision());
+            verify.insert("head_commit", concealedHead);
+            const auto refused =
+                deferred(fixture, developer, "agents.team_task_route_verify", verify);
+            QCOMPARE(refused.value("error_code").toString(), QString("review_required"));
+            QVERIFY(!refused.contains("evidence_id"));
+            const auto denied = fixture.agents(leader, "agents.team_task_route_decide",
+                                               {{"task_id", "T-1"},
+                                                {"expected_team_revision", revision()},
+                                                {"kind", "change"},
+                                                {"route", "developer_leader"},
+                                                {"head_commit", concealedHead},
+                                                {"confidence", 99},
+                                                {"reason", "material_delta_requires_review"}});
+            QCOMPARE(denied.value("error_code").toString(), QString("review_required"));
+            if (attack == "replaced-base-tree") {
+                QByteArray tree;
+                QVERIFY(git(worktree, {"--no-replace-objects", "rev-parse", baseCommit + "^{tree}"},
+                            &tree));
+                QVERIFY(git(worktree, {"replace", "-d", QString::fromLatin1(tree.trimmed())}));
+            }
+            QVERIFY(git(worktree, {"reset", "--hard", head}));
+            verify.insert("head_commit", head);
+        }
         const auto evidence = deferred(fixture, developer, "agents.team_task_route_verify", verify);
         QVERIFY2(evidence.value("ok").toBool(), qPrintable(text(evidence)));
         const QString id = evidence.value("evidence_id").toString();

@@ -53,7 +53,11 @@ The proof concerns this exact delta, not the correctness of the repository's
 baseline. Old tasks whose recorded base includes unrelated changes fall back to
 review rather than silently narrowing the assessed diff. Git calls have bounded
 output/time and disable external diff, textconv, fsmonitor and inherited Git
-repository overrides; no repository script, build or provider is executed.
+repository overrides. Every operation disables replacement-object resolution,
+including base/tree/blob reads and receipt lookup. Diff enumeration, whitespace
+checks and clean-status fences explicitly include submodules regardless of local
+ignore configuration; a changed gitlink is an unsupported mode, never omitted
+from the proof. No repository script, build or provider is executed.
 
 Opaque receipt IDs and per-check/scope/rollback references are minted by the host.
 The host's bounded in-memory store holds at most 128 immutable receipts for ten
