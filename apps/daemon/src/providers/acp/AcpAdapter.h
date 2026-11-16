@@ -42,6 +42,8 @@ class AcpAdapter : public ProviderAdapter {
     // Set process_ program/arguments; the engine owns channels, environment and signals.
     virtual void configureProcess() = 0;
     virtual QJsonObject clientCapabilities() const;
+    // A provider may bootstrap a server at process launch instead of session setup.
+    virtual QJsonArray sessionMcpServers(const QJsonArray& servers) const { return servers; }
     // Opt in to turn-bound permission IDs and strictly advertised one-time options.
     virtual bool strictPermissionRequests() const { return false; }
     // rawInput is provider-owned data, not a portable authenticated MCP identity.

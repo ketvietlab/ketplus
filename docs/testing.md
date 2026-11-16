@@ -906,16 +906,17 @@ It creates and removes its own empty home/profile/cache/workspace, inherits no
 credentials, and enables offline BYOK with a rejecting local endpoint. It sends
 initialize/new and the informational `/mcp list` command, never a model question
 or tool call. Exit 2 means MCP discovery was not proved; it must not trigger a
-model fallback or automatic retry. The observed 1.0.112 run exits 2 with zero
-endpoint requests and zero remaining workers for both request injection and
-launch configuration. The launch variant spawns its registered worker, but
-neither variant observes MCP initialize/tools-list within five seconds. These
-are bounded observations, not an unsupported-provider conclusion. This control is not in the default
+model fallback or automatic retry. The corrected 1.0.112 launch control exits 0:
+the peer answers vendor `server/discover` with method-not-found before standard
+MCP initialize/tools-list completes. Request injection still exits 2 without
+worker startup within five seconds. Both record zero endpoint requests and zero
+remaining workers. These are bounded observations, not an unsupported-provider
+conclusion. This control is not in the default
 suite and does not establish production-adapter history preservation. The bounded
 live-turn budget and remaining authentication/discovery gates are recorded in the
 [origin evidence](decisions/0127-provider-origin-refresh-evidence.md).
 
-Neither sends a model prompt, reads existing user history or fabricates provider
+These controls do not send a model question, read existing user history or fabricate provider
 storage. Empty-session load failure is recorded as a validation gap, not proof
 that non-empty history cannot load.
 

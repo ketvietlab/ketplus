@@ -330,19 +330,48 @@ worker startup; GitHub documents informational ACP slash commands as non-model
 operations. The local endpoint observes **zero requests**, the provider exits,
 and no worker remains. The reproducible control
 `tests/providers/copilot/refresh-control.py` therefore exits **2** for missing
-MCP discovery. A separate launch-configuration control uses the documented
-`--additional-mcp-config` route instead of request injection. Its informational
-output names the fixture and its worker spawns, but no initialize/tools-list
-exchange is observed within the same bound. It also exits 2, with zero endpoint
-requests and no remaining workers. This separates registration/startup from
-verified MCP readiness; neither route is a passing provider test
-or evidence that the provider cannot support injected MCP. The discovery
-boundary requires investigation before the authorized model turn may be used.
+MCP discovery. This bounded request-injection observation does not establish
+that the provider cannot support injected MCP.
+
+A separate launch-configuration control uses the documented
+`--additional-mcp-config` route instead of request injection. An initial fixture
+aborted on the vendor's `server/discover` preflight. That result was a fixture
+defect, not provider readiness evidence. Returning JSON-RPC method-not-found
+for the unsupported preflight allows standard MCP initialization to follow.
+The corrected launch control **passes (exit 0)**: its informational output names
+the fixture, its worker completes `initialize` and `tools/list`, zero endpoint
+requests occur, and the provider and worker exit without leftover processes.
+The corrected request-injection control still observes no worker and exits 2.
+
+The Copilot adapter now supplies the managed agent server in an immutable
+process-launch configuration file owned by its dedicated conversation worker.
+The file is created with `NewOnly` and explicit owner read/write permissions
+(`0600` on POSIX); argv contains only its
+`@file` reference, and deletion follows worker release. The common server is
+omitted from session-level injection to avoid registering it twice. Other MCP
+servers keep their existing routing. Platform launch construction preserves
+Windows wrapper quoting, rejecting unsafe command-wrapper/configuration paths.
+Fixtures verify distinct epoch files, old-file deletion, credential exclusion
+from argv/logs and unchanged mutation gating. Authentication/model/cwd policy
+is not replaced by a test configuration. Creation-time permissions use
+[Qt's ACL-aware file-open API](https://doc.qt.io/qt-6/qfile.html#open-1), rather
+than relying on a later `setPermissions` call for Windows. Windows command
+shapes are exercised on macOS; native Windows launch/ACL validation was not run.
 
 The control is a standalone protocol measurement, not a production-adapter
 history/epoch proof. Copilot's previously missing executable gap is closed for
-this pinned test environment; injected MCP readiness, completed history and
-production-adapter refresh remain unverified. Cursor/Copilot mutation gates stay
+this pinned test environment; the standalone process-launch MCP control also
+passes. Completed history and real production-adapter refresh remain unverified.
+Cursor/Copilot mutation gates stay
 in place. The next external step is official user login into the separate test
 profiles, coordinated by the leader; no request to increase the approved budget
 is needed at this checkpoint.
+
+The final build and focused Host-origin/ACP-isolation/Copilot-adapter/tool/catalog/
+CLI CTest matrix pass **6/6 (59.65 s)**; Python compilation and diff checks pass.
+The initial matrix exposed a 500 ms interpreter-startup deadline in the isolation
+fixture, with different startup cases timing out across runs. Initialization now
+has its own 3 s fixture budget; the intentional `session/load` timeout remains
+500 ms and production deadlines are unchanged. The corrected real launch-MCP
+control passes without inference. These checks do not complete the real history
+or mutation-support acceptance criteria.

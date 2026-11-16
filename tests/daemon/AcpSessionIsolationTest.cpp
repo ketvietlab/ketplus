@@ -27,7 +27,9 @@ class FixtureAdapter final : public AcpAdapter {
     AcpAdapter* createSessionWorker() override { return new FixtureAdapter(path_); }
     void configureProcess() override { process_->setProgram(path_); }
     int requestTimeoutMs(const QString& method) const override {
-        return method == "initialize" || method == "session/load" ? 500 : 0;
+        // Process startup is not the load-timeout fault under test. Allow the
+        // interpreter to start under host load without weakening the 500ms load fence.
+        return method == "initialize" ? 3000 : method == "session/load" ? 500 : 0;
     }
 
   private:

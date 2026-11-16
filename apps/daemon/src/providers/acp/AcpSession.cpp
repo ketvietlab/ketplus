@@ -29,6 +29,7 @@ void AcpAdapter::ensureAcpSession(const QString& ketplusSessionId, const QString
     const QJsonObject agentServer = agentServers_.value(ketplusSessionId);
     if (!agentServer.isEmpty())
         servers.append(agentServer);
+    servers = sessionMcpServers(servers);
     const auto bind = [this, ketplusSessionId, callback = std::move(callback), model,
                        browserInjected, agentsInjected = !agentServer.isEmpty(),
                        computerInjected = computer.has_value(),

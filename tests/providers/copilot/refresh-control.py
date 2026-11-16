@@ -56,7 +56,11 @@ def worker():
             result = dict(tools=[dict(name="t3_control_one", description="Discovery only",
                                      inputSchema=dict(type="object", properties={}))])
         else:
-            raise RuntimeError("No tool invocation is allowed")
+            # Copilot probes server/discover before falling back to standard MCP.
+            # Unknown RPC methods must not terminate an otherwise valid MCP peer.
+            emit(jsonrpc="2.0", id=request,
+                 error=dict(code=-32601, message="Method not found; discovery-only peer"))
+            continue
         emit(jsonrpc="2.0", id=request, result=result)
 
 
@@ -132,6 +136,7 @@ def probe(executable, source):
     peer = None
     discovered = False
     cleaned = False
+    unexpected_calls = False
     with tempfile.TemporaryDirectory(prefix="ketplus-copilot-control-") as temporary:
         root = pathlib.Path(temporary).resolve()
         log = root / "workers.jsonl"
@@ -184,11 +189,13 @@ def probe(executable, source):
                     break
                 time.sleep(.05)
             discovered = any(entry["event"] == "tools/list" for entry in entries)
+            unexpected_calls = any(entry["event"] == "tools/call" for entry in entries)
             emit(step="new", mcp_source=source, observation_seconds=5,
                  ok="result" in new, error_code=new.get("error", {}).get("code"),
                  session_created=bool(session), mcp_spawned=bool(entries),
                  mcp_initialized=any(entry["event"] == "initialize" for entry in entries),
                  mcp_tools_listed=discovered, model_turns_sent=0,
+                 unexpected_tool_calls=unexpected_calls,
                  local_endpoint_requests=len(requests))
         finally:
             if peer:
@@ -210,7 +217,7 @@ def probe(executable, source):
             cleaned = not any(alive(pid) for pid in workers)
             server.shutdown()
     # Missing discovery is a failed capability control, never authorization to prompt.
-    return 0 if discovered and not requests and cleaned else 2
+    return 0 if discovered and not requests and cleaned and not unexpected_calls else 2
 
 
 if __name__ == "__main__":

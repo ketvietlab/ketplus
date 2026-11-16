@@ -1,8 +1,13 @@
 #include "providers/CopilotAdapter.h"
+#include <QDir>
+#include <QFile>
 #include <QFileInfo>
+#include <QJsonArray>
+#include <QJsonDocument>
 #include <QProcess>
 #include <QRegularExpression>
 #include <QTimer>
+#include <QUuid>
 
 namespace ketplus::daemon {
 namespace {
@@ -21,6 +26,30 @@ QString safeExplanation(QString text) {
     return text.left(2000).trimmed();
 }
 } // namespace
+
+struct CopilotAdapter::ManagedMcpFile final {
+    QFile file{QDir::tempPath() + "/ketplus-copilot-mcp-" +
+               QUuid::createUuid().toString(QUuid::WithoutBraces) + ".json"};
+    bool owned{false};
+    ~ManagedMcpFile() {
+        if (owned) {
+            file.close();
+            file.remove();
+        }
+    }
+    QString fileName() const { return file.fileName(); }
+    bool write(const QByteArray& data) {
+        // Creation-time permissions also construct Windows ACLs. A later chmod
+        // via setPermissions() alone does not restrict NTFS ACL inheritance.
+        if (!file.open(QIODevice::WriteOnly | QIODevice::NewOnly,
+                       QFileDevice::ReadOwner | QFileDevice::WriteOwner))
+            return false;
+        owned = true;
+        const bool written = file.write(data) == data.size() && file.flush();
+        file.close();
+        return written;
+    }
+};
 
 CopilotAdapter::CopilotAdapter(const QString& executable, QObject* parent)
     : AcpAdapter(QStringLiteral("GitHub Copilot"), parent), explicitPath_(executable),
@@ -91,6 +120,13 @@ void CopilotAdapter::call(const QString& method, const QJsonObject& params, Call
         catalog_->get(executable(), std::move(done));
         return;
     }
+    if (method == QStringLiteral("turn/start")) {
+        const auto error = prepareManagedMcpLaunch(params);
+        if (!error.isEmpty()) {
+            done({}, error);
+            return;
+        }
+    }
     if (authenticationFailed_) {
         stop();
         authenticationFailed_ = false;
@@ -98,19 +134,65 @@ void CopilotAdapter::call(const QString& method, const QJsonObject& params, Call
     AcpAdapter::call(method, params, std::move(done));
 }
 
+QString CopilotAdapter::prepareManagedMcpLaunch(const QJsonObject& params) {
+    const auto server = params.value("agentMcpServer").toObject();
+    if (params.value("managedTransportEpoch").toString().isEmpty() || server.isEmpty())
+        return {};
+    if (process_->state() != QProcess::NotRunning) {
+        if (server != managedMcpBootstrap_)
+            return "mutation_refresh_unavailable: Copilot MCP launch context cannot change.";
+        return {};
+    }
+    // Installed 1.0.112 discovers process-level MCP configuration before a prompt.
+    // A session/new ACK alone did not initialize its request-injected stdio peer.
+    // Keep credentials out of argv and retain one immutable file per owned worker.
+    QJsonObject environment;
+    for (const auto& value : server.value("env").toArray()) {
+        const auto entry = value.toObject();
+        environment.insert(entry.value("name").toString(), entry.value("value"));
+    }
+    const auto name = server.value("name").toString();
+    if (name != "ketplus_agents" || server.value("command").toString().isEmpty())
+        return "mutation_refresh_unavailable: Invalid Copilot managed MCP bootstrap.";
+    const QJsonObject launch{{"command", server.value("command")},
+                             {"args", server.value("args")},
+                             {"env", environment},
+                             {"tools", QJsonArray{"*"}}};
+    const auto data = QJsonDocument(QJsonObject{{"mcpServers", QJsonObject{{name, launch}}}})
+                          .toJson(QJsonDocument::Compact);
+    auto file = std::make_unique<ManagedMcpFile>();
+    if (!file->write(data))
+        return "mutation_refresh_unavailable: Unable to prepare private Copilot MCP configuration.";
+    managedMcpBootstrap_ = server;
+    managedMcpFile_ = std::move(file);
+    return {};
+}
+
 AcpAdapter* CopilotAdapter::createSessionWorker() { return new CopilotAdapter(executable()); }
+
+QJsonArray CopilotAdapter::sessionMcpServers(const QJsonArray& servers) const {
+    if (!managedMcpFile_)
+        return servers;
+    QJsonArray result;
+    for (const auto& server : servers)
+        if (server.toObject().value("name") != "ketplus_agents")
+            result.append(server);
+    return result;
+}
 
 void CopilotAdapter::checkLaunch(std::function<void(const QString&)> done) {
     const auto context = copilot_cli::systemDiscoveryContext();
     const auto invocation =
-        copilot_cli::processInvocation(executable(), context.platform, context.environment);
+        copilot_cli::processInvocation(executable(), context.platform, context.environment,
+                                       managedMcpFile_ ? managedMcpFile_->fileName() : QString{});
     done(invocation.error);
 }
 
 void CopilotAdapter::configureProcess() {
     const auto context = copilot_cli::systemDiscoveryContext();
     const auto invocation =
-        copilot_cli::processInvocation(executable(), context.platform, context.environment);
+        copilot_cli::processInvocation(executable(), context.platform, context.environment,
+                                       managedMcpFile_ ? managedMcpFile_->fileName() : QString{});
     process_->setProgram(invocation.program);
     process_->setArguments(invocation.arguments);
 #ifdef Q_OS_WIN
