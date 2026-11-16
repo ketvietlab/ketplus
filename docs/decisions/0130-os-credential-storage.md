@@ -119,6 +119,20 @@ The failures were retained and investigated:
   but does not establish the original write error conclusively. No journal code
   or assertions were changed to obtain the passing rerun.
 
+A subsequent full build at `23d1e298e51e25918857db1e1509188678c9f8b8` passed,
+but its serial test run exposed three additional missing-fingerprint failures in
+machine end-to-end, headless daemon and SSH daemon integration fixtures. That run
+was stopped after 100 completed suites. The subprocess fixtures launched the
+production daemon with temporary data directories, which did not isolate the
+native credential namespace. The earlier run is therefore not evidence of native
+store isolation for these subprocess tests. Their test-only daemon now links a
+persistent synthetic backend, with no production fallback or runtime opt-in.
+Native-store behavior remains covered separately by the disposable Keychain and
+private-bus fixtures.
+With this fixture isolation, the complete machine end-to-end, headless daemon,
+SSH daemon integration and Copilot CLI suites passed together (4/4, 15.60 seconds).
+The headless suite includes fingerprint persistence across subprocess restarts.
+
 Real Linux Secret Service implementations, Linux OS-user ACLs/backups, signed
 Desktop upgrade prompts, Windows, packaging and deployment still require platform
 verification. Passing a fake D-Bus service on macOS is not Linux native acceptance.

@@ -863,6 +863,13 @@ remote-control client/projection/backend and WebRTC host phase 3 suites for acco
 and sign-out interactions. No provider quota or real user credentials are used.
 Desktop session discovery links the same in-memory credential fixture and resets
 it before each case so its synthetic daemon identity never accesses an OS store.
+Tests that start a daemon subprocess use `ketplus_fixture_daemon`: the production
+entry point linked with a test-only persistent credential backend. Its synthetic
+records live beneath the explicitly supplied temporary `KETPLUS_DAEMON_DATA_DIR`,
+so restart/fingerprint checks work without accessing a native OS store. The fixture
+is neither installed nor bundled, and production has no environment switch to
+enable this backend. A data-directory override alone does not isolate native
+credential namespaces and must not be used as that isolation boundary.
 
 The normal test configuration warns if the optional Secret Service fixture tools
 are unavailable on the build host; do not claim that coverage in that case. Fake
