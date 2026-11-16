@@ -196,6 +196,19 @@ crashes on both sides of spawn/register; persisting a PID after spawn leaves an
 unacceptable ownership gap. A managed child agent has the same lifecycle
 obligations, including work it launches through the managed mechanism.
 
+Linux requires a delegated cgroup v2 **domain** per job, `cgroup.kill`, and
+`cgroup.events`/`populated`. Persist boot/subtree identity and contain the trusted
+launcher before any workload exec; the supervisor stays outside the subtree.
+Reclaim with `cgroup.kill` and confirm `populated=0` before terminal commit.
+Delegation to the workload's own UID alone does not prevent migration. A
+supported deployment must also supply tested unit/namespace isolation that
+prevents migration outside the job boundary. Missing capabilities return
+`containment_unavailable` before accepted, with no PGID fallback. The daemon
+must not install privilege changes, mount cgroups or change system ownership to
+make admission succeed. This does not claim to contain deliberate requests to
+external services. See the [kernel cgroup v2 documentation](https://docs.kernel.org/admin-guide/cgroup-v2.html)
+for delegation, migration and populated semantics.
+
 Lease loss terminates contained work, then escalates to kill after a finite
 grace period. Containment includes descendants, not just the direct QProcess.
 An implementation must demonstrate the platform's containment behavior,
@@ -287,9 +300,22 @@ learn when requested bytes have fallen out of retention, rather than interpretin
 the surviving tail as a complete transcript. Byte pagination must tolerate
 UTF-8 characters crossing a page boundary. UI decoding is not cursor arithmetic.
 
-Terminal metadata is retained for seven days. Nonterminal records and pending
-outbox events must not be pruned. Retention cannot break a pending event's
-reference or its durable acceptance deduplication.
+Terminal metadata and output are retained for seven days. Prune only settled
+terminal records: retain pending outbox, accepted/dispatching wake and live
+ownership references. Atomically replace pruned metadata with a tombstone
+`{owner_session_id, owner_generation, client_request_id, spec_hash, task_id,
+expired_at}` and the accepted defaults snapshot needed to normalize retries.
+Same-key/same-spec retries return `ok=false`, `error_code=task_expired`, the
+original `task_id` and `expired=true`; changed specs return
+`idempotency_conflict`. Neither path launches execution. Canonical hashing
+resolves omitted fields against the original defaults, including after owner
+configuration changes. Retain the requested-to-resolved cwd mapping so a retry
+does not follow a later symlink retarget or deletion. Tombstones have no independent TTL while that generation
+can accept requests; GC is permitted only with permanent generation revocation.
+Keep nonterminal records and pending outbox events. Retention cannot break a pending event's
+reference or its durable acceptance deduplication. Keep the compact child link
+as an ownership fence after parent expiry, so an expired worker cannot become a
+new quota root simply because its metadata aged out.
 
 Default admission limits are four execution slots per root owner session/generation
 and sixteen globally. Queued jobs do not consume slots. When slots are full,
@@ -396,3 +422,33 @@ those integration points without dropping legacy cleanup or inventing results.
 - Claim exactly-once execution/inference: a crash can leave an already executed
   side effect or model request with an unknown result. Durable deduplication
   prevents duplicate acceptance, not that fundamental ambiguity.
+
+## Implementation checkpoint for T-2
+
+The native pre-exec barrier records the forked root birth identity durably before
+releasing it to exec; gate EOF aborts a child whose supervisor died before release.
+This also covers commands that exit before Qt emits its started notification.
+
+The storage/runtime implementation now includes the transactional registry,
+permission-gated native macOS supervisor, owner-bound IPC operations, independent
+managed child conversations, durable completion acceptance and wake dispatch.
+`background_tasks` remains a 16-row compatibility projection; its active records
+come first, while list/get/output/stop use the complete registry. Authenticated
+local administration can inspect a retained owner/generation after conversation
+deletion and acknowledge cleanup with revision/audit checks; agent and remote
+credentials do not gain this administration grant.
+
+An accepted wake contains a durable logical `turn_id=background-wake:<event_id>`.
+A live dispatcher may defer a claimed wake only before invoking a provider.
+Recovered `dispatching` records become interrupted and are never replayed;
+`accepted` records remain eligible after restart. Managed child terminal commit
+waits for descendant jobs and their accepted/pending completion continuations.
+A parked child must reacquire a quota slot before another inference starts.
+
+Native macOS executor and fake-provider Host/IPC tests are runtime evidence;
+provider migration and shared UI acceptance remain separate gates. Linux process
+admission currently fails closed: the cgroup executor and its complete fault
+matrix are not implemented or verified. A temporary Linux reference probe found
+cgroup v2/nsdelegate and working system-service read-only control-group mounts,
+but no user bus and denied unprivileged user-namespace UID mapping. This is a
+verification limitation, not a containment claim or a product VM dependency.

@@ -12,6 +12,7 @@ int main() {
         // A new process group defeats cleanup that only signals the root PGID.
         if (setsid() < 0)
             _exit(3);
+        signal(SIGTERM, SIG_IGN);
         while (true)
             pause();
     }

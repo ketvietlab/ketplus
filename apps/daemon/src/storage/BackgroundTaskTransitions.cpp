@@ -121,6 +121,21 @@ QJsonObject BackgroundTaskLedger::changeImpl(const QString& id, qint64 expectedR
         if (descendants.next())
             return fail("execution_live",
                         "A managed agent cannot finish before its descendant jobs.");
+        descendants.finish();
+        descendants.prepare(
+            "SELECT 1 FROM managed_job_children c WHERE c.task_id=? AND "
+            "(EXISTS(SELECT 1 FROM managed_job_outbox o WHERE "
+            "o.owner_session_id=c.child_session_id "
+            "AND o.owner_generation=c.child_generation AND o.status='pending') OR "
+            "EXISTS(SELECT 1 FROM managed_job_wakes w WHERE w.owner_session_id=c.child_session_id "
+            "AND w.owner_generation=c.child_generation AND w.state IN ('accepted','dispatching'))) "
+            "LIMIT 1");
+        descendants.addBindValue(id);
+        if (!descendants.exec())
+            return fail("storage_error", descendants.lastError().text());
+        if (descendants.next())
+            return fail("execution_live",
+                        "A managed child's completion continuations are still pending.");
     }
     if (native && change.cleanupStatus == "verified" && !change.fullScopeVerified)
         return fail("invalid_cleanup_evidence",

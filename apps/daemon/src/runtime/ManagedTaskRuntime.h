@@ -27,14 +27,20 @@ class ManagedTaskRuntime final : public QObject {
                       ChildStop childStop);
     bool initialize(QString* error);
     QJsonObject start(const BackgroundTaskIntent& intent, const QJsonObject& execution);
-    QJsonObject stop(const QString& taskId, const BackgroundTaskOwner& owner);
+    QJsonObject stop(const QString& taskId, const BackgroundTaskOwner& owner,
+                     bool localAdministration = false);
     void permissionResolved(const QString& taskId, bool granted);
     void cancelOwner(const BackgroundTaskOwner& owner, const QString& reason);
     [[nodiscard]] QJsonObject output(const QString& taskId, const BackgroundTaskOwner& owner,
-                                     const QString& cursor = {}) const;
+                                     const QString& cursor = {},
+                                     bool localAdministration = false) const;
+    QJsonObject resolveCleanup(const QString& taskId, qint64 revision, const QString& clientId);
     // Managed children report only after inference, approvals and descendants settle.
     void childChanged(const QString& taskId, const BackgroundTaskChange& change);
     QJsonObject reserveChild(const QString& taskId);
+    QJsonObject parkChild(const QString& taskId);
+    QJsonObject resumeChild(const QString& taskId);
+    bool appendChildOutput(const QString& taskId, qint64 turn, const QByteArray& bytes);
 
   private:
     struct LiveTask {
@@ -51,11 +57,13 @@ class ManagedTaskRuntime final : public QObject {
     void reconcileProcess(const QString& taskId);
     void stopTask(const QString& taskId, const QString& reason);
     void publish(const QString& taskId);
+    void maintain();
     BackgroundTaskLedger ledger_;
     QString directory_;
     QString executor_;
     QHash<QString, std::shared_ptr<LiveTask>> live_;
     QTimer timer_;
+    QTimer maintenance_;
     Changed changed_;
     Permission permission_;
     ChildStart childStart_;

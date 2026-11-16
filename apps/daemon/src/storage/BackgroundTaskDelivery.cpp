@@ -1,4 +1,5 @@
 #include "storage/BackgroundTaskLedger.h"
+#include <QJsonDocument>
 #include <QSqlError>
 #include <QSqlQuery>
 #include <QVariant>
@@ -45,7 +46,10 @@ QJsonObject BackgroundTaskLedger::acceptCompletion(const QString& eventId,
     if (!query.next() || query.value(2).toString() != owner.sessionId ||
         query.value(3).toLongLong() != owner.generation)
         return fail("stale_owner", "The completion does not belong to this owner generation.");
-    const QByteArray payload = query.value(0).toByteArray();
+    auto turn = QJsonDocument::fromJson(query.value(0).toByteArray()).object();
+    turn.insert("event_id", eventId);
+    turn.insert("turn_id", "background-wake:" + eventId);
+    const QByteArray payload = QJsonDocument(turn).toJson(QJsonDocument::Compact);
     const QString status = query.value(1).toString();
     query.finish();
     if (status == "suppressed")

@@ -863,8 +863,12 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
 - Provider-neutral, daemon-owned background jobs: accepted contract in
   [ADR 0127](decisions/0127-daemon-background-tasks.md) records the leader-defined
   registry, executor/lease, transactional completion and owner-wake contract.
-  Its design fixtures are not runtime acceptance; registry/executor, provider
-  migration (including enforced Claude blocking) and shared UI remain to implement.
+  The runtime foundation includes transactional registry/output/quotas and native
+  macOS supervisor/lease,
+  permission/IPC/managed-child integration and durable owner-wake implementation
+  with isolated and fake-provider tests. Linux cgroup
+  execution, provider migration (including enforced Claude blocking), shared UI
+  and integration acceptance remain gates; this is not a completed product claim.
 
 - Agent teams ([ADR 0114](decisions/0114-agent-teams.md), epic #450): a leader, one
   to five developers and a Claude reviewer on one goal, with tasks, lanes, per-task

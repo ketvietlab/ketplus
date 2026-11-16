@@ -124,14 +124,20 @@ ManagedTaskAdmission validateManagedTask(const QJsonObject& payload,
     }
     if (QJsonDocument(execution).toJson(QJsonDocument::Compact).size() > 96 * 1024)
         return fail("invalid_execution", "The execution specification is too large.");
-    // Hash the caller's immutable request, before resolving omitted owner defaults.
-    // A retry must retain the accepted child config even after defaults change.
-    const auto fingerprint = QCryptographicHash::hash(
-        QJsonDocument(payload).toJson(QJsonDocument::Compact), QCryptographicHash::Sha256);
+    const QJsonObject defaults{
+        {"cwd", context.cwd},
+        {"requested_cwd",
+         payload.value("execution_spec").toObject().value("cwd").toString(context.cwd)},
+        {"resolved_cwd", cwd},
+        {"provider", context.provider},
+        {"model", context.model},
+        {"effort", context.effort}};
+    metadata.insert("request_defaults", defaults);
+    const auto fingerprint = backgroundTaskFingerprint(payload, defaults);
     result.intent = {context.owner, payload.value("client_request_id").toString(),
                      kind,          payload.value("title").toString(),
                      fingerprint,   qint64(timeout),
-                     metadata};
+                     metadata,      payload};
     result.execution = execution;
     return result;
 }

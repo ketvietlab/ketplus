@@ -29,8 +29,11 @@ add_executable(ketplus_background_ledger_tests
     "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/storage/BackgroundTaskLedger.cpp"
     "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/storage/BackgroundTaskTransitions.cpp"
     "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/storage/BackgroundTaskDelivery.cpp"
+    "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/storage/BackgroundTaskWakeQueue.cpp"
     "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/storage/BackgroundTaskQuota.cpp"
     "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/storage/BackgroundTaskList.cpp"
+    "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/storage/BackgroundTaskFingerprint.cpp"
+    "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/storage/BackgroundTaskRetention.cpp"
     "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/storage/BackgroundTaskExecutors.cpp"
     "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/storage/BackgroundTaskChildren.cpp"
 )
@@ -45,6 +48,7 @@ add_test(NAME ketplus_background_ledger_tests COMMAND ketplus_background_ledger_
 
 add_executable(ketplus_managed_task_spec_tests
     ../ManagedTaskSpecTest.cpp
+    "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/storage/BackgroundTaskFingerprint.cpp"
     "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/runtime/ManagedTaskSpec.cpp")
 target_include_directories(ketplus_managed_task_spec_tests PRIVATE
     "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src")
@@ -80,7 +84,10 @@ if(APPLE)
         "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/storage/BackgroundTaskLedger.cpp"
         "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/storage/BackgroundTaskTransitions.cpp"
         "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/storage/BackgroundTaskDelivery.cpp"
-        "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/storage/BackgroundTaskExecutors.cpp"
+        "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/storage/BackgroundTaskWakeQueue.cpp"
+        "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/storage/BackgroundTaskFingerprint.cpp"
+    "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/storage/BackgroundTaskRetention.cpp"
+    "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/storage/BackgroundTaskExecutors.cpp"
         "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/storage/BackgroundTaskChildren.cpp"
         "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/storage/BackgroundTaskQuota.cpp"
         "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/storage/BackgroundTaskList.cpp"

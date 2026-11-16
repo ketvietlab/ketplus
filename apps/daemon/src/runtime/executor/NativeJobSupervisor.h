@@ -13,6 +13,8 @@
 #include <QTimer>
 #include <memory>
 
+class QSocketNotifier;
+
 namespace ketplus::daemon::executor {
 class NativeJobSupervisor final : public QObject {
   public:
@@ -28,6 +30,9 @@ class NativeJobSupervisor final : public QObject {
     void send(const QString& event, const QJsonObject& data = {});
     bool persist();
     void launch(const QJsonObject& message);
+    bool prepareLaunchGate(QString* error);
+    void commitLaunchIdentity();
+    void closeLaunchGate();
     void drainOutput();
     void refreshKnown();
     void signalKnown(int signal);
@@ -45,6 +50,9 @@ class NativeJobSupervisor final : public QObject {
     QByteArray input_;
     QByteArray executionHash_;
     QProcess process_;
+    QSocketNotifier* launchReady_{nullptr};
+    int launchIdentityPipe_[2]{-1, -1};
+    int launchGate_[2]{-1, -1};
     QTimer timer_;
     QElapsedTimer clock_;
     QSqlDatabase outputDatabase_;

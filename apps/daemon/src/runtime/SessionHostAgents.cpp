@@ -51,6 +51,22 @@ QJsonObject SessionHost::handleAgentCommand(const QString& token, const QString&
 
 void SessionHost::handleAgentCommandDeferred(const QString& token, const QString& type,
                                              const QJsonObject& payload, CommandCallback done) {
+    if (isManagedTaskCommand(type)) {
+        const auto owner = agents_->sessionForToken(token);
+        const auto caller = owner ? agentConversation(owner->first) : std::nullopt;
+        if (!caller || caller->generation != owner->second) {
+            done({{"ok", false},
+                  {"error_code", "forbidden"},
+                  {"error_message", "The agent owner generation expired."}});
+            return;
+        }
+        managedTaskCommand({{"message_type", type},
+                            {"session_id", caller->sessionId},
+                            {"session_generation", caller->generation},
+                            {"payload", payload}},
+                           "authenticated-agent", std::move(done), true);
+        return;
+    }
     auto run = [this, token, type, payload, done = std::move(done)] {
         done(agents_->handle(token, type, payload));
     };

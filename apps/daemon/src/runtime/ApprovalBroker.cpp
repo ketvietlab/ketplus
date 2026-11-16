@@ -126,7 +126,8 @@ void ApprovalBroker::updateExpiryTimer() {
 
 QString ApprovalBroker::request(const QString& sessionId, const qint64 generation,
                                 const QJsonValue& providerRequestId, const QString& kind,
-                                const QJsonObject& details, const int timeoutMs) {
+                                const QJsonObject& details, const int timeoutMs,
+                                const bool managedTask) {
     const QString id = QUuid::createUuid().toString(QUuid::WithoutBraces);
     const qint64 expiry = timeoutMs > 0 ? QDateTime::currentMSecsSinceEpoch() + timeoutMs : 0;
     QJsonObject normalizedDetails = details;
@@ -148,8 +149,8 @@ QString ApprovalBroker::request(const QString& sessionId, const qint64 generatio
         if (!itemId.isEmpty())
             normalizedDetails.insert(QStringLiteral("item_id"), itemId);
     }
-    pending_.insert(id,
-                    {sessionId, generation, providerRequestId, kind, expiry, normalizedDetails, 1});
+    pending_.insert(id, {sessionId, generation, providerRequestId, kind, expiry, normalizedDetails,
+                         1, managedTask});
     updateExpiryTimer();
     emit requested(
         id, sessionId, generation, kind, normalizedDetails,
@@ -384,11 +385,13 @@ void ApprovalBroker::expireRequests() {
     updateExpiryTimer();
 }
 
-void ApprovalBroker::cancelPending(const QString& sessionId, const qint64 generation) {
+void ApprovalBroker::cancelPending(const QString& sessionId, const qint64 generation,
+                                   const bool includeManagedTasks) {
     // Remove first: answering a provider may synchronously finish the turn.
     QHash<QString, Pending> cancelled;
     for (auto it = pending_.begin(); it != pending_.end();) {
-        if (it->sessionId == sessionId && it->generation == generation) {
+        if (it->sessionId == sessionId && it->generation == generation &&
+            (includeManagedTasks || !it->managedTask)) {
             cancelled.insert(it.key(), *it);
             it = pending_.erase(it);
         } else
@@ -403,6 +406,19 @@ void ApprovalBroker::cancelPending(const QString& sessionId, const qint64 genera
                                          : cancelledApprovalResult(it->details));
         emit expired(it.key(), it->sessionId, it->generation, it->kind, it->revision);
     }
+}
+
+void ApprovalBroker::cancelRequest(const QString& approvalId) {
+    const auto found = pending_.find(approvalId);
+    if (found == pending_.end())
+        return;
+    const Pending request = *found;
+    pending_.erase(found);
+    deferred_.remove(QStringLiteral("%1\n%2").arg(approvalId).arg(request.revision));
+    rememberResolved(approvalId, request.kind);
+    emit providerResolutionReady(request.providerRequestId,
+                                 cancelledApprovalResult(request.details));
+    emit expired(approvalId, request.sessionId, request.generation, request.kind, request.revision);
 }
 
 void ApprovalBroker::expireAssistantQuestions(const QString& sessionId, const qint64 generation) {
@@ -424,10 +440,11 @@ void ApprovalBroker::expireAssistantQuestions(const QString& sessionId, const qi
 }
 
 QList<QJsonValue>
-ApprovalBroker::abandonPending(const std::function<bool(const QString&)>& ofSession) {
+ApprovalBroker::abandonPending(const std::function<bool(const QString&)>& ofSession,
+                               const bool includeManagedTasks) {
     QHash<QString, Pending> abandoned;
     for (auto it = pending_.begin(); it != pending_.end();) {
-        if (ofSession && !ofSession(it->sessionId)) {
+        if ((!includeManagedTasks && it->managedTask) || (ofSession && !ofSession(it->sessionId))) {
             ++it;
             continue;
         }

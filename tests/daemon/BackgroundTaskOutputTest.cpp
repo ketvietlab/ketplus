@@ -12,6 +12,59 @@ class BackgroundTaskOutputTest final : public QObject {
     Q_OBJECT
 
   private slots:
+    void textPagesPreserveUtf8AndKeepRawByteCursors() {
+        const auto name = QUuid::createUuid().toString();
+        {
+            auto db = QSqlDatabase::addDatabase("QSQLITE", name);
+            db.setDatabaseName(":memory:");
+            QVERIFY(db.open());
+            BackgroundTaskOutput output(db);
+            QString error;
+            QVERIFY(output.initialize(&error));
+            const auto text = QByteArray(8191, 'x') + QStringLiteral("😌 tiếng Việt").toUtf8();
+            QVERIFY(output.append("job", text, &error));
+            const auto first = output.read("job", {}, 8192, true);
+            QCOMPARE(first.bytes.size(), 8191);
+            const auto second = output.read("job", first.nextCursor, 8192, true);
+            QCOMPARE(first.bytes + second.bytes, text);
+            const auto partial = QStringLiteral("✨").toUtf8();
+            QVERIFY(output.append("partial", partial.left(2), &error));
+            const auto waiting = output.read("partial", {}, 8192, true);
+            QVERIFY(waiting.bytes.isEmpty());
+            QVERIFY(output.append("partial", partial.mid(2), &error));
+            QCOMPARE(output.read("partial", waiting.nextCursor, 8192, true).bytes, partial);
+            QVERIFY(output.append("invalid", QByteArray::fromHex("e282"), &error));
+            QCOMPARE(output.read("invalid", {}, 8192, true, true).bytes,
+                     QByteArray::fromHex("e282"));
+        }
+        QSqlDatabase::removeDatabase(name);
+    }
+
+    void producerCursorDeduplicatesOutputAtomically() {
+        const auto name = QUuid::createUuid().toString();
+        {
+            auto db = QSqlDatabase::addDatabase("QSQLITE", name);
+            db.setDatabaseName(":memory:");
+            QVERIFY(db.open());
+            BackgroundTaskOutput output(db);
+            QString error;
+            QVERIFY(output.initialize(&error));
+            QVERIFY(output.append("agent-job", "first", &error, 10));
+            QVERIFY(output.append("agent-job", "first", &error, 10));
+            QVERIFY(output.append("agent-job", "older", &error, 9));
+            QCOMPARE(output.read("agent-job").bytes, QByteArray("first"));
+            QSqlQuery query(db);
+            QVERIFY(query.exec("CREATE TRIGGER fail_producer BEFORE UPDATE ON job_output_producers "
+                               "BEGIN SELECT RAISE(ABORT,'injected output cursor failure'); END"));
+            QVERIFY(!output.append("agent-job", "second", &error, 11));
+            QCOMPARE(output.read("agent-job").bytes, QByteArray("first"));
+            QVERIFY(query.exec("DROP TRIGGER fail_producer"));
+            QVERIFY(output.append("agent-job", "second", &error, 11));
+            QCOMPARE(output.read("agent-job").bytes, QByteArray("firstsecond"));
+        }
+        QSqlDatabase::removeDatabase(name);
+    }
+
     void roundTripAcrossPagesAndReopen() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());

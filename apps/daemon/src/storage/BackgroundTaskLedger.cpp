@@ -35,7 +35,14 @@ BackgroundTaskLedger::BackgroundTaskLedger(QSqlDatabase database)
 bool BackgroundTaskLedger::initialize(QString* error) {
     QSqlQuery query(database_);
     for (const auto& statement :
-         {"CREATE TABLE IF NOT EXISTS managed_jobs (sequence INTEGER PRIMARY KEY AUTOINCREMENT,"
+         {"CREATE TABLE IF NOT EXISTS managed_job_tombstones(owner_session_id TEXT NOT NULL,"
+          "owner_generation INTEGER NOT NULL,client_request_id TEXT NOT NULL,spec_hash BLOB NOT "
+          "NULL,"
+          "task_id TEXT NOT NULL UNIQUE,expired_at INTEGER NOT NULL,defaults_snapshot BLOB NOT "
+          "NULL,"
+          "output_removed INTEGER NOT NULL DEFAULT 0,PRIMARY "
+          "KEY(owner_session_id,owner_generation,client_request_id))",
+          "CREATE TABLE IF NOT EXISTS managed_jobs (sequence INTEGER PRIMARY KEY AUTOINCREMENT,"
           "task_id TEXT NOT NULL UNIQUE, "
           "owner_session_id TEXT NOT NULL,owner_generation INTEGER NOT NULL,"
           "root_session_id TEXT NOT NULL,root_generation INTEGER NOT NULL,"
@@ -45,6 +52,10 @@ bool BackgroundTaskLedger::initialize(QString* error) {
           "record BLOB NOT NULL,UNIQUE(owner_session_id,owner_generation,client_request_id))",
           "CREATE INDEX IF NOT EXISTS managed_jobs_slots ON "
           "managed_jobs(holds_slot,root_session_id,root_generation)",
+          "CREATE INDEX IF NOT EXISTS managed_jobs_descendants ON "
+          "managed_jobs(json_extract(record,'$.parent_task_id'),state)",
+          "CREATE INDEX IF NOT EXISTS managed_jobs_nonterminal ON managed_jobs(sequence) WHERE "
+          "state NOT IN ('completed','failed','cancelled','timed_out','interrupted')",
           "CREATE TABLE IF NOT EXISTS managed_job_children(task_id TEXT PRIMARY KEY,"
           "child_session_id TEXT NOT NULL UNIQUE,child_generation INTEGER NOT NULL)",
           "CREATE TABLE IF NOT EXISTS managed_job_outbox (event_id TEXT PRIMARY KEY,"
@@ -119,9 +130,9 @@ QJsonObject BackgroundTaskLedger::task(const QString& taskId) const {
     return record;
 }
 
-QJsonObject BackgroundTaskLedger::get(const QString& taskId,
-                                      const BackgroundTaskOwner& owner) const {
-    if (!currentOwner(database_, owner))
+QJsonObject BackgroundTaskLedger::get(const QString& taskId, const BackgroundTaskOwner& owner,
+                                      bool localAdministration) const {
+    if (!localAdministration && !currentOwner(database_, owner))
         return failure("stale_owner", "The owner generation is no longer current.");
     auto record = task(taskId);
     if (record.contains("error_code"))
@@ -136,6 +147,9 @@ QJsonObject BackgroundTaskLedger::create(const BackgroundTaskIntent& intent) {
         intent.clientRequestId.isEmpty() || intent.specFingerprint.isEmpty() ||
         (intent.kind != "process" && intent.kind != "agent") || intent.timeoutMs <= 0)
         return failure("invalid_request", "Incomplete accepted task intent.");
+    const auto existing = retry(intent);
+    if (!existing.value("ok").toBool() || !existing.value("task").isNull())
+        return existing;
     if (!database_.transaction())
         return failure("storage_error", database_.lastError().text());
     const auto fail = [&](const QString& code, const QString& message) {
@@ -176,7 +190,7 @@ QJsonObject BackgroundTaskLedger::create(const BackgroundTaskIntent& intent) {
     qint64 rootGeneration = intent.owner.generation;
     QString parentTask;
     query.prepare("SELECT j.root_session_id,j.root_generation,j.task_id,c.child_generation,j.state "
-                  "FROM managed_job_children c JOIN managed_jobs j ON j.task_id=c.task_id "
+                  "FROM managed_job_children c LEFT JOIN managed_jobs j ON j.task_id=c.task_id "
                   "WHERE c.child_session_id=?");
     query.addBindValue(intent.owner.sessionId);
     if (!query.exec())

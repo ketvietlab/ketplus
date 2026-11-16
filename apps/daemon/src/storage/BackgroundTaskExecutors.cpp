@@ -16,8 +16,14 @@ QJsonObject failure(const QString& code, const QString& message) {
 
 QJsonObject BackgroundTaskLedger::retry(const BackgroundTaskIntent& intent) const {
     QSqlQuery query(database_);
-    query.prepare("SELECT task_id,spec_fingerprint FROM managed_jobs WHERE owner_session_id=? "
-                  "AND owner_generation=? AND client_request_id=?");
+    query.prepare(
+        "SELECT task_id,spec_fingerprint,json_extract(record,'$.execution.request_defaults'),0 "
+        "FROM managed_jobs WHERE owner_session_id=? AND owner_generation=? AND client_request_id=? "
+        "UNION ALL SELECT task_id,spec_hash,defaults_snapshot,1 FROM managed_job_tombstones "
+        "WHERE owner_session_id=? AND owner_generation=? AND client_request_id=? LIMIT 1");
+    query.addBindValue(intent.owner.sessionId);
+    query.addBindValue(intent.owner.generation);
+    query.addBindValue(intent.clientRequestId);
     query.addBindValue(intent.owner.sessionId);
     query.addBindValue(intent.owner.generation);
     query.addBindValue(intent.clientRequestId);
@@ -27,13 +33,28 @@ QJsonObject BackgroundTaskLedger::retry(const BackgroundTaskIntent& intent) cons
         return {{"ok", true}, {"task", QJsonValue::Null}};
     const auto id = query.value(0).toString();
     const auto fingerprint = query.value(1).toByteArray();
+    const auto defaults = QJsonDocument::fromJson(query.value(2).toByteArray()).object();
+    const bool expired = query.value(3).toBool();
     query.finish();
+    QSqlQuery current(database_);
+    current.prepare("SELECT 1 FROM sessions WHERE id=? AND generation=?");
+    current.addBindValue(intent.owner.sessionId);
+    current.addBindValue(intent.owner.generation);
+    if (!current.exec())
+        return failure("storage_error", current.lastError().text());
+    if (!current.next())
+        return failure("stale_owner", "The owner generation is no longer current.");
+    const auto requested = intent.requestPayload.isEmpty()
+                               ? intent.specFingerprint
+                               : backgroundTaskFingerprint(intent.requestPayload, defaults);
+    if (fingerprint != requested)
+        return failure("idempotency_conflict",
+                       "This request key was accepted with a different spec.");
+    if (expired)
+        return {{"ok", false}, {"error_code", "task_expired"}, {"task_id", id}, {"expired", true}};
     auto reply = get(id, intent.owner);
     if (!reply.value("ok").toBool())
         return reply;
-    if (fingerprint != intent.specFingerprint)
-        return failure("idempotency_conflict",
-                       "This request key was accepted with a different spec.");
     reply.insert("reused", true);
     return reply;
 }

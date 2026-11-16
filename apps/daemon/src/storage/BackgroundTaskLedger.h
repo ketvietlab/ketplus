@@ -22,7 +22,10 @@ struct BackgroundTaskIntent final {
     QByteArray specFingerprint;
     qint64 timeoutMs{0};
     QJsonObject executionMetadata;
+    QJsonObject requestPayload{};
 };
+
+QByteArray backgroundTaskFingerprint(QJsonObject request, const QJsonObject& defaults);
 
 struct BackgroundTaskChange final {
     QString state;
@@ -54,9 +57,10 @@ class BackgroundTaskLedger final {
     QJsonObject create(const BackgroundTaskIntent& intent);
     // Retry lookup precedes infrastructure/quota checks; it never creates a job.
     [[nodiscard]] QJsonObject retry(const BackgroundTaskIntent& intent) const;
-    [[nodiscard]] QJsonObject get(const QString& taskId, const BackgroundTaskOwner& owner) const;
+    [[nodiscard]] QJsonObject get(const QString& taskId, const BackgroundTaskOwner& owner,
+                                  bool localAdministration = false) const;
     [[nodiscard]] QJsonObject list(const BackgroundTaskOwner& owner, const QString& cursor = {},
-                                   int limit = 50);
+                                   int limit = 50, bool localAdministration = false);
     QJsonObject change(const QString& taskId, qint64 expectedRevision,
                        const BackgroundTaskChange& change);
     QJsonObject claimNext();
@@ -78,6 +82,18 @@ class BackgroundTaskLedger final {
     bool holdOwner(const BackgroundTaskOwner& owner, const QString& reason, QString* error);
     // A dispatching inference is never claimed again after restart.
     QJsonObject claimWake(const QString& eventId, const BackgroundTaskOwner& owner);
+    // Runtime-only scans/links; never expose these without the IPC owner/grant checks.
+    [[nodiscard]] QJsonObject runtimeTask(const QString& taskId) const { return task(taskId); }
+    [[nodiscard]] QJsonObject linkedTask(const QString& childSessionId, qint64 generation) const;
+    [[nodiscard]] QJsonObject deliveryPage(bool acceptedWakes, qint64 after = 0) const;
+    QJsonObject suppressCompletion(const QString& eventId, const QString& reason);
+    QJsonObject finishWake(const QString& eventId, const QString& state);
+    QJsonObject recoverDispatchingWakes();
+    QJsonObject deferWake(const QString& eventId);
+    QJsonObject prune(qint64 nowMs);
+    bool outputRemoved(const QString& taskId);
+    [[nodiscard]] bool wakeDispatchAllowed(const QString& eventId,
+                                           const BackgroundTaskOwner& owner) const;
 
   private:
     QJsonObject changeImpl(const QString& taskId, qint64 expectedRevision,

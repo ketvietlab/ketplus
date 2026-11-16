@@ -2,7 +2,9 @@
 #include "runtime/executor/NativeProcessIdentity.h"
 
 #include <QJsonArray>
+#include <cerrno>
 #include <csignal>
+#include <unistd.h>
 
 namespace ketplus::daemon::executor {
 namespace {
@@ -13,6 +15,14 @@ NativeProcessIdentity fromJson(const QJsonObject& value) {
 bool alive(const QJsonObject& value) {
     const auto current = inspect(value.value("pid").toInteger());
     return current && !current->zombie && current->birth == value.value("birth").toString();
+}
+bool stopped(const QJsonObject& value) {
+    if (value.value("pid").toInteger() <= 0 || value.value("birth").toString().isEmpty())
+        return false;
+    const auto current = inspect(value.value("pid").toInteger());
+    if (current)
+        return current->zombie || current->birth != value.value("birth").toString();
+    return kill(pid_t(value.value("pid").toInteger()), 0) != 0 && errno == ESRCH;
 }
 } // namespace
 
@@ -50,10 +60,12 @@ void NativeJobClient::recoverLostSupervisor() {
     }
     // Missing receipts cannot establish that an as-yet-unregistered supervisor
     // stopped. Keep the slot and attention record rather than inventing evidence.
-    const bool stopped =
-        !supervisor.isEmpty() && !alive(supervisor) && (root.isEmpty() || !alive(root));
-    reportLost(stopped, lastReceipt_.isEmpty() ? "executor_receipt_unavailable"
-                                               : "executor_connection_lost");
+    bool knownStopped =
+        !supervisor.isEmpty() && stopped(supervisor) && (root.isEmpty() || stopped(root));
+    for (const auto value : identities)
+        knownStopped = knownStopped && stopped(value.toObject());
+    reportLost(knownStopped, lastReceipt_.isEmpty() ? "executor_receipt_unavailable"
+                                                    : "executor_connection_lost");
 }
 
 void NativeJobClient::reportLost(bool stopped, const QString& issue) {

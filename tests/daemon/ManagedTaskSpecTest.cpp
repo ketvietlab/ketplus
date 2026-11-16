@@ -35,6 +35,32 @@ QJsonObject payload(const QString& cwd) {
 class ManagedTaskSpecTest final : public QObject {
     Q_OBJECT
   private slots:
+    void retryFingerprintKeepsAcceptedCwdAfterSymlinkRetarget() {
+        QTemporaryDir directory;
+        const auto cwd = QFileInfo(directory.path()).canonicalFilePath();
+        QVERIFY(QDir(cwd).mkdir("first"));
+        QVERIFY(QDir(cwd).mkdir("second"));
+        QVERIFY(QFile::link(cwd + "/first", cwd + "/alias"));
+        auto input = payload(cwd);
+        auto spec = input.value("execution_spec").toObject();
+        spec.insert("cwd", cwd + "/alias");
+        input.insert("execution_spec", spec);
+        const auto accepted = validateManagedTask(input, context(cwd));
+        QVERIFY(accepted.error.isEmpty());
+        QVERIFY(QFile::remove(cwd + "/alias"));
+        QVERIFY(QFile::link(cwd + "/second", cwd + "/alias"));
+        QCOMPARE(backgroundTaskFingerprint(
+                     input, accepted.intent.executionMetadata.value("request_defaults").toObject()),
+                 accepted.intent.specFingerprint);
+        const auto fresh = validateManagedTask(input, context(cwd));
+        QVERIFY(fresh.error.isEmpty());
+        QVERIFY(fresh.intent.specFingerprint != accepted.intent.specFingerprint);
+        QVERIFY(QFile::remove(cwd + "/alias"));
+        QCOMPARE(backgroundTaskFingerprint(
+                     input, accepted.intent.executionMetadata.value("request_defaults").toObject()),
+                 accepted.intent.specFingerprint);
+    }
+
     void authenticatedOwnerAndCredentialFreeMetadata() {
         QTemporaryDir directory;
         const auto cwd = QFileInfo(directory.path()).canonicalFilePath();
@@ -93,10 +119,13 @@ class ManagedTaskSpecTest final : public QObject {
         QCOMPARE(original.intent.executionMetadata.value("model"), "model-a");
         owner.model = "model-b";
         const auto changedDefaults = validateManagedTask(input, owner);
-        QCOMPARE(changedDefaults.intent.specFingerprint, original.intent.specFingerprint);
+        QVERIFY(changedDefaults.intent.specFingerprint != original.intent.specFingerprint);
+        QCOMPARE(backgroundTaskFingerprint(
+                     input, original.intent.executionMetadata.value("request_defaults").toObject()),
+                 original.intent.specFingerprint);
         QCOMPARE(changedDefaults.intent.executionMetadata.value("model"), "model-b");
-        // The start handler uses the original fingerprint to return the accepted
-        // record before consulting changed defaults/catalog on a retry.
+        // Retry canonicalization uses accepted defaults before a current catalog
+        // or owner configuration can change the immutable request identity.
         for (const auto& forbidden :
              {"session_id", "token", "env", "permissionMode", "system_prompt_override"}) {
             auto spec = input.value("execution_spec").toObject();

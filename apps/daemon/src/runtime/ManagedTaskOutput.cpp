@@ -1,14 +1,39 @@
 #include "runtime/ManagedTaskRuntime.h"
 #include "storage/BackgroundTaskOutput.h"
 
+#include <QDir>
 #include <QFileInfo>
 #include <QSqlError>
 #include <QUuid>
 
 namespace ketplus::daemon {
+bool ManagedTaskRuntime::appendChildOutput(const QString& id, qint64 turn,
+                                           const QByteArray& bytes) {
+    const auto live = live_.value(id);
+    if (!live || live->record.value("kind") != "agent" || turn <= 0)
+        return false;
+    const auto path = directory_ + '/' + id;
+    if (!QDir().mkpath(path) ||
+        !QFile::setPermissions(path, QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner))
+        return false;
+    const auto connection = QUuid::createUuid().toString();
+    bool stored = false;
+    {
+        auto database = QSqlDatabase::addDatabase("QSQLITE", connection);
+        database.setDatabaseName(path + "/output.sqlite");
+        if (database.open()) {
+            BackgroundTaskOutput output(database);
+            QString error;
+            stored = output.initialize(&error) && output.append(id, bytes, &error, turn);
+        }
+    }
+    QSqlDatabase::removeDatabase(connection);
+    return stored;
+}
+
 QJsonObject ManagedTaskRuntime::output(const QString& id, const BackgroundTaskOwner& owner,
-                                       const QString& cursor) const {
-    const auto authorized = ledger_.get(id, owner);
+                                       const QString& cursor, bool localAdministration) const {
+    const auto authorized = ledger_.get(id, owner, localAdministration);
     if (!authorized.value("ok").toBool())
         return authorized;
     const auto path = directory_ + '/' + id + "/output.sqlite";
@@ -31,7 +56,9 @@ QJsonObject ManagedTaskRuntime::output(const QString& id, const BackgroundTaskOw
             if (!QFileInfo::exists(path))
                 output.initialize(&page.error);
             if (page.error.isEmpty())
-                page = output.read(id, cursor);
+                page =
+                    output.read(id, cursor, BackgroundTaskOutput::maximumPageBytes, true,
+                                authorized.value("task").toObject().value("ended_at").isDouble());
         }
     }
     QSqlDatabase::removeDatabase(connection);

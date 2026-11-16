@@ -7,6 +7,21 @@ const fixture = JSON.parse(readFileSync(new URL("./fixtures/background-tasks-v1.
 const nonterminal = new Set(fixture.states.nonterminal);
 const terminal = new Set(fixture.states.terminal);
 
+test("retention and Linux admission preserve dedup and containment gates", () => {
+  assert.equal(fixture.retention_policy.terminal_days, 7);
+  assert.deepEqual(fixture.retention_policy.same_spec_retry,
+    { ok: false, error_code: "task_expired", expired: true, task_id: "original_task_id" });
+  assert.equal(fixture.retention_policy.different_spec_retry, "idempotency_conflict");
+  assert.equal(fixture.retention_policy.hash_defaults, "accepted_snapshot");
+  assert.equal(fixture.retention_policy.tombstone_gc, "only_permanently_revoked_owner_generation");
+  assert.equal(fixture.linux_execution.missing_capability, "containment_unavailable");
+  assert.equal(fixture.linux_execution.pgid_fallback, false);
+  assert.equal(fixture.linux_execution.same_uid_delegation_is_sandbox, false);
+  assert.ok(fixture.linux_execution.requires.includes("pre_exec_containment_barrier"));
+  assert.ok(fixture.linux_execution.requires.includes("migration_isolation"));
+  assert.equal(fixture.linux_execution.terminal_cleanup, "populated_zero");
+});
+
 test("API, identity and admission constraints preserve the shared contract", () => {
   for (const action of ["start", "list", "get", "stop", "output"])
     assert.equal(fixture.api[`background_task_${action}`], `session.task.${action}`);

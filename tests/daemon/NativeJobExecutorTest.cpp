@@ -24,12 +24,18 @@ class Executor final {
     QLocalSocket socket;
     QByteArray buffer;
     QList<QJsonObject> messages;
+    bool doneReceived{false};
 
     ~Executor() {
         if (helper.state() == QProcess::NotRunning)
             return;
         if (socket.state() != QLocalSocket::ConnectedState)
             reconnect();
+        if (doneReceived) {
+            send({{"op", "ack"}});
+            if (helper.waitForFinished(1500))
+                return;
+        }
         send({{"op", "stop"}, {"reason", "cancelled"}});
         const auto done = receive("done", 4500);
         if (!done.isEmpty())
@@ -96,8 +102,11 @@ class Executor final {
         qint64 pulse = 0;
         while (timer.elapsed() < timeout) {
             for (qsizetype i = 0; i < messages.size(); ++i)
-                if (messages[i].value("event") == event)
+                if (messages[i].value("event") == event) {
+                    if (event == "done")
+                        doneReceived = true;
                     return messages.takeAt(i);
+                }
             if (timer.elapsed() - pulse > 750) {
                 send({{"op", "ping"}});
                 pulse = timer.elapsed();
@@ -125,6 +134,43 @@ class NativeJobExecutorTest final : public QObject {
     Q_OBJECT
 
   private slots:
+    void stoppingBeforeTheIdentityCommitNeverExecutesWorkload() {
+        Executor executor;
+        QVERIFY(executor.start());
+        const auto marker = executor.path() + "/must-not-run";
+        const QJsonObject start{
+            {"op", "start"},
+            {"execution", QJsonObject{{"argv", QJsonArray{"/bin/sh", "-c", "touch must-not-run"}},
+                                      {"cwd", executor.path()},
+                                      {"env_delta", QJsonObject{}}}},
+            {"remaining_timeout_ms", 10000}};
+        const QJsonObject stop{{"op", "stop"}, {"reason", "cancelled"}, {"lease", executor.lease}};
+        auto authorized = start;
+        authorized.insert("lease", executor.lease);
+        // One frame batch is consumed before the pre-exec notifier can run.
+        executor.socket.write(QJsonDocument(authorized).toJson(QJsonDocument::Compact) + '\n' +
+                              QJsonDocument(stop).toJson(QJsonDocument::Compact) + '\n');
+        executor.socket.flush();
+        const auto done = executor.receive("done");
+        QCOMPARE(done.value("state"), "cancelled");
+        QVERIFY(!done.value("root_started").toBool());
+        QVERIFY(!QFileInfo::exists(marker));
+    }
+
+    void shortLivedCommandsHaveDurableBirthIdentityBeforeExec() {
+        for (int index = 0; index < 12; ++index) {
+            Executor executor;
+            QVERIFY(executor.start());
+            executor.execute({"/usr/bin/true"});
+            const auto done = executor.receive("done");
+            QCOMPARE(done.value("state"), "completed");
+            QCOMPARE(done.value("cleanup_status"), "best_effort_complete");
+            QVERIFY(done.value("launch_gate_committed").toBool());
+            QVERIFY(!done.value("root_identity").toObject().value("birth").toString().isEmpty());
+            QVERIFY(executor.receipt().value("launch_gate_committed").toBool());
+        }
+    }
+
     void timeoutReclaimsObservedDetachedDescendantByBirthIdentity() {
         Executor executor;
         QVERIFY(executor.start());

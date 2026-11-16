@@ -35,13 +35,16 @@ class ApprovalBroker final : public QObject {
 
     [[nodiscard]] QString request(const QString& sessionId, qint64 generation,
                                   const QJsonValue& providerRequestId, const QString& kind,
-                                  const QJsonObject& details, int timeoutMs = 0);
+                                  const QJsonObject& details, int timeoutMs = 0,
+                                  bool managedTask = false);
     [[nodiscard]] ApprovalResolution resolve(const QString& approvalId, const QString& sessionId,
                                              qint64 generation, const QString& expectedKind,
                                              const QJsonObject& resolution);
     [[nodiscard]] QJsonObject pendingPage(const QString& sessionId, qint64 generation,
                                           const QString& afterId = {}) const;
-    void cancelPending(const QString& sessionId, qint64 generation);
+    void cancelPending(const QString& sessionId, qint64 generation,
+                       bool includeManagedTasks = true);
+    void cancelRequest(const QString& approvalId);
     // #126: true only while a pending request can expire.
     [[nodiscard]] bool expiryTimerActive() const { return expiryTimer_.isActive(); }
     // Async assistant cards belong to one turn; closing them never answers a provider.
@@ -50,7 +53,8 @@ class ApprovalBroker final : public QObject {
     // longer waits for them. Only requests of sessions `ofSession` accepts, or all without one.
     // Returns their provider request ids.
     QList<QJsonValue>
-    abandonPending(const std::function<bool(const QString& sessionId)>& ofSession = {});
+    abandonPending(const std::function<bool(const QString& sessionId)>& ofSession = {},
+                   bool includeManagedTasks = false);
 
   signals:
     void requested(const QString& approvalId, const QString& sessionId, qint64 generation,
@@ -70,6 +74,7 @@ class ApprovalBroker final : public QObject {
         qint64 expiresAtMs{0};
         QJsonObject details;
         int revision{1};
+        bool managedTask{false};
     };
 
     void expireRequests();

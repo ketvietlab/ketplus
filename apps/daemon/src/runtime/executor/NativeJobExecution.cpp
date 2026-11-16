@@ -79,7 +79,20 @@ void NativeJobSupervisor::launch(const QJsonObject& message) {
     process_.setArguments(arguments);
     process_.setWorkingDirectory(cwd);
     process_.setProcessEnvironment(environment);
+    QString gateError;
+    if (!prepareLaunchGate(&gateError)) {
+        metadata_.insert("error", "handshake_failed");
+        rootExited_ = true;
+        finish();
+        return;
+    }
     process_.start();
+    // Only the forked child keeps these ends. EOF on the gate means abort,
+    // including an abrupt supervisor crash before committing root identity.
+    close(launchIdentityPipe_[1]);
+    launchIdentityPipe_[1] = -1;
+    close(launchGate_[0]);
+    launchGate_[0] = -1;
 }
 
 void NativeJobSupervisor::refreshKnown() {
@@ -92,6 +105,8 @@ void NativeJobSupervisor::refreshKnown() {
                 (!current && (kill(pid_t(identity.pid), 0) == 0 || errno != ESRCH))) {
                 cleanupError_ = true;
                 metadata_.insert("cleanup_issue", "process_identity_lost");
+                if (!current)
+                    continue; // Uninspectable is not evidence the known workload stopped.
             }
             known_.remove(identity.pid);
             changed = true;
@@ -99,24 +114,38 @@ void NativeJobSupervisor::refreshKnown() {
     }
     auto parents = known_.values();
     for (qsizetype index = 0; index < parents.size(); ++index) {
+        const auto parent = inspect(parents[index].pid);
+        if (!parent || parent->birth != parents[index].birth || parent->zombie)
+            continue;
         bool complete = false;
         auto pids = ketplus::daemon::executor::children(parents[index].pid, &complete);
-        if (!complete && inspect(parents[index].pid)) {
+        const auto afterSnapshot = inspect(parents[index].pid);
+        if (!complete && afterSnapshot && !afterSnapshot->zombie &&
+            afterSnapshot->birth == parents[index].birth) {
             cleanupError_ = true;
             metadata_.insert("cleanup_issue", "process_snapshot_incomplete");
         }
         if (root_ && parents[index].pid == root_->pid) {
             bool groupComplete = false;
             pids.append(groupMembers(root_->pid, &groupComplete));
-            if (!groupComplete && inspect(root_->pid))
+            const auto afterGroup = inspect(root_->pid);
+            if (!groupComplete && afterGroup && !afterGroup->zombie &&
+                afterGroup->birth == root_->birth) {
                 cleanupError_ = true;
+                metadata_.insert("cleanup_issue", "process_group_snapshot_incomplete");
+            }
         }
         for (const auto pid : pids) {
             if (known_.contains(pid))
                 continue;
             const auto child = inspect(pid);
-            if (!child || child->zombie ||
-                (child->parent != parents[index].pid && (!root_ || child->group != root_->pid)))
+            const auto parentNow = inspect(parents[index].pid);
+            const auto rootNow = root_ ? inspect(root_->pid) : std::nullopt;
+            const bool direct = child && parentNow && parentNow->birth == parents[index].birth &&
+                                child->parent == parentNow->pid;
+            const bool grouped = child && rootNow && rootNow->birth == root_->birth &&
+                                 child->group == rootNow->group && rootNow->group == rootNow->pid;
+            if (!child || child->zombie || (!direct && !grouped))
                 continue;
             if (known_.size() >= 4096) {
                 cleanupError_ = true;
@@ -170,7 +199,7 @@ void NativeJobSupervisor::requestStop(const QString& reason) {
 void NativeJobSupervisor::tick() {
     refreshKnown();
     if (finalized_) {
-        const bool stopped = process_.state() == QProcess::NotRunning;
+        const bool stopped = process_.state() == QProcess::NotRunning && known_.isEmpty();
         if (stopped != metadata_.value("executor_stopped").toBool()) {
             metadata_.insert("executor_stopped", stopped);
             persist();
@@ -219,7 +248,8 @@ void NativeJobSupervisor::finish() {
                                                 : "failed";
     metadata_.insert("state", state);
     metadata_.insert("exit_code", exitCode_);
-    metadata_.insert("executor_stopped", process_.state() == QProcess::NotRunning);
+    metadata_.insert("executor_stopped",
+                     process_.state() == QProcess::NotRunning && known_.isEmpty());
     metadata_.insert("cleanup_status", cleanupError_ ? "unverified"
                                        : metadata_.value("root_started").toBool()
                                            ? "best_effort_complete"

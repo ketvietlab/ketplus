@@ -200,5 +200,50 @@
     {"id": "turn-stop-vs-job-stop", "boundary": "ui", "given": "Foreground owner turn and daemon process job", "when": "Stop turn, Resume explicitly, then Stop job", "expect": ["turn_stop_preserves_process_job", "wake_held_until_resume", "job_stop_cancels_only_job"]},
     {"id": "offline-owner-ui", "boundary": "ui", "given": "Cached task snapshot and an in-flight output request", "when": "Disconnect then switch conversation/generation", "expect": ["offline_snapshot_view_only", "mutations_disabled", "stale_output_discarded", "no_owner_mix"]},
     {"id": "untrusted-output", "boundary": "delivery", "given": "Task output contains instruction-like text", "when": "Render result and create completion context", "expect": ["output_is_data", "receipt_names_task_id_and_result", "no_instruction_privilege"]}
-  ]
+  ],
+  "retention_policy": {
+    "terminal_days": 7,
+    "tombstone_fields": [
+      "owner_session_id",
+      "owner_generation",
+      "client_request_id",
+      "spec_hash",
+      "task_id",
+      "expired_at"
+    ],
+    "same_spec_retry": {
+      "ok": false,
+      "error_code": "task_expired",
+      "expired": true,
+      "task_id": "original_task_id"
+    },
+    "different_spec_retry": "idempotency_conflict",
+    "hash_defaults": "accepted_snapshot",
+    "tombstone_gc": "only_permanently_revoked_owner_generation",
+    "retain": [
+      "nonterminal",
+      "pending_outbox",
+      "accepted_or_dispatching_wake",
+      "live_ownership_references"
+    ]
+  },
+  "linux_execution": {
+    "mechanism": "cgroup_v2",
+    "requires": [
+      "delegated_domain",
+      "cgroup.kill",
+      "cgroup.events.populated",
+      "pre_exec_containment_barrier",
+      "migration_isolation"
+    ],
+    "supervisor": "outside_job_subtree",
+    "missing_capability": "containment_unavailable",
+    "pgid_fallback": false,
+    "terminal_cleanup": "populated_zero",
+    "recovery_identity": [
+      "boot_id",
+      "subtree_identity"
+    ],
+    "same_uid_delegation_is_sandbox": false
+  }
 }

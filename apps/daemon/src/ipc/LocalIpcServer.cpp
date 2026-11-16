@@ -335,10 +335,10 @@ void LocalIpcServer::consumeFrame(QLocalSocket* socket, const QByteArray& frame)
         return;
     }
     if (!it->agentToken.isEmpty()) {
-        if (!AgentBroker::isOperation(type)) {
+        if (!AgentBroker::isOperation(type) && !SessionHost::isManagedTaskCommand(type)) {
             send(socket, protocol::failure(request, QStringLiteral("forbidden"),
                                            QStringLiteral("Agent connections may only call "
-                                                          "agents.* operations.")));
+                                                          "agents.* or managed task operations.")));
             return;
         }
         // Answered at once, except a team's task tool that waits for git (ADR 0114 §1).

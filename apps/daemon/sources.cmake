@@ -23,8 +23,11 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/storage/BackgroundTaskLedger.cpp
     src/storage/BackgroundTaskTransitions.cpp
     src/storage/BackgroundTaskDelivery.cpp
+    src/storage/BackgroundTaskWakeQueue.cpp
     src/storage/BackgroundTaskQuota.cpp
     src/storage/BackgroundTaskList.cpp
+    src/storage/BackgroundTaskFingerprint.cpp
+    src/storage/BackgroundTaskRetention.cpp
     src/storage/BackgroundTaskExecutors.cpp
     src/storage/BackgroundTaskChildren.cpp
     src/storage/LocalJournalManagedTasks.cpp
@@ -36,6 +39,12 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/runtime/ManagedTaskProcesses.cpp
     src/runtime/ManagedTaskOutput.cpp
     src/runtime/ManagedTaskSpec.cpp
+    src/runtime/ManagedTaskBridge.cpp
+    src/runtime/ManagedTaskPermissions.cpp
+    src/runtime/ManagedTaskChildren.cpp
+    src/runtime/ManagedTaskChildOutput.cpp
+    src/runtime/ManagedTaskWake.cpp
+    src/runtime/SessionHostManagedTasks.cpp
     src/storage/LocalJournalArchive.cpp
     src/storage/LocalJournalTags.cpp
     src/cloud/CloudControlCredentials.cpp

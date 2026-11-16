@@ -23,9 +23,11 @@ class BackgroundTaskOutput final {
 
     explicit BackgroundTaskOutput(QSqlDatabase database);
     bool initialize(QString* error);
-    bool append(const QString& taskId, const QByteArray& bytes, QString* error);
+    bool append(const QString& taskId, const QByteArray& bytes, QString* error,
+                qint64 producerRevision = 0);
     [[nodiscard]] BackgroundOutputPage read(const QString& taskId, const QString& cursor = {},
-                                            int limit = maximumPageBytes) const;
+                                            int limit = maximumPageBytes, bool textBoundary = false,
+                                            bool flushTrailing = false) const;
 
   private:
     QSqlDatabase database_;

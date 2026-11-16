@@ -34,6 +34,124 @@ class BackgroundTaskLedgerTest final : public QObject {
     Q_OBJECT
 
   private slots:
+    void retentionCommitsTombstoneAndNeverReexecutesAnExpiredRequest() {
+        QTemporaryDir directory;
+        const auto name = QUuid::createUuid().toString();
+        {
+            auto db = QSqlDatabase::addDatabase("QSQLITE", name);
+            db.setDatabaseName(directory.filePath("registry.sqlite"));
+            QVERIFY(db.open());
+            BackgroundTaskLedger ledger(db);
+            QString error;
+            QVERIFY(ledger.initialize(&error));
+            QVERIFY(seedOwner(db));
+            auto request = intent();
+            request.kind = "agent";
+            const QJsonObject defaults{{"provider", "fake"},
+                                       {"model", "old-model"},
+                                       {"effort", "normal"},
+                                       {"cwd", directory.path()}};
+            request.executionMetadata = {{"request_defaults", defaults}};
+            request.requestPayload = {{"kind", "agent"},
+                                      {"client_request_id", "request"},
+                                      {"execution_spec", QJsonObject{{"prompt", "work"}}}};
+            request.specFingerprint = backgroundTaskFingerprint(request.requestPayload, defaults);
+            const auto id = taskId(ledger.create(request));
+            BackgroundTaskChange denied;
+            denied.state = "failed";
+            denied.reason = "permission_denied";
+            denied.neverLaunched = true;
+            const auto terminal = ledger.change(id, 1, denied);
+            const auto ended = terminal.value("task").toObject().value("ended_at").toInteger();
+            const auto future = ended + 7LL * 24 * 60 * 60 * 1000 + 10000;
+            QCOMPARE(ledger.prune(ended + 1000).value("pruned").toInt(), 0);
+            QSqlQuery query(db);
+            QVERIFY(query.exec("CREATE TRIGGER fail_prune BEFORE DELETE ON managed_jobs "
+                               "BEGIN SELECT RAISE(ABORT,'injected retention crash'); END"));
+            QVERIFY(!ledger.prune(future).value("ok").toBool());
+            QVERIFY(ledger.get(id, request.owner).value("ok").toBool());
+            QVERIFY(query.exec("SELECT count(*) FROM managed_job_tombstones"));
+            QVERIFY(query.next());
+            QCOMPARE(query.value(0).toInt(), 0);
+            query.finish();
+            QVERIFY(query.exec("DROP TRIGGER fail_prune"));
+            QCOMPARE(ledger.prune(future).value("pruned").toInt(), 1);
+            QCOMPARE(ledger.get(id, request.owner).value("error_code"), "task_not_found");
+            db.close();
+            QVERIFY(db.open());
+            BackgroundTaskLedger restarted(db);
+            QVERIFY(restarted.initialize(&error));
+            const auto expired = restarted.create(request);
+            QCOMPARE(expired.value("error_code"), "task_expired");
+            QCOMPARE(expired.value("task_id"), id);
+            QVERIFY(expired.value("expired").toBool());
+            QVERIFY(restarted.prune(future).value("output_cleanup").toArray().contains(id));
+            QVERIFY(restarted.outputRemoved(id));
+            QVERIFY(restarted.prune(future).value("output_cleanup").toArray().isEmpty());
+            auto spec = request.requestPayload.value("execution_spec").toObject();
+            spec.insert("model", "old-model");
+            request.requestPayload.insert("execution_spec", spec);
+            // Omitted and explicit accepted defaults are the same canonical spec.
+            QCOMPARE(restarted.retry(request).value("error_code"), "task_expired");
+            spec.insert("model", "new-model");
+            request.requestPayload.insert("execution_spec", spec);
+            QCOMPARE(restarted.create(request).value("error_code"), "idempotency_conflict");
+            QVERIFY(restarted.nonterminal().value("tasks").toArray().isEmpty());
+            auto pending = intent();
+            pending.clientRequestId = "pending";
+            const auto pendingId = taskId(restarted.create(pending));
+            const auto pendingTerminal = failed(restarted, pendingId);
+            const auto event =
+                pendingTerminal.value("task").toObject().value("completion_event_id").toString();
+            QCOMPARE(restarted.prune(future).value("pruned").toInt(), 0);
+            QVERIFY(restarted.acceptCompletion(event, pending.owner).value("ok").toBool());
+            QCOMPARE(restarted.prune(future).value("pruned").toInt(), 0);
+            QVERIFY(restarted.claimWake(event, pending.owner).value("ok").toBool());
+            QVERIFY(restarted.finishWake(event, "finished").value("ok").toBool());
+            QCOMPARE(restarted.prune(future).value("pruned").toInt(), 1);
+        }
+        QSqlDatabase::removeDatabase(name);
+    }
+
+    void acceptedWakeSurvivesRestartButUncertainDispatchNeverReplays() {
+        const auto name = QUuid::createUuid().toString();
+        {
+            auto db = QSqlDatabase::addDatabase("QSQLITE", name);
+            db.setDatabaseName(":memory:");
+            QVERIFY(db.open());
+            BackgroundTaskLedger ledger(db);
+            QString error;
+            QVERIFY(ledger.initialize(&error));
+            QVERIFY(seedOwner(db));
+            const auto id = taskId(ledger.create(intent()));
+            const auto ended = failed(ledger, id);
+            const auto event =
+                ended.value("task").toObject().value("completion_event_id").toString();
+            QVERIFY(!event.isEmpty());
+            QCOMPARE(ledger.deliveryPage(false).value("events").toArray().size(), 1);
+            QVERIFY(ledger.acceptCompletion(event, {"owner", 1, {}}).value("ok").toBool());
+            QVERIFY(ledger.recoverDispatchingWakes().value("ok").toBool());
+            QCOMPARE(ledger.deliveryPage(true).value("events").toArray().size(), 1);
+            QVERIFY(ledger.claimWake(event, {"owner", 1, {}}).value("ok").toBool());
+            QVERIFY(ledger.wakeDispatchAllowed(event, {"owner", 1, {}}));
+            QVERIFY(ledger.deferWake(event).value("ok").toBool());
+            QCOMPARE(ledger.deliveryPage(true).value("events").toArray().size(), 1);
+            QVERIFY(ledger.claimWake(event, {"owner", 1, {}}).value("ok").toBool());
+            QVERIFY(ledger.recoverDispatchingWakes().value("ok").toBool());
+            QVERIFY(!ledger.wakeDispatchAllowed(event, {"owner", 1, {}}));
+            QVERIFY(ledger.deliveryPage(true).value("events").toArray().isEmpty());
+            QVERIFY(ledger.acceptCompletion(event, {"owner", 1, {}}).value("duplicate").toBool());
+            QVERIFY(ledger.deliveryPage(true).value("events").toArray().isEmpty());
+            QSqlQuery query(db);
+            QVERIFY(query.exec("UPDATE sessions SET generation=2 WHERE id='owner'"));
+            QCOMPARE(ledger.get(id, {"owner", 1, {}}).value("error_code"), "stale_owner");
+            QVERIFY(ledger.get(id, {"owner", 1, {}}, true).value("ok").toBool());
+            QVERIFY(ledger.list({"owner", 1, {}}, {}, 50, true).value("ok").toBool());
+            QCOMPARE(ledger.get(id, {"other", 1, {}}, true).value("error_code"), "task_not_found");
+        }
+        QSqlDatabase::removeDatabase(name);
+    }
+
     void managedChildReservationIsAtomicAndTerminalWaitsForDescendants() {
         const auto name = QUuid::createUuid().toString();
         {
@@ -100,6 +218,19 @@ class BackgroundTaskLedgerTest final : public QObject {
             QVERIFY(ledger.change(childTask, 2, cancelled).value("ok").toBool());
             QVERIFY(ledger.change(parent, 5, complete).value("ok").toBool());
             descendant.clientRequestId = "too-late";
+            QCOMPARE(ledger.create(descendant).value("error_code"), "stale_owner");
+            const auto event = ledger.get(parent, request.owner)
+                                   .value("task")
+                                   .toObject()
+                                   .value("completion_event_id")
+                                   .toString();
+            QVERIFY(ledger.acceptCompletion(event, request.owner).value("ok").toBool());
+            QVERIFY(ledger.claimWake(event, request.owner).value("ok").toBool());
+            QVERIFY(ledger.finishWake(event, "finished").value("ok").toBool());
+            QVERIFY(ledger.prune(QDateTime::currentMSecsSinceEpoch() + 8LL * 24 * 60 * 60 * 1000)
+                        .value("ok")
+                        .toBool());
+            QCOMPARE(ledger.linkedTask(childSession, 1).value("error_code"), "task_expired");
             QCOMPARE(ledger.create(descendant).value("error_code"), "stale_owner");
         }
         QSqlDatabase::removeDatabase(name);

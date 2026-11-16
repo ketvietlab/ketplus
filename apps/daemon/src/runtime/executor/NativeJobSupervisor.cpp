@@ -27,6 +27,7 @@ NativeJobSupervisor::NativeJobSupervisor(QString directory, QString taskId, QStr
       lease_(std::move(lease)), connectionName_(QUuid::createUuid().toString()) {}
 
 NativeJobSupervisor::~NativeJobSupervisor() {
+    closeLaunchGate();
     output_.reset();
     outputDatabase_.close();
     outputDatabase_ = {};
@@ -80,18 +81,11 @@ bool NativeJobSupervisor::initialize(QString* error) {
     connect(&server_, &QLocalServer::newConnection, this, [this] { acceptConnection(); });
     process_.setProcessChannelMode(QProcess::MergedChannels);
     process_.setStandardInputFile(QProcess::nullDevice());
-    process_.setChildProcessModifier([] {
-        if (setsid() < 0)
-            _exit(126);
-    });
     connect(&process_, &QProcess::started, this, [this] {
-        root_ = inspect(process_.processId());
-        if (root_) {
-            known_.insert(root_->pid, *root_);
-            metadata_.insert("root_identity", root_->json());
-        } else {
-            cleanupError_ = true;
-        }
+        // The child was birth-identified and journaled while blocked before exec.
+        // A short command may already have exited when this Qt signal arrives.
+        if (!root_)
+            metadata_.insert("error", "handshake_failed");
         metadata_.insert("executor_stopped", false);
         metadata_.insert("root_started", true);
         if (!persist())
@@ -121,6 +115,7 @@ bool NativeJobSupervisor::initialize(QString* error) {
     timer_.start();
     signal(SIGTERM, stopSignal);
     signal(SIGINT, stopSignal);
+    signal(SIGPIPE, SIG_IGN); // A pre-exec gate peer may die before the release write.
     return true;
 }
 
@@ -178,6 +173,11 @@ void NativeJobSupervisor::command(const QJsonObject& message) {
     } else if (operation == "start" && !finalized_ && !stopping_) {
         launch(message);
     } else if (operation == "stop") {
+        if (finalized_ && metadata_.value("state") == "needs_attention") {
+            // Retry known identities without erasing uncertainty or replaying start.
+            finalized_ = false;
+            stopping_ = false;
+        }
         const auto reason = message.value("reason").toString();
         requestStop(reason == "timed_out"     ? reason
                     : reason == "interrupted" ? reason

@@ -47,7 +47,9 @@ bool BackgroundTaskOutput::initialize(QString* error) {
           "total_bytes INTEGER NOT NULL CHECK(total_bytes>=0))",
           "CREATE TABLE IF NOT EXISTS job_output_chunks (task_id TEXT NOT NULL, "
           "position INTEGER NOT NULL CHECK(position>=0), bytes BLOB NOT NULL, "
-          "PRIMARY KEY(task_id,position))"}) {
+          "PRIMARY KEY(task_id,position))",
+          "CREATE TABLE IF NOT EXISTS job_output_producers(task_id TEXT PRIMARY KEY,revision "
+          "INTEGER NOT NULL)"}) {
         if (!query.exec(QLatin1String(statement))) {
             if (error)
                 *error = query.lastError().text();
@@ -57,7 +59,8 @@ bool BackgroundTaskOutput::initialize(QString* error) {
     return true;
 }
 
-bool BackgroundTaskOutput::append(const QString& taskId, const QByteArray& bytes, QString* error) {
+bool BackgroundTaskOutput::append(const QString& taskId, const QByteArray& bytes, QString* error,
+                                  qint64 producerRevision) {
     if (error)
         error->clear();
     if (taskId.isEmpty()) {
@@ -79,6 +82,18 @@ bool BackgroundTaskOutput::append(const QString& taskId, const QByteArray& bytes
         return false;
     };
     QSqlQuery query(database_);
+    if (producerRevision > 0) {
+        query.prepare("SELECT revision FROM job_output_producers WHERE task_id=?");
+        query.addBindValue(taskId);
+        if (!query.exec())
+            return fail(query.lastError().text());
+        if (query.next() && query.value(0).toLongLong() >= producerRevision) {
+            query.finish();
+            database_.rollback();
+            return true;
+        }
+        query.finish();
+    }
     query.prepare("SELECT total_bytes FROM job_output_heads WHERE task_id=?");
     query.addBindValue(taskId);
     if (!query.exec())
@@ -141,13 +156,22 @@ bool BackgroundTaskOutput::append(const QString& taskId, const QByteArray& bytes
     query.addBindValue(total);
     if (!query.exec())
         return fail(query.lastError().text());
+    if (producerRevision > 0) {
+        query.prepare("INSERT INTO job_output_producers VALUES(?,?) ON CONFLICT(task_id) "
+                      "DO UPDATE SET revision=excluded.revision");
+        query.addBindValue(taskId);
+        query.addBindValue(producerRevision);
+        if (!query.exec())
+            return fail(query.lastError().text());
+    }
     if (!database_.commit())
         return fail(database_.lastError().text());
     return true;
 }
 
 BackgroundOutputPage BackgroundTaskOutput::read(const QString& taskId, const QString& cursor,
-                                                int limit) const {
+                                                int limit, bool textBoundary,
+                                                bool flushTrailing) const {
     BackgroundOutputPage page;
     qint64 requested = 0;
     if (taskId.isEmpty() || limit <= 0 || !decodeCursor(taskId, cursor, &requested)) {
@@ -195,6 +219,23 @@ BackgroundOutputPage BackgroundTaskOutput::read(const QString& taskId, const QSt
     if (first && requested != 0) {
         page.error = QStringLiteral("Output cursor is beyond the byte stream.");
         return page;
+    }
+    if (textBoundary && !page.bytes.isEmpty() && (!flushTrailing || position < page.totalBytes)) {
+        // Keep a valid partial UTF-8 sequence for the next byte page. Invalid
+        // binary data still decodes with replacement; byte cursors remain exact.
+        qsizetype start = page.bytes.size() - 1;
+        while (start > 0 && (static_cast<uchar>(page.bytes[start]) & 0xc0) == 0x80)
+            --start;
+        const auto first = static_cast<uchar>(page.bytes[start]);
+        const int expected = first >= 0xc2 && first <= 0xdf   ? 2
+                             : first >= 0xe0 && first <= 0xef ? 3
+                             : first >= 0xf0 && first <= 0xf4 ? 4
+                                                              : 0;
+        const auto trailing = page.bytes.size() - start;
+        if (expected && trailing < expected) {
+            position -= trailing;
+            page.bytes.truncate(start);
+        }
     }
     page.nextCursor = encodeCursor(taskId, position);
     return page;

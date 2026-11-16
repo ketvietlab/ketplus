@@ -3,6 +3,7 @@ add_executable(ketplus_job_executor
     NativeJobExecutorMain.cpp
     NativeJobSupervisor.cpp
     NativeJobExecution.cpp
+    NativeJobLaunchGate.cpp
     NativeProcessIdentity.cpp
     ../../storage/BackgroundTaskOutput.cpp
 )

@@ -749,16 +749,38 @@ coalescing, start retry, revision races, atomic terminal/outbox and wake accepta
 quota admission/park/resume, pagination above 16 jobs, and native cleanup audit.
 On macOS the executor suite starts a native supervisor and test-owned workloads;
 it exercises a durable pre-launch handshake, reconnect without replay, timeout,
-known detached descendants, supervisor crash, lease expiry and changed birth
-identities. This is best-effort cleanup evidence, not proof that all possible
-unobserved descendants are contained. It does not exercise SessionHost API,
-provider adapters or UI:
+known detached descendants, supervisor crash, lease expiry, changed birth
+identities, a pre-exec identity barrier, Stop before its commit and short-lived
+commands that exit before Qt started notification. This is best-effort cleanup evidence, not proof that all possible
+unobserved descendants are contained. The isolated target does not exercise SessionHost API or UI:
 
 ```sh
 cmake -S tests/daemon/background-output -B build/background-output -G Ninja
 cmake --build build/background-output
 ctest --test-dir build/background-output --output-on-failure
 ```
+
+The daemon build adds `ketplus_managed_task_host_tests` and
+`ketplus_managed_task_ipc_tests` on macOS. Both use the scripted FakeCodex provider
+and temporary journals; they consume no account quota. They cover independent
+child sessions/output/approval, foreground Stop fencing without cancelling process
+jobs, busy-owner durable enqueue without steering, duplicate completion/start
+requests, actual IPC token authentication, owner forgery, retired-generation
+local administration and complete registry pagination beyond 16 rows. The ledger
+suite also injects prune failure and reopens tombstones to verify expired requests
+cannot execute again after defaults change.
+
+```sh
+cmake --build build/daemon-dev --target ketplus_managed_task_host_tests ketplus_managed_task_ipc_tests
+ctest --test-dir build/daemon-dev -R 'ketplus_managed_task_(host|ipc)_tests' --output-on-failure
+```
+
+These tests do not verify the shared UI, SDK native-background blocking, a
+signed deployment bundle, or the Linux cgroup executor. Linux process admission
+fails closed with `containment_unavailable` until delegated cgroup v2 and migration
+isolation are implemented and tested. A system-service read-only cgroup mount
+alone is not evidence for the daemon's user-service deployment. Do not use PGID
+cleanup or same-UID delegation as proof of migration containment.
 
 The accepted provider-neutral contract is [ADR 0127](decisions/0127-daemon-background-tasks.md).
 Run its design-fixture check without a build or provider account:

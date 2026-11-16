@@ -7,7 +7,7 @@
 
 namespace ketplus::daemon {
 QJsonObject BackgroundTaskLedger::list(const BackgroundTaskOwner& owner, const QString& cursor,
-                                       int limit) {
+                                       int limit, bool localAdministration) {
     const auto error = [](const QString& code, const QString& message) {
         return QJsonObject{{"ok", false}, {"error_code", code}, {"error_message", message}};
     };
@@ -36,10 +36,14 @@ QJsonObject BackgroundTaskLedger::list(const BackgroundTaskOwner& owner, const Q
         return error(code, message);
     };
     QSqlQuery query(database_);
-    query.prepare("SELECT c.revision FROM managed_job_clock c JOIN sessions s "
-                  "ON s.id=? AND s.generation=? WHERE c.singleton=1");
-    query.addBindValue(owner.sessionId);
-    query.addBindValue(owner.generation);
+    query.prepare(localAdministration
+                      ? "SELECT revision FROM managed_job_clock WHERE singleton=1"
+                      : "SELECT c.revision FROM managed_job_clock c JOIN sessions s "
+                        "ON s.id=? AND s.generation=? WHERE c.singleton=1");
+    if (!localAdministration) {
+        query.addBindValue(owner.sessionId);
+        query.addBindValue(owner.generation);
+    }
     if (!query.exec())
         return fail("storage_error", query.lastError().text());
     if (!query.next())

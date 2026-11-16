@@ -241,7 +241,12 @@ class ManagedTaskRuntimeTest final : public QObject {
                 {}, [&](const QJsonObject&, const QJsonObject&) { ++fixture.permissionRequests; },
                 {}, {});
             QVERIFY(fixture.runtime->initialize(&error));
-            QTRY_COMPARE_WITH_TIMEOUT(fixture.get(id).value("state"), "completed", 6000);
+            QTRY_VERIFY_WITH_TIMEOUT(fixture.get(id).value("state") == "completed" ||
+                                         fixture.get(id).value("state") == "needs_attention",
+                                     6000);
+            QFile receipt(fixture.path() + "/jobs/" + id + "/executor.json");
+            QVERIFY(receipt.open(QIODevice::ReadOnly));
+            QVERIFY2(fixture.get(id).value("state") == "completed", receipt.readAll().constData());
             QCOMPARE(fixture.permissionRequests, 1);
             QFile marker(fixture.path() + "/once");
             QVERIFY(marker.open(QIODevice::ReadOnly));

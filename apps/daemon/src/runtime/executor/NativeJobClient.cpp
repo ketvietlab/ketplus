@@ -195,7 +195,7 @@ void NativeJobClient::message(const QJsonObject& value) {
 void NativeJobClient::stop(const QString& reason) {
     if (stopReason_.isEmpty())
         stopReason_ = reason;
-    if (authenticated_ && !finished_)
+    if (authenticated_ && (!finished_ || lastReceipt_.value("state") == "needs_attention"))
         send({{"op", "stop"}, {"reason", stopReason_}});
 }
 

@@ -62,6 +62,10 @@ ketplus_enable_warnings(ketplus_daemon)
 
 if(APPLE)
     add_subdirectory(src/runtime/executor)
+    add_dependencies(ketplus_daemon ketplus_job_executor)
+    if(NOT KETPLUS_BUILD_DESKTOP)
+        install(TARGETS ketplus_job_executor RUNTIME DESTINATION bin COMPONENT Runtime)
+    endif()
 endif()
 
 # Claude Agent SDK sidecar: JS + production node_modules. Node itself is not
