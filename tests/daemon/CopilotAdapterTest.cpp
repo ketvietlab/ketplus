@@ -148,7 +148,7 @@ class CopilotAdapterTest final : public QObject {
         }
         QVERIFY(adapter.releaseSessionTransport("test-session"));
         QVERIFY(!QFile::exists(previousFile));
-        QVERIFY(!adapter.supportsManagedMutations());
+        QVERIFY(adapter.supportsManagedMutations());
     }
     void streamsAndCancels() {
         QTemporaryDir dir;

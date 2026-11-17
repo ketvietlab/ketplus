@@ -259,10 +259,14 @@ releases only its owned transports, including prior provider handoffs, before
 removing the local record. The offline adapter fixtures and installed-provider
 history validation gaps are recorded in the
 [refresh evidence](decisions/0127-provider-origin-refresh-evidence.md).
-Cursor/Copilot mutation remains gated until real history/MCP refresh is verified:
-their epochs carry no mutation secret, and MCP discovery omits start/stop. A
+Cursor mutation remains gated until real history/MCP refresh is verified:
+its epochs carry no mutation secret, and MCP discovery omits start/stop. A
 direct mutation attempt returns a capability error; foreground and registry reads
 keep their existing grants. An ACP fixture or load ACK cannot enable that gate.
+Copilot's installed 1.0.112 production-adapter probe verifies completed synthetic
+history, same-ID replacement, MCP rotation and process exit with one authorized
+Auto turn. Its implementation enables managed mutations; each actual turn still
+requires successful history restoration and the exact new transport epoch ACK.
 
 A Cursor adapter can run beside Codex and Claude when the user-installed
 Cursor CLI is available. Discovery uses `PATH`, `KETPLUS_CURSOR_AGENT`,

@@ -33,6 +33,12 @@ def alive(pid):
         return False
 
 
+def approved_discovery(observed):
+    spawned = {row["pid"] for row in observed if row.get("method") == "spawn"}
+    listed = {row["pid"] for row in observed if row.get("method") == "tools/list"}
+    return spawned, listed, bool(spawned) and spawned <= listed
+
+
 def main():
     config = json.loads(pathlib.Path(sys.argv[1]).read_text())
     args = sys.argv[2:]
@@ -47,6 +53,10 @@ def main():
         args += ["--model", "auto", "--no-auto-update", "--disable-builtin-mcps",
                  "--disable-client-telemetry", "--available-tools=t3_no_model_tools_bounded_probe"]
     log = pathlib.Path(config["log"])
+    approval_log = pathlib.Path(config["approval_log"]) if config.get("approval_log") else None
+    if approval_log:
+        assert not copilot and config["mode"] == "control"
+    approval_offset = len(rows(approval_log)) if approval_log else 0
     prior = rows(log)
     epoch = "two" if any(row["event"] == "provider" for row in prior) else "one"
     lock = threading.Lock()
@@ -157,11 +167,21 @@ def main():
                 deadline = time.monotonic() + 8
                 ready = False
                 while time.monotonic() < deadline:
-                    ready = any(row["event"] == "tools_list" and row.get("epoch") == epoch
-                                for row in rows(log))
+                    if approval_log:
+                        observed = rows(approval_log)[approval_offset:]
+                        # Project and request-injected instances may both start.
+                        # Discovery in one must not attest the other instance.
+                        spawned, listed, ready = approved_discovery(observed)
+                    else:
+                        ready = any(row["event"] == "tools_list" and row.get("epoch") == epoch
+                                    for row in rows(log))
                     if ready:
                         break
                     time.sleep(.05)
+                if approval_log:
+                    record("approved_mcp_discovery", spawned=len(spawned), listed=len(listed))
+                    for pid in spawned:
+                        record("mcp", child_pid=pid)
                 if copilot and ready:
                     # Official session-scoped configuration command; not inference.
                     # Swallow its informational output so it cannot masquerade as

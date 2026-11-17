@@ -18,6 +18,9 @@ class CopilotAdapter final : public AcpAdapter {
     QString missingMessage() const override;
     bool isAvailable() const override;
     bool supports(const QString& capability) const override;
+    // Installed 1.0.112 verifies same-ID history/MCP replacement (ADR 0127).
+    // Every grant still requires the owned transport's exact epoch ACK.
+    bool supportsManagedMutations() const override { return true; }
     void runtimeStatus(std::function<void(const compat::Runtime&)> done) override;
     void configurationCatalog(Callback done) override;
     void call(const QString& method, const QJsonObject& params, Callback done) override;

@@ -117,13 +117,15 @@ class ManagedTaskOriginHostTest final : public QObject {
     }
 
   private slots:
-    void unverifiedConcreteAcpAdaptersNeverReceiveMutationCredentials_data() {
+    void concreteAcpMutationSupportStillRequiresExactEpochAck_data() {
         QTest::addColumn<QString>("name");
-        QTest::newRow("cursor") << "cursor";
-        QTest::newRow("copilot") << "copilot";
+        QTest::addColumn<bool>("verified");
+        QTest::newRow("cursor") << "cursor" << false;
+        QTest::newRow("copilot") << "copilot" << true;
     }
-    void unverifiedConcreteAcpAdaptersNeverReceiveMutationCredentials() {
+    void concreteAcpMutationSupportStillRequiresExactEpochAck() {
         QFETCH(QString, name);
+        QFETCH(bool, verified);
         QTemporaryDir directory;
         LocalJournal journal(directory.filePath("journal.sqlite"));
         QVERIFY(seed(journal, directory.path(), name));
@@ -139,13 +141,23 @@ class ManagedTaskOriginHostTest final : public QObject {
                                       {{"execution_policy", "full"}, {"review_guard", false}});
         const auto bootstrap = owner.mutationOrigin.bootstrap();
         QVERIFY(!bootstrap.transportEpoch.isEmpty());
-        QVERIFY(bootstrap.credential.isEmpty());
+        QCOMPARE(!bootstrap.credential.isEmpty(), verified);
+        QVERIFY(!owner.mutationOrigin.authorize(bootstrap.credential, "owner", 1));
         QVERIFY(host.acknowledgeManagedTaskOrigin(
             owner, bootstrap.transportEpoch,
             {{"managedTransportEpoch", bootstrap.transportEpoch}}));
         QVERIFY(!owner.mutationOrigin.authorize("spoofed", "owner", 1));
         const auto launch = host.agentLaunch("owner", 1);
-        QVERIFY(launch && launch->mutationCredential.isEmpty());
+        QVERIFY(launch);
+        QCOMPARE(!launch->mutationCredential.isEmpty(), verified);
+        if (verified) {
+            QVERIFY(owner.mutationOrigin.authorize(bootstrap.credential, "owner", 1));
+            host.prepareManagedTaskOrigin(owner,
+                                          {{"execution_policy", "full"}, {"review_guard", true}});
+            QVERIFY(!owner.mutationOrigin.authorize(bootstrap.credential, "owner", 1));
+            QVERIFY(owner.mutationOrigin.bootstrap().credential.isEmpty());
+            return;
+        }
         const auto token = host.agentToken("owner");
         QCOMPARE(invoke(host, token, "session.task.start", child()).value("error_code"),
                  "mutation_refresh_unavailable");

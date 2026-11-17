@@ -926,12 +926,21 @@ python3 -B tests/providers/cursor/discovery-proposal-test.py
 python3 -B tests/providers/cursor/discovery-proposal.py --prepare --root /path/to/new-private-directory
 ```
 
-The two quota-free tests use Python fixtures only. They verify the static
+The three quota-free tests use Python fixtures only. They verify the static
 single-tool inventory, rejected mutation, matching project/ACP launch tuples,
-private ledger writes before forwarding and refusal to reuse a mock allowance.
+private ledger writes before forwarding, refusal to reuse a mock allowance,
+and refusal to credit one MCP instance's discovery to another instance.
 Preparation starts no provider and executes no approval. Review its manifest,
 checksum and `REVIEW.txt` before seeking the user's approval for the exact
 native enable command. See the [proposal scope and revocation](decisions/0127-provider-origin-refresh-evidence.md#reviewable-cursor-discovery-approval-proposal).
+
+After that exact approval, the Cursor production-adapter `control` run can set
+`KETPLUS_CURSOR_APPROVED_PROPOSAL` to the existing proposal root, with its same
+`CURSOR_CONFIG_DIR` and `CURSOR_DATA_DIR`. It uses the unchanged cwd and server
+tuple from `session-new.json`, observing each newly spawned fixture instance.
+This option is rejected in live mode: a static read-only approval does not
+authorize a different mutation bootstrap. A project instance listing tools
+does not establish discovery for a separate request-injected instance.
 
 The earlier empty-session controls are retained for reference, not a loop to
 repeat when their hypotheses and errors have not changed:

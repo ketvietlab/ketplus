@@ -752,12 +752,13 @@ Linux store policy, signed upgrade prompts and platform release acceptance remai
   survives same-ID resume and owned-process/MCP-epoch replacement without recall.
   Pinned Copilot 1.0.112 passes standalone
   offline MCP discovery through process-launch configuration; its adapter uses
-  a private immutable file for that bootstrap. Authenticated Cursor controls ACK
-  the cheap model but defer tool discovery; Copilot's current plan allows only
-  Auto. Real Cursor history/MCP and Copilot completed-history/adapter-refresh
-  verification remain open. Cursor and
-  Copilot therefore receive no mutation credential and expose only background
-  registry read tools; direct mutation returns a capability error. Their
+  a private immutable file for that bootstrap. A separately approved single Auto
+  turn also passes actual CopilotAdapter completed-history/same-ID/MCP replacement
+  and process-closure checks; managed mutation is enabled subject to each turn's
+  transport ACK and daemon policy. Authenticated Cursor controls ACK the cheap
+  model but defer tool discovery. Real Cursor history/MCP verification remains
+  open. Cursor therefore receives no mutation credential and exposes only background
+  registry read tools; direct mutation returns a capability error. Its
   foreground behavior remains available. See the
   [provider evidence and gaps](decisions/0127-provider-origin-refresh-evidence.md).
 

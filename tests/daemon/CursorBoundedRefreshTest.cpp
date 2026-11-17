@@ -101,20 +101,34 @@ class CursorBoundedRefreshTest final : public QObject {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
         const auto root = QFileInfo(directory.path()).canonicalFilePath();
-        const auto work = root + "/work";
+        const auto proposal = qEnvironmentVariable("KETPLUS_CURSOR_APPROVED_PROPOSAL");
+        // An approved static proposal is a discovery control only. It cannot
+        // substitute for the mutation bootstrap in a quota-bearing test.
+        QVERIFY(proposal.isEmpty() || mode == "control");
+        QJsonObject approvedSession;
+        if (!proposal.isEmpty()) {
+            QFile file(proposal + "/session-new.json");
+            QVERIFY(file.open(QIODevice::ReadOnly));
+            approvedSession = QJsonDocument::fromJson(file.readAll()).object();
+            QVERIFY(!approvedSession.value("mcpServers").toArray().isEmpty());
+        }
+        const auto work =
+            proposal.isEmpty() ? root + "/work" : approvedSession.value("cwd").toString();
         const auto log = root + "/processes.jsonl";
         QVERIFY(QDir().mkpath(work));
         const auto config = root + "/launch.json";
         QVERIFY(writeFile(
             config,
             QJsonDocument(
-                QJsonObject{{"executable", binary},
-                            {"work", work},
-                            {"log", log},
-                            {"mode", mode},
-                            {"ledger", qEnvironmentVariable("KETPLUS_BOUNDED_TEST_LEDGER")},
-                            {"head", qEnvironmentVariable("KETPLUS_BOUNDED_TEST_HEAD")},
-                            {"owner", qEnvironmentVariableIntValue("KETPLUS_BOUNDED_TEST_OWNER")}})
+                QJsonObject{
+                    {"executable", binary},
+                    {"work", work},
+                    {"log", log},
+                    {"mode", mode},
+                    {"approval_log", proposal.isEmpty() ? QString{} : proposal + "/events.jsonl"},
+                    {"ledger", qEnvironmentVariable("KETPLUS_BOUNDED_TEST_LEDGER")},
+                    {"head", qEnvironmentVariable("KETPLUS_BOUNDED_TEST_HEAD")},
+                    {"owner", qEnvironmentVariableIntValue("KETPLUS_BOUNDED_TEST_OWNER")}})
                 .toJson()));
         const auto wrapper = root + "/cursor-bounded";
         const auto fixture = QString::fromUtf8(KETPLUS_CURSOR_LIVE_FIXTURE);
@@ -145,6 +159,8 @@ class CursorBoundedRefreshTest final : public QObject {
                                                   "synthetic-mutation-" + epoch, epoch});
             server.insert("args", QJsonArray{QString::fromUtf8(KETPLUS_CODEX_LIVE_FIXTURE),
                                              "--worker-log", log});
+            if (!proposal.isEmpty())
+                server = approvedSession.value("mcpServers").toArray().first().toObject();
             return QJsonObject{
                 {"sessionId", "t3-bounded-owner"},
                 {"managedTransportEpoch", epoch},

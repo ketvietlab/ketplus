@@ -552,3 +552,79 @@ does not assume the older-version issue is fixed in 1.0.112. Control failures
 occur before any model reservation/delivery. The synthetic-marker gate also
 caught the new ACP tests using the Codex `input` shape rather than ACP's host
 `prompt` field; both ACP fixtures now use the actual adapter input shape.
+
+The actual production-adapter Auto probe then **passes 1/1 (10.08 s)** at
+`fa350ec2179f`, installed CLI **1.0.112**. The observer records exactly one
+forwarded synthetic model prompt, no ACP/native/MCP tool call, a successful
+real `session/load` with the original ID, and replay of the completed assistant
+marker before a recall prompt can reach the provider. Epoch-two MCP discovery
+succeeds; both the prior native provider and MCP PIDs are already dead at
+replacement launch. The observer checks and fails on a still-live prior native
+process instead of waiting and hiding a closure race. All owned recorded PIDs
+exit. The inspected ACP model fields disclose no underlying model ID, so the
+record is **Auto; underlying model not reported**, not an inferred model name.
+
+The Copilot implementation gate is therefore enabled. Every real invocation
+still needs its exact transport epoch ACK, successful same-ID restoration when
+history exists, and the daemon's immutable-origin/policy checks. Failed load
+cannot fall back to new history. This installed-provider evidence covers
+1.0.112 on the validation host; it does not claim native Windows execution or
+model recall. Cursor remains gated and its approval proposal is unchanged.
+
+The persistent whole-team ledger is now **Codex 1/1, Cursor 0/1, Copilot 1/1**,
+total **2/3**. Neither consumed provider may be rerun with the current allowance.
+The compiled opt-in targets skip before provider launch by default, **3/3**
+checks pass (1.31 s), and the Python fixture/mock-ledger tests pass **2/2** with
+both Cursor and Copilot branches, without provider execution. The final
+checkpoint control also passes (5.90 s) before live delivery. Only the unused
+Cursor allowance remains, subject to its readiness and cheap named-model
+constraints.
+
+### Cursor discovery after the user's scoped approval
+
+The user enabled the exact static discovery proposal. This supersedes earlier
+notes saying approval is pending. Read-only inspection finds one matching
+project approval in the isolated data directory. The fixture source checksum
+still matches the reviewed manifest; its name, command, arguments, empty
+environment and canonical project cwd are unchanged. No approval hash was copied,
+default configuration widened, or additional enable operation performed.
+The official `agent mcp list-tools <proposal-identity>` now exits successfully and
+lists `t3_probe_status`. Both recorded fixture processes exit; no model prompt is
+sent. This establishes project-scoped discovery, not request-injected discovery.
+
+A new no-model ACP control uses that same approved tuple in `session/new`.
+Initialize/new both succeed. Two fixture processes initialize, but only one
+issues `tools/list` within eight seconds. Both processes are confirmed gone
+after the owned provider exits. The production `CursorAdapter` control then
+reproduces the boundary: explicit cheap Haiku selection is acknowledged, two
+fixture processes initialize, and only one lists tools. Its observer therefore
+rejects the prompt before native delivery: **control fails in 22.91 s, model
+requests zero**. The observer deliberately requires discovery from each newly
+spawned instance so a project instance cannot attest an injected instance.
+The approved proposal option is restricted to control mode; this static server
+cannot substitute for the mutation bootstrap in a quota-bearing test.
+
+This result neither proves that an eventual model turn cannot discover tools nor
+proves that session injection is ready before delivery. The
+[official ACP reference](https://cursor.com/docs/cli/acp) documents initialize,
+session creation and prompts; the
+[MCP reference](https://cursor.com/docs/cli/mcp) documents project discovery.
+No supported pre-model request-injected discovery operation has been established
+by these controls. Project discovery alone cannot release the delivery fence.
+The outstanding boundary is therefore a supported control for the injected
+context, followed by the still-unused single completed-history/refresh probe.
+There is no additional login or repeated user-approval request.
+
+Cursor remains mutation-gated. The whole-team ledger stays **Codex 1/1,
+Cursor 0/1, Copilot 1/1 (2/3 total)**. No completed Cursor history, model recall,
+or all-provider acceptance is claimed. All owned PIDs from the actual-adapter
+control are confirmed exited. Neither consumed provider is rerun.
+
+The quota-free fixture regressions pass **3/3 (1.126 s)**, including refusal to
+credit project discovery to an injected process. With Copilot support enabled,
+Host tests now check that its pending credential is unusable before the exact
+epoch ACK and is revoked for review; Cursor still gets no mutation credential.
+The Host regression passes **1/1 (3.16 s)** after replacing its obsolete
+Copilot-is-unverified assertion. The concrete Copilot adapter and two-session ACP
+isolation tests also pass (39.16 s and 2.81 s); no provider model is invoked by
+these fixture tests.

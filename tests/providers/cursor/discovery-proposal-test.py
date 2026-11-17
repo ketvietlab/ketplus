@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Quota-free proposal and allowance tests; only Python fixture processes run."""
 import json
+import importlib.util
 import pathlib
 import select
 import stat
@@ -14,6 +15,17 @@ PROPOSAL = HERE / "discovery-proposal.py"
 
 
 class DiscoveryProposalTest(unittest.TestCase):
+    def test_project_discovery_cannot_attest_another_injected_instance(self):
+        spec = importlib.util.spec_from_file_location("bounded", HERE / "adapter-bounded-fixture.py")
+        bounded = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(bounded)
+        observed = [dict(method="spawn", pid=1), dict(method="tools/list", pid=1),
+                    dict(method="spawn", pid=2), dict(method="initialize", pid=2)]
+        self.assertFalse(bounded.approved_discovery(observed)[2])
+        observed.append(dict(method="tools/list", pid=2))
+        self.assertTrue(bounded.approved_discovery(observed)[2])
+        self.assertFalse(bounded.approved_discovery([])[2])
+
     def test_static_inventory_and_matching_launch_tuple(self):
         with tempfile.TemporaryDirectory() as temporary:
             root = pathlib.Path(temporary).resolve() / "proposal"
