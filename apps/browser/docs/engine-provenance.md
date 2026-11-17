@@ -9,7 +9,9 @@ does not establish browser readiness, runtime acceptance or release approval.
 
 The selected policy retains automatic managed-browser downloads and requires an
 independent trusted digest or signature, including verification on cache reuse
-(release-disposition D-04; team decision D-3). HTTPS, a download URL, a revision,
+(release-disposition D-04; team decision D-3, reaffirmed by D-8). A platform without
+independent publisher evidence remains not ready. Project enrollment authority
+is not an approved substitute for that evidence. HTTPS, a download URL, a revision,
 `INSTALLATION_COMPLETE`, and a cache-local hash receipt are not identity roots.
 
 The pinned `playwright-core` 1.63.0 registry identifies Chrome for Testing

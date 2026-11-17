@@ -61,8 +61,10 @@ or every DLL. These are future enrollment requirements, not completed checks.
 The task now prepares only [Route A: an immutable inventory in an authenticated
 app release](engine-release-manifest.md). There is no TUF, online manifest service,
 separate manifest signing key or remote revocation fetch in this preparation.
-This is not approval of project authority as a substitute for independent
-publisher identity: that decision remains pending, and the existing policy stands.
+D-8 reaffirmed independent publisher identity and did not authorize project
+authority as a substitute. A platform without that evidence remains not ready;
+production wiring continues to wait. Route A can distribute already authenticated
+identities but cannot replace their initial publisher authentication.
 
 The concrete prerequisites remain an accountable initial authentication route,
 named enrollment/review/release owners, and evidence that the intended app release

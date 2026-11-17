@@ -1,9 +1,9 @@
 # Route A: immutable managed-engine release inventory
 
-Status: preparation only. The current policy still requires independent publisher
-identity before managed downloads/cache reuse. A possible change to project
-enrollment authority awaits an explicit decision; this document chooses neither
-authority nor production pins. The production installer/launcher is unchanged.
+Status: preparation only. D-8 reaffirmed independent publisher identity before
+managed downloads/cache reuse. Project enrollment authority is not an approved
+substitute; platforms without independent evidence remain not ready. No production
+pin has been enrolled. The production installer/launcher is unchanged.
 No signing key, online metadata service or TUF implementation is introduced.
 
 ## Trust and ownership gates
@@ -17,11 +17,11 @@ reviewer checks that evidence before any expected hash is published. Under the
 current policy, a local hash from an HTTPS download, matching mirrors, or a project
 signature over unexplained bytes does not satisfy initial authentication.
 
-If project enrollment authority is later approved, it still needs named artifact
-enrollers, independent reviewers, release/signing custodians, retained evidence
-and an accepted app-release trust chain. A decision does not itself enroll an
-artifact or establish those operational controls. Private keys stay outside the
-repository and agent workspace. No owner, signer or key is appointed here.
+Named artifact enrollers, independent reviewers and release/signing custodians
+still need to verify and retain publisher-authentication evidence and establish
+the app-release trust chain. A project-signed app or manifest does not itself
+authenticate an upstream artifact. Private keys stay outside the repository and
+agent workspace. No owner, signer or key is appointed here.
 
 | App-release link inspected | Source-level evidence | Still required before trusting an inventory |
 | --- | --- | --- |
