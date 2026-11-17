@@ -18,6 +18,30 @@ PROPOSAL = HERE / "discovery-proposal.py"
 
 
 class DiscoveryProposalTest(unittest.TestCase):
+    def test_explicit_cheap_models_refuse_auto_fast_default_or_mismatched_ack(self):
+        spec = importlib.util.spec_from_file_location("bounded", HERE / "adapter-bounded-fixture.py")
+        bounded = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(bounded)
+        config = dict(mode="cursor-extra-10", purpose="completed_history_refresh", model="composer-2.5")
+        self.assertEqual(bounded.cursor_model(config), "composer-2.5")
+        for field, value in [("model", "auto"), ("model", "default"), ("model", "composer-2.5-fast"),
+                             ("mode", "D-7"), ("purpose", "blind_retry")]:
+            with self.subTest(field=field, value=value), self.assertRaises(AssertionError):
+                bounded.cursor_model(dict(config, **{field: value}))
+        for current in ["composer-2.5", "composer-2.5[fast=false]"]:
+            options = [dict(id="model", currentValue=current)]
+            self.assertTrue(bounded.cheap_model_ack("composer-2.5", options)[0])
+            for fast in [False, "false"]:
+                self.assertTrue(bounded.cheap_model_ack("composer-2.5", options + [dict(id="fast", currentValue=fast)])[0])
+            for fast in [True, "true", 0, None, "unknown"]:
+                self.assertEqual(bounded.cheap_model_ack("composer-2.5", options + [dict(id="fast", currentValue=fast)]),
+                                 (False, "unmatched"))
+        for current in ["auto", "default", "composer-2.5-fast", "composer-2.5[fast=true]", "private-token"]:
+            self.assertEqual(bounded.cheap_model_ack("composer-2.5", [dict(id="model", currentValue=current)]),
+                             (False, "unmatched"))
+        self.assertEqual(bounded.cheap_model_ack("auto", [dict(id="model", currentValue="composer-2.5")]),
+                         (False, "unmatched"))
+
     def test_live_observed_mcp_child_blocks_replacement_before_any_provider_start(self):
         for field in ["pid", "child_pid"]:
             with self.subTest(worker_pid_field=field):
@@ -191,6 +215,9 @@ send({id:1,method:'initialize',params:{protocolVersion:'2024-11-05'}});
     def test_ten_extra_prompts_reserve_before_forward_and_eleventh_is_denied(self):
         self.mock_allowance("cursor", "cursor-extra-10")
 
+    def test_composer_non_fast_uses_the_same_reservation_barrier(self):
+        self.mock_allowance("cursor", "cursor-extra-10", "composer-2.5")
+
     def test_extra_cursor_decision_rejects_wrong_scope_or_changed_parent(self):
         spec = importlib.util.spec_from_file_location("bounded", HERE / "adapter-bounded-fixture.py")
         bounded = importlib.util.module_from_spec(spec)
@@ -222,11 +249,11 @@ send({id:1,method:'initialize',params:{protocolVersion:'2024-11-05'}});
             with self.assertRaises(AssertionError):
                 bounded.validate_allowance(config, budget, "cursor")
 
-    def mock_allowance(self, provider_name, decision="D-3"):
+    def mock_allowance(self, provider_name, decision="D-3", model="claude-haiku-5-5-low"):
         with tempfile.TemporaryDirectory() as temporary:
             root = pathlib.Path(temporary)
             provider = root / "fake-provider"
-            provider.write_text("#!" + sys.executable + "\nPROVIDER=" + repr(provider_name) + "\nLEDGER=" + repr(str(root / "mock-budget.json")) + "\n" + '''import sys,json
+            provider.write_text("#!" + sys.executable + "\nPROVIDER=" + repr(provider_name) + "\nLEDGER=" + repr(str(root / "mock-budget.json")) + "\nCURRENT=" + repr("composer-2.5[fast=false]" if model == "composer-2.5" else "claude-haiku-5-5") + "\n" + '''import sys,json
 forwarded=0
 for line in sys.stdin:
  r=json.loads(line)
@@ -235,7 +262,7 @@ for line in sys.stdin:
  elif r["method"]=="session/prompt":
   forwarded+=1
   assert json.loads(open(LEDGER).read())[PROVIDER]["sent_or_uncertain"]==forwarded
- value={"configOptions":[{"id":"model","currentValue":"claude-haiku-5-5"}]} if r["method"]=="session/set_config_option" else {"stopReason":"end_turn"}
+ value={"configOptions":[{"id":"model","currentValue":CURRENT}]} if r["method"]=="session/set_config_option" else {"stopReason":"end_turn"}
  print(json.dumps({"jsonrpc":"2.0","id":r["id"],"result":value}),flush=True)
 ''')
             provider.chmod(0o700)
@@ -270,7 +297,8 @@ for line in sys.stdin:
             config = root / "launch.json"
             config.write_text(json.dumps(dict(executable=str(provider), work=str(root), log=str(log),
                                              mode=decision, ledger=str(ledger), head="mock-no-provider", owner=1,
-                                             provider=provider_name, purpose="canonical_failure_diagnostic",
+                                             provider=provider_name, model=model,
+                                             purpose="completed_history_refresh" if model == "composer-2.5" else "canonical_failure_diagnostic",
                                              authorization_reference="mock criterion")))
             process = subprocess.Popen([sys.executable, "-B", str(HERE / "adapter-bounded-fixture.py"),
                                         str(config), "acp"], stdin=subprocess.PIPE, stdout=subprocess.PIPE,

@@ -983,3 +983,24 @@ the Cursor adapter suite and bounded-refresh classifier/default native skip pass
 (2/2 CTest targets, 27.32 seconds). Python attestation/diagnostics passes 11/11,
 proposal fixtures 9/9 and additional-budget units 4/4. AST, C++ formatting and
 diff checks pass. No native model or history request is part of those checks.
+
+### Second additional probe preparation: named Composer non-fast
+
+After independent review of the assistant-text boundary, the next deliberate
+purpose is completion followed by completed-history/same-ID refresh. The selected
+model is the catalog's explicit `composer-2.5` non-fast ID, using the published
+rate above, on the unchanged CLI version and approved synthetic launch identity.
+The fixture accepts only that choice or the original Haiku-low model, refuses
+Auto/default/fast variants, and requires an ACK for the chosen model before any
+reservation. A conflicting fast option or an explicit API refusal stops the
+control. No separate entitlement API is assumed: if catalog, ACK and injected
+transport controls pass without a denial, exactly one authorized synthetic prompt
+tests actual availability. A failure stops for classification before a third
+prompt; a completion permits same-ID refresh without a recall prompt. The
+production mutation gate remains denied throughout this validation.
+
+The preparation's quota-free checks pass: 11/11 proposal/model-guard fixtures,
+11/11 attestation/diagnostic regressions and 4/4 budget units. The focused C++
+target rebuilds and its default classifier/native-skip CTest passes. The Composer
+fixture exercises durable reservations and the same eleventh-prompt refusal;
+separate negative cases reject conflicting fast settings and mismatched ACKs.

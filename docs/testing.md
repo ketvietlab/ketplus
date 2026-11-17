@@ -933,6 +933,14 @@ Quota-free tests include `python3 -B tests/providers/cursor/extra-budget-test.py
 and the integrated ten-fake-prompt/eleventh-refused proposal case. These tests
 cannot authorize a live provider run by themselves.
 
+For the deliberate second additional probe, `KETPLUS_CURSOR_TEST_MODEL=composer-2.5`
+and purpose `completed_history_refresh` select the catalog's non-fast named model.
+Only that model and the original Haiku-low choice are accepted; Composer requires
+the control or additional-budget mode. Its ACK must name the non-fast base ID or
+explicit `[fast=false]` form and must not carry a conflicting fast option. Auto,
+default, fast variants and mismatched ACKs fail the barrier. This opt-in changes
+only the synthetic session, never the provider's default configuration.
+
 These probes keep official inherited provider authentication, create a new
 synthetic session and empty temporary cwd, and never scan existing history.
 The native observer can record `assistant_refusal_rule` with only an allowlisted

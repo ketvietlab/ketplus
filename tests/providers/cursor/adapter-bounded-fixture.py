@@ -25,6 +25,29 @@ MODEL = "claude-haiku-5-5-low"
 MARKER = "T3_BOUNDED_CURSOR_ALPHA"
 
 
+def cursor_model(config):
+    model = config.get("model", MODEL)
+    assert model in [MODEL, "composer-2.5"]
+    if model == "composer-2.5":
+        assert config["mode"] in ["control", "cursor-extra-10"]
+        assert config["purpose"] == "completed_history_refresh"
+    return model
+
+
+def cheap_model_ack(model, options):
+    if model not in [MODEL, "composer-2.5"]:
+        return False, "unmatched"
+    current = next((option.get("currentValue") for option in options if option.get("id") == "model"), None)
+    allowed = ["claude-haiku-5-5", MODEL] if model == MODEL else ["composer-2.5", "composer-2.5[fast=false]"]
+    accepted = current in allowed
+    # Composer's catalog base ID is the non-fast model. Refuse a conflicting
+    # explicit fast option even if the model field still names that base ID.
+    if model == "composer-2.5":
+        accepted &= all(option.get("currentValue") is False or option.get("currentValue") == "false"
+                        for option in options if option.get("id") == "fast")
+    return bool(accepted), current if accepted else "unmatched"
+
+
 def rows(path):
     return [json.loads(line) for line in path.read_text().splitlines()] if path.exists() else []
 
@@ -85,7 +108,7 @@ def main():
     args = sys.argv[2:]
     provider = config.get("provider", "cursor")
     copilot = provider == "copilot"
-    model = "auto" if copilot else MODEL
+    model = "auto" if copilot else cursor_model(config)
     marker = "T3_BOUNDED_COPILOT_ALPHA" if copilot else MARKER
     if "acp" not in args and "--acp" not in args:
         os.execv(config["executable"], [config["executable"], *args])
@@ -191,11 +214,8 @@ def main():
                                                             "max_turn_requests"] else None,
                            failed="error" in value)
                 if method == "session/set_config_option" and params.get("configId") == "model":
-                    for option in value.get("result", {}).get("configOptions", []):
-                        current = option.get("currentValue", "")
-                        if option.get("id") == "model":
-                            selected = current.startswith("claude-haiku-5-5") and "fast=true" not in current
-                            record("cheap_model_ack", accepted=selected, current=current)
+                    selected, current = cheap_model_ack(model, value.get("result", {}).get("configOptions", []))
+                    record("cheap_model_ack", accepted=selected, current=current)
                 if method == "session/load":
                     code = value.get("error", {}).get("code")
                     record("load_ack", success="error" not in value,

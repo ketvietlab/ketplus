@@ -146,6 +146,10 @@ class CursorBoundedRefreshTest final : public QObject {
         const auto root = QFileInfo(directory.path()).canonicalFilePath();
         const auto proposal = qEnvironmentVariable("KETPLUS_CURSOR_APPROVED_PROPOSAL");
         const bool attested = qEnvironmentVariable("KETPLUS_CURSOR_ATTESTED_PROBE") == "1";
+        const auto model =
+            qEnvironmentVariable("KETPLUS_CURSOR_TEST_MODEL", "claude-haiku-5-5-low");
+        QVERIFY(model == "claude-haiku-5-5-low" || model == "composer-2.5");
+        QVERIFY(model != "composer-2.5" || mode == "control" || mode == "cursor-extra-10");
         // Attested text-only history validation still issues no mutation grant.
         QVERIFY(proposal.isEmpty() || mode == "control" || attested);
         QVERIFY(!attested || !proposal.isEmpty());
@@ -187,6 +191,7 @@ class CursorBoundedRefreshTest final : public QObject {
                     {"work", work},
                     {"log", log},
                     {"mode", mode},
+                    {"model", model},
                     {"purpose", qEnvironmentVariable("KETPLUS_CURSOR_TEST_PURPOSE")},
                     {"authorization_reference",
                      qEnvironmentVariable("KETPLUS_CURSOR_EXTRA_REFERENCE")},
@@ -241,7 +246,7 @@ class CursorBoundedRefreshTest final : public QObject {
                 {"managedTransportEpoch", epoch},
                 {"resume", resume},
                 {"cwd", work},
-                {"model", "claude-haiku-5-5-low"},
+                {"model", model},
                 {"permission", "read-only"},
                 {"agentMcpServer", server},
                 {"prompt", "Reply exactly T3_BOUNDED_CURSOR_ALPHA. Do not use tools."}};
@@ -313,10 +318,10 @@ class CursorBoundedRefreshTest final : public QObject {
         QVERIFY(adapter.releaseSessionTransport("t3-bounded-owner"));
         adapter.stop();
         QTRY_VERIFY(exited(log));
-        qInfo("%s Cursor: one explicit Haiku low turn; same-ID replay before any recall; "
+        qInfo("%s Cursor: one explicit %s turn; same-ID replay before any recall; "
               "new MCP transport attested and old processes exited. Inspect injected inventory "
               "evidence separately; no production mutation is enabled by this probe.",
-              qPrintable(mode));
+              qPrintable(mode), qPrintable(model));
     }
 };
 QTEST_GUILESS_MAIN(CursorBoundedRefreshTest)
