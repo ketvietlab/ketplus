@@ -15,7 +15,6 @@ struct RepositoryLayout {
     QString commonDir;    // shared directory holding objects and refs
     QString objectsDir;   // <commonDir>/objects
     QString indexFile;    // <gitDir>/index; may not exist in a new repository
-    QString excludeFile;  // <commonDir>/info/exclude; may not exist
     QString objectFormat; // "sha1" or "sha256"
 };
 

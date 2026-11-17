@@ -26,15 +26,19 @@ struct SnapshotRequest {
 };
 
 struct Snapshot {
-    QString commit; // parentless commit in the store, fixed identity and date
+    // Parentless commit in the store, fixed identity and date. The store holds the commit and
+    // every tree; a blob the repository already has is read from there, never copied.
+    QString commit;
     QString tree;
     // Gitlinks in the snapshot. Only the recorded commit id travels, never the submodule's
     // content; the caller warns that the runner sees an empty directory there.
     QStringList submodulePaths;
-    // Paths with a `filter` attribute, from .gitattributes, info/attributes or the user's
-    // core.attributesFile. No filter runs and no worktree content of these paths enters the
-    // snapshot: a tracked one keeps the blob its index already holds (the LFS pointer, or the
-    // encrypted form a filter such as git-crypt stored), an untracked one is left out.
+    // Paths with a `filter` attribute from any source but the system one: .gitattributes in
+    // the tree, the repository's info/attributes, or core.attributesFile (global or repository
+    // configuration; by default $XDG_CONFIG_HOME/git/attributes). No filter runs and no worktree
+    // content of these paths enters the snapshot: a tracked one keeps the blob its index already
+    // holds (the LFS pointer, or the encrypted form a filter such as git-crypt stored), an
+    // untracked one is left out.
     QStringList lfsPaths;      // filter=lfs
     QStringList filteredPaths; // any other filter
 };
@@ -42,7 +46,9 @@ struct Snapshot {
 // Captures the worktree as it is now: every tracked path with its current content (staged
 // or not), deletions, renames, the executable bit and symlinks, plus untracked files that are
 // not ignored by .gitignore, the repository's info/exclude or the user's core.excludesFile.
-// Only one git command reads the user's repository: SealedGit::queryUserConfig.
+// Fails with SnapshotIncomplete rather than return a snapshot with an unreadable object. The
+// only git command run on the user's repository is SealedGit::queryUserConfig; the others
+// run on the store and at most read the repository's objects.
 [[nodiscard]] Result<Snapshot> createSnapshot(const SnapshotRequest& request,
                                               const GitTool& tool = {});
 

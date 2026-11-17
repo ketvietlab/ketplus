@@ -20,8 +20,8 @@ bool isRegularFile(const QString& path) {
 #endif
 }
 
-// Missing or not a regular file: empty. Over the limit: an error, since dropping the file
-// would put ignored or filtered paths into the snapshot.
+} // namespace
+
 Result<QByteArray> readRulesFile(const QString& path) {
     if (path.isEmpty() || !isRegularFile(path))
         return QByteArray();
@@ -36,8 +36,6 @@ Result<QByteArray> readRulesFile(const QString& path) {
     }
     return content;
 }
-
-} // namespace
 
 UserGitSources userGitSourcesFromEnvironment() {
     return {QDir::homePath(), qEnvironmentVariable("XDG_CONFIG_HOME"),

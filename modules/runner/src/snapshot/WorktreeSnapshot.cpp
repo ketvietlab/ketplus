@@ -98,15 +98,19 @@ std::optional<Error> prepareStore(const SealedGit& git, const QString& storePath
     } else if (auto error = writeFileAtomically(binding, wanted)) {
         return error;
     }
-    // The repository's info/exclude; .gitignore files are read in place and the user's own
-    // excludes file is given per snapshot.
-    QByteArray exclude;
-    if (QFile file(layout.excludeFile); file.open(QIODevice::ReadOnly))
-        exclude = file.read(maxUserRulesFileBytes + 1);
-    if (exclude.size() > maxUserRulesFileBytes)
-        return Error{ErrorCode::UnsupportedRepository, QStringLiteral("info/exclude is too large")};
+    // The repository's info/exclude and info/attributes, copied as data into the store's own
+    // info directory, where the snapshot's git reads them; .gitignore and .gitattributes
+    // files are read in place and the user's own files are given per snapshot.
     QDir().mkpath(QDir(storeRoot).filePath(QStringLiteral("info")));
-    return writeFileAtomically(QDir(storeRoot).filePath(QStringLiteral("info/exclude")), exclude);
+    for (const QString& name :
+         {QStringLiteral("info/exclude"), QStringLiteral("info/attributes")}) {
+        const auto content = readRulesFile(QDir(layout.commonDir).filePath(name));
+        if (!content)
+            return content.error();
+        if (auto error = writeFileAtomically(QDir(storeRoot).filePath(name), content.value()))
+            return error;
+    }
+    return std::nullopt;
 }
 
 // A copy of the worktree's index (and any split-index shared files), so the stat cache makes
@@ -245,20 +249,65 @@ Result<Snapshot> createSnapshot(const SnapshotRequest& request, const GitTool& t
     if (!tree)
         return tree.error();
     snapshot.tree = oneLine(tree.value().out);
+    if (!isObjectId(snapshot.tree))
+        return Error{ErrorCode::GitFailed, QStringLiteral("git returned no tree id")};
+
+    // That write-tree reuses the copied index's cache-tree, and skips writing any tree the
+    // cache-tree still holds valid (whether it does depends on which entries `add` refreshed).
+    // Those trees exist only in the repository, so rebuild the tree from its own listing into
+    // an index without a cache-tree: write-tree then writes every tree into the store.
+    const QString alternate = readAlternate(store);
+    GitRun listTree;
+    listTree.gitDir = store;
+    listTree.extraEnvironment = {alternate};
+    listTree.arguments = {QStringLiteral("ls-tree"), QStringLiteral("-r"), QStringLiteral("-z"),
+                          QStringLiteral("--full-tree"), snapshot.tree};
+    const auto listing = git.run(listTree);
+    if (!listing)
+        return listing.error();
+    GitRun rebuild;
+    rebuild.gitDir = store;
+    rebuild.indexFile = scratch.filePath(QStringLiteral("tree-index"));
+    rebuild.arguments = {QStringLiteral("update-index"), QStringLiteral("-z"),
+                         QStringLiteral("--index-info")};
+    rebuild.input = listing.value().out;
+    if (const auto rebuilt = git.run(rebuild); !rebuilt)
+        return rebuilt.error();
+    rebuild.arguments = {QStringLiteral("write-tree"), QStringLiteral("--missing-ok")};
+    rebuild.input.clear();
+    const auto written = git.run(rebuild);
+    if (!written)
+        return written.error();
+    if (oneLine(written.value().out) != snapshot.tree)
+        return Error{ErrorCode::SnapshotIncomplete,
+                     QStringLiteral("the snapshot tree changed when written to the store")};
 
     GitRun commit;
     commit.gitDir = store;
     commit.extraEnvironment = snapshotIdentity;
     // commit-tree checks the tree exists; the commit it writes is new, never a repository one.
-    commit.extraEnvironment << readAlternate(store);
+    commit.extraEnvironment << alternate;
     commit.arguments = {QStringLiteral("commit-tree"), snapshot.tree, QStringLiteral("-m"),
                         QStringLiteral("KetPlus worktree snapshot")};
     const auto committed = git.run(commit);
     if (!committed)
         return committed.error();
     snapshot.commit = oneLine(committed.value().out);
-    if (!isObjectId(snapshot.commit) || !isObjectId(snapshot.tree))
-        return Error{ErrorCode::GitFailed, QStringLiteral("git returned no object id")};
+    if (!isObjectId(snapshot.commit))
+        return Error{ErrorCode::GitFailed, QStringLiteral("git returned no commit id")};
+
+    // Every object of the snapshot must be readable from the store or the repository before
+    // it is handed out; a pack written from an incomplete one would fail on the runner.
+    GitRun complete;
+    complete.gitDir = store;
+    complete.extraEnvironment = {alternate};
+    complete.arguments = {QStringLiteral("rev-list"), QStringLiteral("--quiet"),
+                          QStringLiteral("--objects"), QStringLiteral("--missing=error"),
+                          snapshot.commit};
+    if (const auto checked = git.run(complete); !checked) {
+        return Error{ErrorCode::SnapshotIncomplete,
+                     QStringLiteral("the snapshot is missing objects: ") + checked.error().message};
+    }
     return snapshot;
 }
 

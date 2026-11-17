@@ -88,7 +88,6 @@ Result<RepositoryLayout> readRepositoryLayout(const QString& worktreePath) {
         return Error{ErrorCode::NotAWorktree,
                      QStringLiteral("no objects in %1").arg(layout.commonDir)};
     layout.indexFile = QDir(layout.gitDir).filePath(QStringLiteral("index"));
-    layout.excludeFile = QDir(layout.commonDir).filePath(QStringLiteral("info/exclude"));
     layout.objectFormat = objectFormat(layout.commonDir);
     if (layout.objectFormat != QStringLiteral("sha1") &&
         layout.objectFormat != QStringLiteral("sha256")) {

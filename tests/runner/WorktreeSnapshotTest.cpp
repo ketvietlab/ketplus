@@ -13,6 +13,8 @@
 #include <QTemporaryDir>
 #include <QTest>
 
+#include <algorithm>
+
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -197,8 +199,11 @@ class WorktreeSnapshotTest : public QObject {
     void hostileTreeCannotLeaveWorkspace();
     void symlinksCannotRedirectWrites();
     void submodulesAndLfsAreReportedNotSent();
+    void storeHoldsEveryTree();
     void userExcludesFileIsHonoured();
+    void filteredPathsAreNotRunNorSent_data();
     void filteredPathsAreNotRunNorSent();
+    void oversizeRuleFilesFailClosed();
 
   private:
     QString path(const QString& relative) const { return m_root->filePath(relative); }
@@ -253,7 +258,8 @@ QString WorktreeSnapshotTest::makeRepository(const QString& name) {
 QMap<QString, Entry> WorktreeSnapshotTest::treeOf(const QString& gitDir, const QString& commit) {
     QMap<QString, Entry> entries;
     const QStringList dirArg{QStringLiteral("--git-dir=") + gitDir};
-    // A snapshot store reads unchanged blobs from the repository it is bound to.
+    // A snapshot store reads unchanged blobs from the repository it is bound to, but holds
+    // every tree itself: the listing below runs on the store alone.
     QStringList alternate;
     if (const QByteArray objects =
             readFile(QDir(gitDir).filePath(QStringLiteral("ketplus-source-objects")));
@@ -264,8 +270,10 @@ QMap<QString, Entry> WorktreeSnapshotTest::treeOf(const QString& gitDir, const Q
         runGitIn(m_home, m_home,
                  dirArg + QStringList{QStringLiteral("ls-tree"), QStringLiteral("-r"),
                                       QStringLiteral("-z"), commit});
-    if (!listing.ok)
+    if (!listing.ok) {
+        qWarning("treeOf failed: %s", qPrintable(listing.err));
         return entries;
+    }
     for (const QByteArray& raw : listing.out.split('\0')) {
         if (raw.isEmpty())
             continue;
@@ -1117,6 +1125,46 @@ void WorktreeSnapshotTest::submodulesAndLfsAreReportedNotSent() {
     QVERIFY(QDir(QDir(workspace).filePath(QStringLiteral("vendor/lib"))).isEmpty());
 }
 
+// A clean worktree whose files predate its index: `add` refreshes nothing, so the copied
+// index's cache-tree stays valid and names trees only the repository holds. The store must
+// still get every tree of the snapshot.
+void WorktreeSnapshotTest::storeHoldsEveryTree() {
+    const QString repo = makeRepository(QStringLiteral("repo"));
+    for (const char* name : {"top.txt", "src/a.c", "src/deep/b.c", "docs/c.md"}) {
+        const QString file = QDir(repo).filePath(QString::fromLatin1(name));
+        QVERIFY(writeFile(file, QByteArray(name) + '\n'));
+        QFile handle(file);
+        QVERIFY(handle.open(QIODevice::ReadWrite));
+        QVERIFY(handle.setFileTime(QDateTime::currentDateTimeUtc().addDays(-1),
+                                   QFileDevice::FileModificationTime));
+    }
+    GIT(add, repo, {QStringLiteral("add"), QStringLiteral("-A")});
+    GIT(commit, repo, {QStringLiteral("commit"), QStringLiteral("-qm"), QStringLiteral("base")});
+    GIT(trees, repo,
+        {QStringLiteral("ls-tree"), QStringLiteral("-r"), QStringLiteral("-d"),
+         QStringLiteral("HEAD")});
+    GIT(root, repo, {QStringLiteral("rev-parse"), QStringLiteral("HEAD^{tree}")});
+
+    const QString store = path(QStringLiteral("store"));
+    const auto snapshot = createSnapshot({repo, store, UserGitSources{m_home, {}, {}}});
+    EXPECT_OK(snapshot);
+    QCOMPARE(snapshot.value().tree.toLatin1(), root.out.trimmed());
+    // Each tree from the store alone, without the repository's objects.
+    QList<QByteArray> ids{root.out.trimmed()};
+    for (const QByteArray& line : trees.out.split('\n')) {
+        if (!line.isEmpty())
+            ids << line.left(line.indexOf('\t')).split(' ').value(2); // mode type id\tpath
+    }
+    QCOMPARE(ids.size(), 4);
+    for (const QByteArray& tree : ids) {
+        GIT(type, m_home,
+            {QStringLiteral("--git-dir=") + store, QStringLiteral("cat-file"), QStringLiteral("-t"),
+             QString::fromLatin1(tree.trimmed())});
+        QCOMPARE(type.out.trimmed(), QByteArray("tree"));
+    }
+    QCOMPARE(treeOf(store, snapshot.value().commit).size(), 4);
+}
+
 void WorktreeSnapshotTest::userExcludesFileIsHonoured() {
     const QString repo = makeRepository(QStringLiteral("repo"));
     QVERIFY(writeFile(QDir(repo).filePath(QStringLiteral("tracked.txt")), "tracked\n"));
@@ -1226,7 +1274,23 @@ void WorktreeSnapshotTest::userExcludesFileIsHonoured() {
            QStringLiteral("local.secret"), QStringLiteral("repo-ignore")});
 }
 
+void WorktreeSnapshotTest::filteredPathsAreNotRunNorSent_data() {
+    QTest::addColumn<QString>("source");
+    QTest::addColumn<bool>("linked");
+    QTest::newRow("gitattributes") << QStringLiteral("gitattributes") << false;
+    QTest::newRow("info/attributes") << QStringLiteral("info") << false;
+    QTest::newRow("info/attributes, linked worktree") << QStringLiteral("info") << true;
+    QTest::newRow("global core.attributesFile") << QStringLiteral("global") << false;
+    QTest::newRow("repository core.attributesFile") << QStringLiteral("repository") << false;
+    QTest::newRow("default user attributes") << QStringLiteral("default") << false;
+}
+
+// Each place the user's git takes a `filter` attribute from (the system one aside): the
+// filter must not run, a tracked path keeps the blob its index holds, an untracked one is
+// left out, and no plaintext reaches the pack.
 void WorktreeSnapshotTest::filteredPathsAreNotRunNorSent() {
+    QFETCH(QString, source);
+    QFETCH(bool, linked);
     const QString markers = path(QStringLiteral("markers"));
     QDir().mkpath(markers);
     // An "encrypting" filter: rot13, recording each run.
@@ -1237,40 +1301,74 @@ void WorktreeSnapshotTest::filteredPathsAreNotRunNorSent() {
     const QString repo = makeRepository(QStringLiteral("repo"));
     GIT(clean, repo, {QStringLiteral("config"), QStringLiteral("filter.crypt.clean"), filter});
     GIT(smudge, repo, {QStringLiteral("config"), QStringLiteral("filter.crypt.smudge"), filter});
-    QVERIFY(writeFile(QDir(repo).filePath(QStringLiteral(".gitattributes")),
-                      "*.secret filter=crypt\n*.txt -filter\n"));
+
+    // The user's git, with the user's configuration in place.
+    const QString xdg = QDir(m_home).filePath(QStringLiteral(".config"));
+    const QString globalConfig = QDir(m_home).filePath(QStringLiteral(".gitconfig"));
+    const QStringList userGit{QStringLiteral("GIT_CONFIG_GLOBAL=") + globalConfig,
+                              QStringLiteral("XDG_CONFIG_HOME=") + xdg};
+    QVERIFY(writeFile(globalConfig, ""));
+    const QByteArray rule = "*.secret filter=crypt\n";
+    if (source == QStringLiteral("gitattributes")) {
+        QVERIFY(writeFile(QDir(repo).filePath(QStringLiteral(".gitattributes")),
+                          rule + "*.txt -filter\n"));
+    } else if (source == QStringLiteral("info")) {
+        QVERIFY(writeFile(QDir(repo).filePath(QStringLiteral(".git/info/attributes")), rule));
+    } else if (source == QStringLiteral("global")) {
+        QVERIFY(writeFile(QDir(m_home).filePath(QStringLiteral("attributes")), rule));
+        QVERIFY(writeFile(globalConfig, "[core]\n\tattributesFile = ~/attributes\n"));
+    } else if (source == QStringLiteral("repository")) {
+        const QString attributes = path(QStringLiteral("repo-attributes"));
+        QVERIFY(writeFile(attributes, rule));
+        GIT(local, repo,
+            {QStringLiteral("config"), QStringLiteral("core.attributesFile"), attributes});
+    } else {
+        QVERIFY(writeFile(QDir(xdg).filePath(QStringLiteral("git/attributes")), rule));
+    }
     QVERIFY(writeFile(QDir(repo).filePath(QStringLiteral("app.secret")), "PLAINTEXT-ONE\n"));
     QVERIFY(writeFile(QDir(repo).filePath(QStringLiteral("notes.txt")), "notes\n"));
-    GIT(add, repo, {QStringLiteral("add"), QStringLiteral("-A")});
-    GIT(commit, repo, {QStringLiteral("commit"), QStringLiteral("-qm"), QStringLiteral("base")});
+    GIT(add, repo, {QStringLiteral("add"), QStringLiteral("-A")}, {}, userGit);
+    GIT(commit, repo, {QStringLiteral("commit"), QStringLiteral("-qm"), QStringLiteral("base")}, {},
+        userGit);
     GIT(stored, repo,
         {QStringLiteral("cat-file"), QStringLiteral("blob"), QStringLiteral("HEAD:app.secret")});
-    QCOMPARE(stored.out, QByteArray("CYNVAGRKG-BAR\n")); // what the repository holds
+    QCOMPARE(stored.out, QByteArray("CYNVAGRKG-BAR\n")); // the user's git did filter it
+
+    QString worktree = repo;
+    if (linked) {
+        worktree = path(QStringLiteral("linked"));
+        GIT(added, repo,
+            {QStringLiteral("worktree"), QStringLiteral("add"), QStringLiteral("-q"), worktree}, {},
+            userGit);
+    }
     QVERIFY(QDir(markers).removeRecursively());
     QDir().mkpath(markers);
 
-    QVERIFY(writeFile(QDir(repo).filePath(QStringLiteral("app.secret")), "PLAINTEXT-TWO\n"));
-    QVERIFY(writeFile(QDir(repo).filePath(QStringLiteral("new.secret")), "PLAINTEXT-THREE\n"));
-    QVERIFY(writeFile(QDir(repo).filePath(QStringLiteral("notes.txt")), "notes edited\n"));
-    // A filter set only by the user's own attributes file counts too.
-    const QString xdg = QDir(m_home).filePath(QStringLiteral(".config"));
-    QVERIFY(
-        writeFile(QDir(xdg).filePath(QStringLiteral("git/attributes")), "*.key filter=crypt\n"));
-    QVERIFY(writeFile(QDir(repo).filePath(QStringLiteral("id.key")), "PLAINTEXT-FOUR\n"));
+    QVERIFY(writeFile(QDir(worktree).filePath(QStringLiteral("app.secret")), "PLAINTEXT-TWO\n"));
+    QVERIFY(writeFile(QDir(worktree).filePath(QStringLiteral("new.secret")), "PLAINTEXT-THREE\n"));
+    QVERIFY(writeFile(QDir(worktree).filePath(QStringLiteral("notes.txt")), "notes edited\n"));
+    // What the user's git filters here, so the case really exercises the source.
+    GIT(filteredByGit, worktree,
+        {QStringLiteral("ls-files"), QStringLiteral("-z"), QStringLiteral("--cached"),
+         QStringLiteral("--others"), QStringLiteral("--exclude-standard"), QStringLiteral("--"),
+         QStringLiteral(":(attr:filter=crypt)")},
+        {}, userGit);
+    QList<QByteArray> byGit = filteredByGit.out.split('\0');
+    byGit.removeAll(QByteArray());
+    std::sort(byGit.begin(), byGit.end());
+    QCOMPARE(byGit, (QList<QByteArray>{"app.secret", "new.secret"}));
 
     const QString store = path(QStringLiteral("store"));
-    const auto snapshot = createSnapshot({repo, store, UserGitSources{m_home, xdg, {}}});
+    const auto snapshot = createSnapshot({worktree, store, UserGitSources{m_home, xdg, {}}});
     EXPECT_OK(snapshot);
     QStringList filtered = snapshot.value().filteredPaths;
     filtered.sort();
-    QCOMPARE(filtered, (QStringList{QStringLiteral("app.secret"), QStringLiteral("id.key"),
-                                    QStringLiteral("new.secret")}));
+    QCOMPARE(filtered, (QStringList{QStringLiteral("app.secret"), QStringLiteral("new.secret")}));
     QVERIFY(snapshot.value().lfsPaths.isEmpty());
 
     const auto tree = treeOf(store, snapshot.value().commit);
     QCOMPARE(tree.value(QStringLiteral("app.secret")).content, QByteArray("CYNVAGRKG-BAR\n"));
     QVERIFY(!tree.contains(QStringLiteral("new.secret")));
-    QVERIFY(!tree.contains(QStringLiteral("id.key")));
     QCOMPARE(tree.value(QStringLiteral("notes.txt")).content, QByteArray("notes edited\n"));
 
     const auto pack =
@@ -1280,6 +1378,26 @@ void WorktreeSnapshotTest::filteredPathsAreNotRunNorSent() {
     QVERIFY(content.contains("notes edited")); // the dump really holds the pack's objects
     QVERIFY(!content.contains("PLAINTEXT"));
     QCOMPARE(QDir(markers).entryList(QDir::Files | QDir::Hidden), QStringList());
+}
+
+// The repository's info/exclude and info/attributes are read as bounded data: one over the
+// limit fails the snapshot instead of being dropped.
+void WorktreeSnapshotTest::oversizeRuleFilesFailClosed() {
+    const QString repo = makeRepository(QStringLiteral("repo"));
+    QVERIFY(writeFile(QDir(repo).filePath(QStringLiteral("a.txt")), "a\n"));
+    const QByteArray oversize(maxUserRulesFileBytes + 1, '#');
+    for (const QString& name :
+         {QStringLiteral("info/exclude"), QStringLiteral("info/attributes")}) {
+        const QString file = QDir(repo).filePath(QStringLiteral(".git/") + name);
+        QVERIFY(writeFile(file, oversize));
+        const auto failed =
+            createSnapshot({repo, path(QStringLiteral("store")), UserGitSources{m_home, {}, {}}});
+        QVERIFY2(!failed.ok(), qPrintable(name));
+        QCOMPARE(failed.error().code, ErrorCode::UnsupportedRepository);
+        QVERIFY(writeFile(file, oversize.left(maxUserRulesFileBytes)));
+        EXPECT_OK(
+            createSnapshot({repo, path(QStringLiteral("store")), UserGitSources{m_home, {}, {}}}));
+    }
 }
 
 QTEST_GUILESS_MAIN(WorktreeSnapshotTest)

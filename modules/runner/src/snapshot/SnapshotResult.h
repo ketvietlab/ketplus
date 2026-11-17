@@ -20,7 +20,7 @@ enum class ErrorCode {
     PackTooLarge,       // the pack exceeds ApplyLimits::maxPackBytes.
     PackDigestMismatch, // the pack's SHA-256 differs from the expected one.
     PackInvalid,        // git rejected the pack (corrupt or failing fsck checks).
-    SnapshotIncomplete, // the commit or an object it reaches is missing after indexing.
+    SnapshotIncomplete, // the commit or an object it reaches is missing (made or indexed).
     UnsafePath,         // the snapshot tree has a path that could leave the workspace.
     CheckoutTooLarge,   // the snapshot tree exceeds the checkout limits.
     Io,                 // a local file operation failed.

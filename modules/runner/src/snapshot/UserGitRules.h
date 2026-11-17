@@ -16,6 +16,11 @@ namespace ketplus::runner::snapshot {
 // Bytes accepted from either file; a larger one fails the snapshot rather than being dropped.
 inline constexpr qint64 maxUserRulesFileBytes = 1024 * 1024;
 
+// Reads an ignore or attributes file as data. Missing or not a regular file (a device, FIFO
+// or directory): empty. Over maxUserRulesFileBytes: UnsupportedRepository, since dropping
+// the file would put ignored or filtered paths into the snapshot.
+[[nodiscard]] Result<QByteArray> readRulesFile(const QString& path);
+
 // Where the user's git would look, as seen by that git: empty means unset.
 struct UserGitSources {
     QString home;
@@ -31,8 +36,7 @@ struct UserGitRules {
     QByteArray attributes;
 };
 
-// A file the configuration names that is missing, or is not a regular file (a device, FIFO
-// or directory), counts as empty.
+// Each file the configuration names (or its default) is read with readRulesFile.
 [[nodiscard]] Result<UserGitRules> readUserGitRules(const SealedGit& git,
                                                     const RepositoryLayout& layout,
                                                     const UserGitSources& sources);
