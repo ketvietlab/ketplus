@@ -1064,27 +1064,46 @@ std::optional<QList<StoredSession>> LocalJournal::readSessions() const {
     QList<StoredSession> result;
     QSqlQuery query(database_);
     if (!query.exec(QStringLiteral(
-            "SELECT id, worktree_path, adapter, thread_id, turn_id, state, generation, "
-            "last_cursor, current_turn_sequence, title, configuration_revision, model, effort, "
-            "execution_policy, mode, provider_threads, last_seen_cursor, last_turn_started_at, "
-            "context_revision, compact_window, archived_at, tags, awaiting_reply "
-            "FROM sessions ORDER BY id"))) {
+            "SELECT s.id, s.worktree_path, s.adapter, s.thread_id, s.turn_id, s.state, "
+            "s.generation, "
+            "s.last_cursor, s.current_turn_sequence, s.title, s.configuration_revision, s.model, "
+            "s.effort, s.execution_policy, s.mode, s.provider_threads, s.last_seen_cursor, "
+            "s.last_turn_started_at, s.context_revision, s.compact_window, s.archived_at, s.tags, "
+            "s.awaiting_reply, n.repository_path, n.path FROM sessions s "
+            "LEFT JOIN conversation_navigation n ON n.session_id=s.id AND "
+            "n.generation=s.generation "
+            "ORDER BY s.id"))) {
         setError(query.lastError().text());
         return std::nullopt;
     }
     while (query.next()) {
-        result.append({query.value(0).toString(),    query.value(1).toString(),
-                       query.value(2).toString(),    query.value(3).toString(),
-                       query.value(4).toString(),    query.value(5).toString(),
-                       query.value(6).toLongLong(),  query.value(7).toLongLong(),
-                       query.value(8).toLongLong(),  query.value(9).toString(),
-                       query.value(10).toLongLong(), query.value(11).toString(),
-                       query.value(12).toString(),   query.value(13).toString(),
-                       query.value(14).toString(),   query.value(15).toString(),
-                       query.value(16).toLongLong(), query.value(17).toString(),
-                       query.value(18).toLongLong(), query.value(19).toLongLong(),
-                       query.value(20).toString(),   storedTags(query.value(21).toString()),
-                       query.value(22).toBool()});
+        result.append(
+            {query.value(0).toString(),
+             query.value(1).toString(),
+             query.value(2).toString(),
+             query.value(3).toString(),
+             query.value(4).toString(),
+             query.value(5).toString(),
+             query.value(6).toLongLong(),
+             query.value(7).toLongLong(),
+             query.value(8).toLongLong(),
+             query.value(9).toString(),
+             query.value(10).toLongLong(),
+             query.value(11).toString(),
+             query.value(12).toString(),
+             query.value(13).toString(),
+             query.value(14).toString(),
+             query.value(15).toString(),
+             query.value(16).toLongLong(),
+             query.value(17).toString(),
+             query.value(18).toLongLong(),
+             query.value(19).toLongLong(),
+             query.value(20).toString(),
+             storedTags(query.value(21).toString()),
+             query.value(22).toBool(),
+             query.value(23).isNull() ? std::nullopt
+                                      : std::optional<QString>{query.value(23).toString()},
+             query.value(24).isNull() ? query.value(1).toString() : query.value(24).toString()});
     }
     if (query.lastError().isValid()) {
         setError(query.lastError().text());

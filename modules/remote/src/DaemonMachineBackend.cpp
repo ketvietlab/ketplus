@@ -133,6 +133,12 @@ QJsonObject DaemonMachineBackend::groupWorkspacesByRepository(const QJsonObject&
         }
         const qsizetype index = indexByRepository.value(repositoryPath);
         auto repository = repositories.at(index).toObject();
+        // Keep execution worktrees; only the sidebar omits a confirmed non-repository root.
+        const bool visible =
+            workspace.value(QStringLiteral("sidebar_repository_visible")).toBool(true);
+        repository.insert(QStringLiteral("sidebarVisible"),
+                          repository.value(QStringLiteral("sidebarVisible")).toBool(false) ||
+                              visible);
         auto worktrees = repository.value(QStringLiteral("worktrees")).toArray();
         worktrees.append(worktree);
         repository.insert(QStringLiteral("worktrees"), worktrees);

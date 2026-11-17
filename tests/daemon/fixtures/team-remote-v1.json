@@ -41,6 +41,7 @@
           "id": "3",
           "revision": 11,
           "repository_id": "repository-1",
+          "sidebar_repository_id": "repository-1",
           "name": "Mobile Refactor",
           "paused": false,
           "paused_reason": "",
@@ -124,6 +125,7 @@
         "id": "3",
         "revision": 11,
         "repository_id": "repository-1",
+        "sidebar_repository_id": "repository-1",
         "name": "Mobile Refactor",
         "goal": "Update desktop sidebar and bring the team feature to mobile",
         "integration_branch": "integration",
@@ -489,6 +491,7 @@
         "id": "3",
         "revision": 12,
         "repository_id": "repository-1",
+        "sidebar_repository_id": "repository-1",
         "name": "Mobile Refactor",
         "goal": "Update desktop sidebar and bring the team feature to mobile",
         "integration_branch": "integration",
@@ -752,6 +755,7 @@
         "id": "3",
         "revision": 11,
         "repository_id": "repository-1",
+        "sidebar_repository_id": "repository-1",
         "name": "Mobile Refactor",
         "goal": "Update desktop sidebar and bring the team feature to mobile",
         "integration_branch": "integration",
@@ -963,7 +967,9 @@
         "paused_reason": "empty_role",
         "review": {
           "reviewing": "",
-          "queued": ["T-4"],
+          "queued": [
+            "T-4"
+          ],
           "reviewers": []
         }
       }

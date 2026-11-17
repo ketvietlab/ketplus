@@ -483,6 +483,28 @@ QString CloudControlClient::hostKeyFingerprint(QString* error) {
     return DevicePins::hostFingerprint(crypto_.publicKeys(error));
 }
 
+std::optional<bool> CloudControlClient::sidebarRepositoryVisible(const QString& path) {
+    const QFileInfo origin(path);
+    if (!origin.isDir() || !origin.isReadable())
+        return std::nullopt;
+    const auto canonicalOrigin = origin.canonicalFilePath();
+    if (canonicalOrigin.isEmpty())
+        return std::nullopt;
+    QDir directory(canonicalOrigin);
+    do {
+        const QFileInfo marker(directory.filePath(QStringLiteral(".git")));
+        if (marker.exists() || marker.isSymLink()) {
+            const auto git = worktreeGitDirectory(directory.absolutePath());
+            return !git.isEmpty() && QFileInfo(git).isDir() ? std::optional<bool>{true}
+                                                            : std::nullopt;
+        }
+        if (QFileInfo(directory.filePath(QStringLiteral("HEAD"))).isFile() &&
+            QFileInfo(directory.filePath(QStringLiteral("objects"))).isDir())
+            return true;
+    } while (directory.cdUp());
+    return false;
+}
+
 QJsonArray CloudControlClient::sessionSnapshots(
     const QList<StoredSession>& stored, const QString& workspaceId, const QString& machineId,
     const QByteArray& pathIdSalt, const QHash<QString, QString>& repositories,
@@ -541,6 +563,32 @@ QJsonArray CloudControlClient::sessionSnapshots(
                  {QStringLiteral("worktreeId"), context.value(QStringLiteral("worktreeId"))},
                  {QStringLiteral("worktreeLabel"),
                   context.value(QStringLiteral("worktreeLabel"))}});
+            // Navigation placement is host-sealed metadata only. The relay's routing scope
+            // above continues to name the current execution worktree/repository.
+            if (session.sidebarRepository) {
+                const auto& placement = *session.sidebarRepository;
+                auto& sealed = (*metadata)[session.id];
+                sealed.insert(QStringLiteral("sidebarPlacementKnown"), true);
+                sealed.insert(QStringLiteral("sidebarRepositoryId"),
+                              placement.isEmpty() ? QString{}
+                                                  : cloud_control::opaquePathId(
+                                                        "repository", placement, pathIdSalt));
+                sealed.insert(QStringLiteral("sidebarRepositoryLabel"),
+                              QFileInfo(placement).fileName());
+            } else if (!session.conversationPath.isEmpty()) {
+                // Legacy navigation is a stable fallback, not a claim about historical origin.
+                const auto recorded = repositories.value(session.conversationPath);
+                const auto fallback = recorded.isEmpty() ? session.conversationPath : recorded;
+                auto& sealed = (*metadata)[session.id];
+                sealed.insert(QStringLiteral("sidebarPlacementKnown"), false);
+                sealed.insert(QStringLiteral("sidebarRepositoryId"),
+                              cloud_control::opaquePathId("repository", fallback, pathIdSalt));
+                sealed.insert(QStringLiteral("sidebarRepositoryLabel"),
+                              QFileInfo(fallback).fileName());
+            }
+            if (const auto visible = sidebarRepositoryVisible(session.worktreePath))
+                (*metadata)[session.id].insert(QStringLiteral("sidebarExecutionRepositoryVisible"),
+                                               *visible);
             // ADR 0027: the number agents and users address the conversation by, and the
             // conversation whose message started the running turn. Sealed: only the phone
             // shows them.

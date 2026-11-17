@@ -217,6 +217,13 @@ class TeamHostPort {
     // Asked only for a conversation that is to join a team, because the session runtime may
     // have to ask git for it.
     [[nodiscard]] virtual QString conversationRepository(const QString& sessionId) const = 0;
+    // Display placement at creation, independently of execution scope. Empty means known
+    // no-repository; nullopt means the host could not establish an identity.
+    [[nodiscard]] virtual std::optional<QString>
+    sidebarRepositoryAtCreation(const QString& path) const {
+        (void)path;
+        return std::nullopt;
+    }
     // T-90 (ADR 0123): whether a team or task may work in `path`: the main checkout of a Git
     // repository whose origin has `integrationBranch` (any repository when it is empty).
     [[nodiscard]] virtual RepositoryCheck checkRepository(const QString& path,

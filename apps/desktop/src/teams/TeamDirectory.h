@@ -52,6 +52,7 @@ class TeamDirectory final : public QObject {
 
     [[nodiscard]] QList<QJsonObject> teams() const;
     [[nodiscard]] QList<QJsonObject> teams(const QString& repository) const;
+    [[nodiscard]] QList<QJsonObject> sidebarTeams(const QString& repository) const;
     [[nodiscard]] std::optional<QJsonObject> team(const QString& teamId) const;
     // The team a conversation (its daemon session id) belongs to.
     [[nodiscard]] std::optional<QJsonObject> teamOf(const QString& sessionId) const;

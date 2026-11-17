@@ -443,6 +443,13 @@ Explorer and Source Control render Két row recipes through Qt item delegates, r
 
 ### Pro sidebar presentation
 
+Sidebar placement is separate from mutable execution scope. Conversations retain the
+repository captured by their generation's first navigation record; teams retain their
+creation placement and keep member rows together when tasks use other repositories.
+Known no-repository is distinct from legacy unknown placement. Local and paired display
+metadata preserve this distinction without changing execution routing or authorization
+([decision](decisions/2026-11-17-sidebar-origin-placement.md)).
+
 The native sidebar composes Két NavItem, GroupHeader, ConversationRow and UpdatePill controls; the standalone Agent Workspace uses their QML counterparts. Conversation selection, context actions, collapsed repositories and preview limits keep their existing session-manager routing. Rows draw no user tags and the sidebar has no tag filter (ADR 0117); a team member's row draws only its locked role tag. This UI does not infer a finished turn's approval intent. The `awaitingReply` projection has a distinct kit state when supplied.
 
 The sidebar reads the local daemon's `storage.size.read` capability through the existing CodexAppServer facade. The adapter accepts only read/apply operation names and requires a ready daemon advertising the exact operation. A visible window refreshes advisory status at most once a minute, with one in-flight request, a deadline and stale-response fencing. It shows the warning only from an authoritative successful response, hides stale status on disconnect, and links to Settings. This does not change retention policy or start a provider turn.

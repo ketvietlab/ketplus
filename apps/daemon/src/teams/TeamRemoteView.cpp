@@ -258,7 +258,7 @@ QJsonObject directoryEntry(const QJsonObject& team, const Ids& ids) {
             {QStringLiteral("role"), entry.value(QStringLiteral("role"))}});
     }
     const QString repository = team.value(QStringLiteral("repository")).toString();
-    return {
+    QJsonObject json{
         {QStringLiteral("id"), team.value(QStringLiteral("id"))},
         {QStringLiteral("revision"), team.value(QStringLiteral("revision"))},
         {QStringLiteral("repository_id"), ids.repository ? ids.repository(repository) : QString{}},
@@ -271,6 +271,12 @@ QJsonObject directoryEntry(const QJsonObject& team, const Ids& ids) {
              .toInt(int(team.value(QStringLiteral("tasks")).toArray().size()))},
         {QStringLiteral("tasks_done"), team.value(QStringLiteral("tasks_done")).toInt()},
         {QStringLiteral("members"), members}};
+    if (team.value(QStringLiteral("sidebar_repository")).isString()) {
+        const auto placement = team.value(QStringLiteral("sidebar_repository")).toString();
+        json.insert(QStringLiteral("sidebar_repository_id"),
+                    !placement.isEmpty() && ids.repository ? ids.repository(placement) : QString{});
+    }
+    return json;
 }
 
 QJsonObject summary(const QJsonObject& team, const Ids& ids) {

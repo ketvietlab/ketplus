@@ -97,6 +97,7 @@ QString SessionHost::createMemberConversation(const QString& worktree, const QSt
         return {};
     }
     session.stored.worktreePath = directory;
+    session.stored.sidebarRepository = sidebarRepositoryAtCreation(directory);
     session.stored.adapter = provider;
     session.stored.state = QStringLiteral("ready");
     session.stored.generation = 1;

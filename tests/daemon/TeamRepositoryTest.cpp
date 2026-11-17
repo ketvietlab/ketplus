@@ -97,6 +97,50 @@ class TeamRepositoryTest final : public QObject {
     }
 
   private slots:
+    void aNoRepositoryTeamKeepsMembershipWithoutAnInventedRepository() {
+        QTemporaryDir directory;
+        LocalJournal journal(directory.filePath("no-repository.sqlite"));
+        QVERIFY(journal.isOpen());
+        FakeHost host;
+        host.conversations = host_.conversations;
+        host.sidebarPlacements.insert(QStringLiteral("/repo"), QString{});
+        TeamCoordinator coordinator(&journal, &host);
+        const auto created = coordinator.create(standardTeam(), "user");
+        QVERIFY(created.ok());
+        const auto* team = coordinator.team(created.teamId);
+        QVERIFY(team);
+        QVERIFY(team->sidebarRepository);
+        QVERIFY(team->sidebarRepository->isEmpty());
+        QVERIFY(toJson(*team).value("sidebar_repository").isString());
+        QCOMPARE(team->repository, QStringLiteral("/repo"));
+        QCOMPARE(team->memberSessions(), standardTeam().memberSessions());
+        TeamCoordinator reopened(&journal, &host);
+        reopened.load();
+        const auto* restored = reopened.team(created.teamId);
+        QVERIFY(restored);
+        QVERIFY(restored->sidebarRepository);
+        QVERIFY(restored->sidebarRepository->isEmpty());
+        QCOMPARE(restored->repository, QStringLiteral("/repo"));
+        QCOMPARE(restored->memberSessions(), team->memberSessions());
+    }
+    void legacyTeamFreezesItsPersistedFallbackBeforeChangingExecution() {
+        auto legacy = toJson(team());
+        legacy.remove("sidebar_repository");
+        QString error;
+        QVERIFY2(
+            journal_->saveTeam(team_, team().revision, legacy, team().memberSessions(), &error),
+            qPrintable(error));
+        reload();
+        QVERIFY(!team().sidebarRepository);
+        const auto changed = move("/ketplus", "main");
+        QVERIFY(changed.ok());
+        QCOMPARE(team().repository, QStringLiteral("/ketplus"));
+        QVERIFY(team().sidebarRepository);
+        QCOMPARE(*team().sidebarRepository, QStringLiteral("/repo"));
+        reload();
+        QCOMPARE(*team().sidebarRepository, QStringLiteral("/repo"));
+        QCOMPARE(team().repository, QStringLiteral("/ketplus"));
+    }
     void initTestCase() { QStandardPaths::setTestModeEnabled(true); }
 
     void init() {
@@ -132,6 +176,8 @@ class TeamRepositoryTest final : public QObject {
     // Criteria 2 and 3: the change is recorded with its reason; the started task keeps the
     // repository it began in, the task not started yet and a new one use the new repository.
     void startedTasksKeepTheirRepositoryAndNewOnesUseTheNewOne() {
+        QVERIFY(team().sidebarRepository);
+        QCOMPARE(*team().sidebarRepository, QStringLiteral("/repo"));
         const QString started = create({.title = "Cart", .lane = "Web"});
         const QString waiting = create({.title = "Search", .lane = "Web"});
         QVERIFY(teams_->assignTask(team_, started, "dev1", "lead").ok());
@@ -141,6 +187,11 @@ class TeamRepositoryTest final : public QObject {
 
         const TeamResult moved = move("/ketplus", "main");
         QVERIFY2(moved.ok(), moved.ok() ? "" : qPrintable(moved.error->message));
+        QCOMPARE(team().repository, QStringLiteral("/ketplus"));
+        QCOMPARE(team().sidebarRepository, std::optional<QString>{QStringLiteral("/repo")});
+        const auto persistedPlacement = team().sidebarRepository;
+        reload();
+        QCOMPARE(team().sidebarRepository, persistedPlacement);
         QCOMPARE(team().repository, QStringLiteral("/ketplus"));
         QCOMPARE(team().integrationBranch, QStringLiteral("main"));
         QCOMPARE(host_.repositoryChecks.last(),

@@ -90,8 +90,27 @@ void CloudControlClient::heartbeat() {
         // on no team has no `team` field.
         const QHash<QString, QJsonObject> teams =
             host_ ? host_->teamMetadata() : QHash<QString, QJsonObject>{};
-        for (auto it = teams.cbegin(); it != teams.cend(); ++it)
-            agentMetadata[it.key()].insert(QStringLiteral("team"), it.value());
+        QHash<QString, QString> teamPlacements;
+        for (const auto& document : journal_->teamDocuments())
+            teamPlacements.insert(
+                document.value(QStringLiteral("id")).toString(),
+                document.value(QStringLiteral("sidebar_repository"))
+                    .toString(document.value(QStringLiteral("repository")).toString()));
+        for (auto it = teams.cbegin(); it != teams.cend(); ++it) {
+            auto team = it.value();
+            const auto placement =
+                teamPlacements.constFind(team.value(QStringLiteral("id")).toString());
+            if (placement != teamPlacements.cend()) {
+                team.insert(QStringLiteral("sidebarPlacementKnown"), true);
+                team.insert(QStringLiteral("sidebarRepositoryId"),
+                            placement->isEmpty()
+                                ? QString{}
+                                : cloud_control::opaquePathId("repository", *placement, salt));
+                team.insert(QStringLiteral("sidebarRepositoryLabel"),
+                            QFileInfo(*placement).fileName());
+            }
+            agentMetadata[it.key()].insert(QStringLiteral("team"), team);
+        }
         const auto requestAccount = accountFence();
         const QString workspaceId = workspaceId_;
         const QString machineId = machineId_;

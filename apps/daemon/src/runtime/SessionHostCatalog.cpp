@@ -1,5 +1,6 @@
 #include "protocol/DaemonProtocol.h"
 #include "runtime/SessionHost.h"
+#include "teams/TeamCoordinator.h"
 
 #include <QJsonDocument>
 #include <algorithm>
@@ -131,6 +132,7 @@ QJsonObject SessionHost::listSessions(const QJsonObject& request) const {
     }
     qsizetype pageBytes = 0;
     QString next;
+    const auto recordedRepositories = journal_->worktreeRepositories();
     for (const QString& id : std::as_const(ids)) {
         const Session& session = *sessions_.constFind(id);
         const StoredSession& stored = session.stored;
@@ -148,6 +150,18 @@ QJsonObject SessionHost::listSessions(const QJsonObject& request) const {
                           {QStringLiteral("last_event_cursor"), stored.lastCursor},
                           {QStringLiteral("last_seen_cursor"), stored.lastSeenCursor},
                           {QStringLiteral("last_turn_started_at"), stored.lastTurnStartedAt}};
+        if (stored.sidebarRepository)
+            value.insert(QStringLiteral("sidebar_repository_path"), *stored.sidebarRepository);
+        else {
+            const auto navigation = journal_->conversationPath(stored);
+            const auto recorded = recordedRepositories.value(navigation);
+            value.insert(QStringLiteral("sidebar_repository_fallback_path"),
+                         recorded.isEmpty() ? navigation : recorded);
+        }
+        if (const auto* team = teams_ ? teams_->teamOf(stored.id) : nullptr) {
+            value.insert(QStringLiteral("sidebar_team_repository_path"),
+                         team->sidebarRepository.value_or(team->repository));
+        }
         if (const QString number = numbers.value(stored.id); !number.isEmpty())
             value.insert(QStringLiteral("number"), number);
         if (!stored.archivedAt.isEmpty())

@@ -110,6 +110,8 @@ class ControlV2Client final : public QObject {
         QString detail;
         // Milliseconds since the epoch after which it is asked again; 0 keeps it.
         qint64 until{0};
+        // Display-only marker from the host's signed scope; absent on older hosts.
+        std::optional<bool> sidebarVisible;
     };
     [[nodiscard]] static QString worktreeVerdictKey(const QJsonObject& entry);
     [[nodiscard]] qint64 worktreeVerificationNow() const;

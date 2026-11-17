@@ -312,6 +312,10 @@ QVariantList AgentSessionManager::conversations(const QString& worktreePath) con
             {QStringLiteral("id"), session->id},
             {QStringLiteral("executionPath"),
              session->executionPath.isEmpty() ? session->path : session->executionPath},
+            {QStringLiteral("sidebarRepositoryKnown"), session->sidebarRepository.has_value()},
+            {QStringLiteral("sidebarRepositoryPath"),
+             session->sidebarRepository.value_or(QString{})},
+            {QStringLiteral("sidebarRepositoryFallback"), session->sidebarRepositoryFallback},
             {QStringLiteral("provider"), listedProvider(session->options)},
             {QStringLiteral("title"), session->title},
             {QStringLiteral("number"), session->number},
@@ -1588,6 +1592,12 @@ void AgentSessionManager::handleDaemonSession(const QJsonObject& stored) {
             sessions_.insert(path, session);
         }
     }
+    if (session->daemonGeneration != stored.value("session_generation").toInteger())
+        session->sidebarRepository.reset();
+    if (!session->sidebarRepository && stored.value("sidebar_repository_path").isString())
+        session->sidebarRepository = stored.value("sidebar_repository_path").toString();
+    session->sidebarRepositoryFallback =
+        stored.value("sidebar_repository_fallback_path").toString();
     if (session->daemonGeneration != stored.value("session_generation").toInteger() ||
         stored.value("context_revision").toInteger(1) >= session->executionRevision) {
         session->executionPath = normalizedPath(stored.value("worktree_path").toString(path));

@@ -12,27 +12,43 @@ QVector<SidebarRepository> machineSidebarRepositories(const MachineCatalog& cata
     QVector<SidebarRepository> repositories;
     QHash<QString, qsizetype> indexById;
     for (const auto& repository : catalog.repositories()) {
+        if (!repository.sidebarVisible)
+            continue;
         indexById.insert(repository.id, repositories.size());
         repositories.append({repository.id, repository.label, false, {}, {}});
     }
     for (const auto& conversation : catalog.conversations()) {
-        QString repository = catalog.repositoryOf(conversation);
+        QString repository = conversation.sidebarPlacementProvided
+                                 ? conversation.sidebarRepositoryId
+                                 : catalog.repositoryOf(conversation);
         auto index = indexById.constFind(repository);
         if (index == indexById.cend()) {
-            // A conversation outside every repository the machine named (a directory that is
-            // not a registered workspace) stays listed, under its own worktree.
-            repository = conversation.worktreeId.isEmpty() ? QStringLiteral("other:")
-                                                           : conversation.worktreeId;
-            index = indexById.constFind(repository);
-            if (index == indexById.cend()) {
+            if (conversation.sidebarPlacementProvided) {
+                // Empty placement is a real no-repository group. Never turn its execution
+                // worktree (or its basename) into a repository identity.
                 index = indexById.insert(repository, repositories.size());
                 repositories.append({repository,
-                                     conversation.worktreeId.isEmpty()
-                                         ? QObject::tr("Other conversations")
-                                         : conversation.worktreeLabel,
+                                     repository.isEmpty() ? QObject::tr("Other conversations")
+                                                          : conversation.sidebarRepositoryLabel,
                                      false,
                                      {},
                                      {}});
+            } else {
+                // A conversation outside every repository the machine named (a directory that is
+                // not a registered workspace) stays listed, under its own worktree.
+                repository = conversation.worktreeId.isEmpty() ? QStringLiteral("other:")
+                                                               : conversation.worktreeId;
+                index = indexById.constFind(repository);
+                if (index == indexById.cend()) {
+                    index = indexById.insert(repository, repositories.size());
+                    repositories.append({repository,
+                                         conversation.worktreeId.isEmpty()
+                                             ? QObject::tr("Other conversations")
+                                             : conversation.worktreeLabel,
+                                         false,
+                                         {},
+                                         {}});
+                }
             }
         }
         const bool selected = conversation.sessionId == openSessionId;

@@ -313,6 +313,96 @@ class TeamProtocolTest final : public QObject {
         QCOMPARE(listed(), 1);
     }
 
+    void createdMembersPersistTheHostResolvedSidebarOrigin_data() {
+        QTest::addColumn<bool>("gitRepository");
+        QTest::newRow("known-no-repository") << false;
+        QTest::newRow("real-repository") << true;
+    }
+    void createdMembersPersistTheHostResolvedSidebarOrigin() {
+        QFETCH(bool, gitRepository);
+        Fixture fixture;
+        QVERIFY(fixture.open());
+        if (gitRepository) {
+            QProcess git;
+            git.setWorkingDirectory(fixture.directory.path());
+            git.start("git", {"init", "--quiet"});
+            QVERIFY(git.waitForFinished(15000));
+            QCOMPARE(git.exitCode(), 0);
+        }
+        const auto expected = gitRepository
+                                  ? QFileInfo(fixture.directory.path()).canonicalFilePath()
+                                  : QStringLiteral("");
+        const auto made = create(fixture);
+        QVERIFY2(made.value("ok").toBool(), qPrintable(text(made)));
+        QCOMPARE(made.value("team").toObject().value("sidebar_repository").toString(), expected);
+        const auto memberId = made.value("team")
+                                  .toObject()
+                                  .value("members")
+                                  .toArray()
+                                  .at(1)
+                                  .toObject()
+                                  .value("session_id")
+                                  .toString();
+        QVERIFY(!memberId.isEmpty());
+        QString executionPath = QFileInfo(fixture.directory.path()).canonicalFilePath();
+        const auto check = [&] {
+            const auto stored = fixture.journal->readSessions();
+            QVERIFY(stored);
+            QCOMPARE(stored->size(), 4);
+            for (const auto& session : *stored) {
+                QVERIFY2(session.sidebarRepository.has_value(), qPrintable(session.id));
+                QCOMPARE(*session.sidebarRepository, expected);
+                if (session.id == memberId)
+                    QCOMPARE(session.worktreePath, executionPath);
+            }
+            const auto team = command(fixture, "team.get",
+                                      {{"team_id", made.value("team").toObject().value("id")}})
+                                  .value("team")
+                                  .toObject();
+            QCOMPARE(team.value("members").toArray().size(), 4);
+            QCOMPARE(team.value("sidebar_repository").toString(), expected);
+            bool stillMember = false;
+            for (const auto& item : team.value("members").toArray())
+                stillMember |= item.toObject().value("session_id").toString() == memberId;
+            QVERIFY(stillMember);
+            const auto listed = command(fixture, "session.list", {}).value("sessions").toArray();
+            QCOMPARE(listed.size(), 4);
+            for (const auto& item : listed) {
+                const auto row = item.toObject();
+                QVERIFY(row.value("sidebar_repository_path").isString());
+                QCOMPARE(row.value("sidebar_repository_path").toString(), expected);
+            }
+        };
+        check();
+        QTemporaryDir execution;
+        QVERIFY(execution.isValid());
+        QProcess git;
+        git.setWorkingDirectory(execution.path());
+        git.start("git", {"init", "--quiet", "-b", "main"});
+        QVERIFY(git.waitForFinished(15000));
+        QCOMPARE(git.exitCode(), 0);
+        git.start("git",
+                  {"-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "-c",
+                   "commit.gpgsign=false", "commit", "--allow-empty", "-m", "fixture"});
+        QVERIFY(git.waitForFinished(15000));
+        QCOMPARE(git.exitCode(), 0);
+        const auto moved = fixture.host->handleCommand(
+            request("session.worktree.switch",
+                    {{"worktree_path", execution.path()}, {"expected_context_revision", 1}},
+                    memberId, 1),
+            "desktop-test");
+        QVERIFY2(moved.value("ok").toBool(), qPrintable(text(moved)));
+        executionPath = QFileInfo(execution.path()).canonicalFilePath();
+        check();
+        fixture.host.reset();
+        fixture.journal.reset();
+        fixture.journal =
+            std::make_unique<LocalJournal>(fixture.directory.filePath("journal.sqlite3"));
+        QVERIFY(fixture.journal->isOpen());
+        fixture.restart();
+        check();
+    }
+
     void createStartsFourNamedMembersAndSurvivesRestart() {
         Fixture fixture;
         QVERIFY(fixture.open());

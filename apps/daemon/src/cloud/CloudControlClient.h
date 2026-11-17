@@ -200,6 +200,7 @@ class CloudControlClient final : public QObject {
     // Where a conversation can start: every checkout of each repository a conversation
     // ran in, those with conversations first.
     [[nodiscard]] QStringList catalogWorktreePaths() const;
+    [[nodiscard]] static std::optional<bool> sidebarRepositoryVisible(const QString& path);
     [[nodiscard]] QJsonArray worktreeSnapshots() const;
     // session.create and worktree.branches.read: checked against the catalog worktree they
     // name, answered sealed to the phone that asked.

@@ -1317,6 +1317,7 @@ QJsonObject SessionHost::startTurn(const QJsonObject& request, bool localClient,
         Session session;
         session.stored.id = sessionId;
         session.stored.worktreePath = worktree;
+        session.stored.sidebarRepository = sidebarRepositoryAtCreation(worktree);
         session.stored.adapter = adapter;
         session.stored.state = QStringLiteral("ready");
         session.stored.generation = 1;

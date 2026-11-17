@@ -1,4 +1,5 @@
 #include "MachineAttachmentUpload.h"
+#include "MachineRows.h"
 #include "SyntheticRelay.h"
 #include <QCryptographicHash>
 #include <QDateTime>
@@ -814,6 +815,134 @@ class RemoteRelayBackendTest final : public QObject {
         // No retry until the user signs in again.
         backend.connectToRelay();
         QCOMPARE(backend.connectionState(), ConnectionState::Offline);
+    }
+
+    void sidebarVisibilityComesFromTheSignedHostVerdict_data() {
+        QTest::addColumn<QString>("mode");
+        for (const auto* mode : {"hide", "show", "legacy", "invalid"})
+            QTest::newRow(mode) << QString::fromLatin1(mode);
+    }
+    void sidebarVisibilityComesFromTheSignedHostVerdict() {
+        QFETCH(QString, mode);
+        QTemporaryDir directory;
+        FixtureTransport network;
+        ControlV2Client client(QUrl{origin});
+        EncryptedFixture fixture(client, network);
+        SyntheticRelay relay(network, fixture, client);
+        relay.sessions = {};
+        network.replies.insert(prefix + "/v2/mobile/sessions", relay.sessions);
+        auto index = worktreeDto("wt-empty", "repository");
+        index.insert("sidebarVisible", mode == QStringLiteral("hide")); // forged opposite
+        relay.worktrees = {index};
+        relay.results = [&](const QString& kind, const QJsonObject&) -> QJsonObject {
+            if (kind != QStringLiteral("worktree.configuration.read"))
+                return {};
+            QJsonObject scope{{"repositoryId", "repo-1"},
+                              {"worktreeId", "wt-empty"},
+                              {"repositoryLabel", "ketplus"},
+                              {"worktreeLabel", "repository"}};
+            if (mode == QStringLiteral("invalid"))
+                scope.insert("sidebarVisible", "not-a-boolean");
+            else if (mode != QStringLiteral("legacy"))
+                scope.insert("sidebarVisible", mode == QStringLiteral("show"));
+            return {{"configuration", QJsonObject{}}, {"worktree", scope}};
+        };
+        RemoteControlTestAccess::restorePoll(client, 10);
+        RelayMachineBackend backend(&client, "linux-host",
+                                    fastOptions(directory.filePath("outbox.json")));
+        connectAndWait(backend);
+        QJsonObject listing;
+        settledListing(backend, &listing);
+        if (mode == QStringLiteral("invalid")) {
+            QVERIFY(listing.value("repositories").toArray().isEmpty());
+            const auto rejected = listing.value("rejected").toArray();
+            QCOMPARE(rejected.size(), 1);
+            QCOMPARE(rejected.first().toObject().value("reason").toString(),
+                     QStringLiteral("verification_failed"));
+            return;
+        }
+        const auto groups = listing.value("repositories").toArray();
+        QCOMPARE(groups.size(), 1);
+        const auto rows = repositoriesFromListing(listing);
+        QCOMPARE(rows.size(), 1);
+        QCOMPARE(rows.first().sidebarVisible, mode != QStringLiteral("hide"));
+        const auto worktree = worktreeNamed(listing, "wt-empty");
+        QVERIFY(!worktree.isEmpty()); // display hiding never removes execution worktrees
+        QCOMPARE(worktree.value("verified").toString(), QStringLiteral("host_read"));
+        if (mode == QStringLiteral("legacy"))
+            QVERIFY(!worktree.contains("sidebarVisible"));
+        else
+            QCOMPARE(worktree.value("sidebarVisible").toBool(), mode == QStringLiteral("show"));
+        const auto reads = readsOf(relay, "worktree.configuration.read");
+        settledListing(backend, &listing);
+        QCOMPARE(readsOf(relay, "worktree.configuration.read"), reads);
+        QCOMPARE(repositoriesFromListing(listing).first().sidebarVisible,
+                 mode != QStringLiteral("hide"));
+    }
+
+    void sidebarVisibilityIsReverifiedAfterExpiryOrScopeChange_data() {
+        QTest::addColumn<bool>("expire");
+        QTest::newRow("expired-verdict") << true;
+        QTest::newRow("changed-scope") << false;
+    }
+    void sidebarVisibilityIsReverifiedAfterExpiryOrScopeChange() {
+        QFETCH(bool, expire);
+        QTemporaryDir directory;
+        FixtureTransport network;
+        ControlV2Client client(QUrl{origin});
+        EncryptedFixture fixture(client, network);
+        SyntheticRelay relay(network, fixture, client);
+        relay.sessions = {};
+        network.replies.insert(prefix + "/v2/mobile/sessions", relay.sessions);
+        auto index = worktreeDto("wt-empty", "repository");
+        index.insert("sidebarVisible", true); // unsigned spoof must never win
+        relay.worktrees = {index};
+        bool signedVisible = false;
+        relay.results = [&](const QString& kind, const QJsonObject&) -> QJsonObject {
+            if (kind != QStringLiteral("worktree.configuration.read"))
+                return {};
+            return {{"configuration", QJsonObject{}},
+                    {"worktree", QJsonObject{{"repositoryId", "repo-1"},
+                                             {"worktreeId", "wt-empty"},
+                                             {"repositoryLabel", "ketplus"},
+                                             {"worktreeLabel", "repository"},
+                                             {"sidebarVisible", signedVisible}}}};
+        };
+        qint64 now = 1000;
+        RemoteControlTestAccess::verificationClock(client, [&] { return now; });
+        RemoteControlTestAccess::restorePoll(client, 10);
+        RelayMachineBackend backend(&client, "linux-host",
+                                    fastOptions(directory.filePath("outbox.json")));
+        connectAndWait(backend);
+        QJsonObject listing;
+        settledListing(backend, &listing);
+        QCOMPARE(repositoriesFromListing(listing).size(), 1);
+        QVERIFY(!repositoriesFromListing(listing).first().sidebarVisible);
+        const auto reads = readsOf(relay, "worktree.configuration.read");
+        if (expire) {
+            RemoteControlTestAccess::verificationDeadline(client, now + 1);
+            now += 2;
+        } else {
+            index.insert("catalogRevision", 1);
+            relay.worktrees = {index};
+        }
+        // Pause delivery so the intermediate listing proves the stale false marker is not
+        // shown as a current verdict while the host is being asked again.
+        relay.hostPaused = true;
+        Answer pending;
+        backend.listRepositories(pending.callback());
+        QTRY_VERIFY(pending.done);
+        QVERIFY(pending.error.isEmpty());
+        QVERIFY(pending.result.value("repositories").toArray().isEmpty());
+        QCOMPARE(pending.result.value("pending").toArray().size(), 1);
+        signedVisible = true;
+        QSignalSpy verified(&backend, &MachineBackend::catalogChanged);
+        relay.hostPaused = false;
+        QTRY_VERIFY(verified.size() > 0);
+        settledListing(backend, &listing);
+        QCOMPARE(repositoriesFromListing(listing).size(), 1);
+        QVERIFY(repositoriesFromListing(listing).first().sidebarVisible);
+        QCOMPARE(readsOf(relay, "worktree.configuration.read"), reads + 1);
     }
 
     void worktreeVerificationIsLazyCachedAndBounded() {

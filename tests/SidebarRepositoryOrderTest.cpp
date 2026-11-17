@@ -8,6 +8,7 @@
 #include "agent/AgentSessionManager.h"
 #include "agent/CodexAppServer.h"
 #include "app/MainWindow.h"
+#include "teams/TeamDirectory.h"
 #include "ui/Theme.h"
 #include "workspace/ActivityBar.h"
 #include "workspace/SidebarRepositoryList.h"
@@ -17,6 +18,7 @@
 #include <QDateTime>
 #include <QDir>
 #include <QEnterEvent>
+#include <QJsonArray>
 #include <QJsonObject>
 #include <QMenu>
 #include <QProcess>
@@ -426,6 +428,167 @@ class SidebarRepositoryOrderTest final : public QObject {
         QDir().mkpath(target);
         QVERIFY(list->grab().save(QDir(target).filePath(
             qEnvironmentVariable("KETPLUS_SIDEBAR_CAPTURE_NAME", "sidebar") + ".png")));
+    }
+
+    void explicitPlacementSurvivesWindowChangesAndFilter_data() {
+        QTest::addColumn<bool>("noRepository");
+        QTest::newRow("known-no-repository") << true;
+        QTest::newRow("real-repository-named-repository") << false;
+    }
+    void explicitPlacementSurvivesWindowChangesAndFilter() {
+        QFETCH(bool, noRepository);
+        const auto origin = folder("repository");
+        const auto execution = folder("execution");
+        for (const auto& root :
+             noRepository ? QStringList{execution} : QStringList{origin, execution}) {
+            git(root, {"init", "-q", "-b", "main"});
+            git(root, {"commit", "-q", "--allow-empty", "-m", "fixture"});
+        }
+        ketplus::ThemeManager theme(*qApp);
+        ketplus::MainWindow window(theme);
+        window.openFolder(execution);
+        window.resize(1200, 800);
+        window.show();
+        auto* agent = window.findChild<QAbstractButton*>("agentWorkspaceActivityButton");
+        QVERIFY(agent);
+        agent->click();
+        auto* server = window.findChild<ketplus::CodexAppServer*>();
+        auto* list = window.findChild<ketplus::SidebarRepositoryList*>();
+        QVERIFY(server);
+        QVERIFY(list);
+        QJsonObject session{{"session_id", "placement-row"},
+                            {"session_generation", 1},
+                            {"conversation_path", origin},
+                            {"worktree_path", execution},
+                            {"sidebar_repository_path", noRepository ? QString{} : origin},
+                            {"title", "Stable placement fixture"},
+                            {"state", "idle"}};
+        emit server->daemonSessionDiscovered(session);
+        const auto row = [&]() -> QAbstractButton* {
+            for (auto* item : window.findChildren<QAbstractButton*>("productConversationButton"))
+                if (item->property("conversationId") == QStringLiteral("placement-row"))
+                    return item;
+            return nullptr;
+        };
+        QTRY_VERIFY_WITH_TIMEOUT(row() != nullptr, 10000);
+        const auto placement = noRepository ? QString{} : origin;
+        QCOMPARE(row()->property("repositoryPath").toString(), placement);
+        list->setFilterText("Stable placement");
+        QVERIFY(row());
+        row()->click();
+        QTRY_VERIFY_WITH_TIMEOUT(row() != nullptr, 10000);
+        QCOMPARE(row()->property("repositoryPath").toString(), placement);
+        QCOMPARE(list->filterText(), QStringLiteral("Stable placement"));
+        window.openFolder(origin);
+        emit server->daemonSessionDiscovered(session);
+        QTRY_VERIFY_WITH_TIMEOUT(row() != nullptr, 10000);
+        QCOMPARE(row()->property("repositoryPath").toString(), placement);
+        QCOMPARE(list->filterText(), QStringLiteral("Stable placement"));
+        // A later execution update must not rewrite a known placement of this generation.
+        session.insert("worktree_path", origin);
+        session.insert("sidebar_repository_path", execution);
+        emit server->daemonSessionDiscovered(session);
+        QTRY_VERIFY_WITH_TIMEOUT(row() != nullptr, 10000);
+        QCOMPARE(row()->property("repositoryPath").toString(), placement);
+        list->setFilterText({});
+        QTRY_VERIFY(row() != nullptr);
+        QCOMPARE(row()->property("repositoryPath").toString(), placement);
+        if (noRepository)
+            QVERIFY(!shownOrder(*list).contains(origin));
+        const auto captures = qEnvironmentVariable("KETPLUS_ORIGIN_CAPTURE_DIR");
+        if (!captures.isEmpty()) {
+            QVERIFY(QDir().mkpath(captures));
+            QVERIFY(window.grab().save(QDir(captures).filePath(
+                noRepository ? QStringLiteral("local-no-repository.png")
+                             : QStringLiteral("local-repository-identity.png"))));
+        }
+    }
+
+    void teamMembersStayTogetherWhenExecutionAndTheTeamRepositoryChange() {
+        const auto origin = folder("origin");
+        const auto execution = folder("execution");
+        for (const auto& root : {origin, execution}) {
+            git(root, {"init", "-q", "-b", "main"});
+            git(root, {"commit", "-q", "--allow-empty", "-m", "fixture"});
+        }
+        QJsonObject team{
+            {"id", "7"},
+            {"revision", 1},
+            {"name", "Origin team"},
+            {"repository", origin},
+            {"sidebar_repository", origin},
+            {"members",
+             QJsonArray{
+                 QJsonObject{{"session_id", "origin-lead"}, {"role", "leader"}, {"name", "Lead"}},
+                 QJsonObject{
+                     {"session_id", "origin-dev"}, {"role", "developer"}, {"name", "Developer"}}}}};
+        ketplus::ThemeManager theme(*qApp);
+        ketplus::MainWindow window(theme);
+        window.openFolder(execution);
+        window.resize(1200, 800);
+        window.show();
+        auto* agent = window.findChild<QAbstractButton*>("agentWorkspaceActivityButton");
+        QVERIFY(agent);
+        agent->click();
+        auto* server = window.findChild<ketplus::CodexAppServer*>();
+        auto* directory = window.findChild<ketplus::TeamDirectory*>();
+        auto* list = window.findChild<ketplus::SidebarRepositoryList*>();
+        QVERIFY(server);
+        QVERIFY(directory);
+        QVERIFY(list);
+        directory->setTransport(
+            [&team](const QString&, const QJsonObject&, ketplus::TeamDirectory::Reply reply) {
+                reply({{"ok", true},
+                       {"team", team},
+                       {"teams", QJsonArray{team}},
+                       {"tasks", QJsonArray{}},
+                       {"updates", QJsonArray{}},
+                       {"decisions", QJsonArray{}}},
+                      {});
+            });
+        directory->setAvailable(true);
+        for (const auto* id : {"origin-lead", "origin-dev"})
+            emit server->daemonSessionDiscovered(
+                QJsonObject{{"session_id", id},
+                            {"session_generation", 1},
+                            {"conversation_path", origin},
+                            {"worktree_path", execution},
+                            {"sidebar_repository_path", origin},
+                            {"title", QStringLiteral("Stable ") + QLatin1String(id)},
+                            {"state", "idle"}});
+        const auto folderOfTeam = [&]() -> QWidget* {
+            for (auto* item : window.findChildren<QWidget*>("productTeamFolder"))
+                if (item->property("teamId") == QStringLiteral("7"))
+                    return item;
+            return nullptr;
+        };
+        QTRY_VERIFY_WITH_TIMEOUT(folderOfTeam() != nullptr, 10000);
+        QCOMPARE(folderOfTeam()->property("repositoryPath").toString(), origin);
+        QCOMPARE(folderOfTeam()->findChildren<QAbstractButton*>("productConversationButton").size(),
+                 2);
+        team.insert("revision", 2);
+        team.insert("repository", execution);
+        directory->applyEvent("team.changed", {{"team", team}});
+        QTRY_VERIFY(folderOfTeam() != nullptr);
+        QCOMPARE(folderOfTeam()->property("repositoryPath").toString(), origin);
+        list->setFilterText("origin-dev");
+        QTRY_VERIFY(folderOfTeam() != nullptr);
+        auto* open = folderOfTeam()->findChild<QAbstractButton*>("productTeamFolderName");
+        QVERIFY(open);
+        open->click();
+        QTRY_VERIFY(folderOfTeam() != nullptr);
+        QCOMPARE(folderOfTeam()->property("repositoryPath").toString(), origin);
+        QCOMPARE(list->filterText(), QStringLiteral("origin-dev"));
+        QVERIFY(directory->teamOf("origin-dev"));
+        QCOMPARE(directory->teamOf("origin-dev")->value("id").toString(), QStringLiteral("7"));
+        list->setFilterText({});
+        QTRY_COMPARE(
+            folderOfTeam()->findChildren<QAbstractButton*>("productConversationButton").size(), 2);
+        const auto captures = qEnvironmentVariable("KETPLUS_ORIGIN_CAPTURE_DIR");
+        if (!captures.isEmpty()) {
+            QVERIFY(QDir().mkpath(captures));
+            QVERIFY(window.grab().save(QDir(captures).filePath("local-team-stable.png")));
+        }
     }
 
     // Criteria 4 and 5: a conversation that switches its worktree to another repository stays

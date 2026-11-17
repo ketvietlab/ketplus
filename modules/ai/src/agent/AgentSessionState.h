@@ -1,4 +1,5 @@
 #pragma once
+#include <optional>
 
 #include "agent/AgentSessionManager.h"
 #include <functional>
@@ -17,6 +18,8 @@ struct AgentSessionManager::Session final {
     QString path;
     // Stable birth anchor remains path; navigation follows the acknowledged execution root.
     QString executionPath;
+    std::optional<QString> sidebarRepository;
+    QString sidebarRepositoryFallback;
     QString executionBranch;
     qint64 executionRevision{0};
     QString threadId;

@@ -234,6 +234,9 @@ std::optional<Candidate> TeamCoordinator::candidate(const QString& sessionId) co
 std::optional<TeamError> TeamCoordinator::commit(Team& team, const Team& before,
                                                  const QString& actor,
                                                  const QList<Update>& updates) {
+    // Preserve the last persisted placement of legacy teams before execution scope changes.
+    // A caller cannot relocate an already known sidebar placement through settings updates.
+    team.sidebarRepository = before.sidebarRepository.value_or(before.repository);
     team.revision = before.revision + 1;
     team.changedAt = nowIso();
     stampChanges(team, before);
@@ -346,6 +349,7 @@ TeamResult TeamCoordinator::create(Team draft, const QString& actor) {
                                    QStringLiteral("Shared paths are relative to the repository.")}};
     if (auto refused = rules::canCreate(draft, candidates))
         return {.error = refused};
+    draft.sidebarRepository = host_->sidebarRepositoryAtCreation(draft.repository);
     const QString now = nowIso();
     draft.createdAt = now;
     draft.changedAt = now;

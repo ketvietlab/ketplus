@@ -30,6 +30,10 @@ class FakeHost final : public TeamHostPort {
     QString conversationRepository(const QString& sessionId) const override {
         return conversations.contains(sessionId) ? repository : QString{};
     }
+    std::optional<QString> sidebarRepositoryAtCreation(const QString& path) const override {
+        return sidebarPlacements.contains(path) ? sidebarPlacements.value(path)
+                                                : std::optional<QString>{path};
+    }
     std::optional<TaskWorktree> createTaskWorktree(const Team& team, const Task& task,
                                                    QString* error) override {
         ++made;
@@ -269,6 +273,7 @@ class FakeHost final : public TeamHostPort {
     QString worktreeRoot = QStringLiteral("/wt/");
     // The repository its conversations are in.
     QString repository = QStringLiteral("/repo");
+    QHash<QString, std::optional<QString>> sidebarPlacements;
     // T-90: the repository each worktree was made in, the repositories checked, and the
     // ones refused with the reason.
     QStringList madeIn;

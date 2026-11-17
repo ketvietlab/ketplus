@@ -154,6 +154,22 @@ class TeamRemoteTest final : public QObject {
     void initTestCase() { QStandardPaths::setTestModeEnabled(true); }
 
     // §6: each read answers with the fields of the contract's fixture, and no local path.
+    void sidebarPlacementIsAdditiveAndDoesNotReplaceExecutionIdentity() {
+        QJsonObject team{{"id", "3"}, {"repository", "/synthetic/execution"}};
+        auto row = remote::directoryEntry(team, ids);
+        QCOMPARE(row.value("repository_id").toString(), QStringLiteral("repo:execution"));
+        QVERIFY(!row.contains("sidebar_repository_id")); // legacy unknown
+        team.insert("sidebar_repository", "");
+        row = remote::directoryEntry(team, ids);
+        QVERIFY(row.value("sidebar_repository_id").isString());
+        QVERIFY(row.value("sidebar_repository_id").toString().isEmpty());
+        QCOMPARE(row.value("repository_id").toString(), QStringLiteral("repo:execution"));
+        team.insert("sidebar_repository", "/synthetic/origin");
+        row = remote::directoryEntry(team, ids);
+        QCOMPARE(row.value("sidebar_repository_id").toString(), QStringLiteral("repo:origin"));
+        QCOMPARE(row.value("repository_id").toString(), QStringLiteral("repo:execution"));
+    }
+
     void theReadModelHasTheContractsShape() {
         const QJsonObject fixtureJson = contract();
         QVERIFY(!fixtureJson.isEmpty());
@@ -175,6 +191,8 @@ class TeamRemoteTest final : public QObject {
         const QJsonObject list = phone(fixture, "team.list", {});
         sameShape(list, fixtureJson.value("directory").toObject().value("result"), "directory");
         QCOMPARE(list.value("teams").toArray().first().toObject().value("repository_id"),
+                 QJsonValue("repo:shop"));
+        QCOMPARE(list.value("teams").toArray().first().toObject().value("sidebar_repository_id"),
                  QJsonValue("repo:shop"));
 
         const QJsonObject snapshot = phone(fixture, "team.get", {{"team_id", team.id}});
