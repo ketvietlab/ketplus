@@ -1109,3 +1109,68 @@ mutation origin, background tools and bounded refresh. The bounded refresh nativ
 case is skipped before launching a CLI; the remaining adapter cases use fixtures.
 Changed C++ formatting and the diff check pass. No provider/model request is made
 by this validation.
+
+### Production support recognition and final integration matrix
+
+Independent review reports no findings in the capability delta at
+`a00f6de63ed829db7066aa73a477715a65bcfa5d`, including a separate six-target build
+and six passing CTests. The final follow-up changes documentation only; full
+independent task review remains pending.
+
+`supportsManagedMutations()` opts an adapter implementation into the managed
+transport contract; it is not the grant or an allowlist of vendor module hashes.
+Cursor still passes its normal executable/version compatibility launch check.
+The actual ACP initialize response narrows `threadResume` unless `loadSession`
+is explicitly supported. A managed replacement requires the prior process to
+exit, requests the original history ID with the current MCP launch configuration,
+and rejects unsupported/failed/timed-out loads without creating new history.
+Only successful setup produces the captured epoch ACK which the host checks
+before activating that turn's capability. Old callbacks cannot acknowledge a
+replacement epoch. Reviews never receive a mutation credential.
+
+Production does not run the test preload/private observer, require project MCP
+inventory, or inspect account quota as part of this authority decision. Those
+controls establish native evidence for the pinned installed version/callsite;
+they are not runtime enforcement. No claim is made that every vendor release has
+been tested. The production boundary trusts successful protocol setup after its
+local ownership/closure checks; vendor upgrades require compatibility review and
+reverification of that boundary.
+
+The final quota-free integration run at `a00f6de63ed829db7066aa73a477715a65bcfa5d`
+builds 17 C++ targets and passes **19/19 CTests in 269.86 seconds**. It covers
+Host/IPC/origin, daemon lifecycle, turn acceptance, Claude/Cursor/Copilot adapters,
+Codex/ACP isolation, messaging/handoff/response identity, common MCP tools,
+mutation state, sidecar and the Codex contract. Native bounded refresh skips
+before CLI launch. Python passes **35/35** observer/proposal/budget/owned-history
+cases; additional sidecar permission/browser tests pass **2/2**, and public-tree
+hygiene passes **4/4**. AST checks cover 14 Python files, Node syntax 24 files,
+and C++ formatting 57 files; the diff check passes. No installed provider,
+authentication helper or model is launched by this final matrix.
+
+The acceptance evidence maps to the implementation as follows:
+
+- Common owner/API/status and independent stop/output/completion: shared
+  `AgentBackgroundTools`/`AgentMcpServer`, daemon `ManagedTaskBridge`, and
+  Host/IPC/child fixtures. The existing registry and transactional wake outbox
+  remain the sole owner of new jobs.
+- Claude native ownership removal: the pinned SDK settings/environment overlay,
+  native tool exclusions and fail-blocking hook/callback checks; real SDK control
+  rejection/process-exit evidence is recorded above. Auth, apiKeyHelper and
+  unrelated foreground behavior remain covered by sidecar fixtures.
+- Watchdog/legacy migration: the watchdog stays a stall detector. Legacy Claude
+  drain does not start registry jobs or emit its durable completion wake;
+  foreground Stop and accepted managed children keep the daemon policy fences.
+- Review-origin and accepted-policy enforcement: daemon origin authorization,
+  permission/child policy snapshots and Host regressions cover read/verify,
+  active/idle/drain/queued requests, spoofed or expired origin and authorized
+  child control. Agent cleanup acknowledgement remains unavailable.
+- Immutable invocation/turn/transport authority: MCP bootstrap captures the
+  credential once; revocation, exact epoch activation and stale callback tests
+  reject rebinding old requests to current policy.
+- Provider refresh: Claude waits for actual SDK process exit; Codex and ACP use
+  per-session processes with two-session isolation, same-ID resume, no new-history
+  fallback, and explicit failure/timeout behavior. Installed-provider evidence
+  above complements the fake lifecycle fixtures; neither replaces the other.
+- Validation/budget: docs and fixtures are committed for review. Both exhausted
+  parent ledgers remain unchanged; the additional Cursor ledger stays **3/10**.
+  Full independent T-3 review is still required before acceptance or merge.

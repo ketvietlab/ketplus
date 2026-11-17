@@ -828,9 +828,10 @@ credential is insufficient for mutation: the host supplies a separate immutable
 origin capability through MCP bootstrap, never through prompt/model arguments.
 The narrow target also tests this capability state machine and credential capture.
 Without a bootstrap mutation credential, MCP discovery omits start/stop while
-retaining list/get/output. Concrete Cursor/Copilot Host fixtures verify that a
-successful epoch ACK cannot enable their unverified production mutation support;
-those tests never launch either provider binary.
+retaining list/get/output. Concrete Cursor/Copilot Host fixtures verify that
+capability opt-in still rejects start/stop until the exact epoch ACK, and that
+review revocation removes authority. An unverified adapter remains a negative
+control even after ACK; these tests never launch provider binaries.
 
 For an explicit, no-inference check against an already installed SDK 0.3.322,
 set `KETPLUS_CLAUDE_SDK_DIRECTORY` to that SDK package directory and run:
