@@ -417,3 +417,38 @@ the replacement transport's prompt after the provider's real load/model reply,
 so history replay can be inspected without a second/recall turn. That observer
 does not invent history, write provider storage, or replace a load ACK. The
 bounded tests skip by default and are excluded from quota-free regression runs.
+
+### Bounded result ledger and remaining provider gaps
+
+The real Codex production-adapter test **passes 1/1 (16.34 s)** at source
+checkpoint `58644f64`, with installed CLI **0.162.1**, explicit
+**gpt-6-luna / low**, and one synthetic text-only turn. The observer's earlier
+missing `agents_whoami` fixture entry caused the pre-delivery readiness fence to
+timeout; the corrected fixture passes before reserving the allowance. Completed
+`agentMessage` history containing the synthetic marker is visible through
+`thread/read` after same-process resume and after dedicated-process same-ID
+resume. Epoch-two tools replace epoch one; the previous MCP processes are dead
+at replacement launch. All recorded owned provider/MCP PIDs exit. No tool call,
+recall turn, fallback model, or second model turn occurs. This verifies rendered
+completed history, not model recall of that history.
+
+The team ledger is now **Codex 1/1, Cursor 0/1, Copilot 0/1**, total **1/3**.
+Codex must not be rerun with that ledger. No allowance is refunded for a failed
+assertion or uncertain delivery.
+
+| Provider/version | Verified through the supported authentication route | Remaining gap / smallest next step |
+| --- | --- | --- |
+| Codex 0.162.1 | Actual adapter, available named cheap model, one completed turn, same-ID history before/after process replacement, MCP epoch rotation and process exit | No further model validation is required for these assertions; model recall was intentionally excluded |
+| Cursor 2026.11.11-043ef28 | Status authenticated; actual adapter initialize/new succeeds and ACKs named Haiku selection; request-injected MCP receives initialize/initialized | MCP does not issue `tools/list` before the observer's prompt fence, including a standard list-changed notification control. A direct no-model new-session control succeeds in 7.83 s, separating the initial startup timeout from an auth failure. The official project-scoped `agent mcp list-tools` control refuses the unapproved synthetic server before launching it. Establish a supported approval/discovery path without modifying default user settings, then use the still-unused single allowance for real completed-history/same-ID refresh. Mutation remains gated. |
+| Copilot CLI 1.0.112 | Inherited-route ACP initialize/new; existing standalone launch-MCP discovery; session-scoped model control returns the explicit entitlement diagnostic | Current plan permits Auto only and advertises no named-model selector. A supported cheap named-model entitlement or an explicit revised model constraint is needed before the unused allowance can be sent. Then verify actual-adapter completed-history/MCP replacement; mutation remains gated. |
+
+Cursor control prompts are intercepted, not delivered to the provider. One
+initial control timeout briefly outlived the observer's three-second cleanup
+check; a subsequent PID check confirms every recorded owned process exited.
+The corrected protocol control exits its owned provider and worker. These are
+test-observer observations, not proof that a real background executor leaked.
+The additional CLI project fixture contains only synthetic configuration and
+does not approve a server or change global settings. The official
+[Cursor MCP command reference](https://cursor.com/docs/cli/mcp) documents the
+`list-tools` route. No repeated empty-session load probes, provider-storage
+edits, user-history reads, or additional provider installations were used.

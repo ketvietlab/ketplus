@@ -747,12 +747,15 @@ Linux store policy, signed upgrade prompts and platform release acceptance remai
   accepted jobs retain their effective-policy snapshot. Claude waits for actual
   SDK process exit; Codex/ACP use dedicated per-conversation processes before
   restoring history and acknowledging a fresh MCP epoch. Offline fixtures pass;
-  installed Codex 0.162.1 also passes the production-adapter injection/same-ID
-  resume/MCP-rotation control without inference. This preserves provider-written
-  raw context, not completed-turn history. Pinned Copilot 1.0.112 passes standalone
+  installed Codex 0.162.1 also passes production-adapter injection controls and a
+  separately authorized single cheap-model turn: completed synthetic history
+  survives same-ID resume and owned-process/MCP-epoch replacement without recall.
+  Pinned Copilot 1.0.112 passes standalone
   offline MCP discovery through process-launch configuration; its adapter uses
-  a private immutable file for that bootstrap. Real Cursor history/MCP and
-  Copilot completed-history/adapter-refresh verification remain open. Cursor and
+  a private immutable file for that bootstrap. Authenticated Cursor controls ACK
+  the cheap model but defer tool discovery; Copilot's current plan allows only
+  Auto. Real Cursor history/MCP and Copilot completed-history/adapter-refresh
+  verification remain open. Cursor and
   Copilot therefore receive no mutation credential and expose only background
   registry read tools; direct mutation returns a capability error. Their
   foreground behavior remains available. See the

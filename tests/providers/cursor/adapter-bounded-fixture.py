@@ -59,9 +59,10 @@ def main():
     pending = {}
     selected = False
     replaying = False
+    replay_text = ""
 
     def read():
-        nonlocal selected, replaying
+        nonlocal selected, replaying, replay_text
         for line in process.stdout:
             try:
                 value = json.loads(line)
@@ -84,7 +85,9 @@ def main():
                     replaying = False
             if value.get("method") == "session/update" and replaying:
                 update = value.get("params", {}).get("update", {})
-                if MARKER in update.get("content", {}).get("text", ""):
+                if update.get("sessionUpdate") == "agent_message_chunk":
+                    replay_text = (replay_text + update.get("content", {}).get("text", ""))[-2 * len(MARKER):]
+                if MARKER in replay_text:
                     record("history_marker", kind=update.get("sessionUpdate"))
             emit(value)
 
@@ -142,6 +145,7 @@ def main():
             if "id" in value:
                 pending[str(value["id"])] = (method, params)
             if method == "session/load":
+                replay_text = ""
                 replaying = True
             process.stdin.write(json.dumps(value) + "\n")
             process.stdin.flush()

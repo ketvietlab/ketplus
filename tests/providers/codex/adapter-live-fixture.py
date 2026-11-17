@@ -52,12 +52,15 @@ def worker(log):
         for line in sys.stdin:
             message = json.loads(line)
             request = message.get("id")
-            if request is None:
-                continue
             method = message.get("method")
             record(log, "mcp_method", method=method, epoch=epoch)
+            if request is None:
+                if method == "notifications/initialized" and os.environ.get("T3_MCP_LIST_CHANGED") == "1":
+                    print(json.dumps(dict(jsonrpc="2.0", method="notifications/tools/list_changed")), flush=True)
+                continue
             if method == "initialize":
-                result = dict(protocolVersion=message.get("params", {}).get("protocolVersion", "2024-11-05"), capabilities=dict(tools={}),
+                tools = dict(listChanged=True) if os.environ.get("T3_MCP_LIST_CHANGED") == "1" else {}
+                result = dict(protocolVersion=message.get("params", {}).get("protocolVersion", "2024-11-05"), capabilities=dict(tools=tools),
                               serverInfo=dict(name="t3-bounded", version=epoch))
             elif method == "tools/list":
                 record(log, "tools_list", epoch=epoch)
