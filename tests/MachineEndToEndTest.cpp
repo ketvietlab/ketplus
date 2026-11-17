@@ -361,10 +361,17 @@ class MachineEndToEndTest final : public QObject {
         QCOMPARE(repositories.size(), 1);
         // The machine's repositories are listed, so the sidebar does not call them unavailable.
         QTRY_VERIFY(!window.findChild<QLabel*>("productMachineNotice")->isVisibleTo(&window));
-        QCOMPARE(QFileInfo(repositories.first().path).canonicalFilePath(), canonical);
+        // The execution directory has no Git metadata. Its conversation stays in Other
+        // conversations, while the real execution directory remains usable by the picker.
+        QVERIFY(repositories.first().path.isEmpty());
+        QCOMPARE(repositories.first().name, QObject::tr("Other conversations"));
+        QCOMPARE(
+            QFileInfo(repositories.first().conversations.first().toMap().value("path").toString())
+                .canonicalFilePath(),
+            canonical);
 
         // A new conversation in the remote worktree; it asks for an approval.
-        view->startNewConversation(repositories.first().path);
+        view->startNewConversation(canonical);
         auto* picker = view->findChild<QComboBox*>("machineWorktreePicker");
         QVERIFY(shown(picker));
         QTRY_VERIFY(picker->count() >= 1);

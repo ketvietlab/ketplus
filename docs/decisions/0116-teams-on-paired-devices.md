@@ -258,12 +258,20 @@ objects carries a local path or a tag.
 | Field | Content |
 | --- | --- |
 | `id`, `revision` | the team and its revision |
-| `repository_id` | the opaque catalog id of the team's repository, which Home groups by |
+| `repository_id` | the opaque catalog id of the team's current execution repository |
+| `sidebar_repository_id` | optional opaque origin id for grouping; empty means known no-repository, absent means legacy unknown |
 | `name` | up to 120 bytes |
 | `paused`, `paused_reason` | the reason is `user`, `budget`, `empty_role` or empty |
 | `open_decisions` | drives the warning mark |
 | `tasks_total`, `tasks_done` | |
 | `members` | every member, at most 8 entries `{session_id, number, role}`: the leader, five developers and two reviewers |
+
+`sidebar_repository_id` is additive display metadata in the existing encrypted answer,
+not command authority or task scope. New clients group by it when present; an absent
+field retains the legacy repository fallback. The summary carries the same optional
+field. Moving execution repositories does not rewrite a known origin; older clients
+can ignore the field. No origin path is exposed and the contract stays version 1.
+See [sidebar origin placement](2026-11-17-sidebar-origin-placement.md).
 
 At most 100 entries are returned, followed by `teams_total`.
 
