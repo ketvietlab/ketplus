@@ -335,6 +335,16 @@ class TeamProtocolTest final : public QObject {
         const auto made = create(fixture);
         QVERIFY2(made.value("ok").toBool(), qPrintable(text(made)));
         QCOMPARE(made.value("team").toObject().value("sidebar_repository").toString(), expected);
+        const auto memberId = made.value("team")
+                                  .toObject()
+                                  .value("members")
+                                  .toArray()
+                                  .at(1)
+                                  .toObject()
+                                  .value("session_id")
+                                  .toString();
+        QVERIFY(!memberId.isEmpty());
+        QString executionPath = QFileInfo(fixture.directory.path()).canonicalFilePath();
         const auto check = [&] {
             const auto stored = fixture.journal->readSessions();
             QVERIFY(stored);
@@ -342,7 +352,19 @@ class TeamProtocolTest final : public QObject {
             for (const auto& session : *stored) {
                 QVERIFY2(session.sidebarRepository.has_value(), qPrintable(session.id));
                 QCOMPARE(*session.sidebarRepository, expected);
+                if (session.id == memberId)
+                    QCOMPARE(session.worktreePath, executionPath);
             }
+            const auto team = command(fixture, "team.get",
+                                      {{"team_id", made.value("team").toObject().value("id")}})
+                                  .value("team")
+                                  .toObject();
+            QCOMPARE(team.value("members").toArray().size(), 4);
+            QCOMPARE(team.value("sidebar_repository").toString(), expected);
+            bool stillMember = false;
+            for (const auto& item : team.value("members").toArray())
+                stillMember |= item.toObject().value("session_id").toString() == memberId;
+            QVERIFY(stillMember);
             const auto listed = command(fixture, "session.list", {}).value("sessions").toArray();
             QCOMPARE(listed.size(), 4);
             for (const auto& item : listed) {
@@ -351,6 +373,26 @@ class TeamProtocolTest final : public QObject {
                 QCOMPARE(row.value("sidebar_repository_path").toString(), expected);
             }
         };
+        check();
+        QTemporaryDir execution;
+        QVERIFY(execution.isValid());
+        QProcess git;
+        git.setWorkingDirectory(execution.path());
+        git.start("git", {"init", "--quiet", "-b", "main"});
+        QVERIFY(git.waitForFinished(15000));
+        QCOMPARE(git.exitCode(), 0);
+        git.start("git",
+                  {"-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "-c",
+                   "commit.gpgsign=false", "commit", "--allow-empty", "-m", "fixture"});
+        QVERIFY(git.waitForFinished(15000));
+        QCOMPARE(git.exitCode(), 0);
+        const auto moved = fixture.host->handleCommand(
+            request("session.worktree.switch",
+                    {{"worktree_path", execution.path()}, {"expected_context_revision", 1}},
+                    memberId, 1),
+            "desktop-test");
+        QVERIFY2(moved.value("ok").toBool(), qPrintable(text(moved)));
+        executionPath = QFileInfo(execution.path()).canonicalFilePath();
         check();
         fixture.host.reset();
         fixture.journal.reset();
