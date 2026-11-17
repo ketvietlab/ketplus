@@ -2,6 +2,7 @@
 
 #include "workspace/SidebarRepositoryPins.h"
 
+#include <QHash>
 #include <QPoint>
 #include <QPointer>
 #include <QSet>
@@ -145,17 +146,34 @@ class SidebarRepositoryList final : public QWidget {
     void updateRows(const QVector<SidebarRepository>& repositories);
     void applyPresentation();
     void applyFilter();
+    [[nodiscard]] QSet<QString> listedConversationIds(const SidebarRepository& repository) const;
     void onRepositoryHeaderClicked(const QString& path);
     void persistCollapsedRepositories() const;
     // T-92: a small pin drawn at the end of a pinned repository's name row.
     void presentPinMark(ket::SidebarRepositoryHeader* header, bool pinned) const;
 
+    // What a repository's group is built from: its widgets are rebuilt only when this changes.
+    // Only the rows it previews are built (five, plus running and selected ones); the rest are
+    // built when "Show N more" is pressed or matched by a filter, so hidden history costs no
+    // widgets.
+    [[nodiscard]] QStringList groupStructure(const SidebarRepository& repository) const;
+    QWidget* createGroup(const SidebarRepository& repository);
+    // Builds the groups whose structure changed, keeps the others, and lays them out in order.
+    void presentGroups(const QVector<SidebarRepository>& repositories);
+    // "Show N more": builds the rest of a group's rows where they belong, keeping the group.
+    void expandGroup(const QString& path);
+    // The Tab order follows the groups as shown, also after only some were rebuilt.
+    void orderFocusChain();
+
     QVBoxLayout* layout_{nullptr};
     QLabel* filterEmpty_{nullptr};
     QString filterText_;
     QVector<SidebarRepository> repositories_;
-    QStringList structure_;
-    QVector<ket::SidebarRow*> rows_;
+    // Parallel to groups_: each group's structure and its built rows by conversation id.
+    QVector<QStringList> groupStructures_;
+    QVector<QHash<QString, ket::SidebarRow*>> groupRows_;
+    // The group createRow registers rows in while one is built.
+    QHash<QString, ket::SidebarRow*>* buildingRows_{nullptr};
     QVector<ket::SidebarRepositoryHeader*> headers_;
     QVector<QWidget*> groups_;
     QVector<QWidget*> folders_;

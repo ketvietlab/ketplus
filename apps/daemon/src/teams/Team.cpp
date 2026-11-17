@@ -53,6 +53,14 @@ Task taskFromJson(const QJsonObject& json) {
     task.baseCommit = json.value(QStringLiteral("base_commit")).toString();
     task.headCommit = json.value(QStringLiteral("head_commit")).toString();
     task.pullRequest = json.value(QStringLiteral("pull_request")).toString();
+    task.reviewFindings = review_policy::fromJson(json.value(QStringLiteral("review_findings")));
+    if (json.contains(QStringLiteral("review_findings")) && !task.reviewFindings) {
+        review_policy::Record unknown;
+        unknown.legacy = true;
+        unknown.reviewer = QStringLiteral("unknown");
+        unknown.round = 1;
+        task.reviewFindings = unknown;
+    }
     task.routingDecision = risk::fromJson(json.value(QStringLiteral("routing_decision")));
     if (task.routingDecision && (task.routingDecision->taskId != task.id ||
                                  task.routingDecision->route == risk::Route::LeaderDirect))
@@ -65,6 +73,13 @@ Task taskFromJson(const QJsonObject& json) {
     task.reviewer = json.value(QStringLiteral("reviewer")).toString();
     task.missingVerdicts = json.value(QStringLiteral("missing_verdicts")).toInt();
     task.roundLimit = json.value(QStringLiteral("round_limit")).toInt();
+    const auto arbitration = json.value(QStringLiteral("arbitrated_round"));
+    const QString arbitrationHead = json.value(QStringLiteral("arbitration_head")).toString();
+    if (arbitration.isDouble() && arbitration.toInt() > 0 && arbitration.toInt() <= 1000000 &&
+        arbitration.toDouble() == arbitration.toInt() && review_policy::revision(arbitrationHead)) {
+        task.arbitratedRound = arbitration.toInt();
+        task.arbitrationHead = arbitrationHead;
+    }
     task.reviewPlace = json.value(QStringLiteral("review_place")).toString();
     task.reviewComment = json.value(QStringLiteral("review_comment")).toString();
     task.outsideLane = stringList(json.value(QStringLiteral("outside_lane")));
@@ -336,6 +351,12 @@ QJsonObject toJson(const Task& task, const bool withHistory) {
                      {QStringLiteral("changed_revision"), task.changedRevision}};
     if (task.routingDecision)
         json.insert(QStringLiteral("routing_decision"), risk::toJson(*task.routingDecision));
+    if (task.arbitratedRound > 0) {
+        json.insert(QStringLiteral("arbitrated_round"), task.arbitratedRound);
+        json.insert(QStringLiteral("arbitration_head"), task.arbitrationHead);
+    }
+    if (task.reviewFindings)
+        json.insert(QStringLiteral("review_findings"), review_policy::toJson(*task.reviewFindings));
     if (!task.allowedPaths.isEmpty())
         json.insert(QStringLiteral("allowed_paths"), strings(task.allowedPaths));
     // T-90: sent only when the task does not work in the team's repository.

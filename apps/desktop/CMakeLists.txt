@@ -74,6 +74,7 @@ add_library(ketplus_desktop_support STATIC
     src/workspace/SidebarRepositoryList.h
     src/workspace/SidebarRepositoryListDetail.h
     src/workspace/SidebarRepositoryListLayout.cpp
+    src/workspace/SidebarRepositoryListGroups.cpp
     src/workspace/SidebarRepositoryListRows.cpp
     src/workspace/SidebarRepositoryListTeams.cpp
     src/workspace/SidebarRepositoryPins.cpp

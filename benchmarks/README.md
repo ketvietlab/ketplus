@@ -22,6 +22,33 @@ Measure daemon-backed transcript restore without calling a model:
 ./benchmarks/run-daemon-restore.sh
 ```
 
+Measure a long-lived install: thousands of conversations over many repositories.
+The sidebar alone, offscreen (initial build, unchanged, select, running, rename,
+add; median ms):
+
+```sh
+cmake --preset release -DKETPLUS_BUILD_TESTS=ON -DKETPLUS_BUILD_BENCHMARKS=ON
+build/release/ketplus_sidebar_scale_benchmark 3000 150 5
+```
+
+The real Pro app on a synthetic journal (`ketplus_large_workspace_journal`, cached
+under `$TMPDIR`), against `ketplus_fixture_daemon` with file-backed synthetic
+credentials and no provider:
+
+```sh
+bash benchmarks/run-large-workspace.sh build/release 3000 150 25 /tmp/large.sample.txt
+```
+
+It reports launch-to-idle app and daemon CPU and memory, every sidebar refresh
+(`KETPLUS_SIDEBAR_TRACE`), and idle CPU. An optional `sample` profile goes to the
+fifth argument. The app gets a temporary profile (`KETPLUS_PROFILE_DIR`: INI
+settings under that directory, never the installed app's preferences) and opens
+Agent Workspace (`KETPLUS_BENCHMARK_AGENT_WORKSPACE`). INI settings write the whole
+store on every sync, which makes repeated settings writes stand out more than the
+native store does. `WINDOW_GEOMETRY=WxH+X+Y` places the window, for example on a
+second display. `CAPTURE_DISPLAY=n CAPTURE_FILE=path` captures that one display
+only (`screencapture -D`). `KEEP_RUN=1` keeps the logs.
+
 Measure cold/warm conversation selection and repeated history body measurement
 with two synthetic 90-turn conversations (8 KiB assistant bodies):
 

@@ -22,66 +22,11 @@
 namespace ketplus {
 namespace {
 
+using sidebar_list::previewedConversationIds;
 using sidebar_list::runningAgentSender;
 
-constexpr int kPreviewConversationCount = 5;
 constexpr int kShowMoreHeight = 28;
 const auto kCollapsedSetting = QStringLiteral("sidebar/collapsedRepositories");
-
-// Everything that needs new widgets. Selection and turn status are updated in place.
-QStringList structureOf(const QVector<SidebarRepository>& repositories) {
-    QStringList structure;
-    for (const SidebarRepository& repository : repositories) {
-        // The active repository is state, not structure: switching repositories must not rebuild.
-        structure << repository.path << repository.name
-                  << (repository.pinnable ? QStringLiteral("pinnable") : QString())
-                  << QString::number(repository.pinOrder);
-        for (const SidebarTeam& team : repository.teams) {
-            structure << QStringLiteral("team:") + team.id << team.name;
-            for (const QVariant& value : team.members) {
-                const QVariantMap member = value.toMap();
-                structure << member.value(QStringLiteral("id")).toString()
-                          << member.value(QStringLiteral("title")).toString()
-                          << member.value(QStringLiteral("number")).toString()
-                          << member.value(QStringLiteral("teamRole")).toString()
-                          << runningAgentSender(member);
-            }
-        }
-        for (const QVariant& value : repository.conversations) {
-            const QVariantMap conversation = value.toMap();
-            structure << conversation.value(QStringLiteral("id")).toString()
-                      << conversation.value(QStringLiteral("path")).toString()
-                      << conversation.value(QStringLiteral("title")).toString()
-                      << conversation.value(QStringLiteral("number")).toString()
-                      << runningAgentSender(conversation);
-        }
-        structure << QString();
-    }
-    return structure;
-}
-
-// Newest rows stay first. Running and selected conversations keep a slot even
-// when that pushes the visible set past five.
-QSet<QString> previewedConversationIds(const QVariantList& conversations, const bool showAll) {
-    QSet<QString> kept;
-    if (showAll || conversations.size() <= kPreviewConversationCount) {
-        for (const QVariant& value : conversations)
-            kept.insert(value.toMap().value(QStringLiteral("id")).toString());
-        return kept;
-    }
-    for (const QVariant& value : conversations) {
-        const QVariantMap conversation = value.toMap();
-        if (conversation.value(QStringLiteral("running")).toBool() ||
-            conversation.value(QStringLiteral("selected")).toBool())
-            kept.insert(conversation.value(QStringLiteral("id")).toString());
-    }
-    for (const QVariant& value : conversations) {
-        if (kept.size() >= kPreviewConversationCount)
-            break;
-        kept.insert(value.toMap().value(QStringLiteral("id")).toString());
-    }
-    return kept;
-}
 
 int compareNames(const QString& left, const QString& right) {
     return QString::localeAwareCompare(left.toCaseFolded(), right.toCaseFolded());
@@ -190,114 +135,11 @@ void SidebarRepositoryList::setRepositories(const QVector<SidebarRepository>& pr
         }
         return;
     }
-    const QStringList structure = structureOf(repositories);
     repositories_ = repositories;
     forgetMissingTeams(repositories);
-    if (built_ && structure == structure_) {
-        // Selecting a conversation only changes state; rebuilding would flash the sidebar.
-        updateRows(repositories);
-        applyPresentation();
-        return;
-    }
-    built_ = true;
-    structure_ = structure;
-    rows_.clear();
-    headers_.clear();
-    groups_.clear();
-    folders_.clear();
-    setUpdatesEnabled(false);
-    while (auto* item = layout_->takeAt(0)) {
-        if (item->widget() != filterEmpty_)
-            delete item->widget();
-        delete item;
-    }
-    for (qsizetype groupIndex = 0; groupIndex < repositories.size(); ++groupIndex) {
-        const SidebarRepository& repository = repositories.at(groupIndex);
-        auto* group = new QWidget(this);
-        group->setObjectName(QStringLiteral("productRepositoryGroup"));
-        group->setProperty("repositoryPath", repository.path);
-        auto* groupLayout = new QVBoxLayout(group);
-        chrome_geometry::margins(groupLayout, 0, 0, 0, 0);
-        chrome_geometry::spacing(groupLayout, 0);
-
-        // The repository is the root: its chevron folds it, + offers what it can start.
-        auto* header = new ket::SidebarRepositoryHeader(repository.name, group);
-        header->setObjectName(QStringLiteral("productRepositoryGroupButton"));
-        header->setToolTip(repository.path);
-        header->setDivided(groupIndex > 0);
-        connect(header, &QAbstractButton::clicked, this,
-                [this, path = repository.path] { onRepositoryHeaderClicked(path); });
-        auto* create = header->action();
-        create->setObjectName(QStringLiteral("productNewConversationButton"));
-        const QString createText = teamsAvailable_
-                                       ? tr("New conversation or team in %1").arg(repository.name)
-                                       : tr("New conversation in %1").arg(repository.name);
-        create->setToolTip(createText);
-        create->setLabel(createText);
-        connect(header, &ket::SidebarRepositoryHeader::actionTriggered, this,
-                [this, path = repository.path, create] { onRepositoryAction(path, create); });
-        if (repository.pinnable) {
-            header->setContextMenuPolicy(Qt::CustomContextMenu);
-            connect(header, &QWidget::customContextMenuRequested, this,
-                    [this, path = repository.path, header](const QPoint& at) {
-                        QMenu* menu = createRepositoryMenu(path, header);
-                        if (menu == nullptr)
-                            return;
-                        menu->setAttribute(Qt::WA_DeleteOnClose);
-                        menu->popup(header->mapToGlobal(at));
-                    });
-        }
-        presentPinMark(header, repository.pinOrder >= 0);
-        headers_.append(header);
-        groupLayout->addWidget(header);
-
-        // What the repository holds, along the guide line under its chevron: its teams, then the
-        // conversations of no team.
-        auto* held = new ket::SidebarTreeGuide(0, group);
-        held->setObjectName(QStringLiteral("productRepositoryHeld"));
-        groupLayout->addWidget(held);
-        for (const SidebarTeam& team : repository.teams)
-            held->addPart(createTeamFolder(held, repository, team));
-        if (!repository.teams.isEmpty()) {
-            auto* section = new ket::SidebarSectionLabel(tr("Conversations"), held);
-            section->setObjectName(QStringLiteral("productConversationsSection"));
-            section->action()->setObjectName(QStringLiteral("productSectionNewConversation"));
-            section->action()->setToolTip(tr("New conversation in %1").arg(repository.name));
-            connect(section, &ket::SidebarSectionLabel::actionTriggered, this,
-                    [this, path = repository.path] { emit newConversationRequested(path); });
-            held->addPart(section);
-        }
-        for (const QVariant& value : repository.conversations) {
-            auto* row = createRow(held, value.toMap(), 0);
-            row->setProperty("repositoryPath", repository.path);
-            held->addPart(row);
-        }
-        if (repository.conversations.size() > kPreviewConversationCount) {
-            // A QPushButton honours text-align, so the label starts under the titles.
-            auto* showMore = new QPushButton(held);
-            showMore->setObjectName(QStringLiteral("productShowMoreConversations"));
-            showMore->setProperty("kvRole", QStringLiteral("productShowMoreConversations"));
-            showMore->setProperty("repositoryPath", repository.path);
-            showMore->setFlat(true);
-            showMore->setCursor(Qt::PointingHandCursor);
-            showMore->setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
-            connect(showMore, &QPushButton::clicked, this, [this, path = repository.path] {
-                showAllPaths_.insert(path);
-                applyPresentation();
-            });
-            held->addPart(showMore);
-        }
-        groups_.append(group);
-        layout_->addWidget(group);
-        // A layout shows a widget added to a shown parent only on the next event loop turn, so
-        // until then the rebuilt sidebar was empty; with agents starting and ending turns it
-        // flickered. Show it now, before updates are enabled again.
-        group->show();
-    }
-    layout_->addWidget(filterEmpty_);
-    updateRows(repositories);
-    applyPresentation();
-    setUpdatesEnabled(true);
+    // Selecting a conversation only changes state; rebuilding would flash the sidebar. Only the
+    // groups whose shown structure changed are built again.
+    presentGroups(repositories);
 }
 
 void SidebarRepositoryList::updateRows(const QVector<SidebarRepository>& repositories) {
@@ -309,17 +151,19 @@ void SidebarRepositoryList::updateRows(const QVector<SidebarRepository>& reposit
         header->setConversationCount(conversationCount(repository));
         header->setWaitingCount(waitingCount(repository));
     }
-    qsizetype row = 0;
-    for (const SidebarRepository& repository : repositories) {
-        QVariantList listed;
+    for (qsizetype group = 0; group < repositories.size() && group < groupRows_.size(); ++group) {
+        const SidebarRepository& repository = repositories.at(group);
+        const QHash<QString, ket::SidebarRow*>& rows = groupRows_.at(group);
+        const auto update = [this, &rows](const QVariantList& listed) {
+            for (const QVariant& value : listed) {
+                const QVariantMap conversation = value.toMap();
+                if (auto* row = rows.value(conversation.value(QStringLiteral("id")).toString()))
+                    updateRow(row, conversation);
+            }
+        };
         for (const SidebarTeam& team : repository.teams)
-            listed += team.members;
-        listed += repository.conversations;
-        for (const QVariant& value : std::as_const(listed)) {
-            if (row >= rows_.size())
-                return;
-            updateRow(rows_.at(row++), value.toMap());
-        }
+            update(team.members);
+        update(repository.conversations);
     }
     updateTeamFolders(repositories);
 }
@@ -390,7 +234,11 @@ void SidebarRepositoryList::applyPresentation() {
             // Under the titles of the rows it adds.
             const int text =
                 qRound(ket::sidebarTreeColumns(0, ket::Appearance::instance().zoom()).text);
-            showMore->setStyleSheet(QStringLiteral("padding-left: %1px;").arg(text));
+            // A style sheet is parsed and polished again on every set; most presentations only
+            // change selection.
+            const QString padding = QStringLiteral("padding-left: %1px;").arg(text);
+            if (showMore->styleSheet() != padding)
+                showMore->setStyleSheet(padding);
             showMore->setFixedHeight(px(kShowMoreHeight));
         }
         presentTeamFolders(held);

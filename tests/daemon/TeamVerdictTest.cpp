@@ -113,7 +113,7 @@ class TeamVerdictTest final : public QObject {
         finishReview(*teams_, "rev", "Paused: the disk is full. I will continue later.", false);
         QCOMPARE(task(id).state, state::blocked);
         QCOMPARE(task(id).round, 0);
-        QVERIFY(task(id).question.contains("has no verdict after 2 replies"));
+        QVERIFY(task(id).question.contains("no verdict after 2 replies"));
         QCOMPARE(reviewsTo("dev1").size(), 0);
         QCOMPARE(reviewsTo("rev").size(), 2);
         QVERIFY(firstReviews(team()).reviewing.isEmpty());
@@ -192,52 +192,30 @@ class TeamVerdictTest final : public QObject {
                 QVERIFY(decision.state != "open");
     }
 
-    // Criteria 4 and 5: a review on the pull request is accepted.
-    void theLeaderAcceptsAReviewMadeOutsideTheBoard() {
+    void legacyExternalApprovalCannotOverrideUnknownFindings() {
         const QString id = blockedByTheLimit();
         QVERIFY(!id.isEmpty());
         for (const QString& actor : {"dev1", "rev", "user"})
-            QCOMPARE(teams_
-                         ->acceptReview(team_, id, "https://example.invalid/pr/1#review",
-                                        "Reviewed there", actor)
+            QCOMPARE(teams_->acceptReview(team_, id, "external URL", "approved", actor)
                          .error.value_or(TeamError{})
                          .code,
                      QStringLiteral("role_forbidden"));
-        QCOMPARE(teams_->acceptReview(team_, id, "", "Reviewed there", "lead")
+        QCOMPARE(teams_->acceptReview(team_, id, "external URL", "approved", "lead")
                      .error.value_or(TeamError{})
                      .code,
                  QStringLiteral("invalid_payload"));
-        QVERIFY(teams_
-                    ->acceptReview(team_, id, "https://example.invalid/pr/1#review",
-                                   "The pull request review approved the fix", "lead")
-                    .ok());
-        QCOMPARE(task(id).state, state::ready);
-        QVERIFY(task(id).question.isEmpty());
-        QCOMPARE(historyOf(id, "review_accepted"), 1);
-        QString accepted;
-        for (const HistoryEntry& entry : task(id).history)
-            if (entry.kind == "review_accepted")
-                accepted = entry.text;
-        QVERIFY2(accepted.contains("Review accepted by Lead, made outside the board "
-                                   "(https://example.invalid/pr/1#review)"),
-                 qPrintable(accepted));
-        // Only once: a ready task has nothing to accept.
-        QCOMPARE(teams_->acceptReview(team_, id, "x", "y", "lead").error.value_or(TeamError{}).code,
-                 QStringLiteral("invalid_transition"));
+        QCOMPARE(task(id).state, state::blocked);
+        QCOMPARE(historyOf(id, "review_accepted"), 0);
     }
 
-    void acceptingAReviewInFlightDropsItsAnswer() {
+    void acceptanceCannotCancelAnInFlightIndependentReview() {
         const QString first = inReview("One", "dev1");
         const QString second = inReview("Two", "dev2");
-        QCOMPARE(firstReviews(team()).reviewing, first);
         const QString request = firstReviews(team()).message;
-        QVERIFY(teams_->acceptReview(team_, first, "Reviewed on the pull request", "Done", "lead")
-                    .ok());
-        QCOMPARE(task(first).state, state::ready);
-        // The next task's review starts, and the late answer does not touch the first.
-        QCOMPARE(firstReviews(team()).reviewing, second);
+        QVERIFY(!teams_->acceptReview(team_, first, "external URL", "approved", "lead").ok());
+        QCOMPARE(firstReviews(team()).message, request);
         teams_->reviewFinished("rev", request, "Verdict: findings", false);
-        QCOMPARE(task(first).state, state::ready);
+        QCOMPARE(task(first).state, state::inProgress);
         QCOMPARE(task(second).state, state::inReview);
     }
 

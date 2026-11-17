@@ -36,7 +36,15 @@ or a general code/documentation change therefore needs a reviewer. This recipe
 does not claim a general semantic analyzer or safety from filenames alone.
 Tasks with review history are ineligible for this recipe. Finding closure needs
 separate reviewed-baseline-to-fix-head attestation; a round-zero prose receipt
-does not provide it.
+does not provide it. The distinct `prose_line_width_fix_v1` producer provides
+that attestation only for its bounded, nonmandatory line-width condition on a
+current structured review record; it checks the full three-revision scope. The
+separate `prose_preference_deferral_v1` recipe attests only an unchanged reviewed
+head and a nonmandatory outside-task preference on the same restricted task delta;
+it does not assert a local fix. See
+[ADR 0132](decisions/0132-bounded-review-arbitration.md) for supported closure,
+leader decision/arbitration and the mandatory reviewer fallbacks. Neither recipe
+accepts a caller's recipe selection or risk/pass assertions.
 
 The daemon establishes all evidence itself:
 

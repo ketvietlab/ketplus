@@ -356,6 +356,85 @@ class ProviderDeletionTest final : public QObject {
         QVERIFY(!result.contains("sessions"));
     }
 
+    // A catalog larger than a frame is read in live pages, a keyset walk by session id: every
+    // row once, in order, each reply under the wire limit. Unpaged, it still fails closed.
+    void liveCatalogPagesAreBoundedAndComplete() {
+        QTemporaryDir dir;
+        LocalJournal journal(dir.filePath("journal.sqlite"));
+        constexpr int count = 1300;
+        for (int index = 0; index < count; ++index)
+            QVERIFY(journal.upsertSession({QStringLiteral("s-%1").arg(index, 5, 10, QChar('0')),
+                                           dir.path(),
+                                           "codex",
+                                           {},
+                                           {},
+                                           "ready",
+                                           1,
+                                           0,
+                                           0,
+                                           QString(700, 't')}));
+        CodexAdapter adapter(dir.filePath("missing-provider"));
+        SessionHost host(&journal, &adapter);
+        const auto list = [&](const QJsonObject& payload, qsizetype* bytes = nullptr) {
+            const QJsonObject request{
+                {"message_type", "session.list"}, {"message_id", "catalog"}, {"payload", payload}};
+            const auto result = host.handleCommand(request, "desktop");
+            if (bytes != nullptr)
+                *bytes = protocol::encodeFrame(protocol::response(request, result)).size() - 4;
+            return result;
+        };
+        const QJsonObject live{{"deleted_sessions_page_version", 1},
+                               {"session_catalog_live_only", true}};
+        QCOMPARE(list(live).value("error_code"), QJsonValue("session_catalog_too_large"));
+
+        QStringList ids;
+        int pages = 0;
+        // The first page comes with the deletion walk's first page; the rest are live-only.
+        QJsonObject payload{{"deleted_sessions_page_version", 1},
+                            {"live_sessions_page_version", 1}};
+        for (;;) {
+            qsizetype bytes = 0;
+            const auto page = list(payload, &bytes);
+            QVERIFY2(page.value("ok").toBool(), qPrintable(QJsonDocument(page).toJson()));
+            QVERIFY(bytes <= protocol::maximumFrameBytes);
+            QCOMPARE(page.value("live_sessions_page_version").toInt(), 1);
+            QCOMPARE(page.contains("deleted_sessions"), pages == 0);
+            ++pages;
+            for (const auto& value : page.value("sessions").toArray())
+                ids << value.toObject().value("session_id").toString();
+            const QString next = page.value("live_sessions_next").toString();
+            if (next.isEmpty())
+                break;
+            QCOMPARE(next, ids.last());
+            payload = live;
+            payload.insert("live_sessions_page_version", 1);
+            payload.insert("live_sessions_after", next);
+        }
+        QVERIFY(pages >= 3);
+        QCOMPARE(ids.size(), count);
+        QStringList sorted = ids;
+        sorted.sort();
+        sorted.removeDuplicates();
+        QCOMPARE(ids, sorted);
+
+        auto invalid = live;
+        invalid.insert("live_sessions_page_version", 2);
+        QCOMPARE(list(invalid).value("error_code"), QJsonValue("invalid_session_catalog"));
+        // A continuation is live-only and names a session id.
+        QCOMPARE(list({{"deleted_sessions_page_version", 1},
+                       {"live_sessions_page_version", 1},
+                       {"live_sessions_after", "s-00001"}})
+                     .value("error_code"),
+                 QJsonValue("invalid_session_catalog"));
+        for (const auto& after : {QJsonValue(""), QJsonValue(1), QJsonValue(QJsonObject{})}) {
+            invalid = live;
+            invalid.insert("live_sessions_page_version", 1);
+            invalid.insert("live_sessions_after", after);
+            QCOMPARE(list(invalid).value("error_code"), QJsonValue("invalid_session_catalog"));
+        }
+        QVERIFY(protocol::features(1).contains("session.catalog_pages/1"));
+    }
+
     void tombstoneSnapshotFencesMutationRollbackAndRestart() {
         QTemporaryDir dir;
         LocalJournal journal(dir.filePath("journal.sqlite"));

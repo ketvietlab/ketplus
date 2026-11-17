@@ -164,19 +164,23 @@ void AgentBroker::checkReviewedBranches(const QString& sessionId, const qint64 g
 
 void AgentBroker::reviewTampered(const QString& sessionId, AgentMessageRecord& request,
                                  const review_integrity::Scope& scope, const QJsonArray& changes) {
-    markState(request, QStringLiteral("failed"), QStringLiteral("review_tampered"));
+    const bool interrupted = review_integrity::sourceUnavailable(changes);
+    const QString outcome =
+        interrupted ? QStringLiteral("review_interrupted") : QStringLiteral("review_tampered");
+    markState(request, QStringLiteral("failed"), outcome);
     const auto reviewer = host_->agentConversation(sessionId);
     const QString summary = review_integrity::describe(changes);
-    qWarning("Review %s by %s changed the reviewed branch: %s", qUtf8Printable(request.id),
-             qUtf8Printable(sessionId), qUtf8Printable(summary));
+    qWarning("Review %s: %s (%s)", qUtf8Printable(request.id),
+             interrupted ? "source unavailable; review interrupted" : "reviewed source changed",
+             qUtf8Printable(summary));
     // The working conversation reads what changed; nothing is reverted.
     if (const auto working = host_->agentConversation(scope.workingSession))
         host_->appendAgentNotice(
             working->sessionId, working->generation,
             {{QStringLiteral("message_id"), request.id},
              {QStringLiteral("kind"), QStringLiteral("review")},
-             {QStringLiteral("state"), QStringLiteral("review_tampered")},
-             {QStringLiteral("reason"), QStringLiteral("review_tampered")},
+             {QStringLiteral("state"), outcome},
+             {QStringLiteral("reason"), outcome},
              {QStringLiteral("direction"), QStringLiteral("outgoing")},
              {QStringLiteral("peer_number"), reviewer ? reviewer->number : request.toNumber},
              {QStringLiteral("peer_title"), reviewer ? reviewer->title : QString{}},

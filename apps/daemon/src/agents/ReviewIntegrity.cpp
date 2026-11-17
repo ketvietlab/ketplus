@@ -46,6 +46,7 @@ void add(QJsonArray& changes, const QString& field, const QString& before, const
 
 void capture(QObject* owner, const Scope& scope, std::function<void(Snapshot)> done) {
     auto snapshot = std::make_shared<Snapshot>();
+    snapshot->localExpected = !scope.worktree.isEmpty();
     if (scope.worktree.isEmpty()) {
         captureRemote(owner, scope, snapshot, std::move(done));
         return;
@@ -71,7 +72,9 @@ void capture(QObject* owner, const Scope& scope, std::function<void(Snapshot)> d
                               [guard, scope, snapshot, done](const std::optional<QString>& status) {
                                   if (!guard)
                                       return;
-                                  snapshot->local = status.has_value();
+                                  // A detached HEAD is still readable source; an empty
+                                  // symbolic ref must not hide a real branch change.
+                                  snapshot->local = status.has_value() && !snapshot->head.isEmpty();
                                   if (status)
                                       snapshot->statusHash = QString::fromLatin1(
                                           QCryptographicHash::hash(status->toUtf8(),
@@ -85,24 +88,33 @@ void capture(QObject* owner, const Scope& scope, std::function<void(Snapshot)> d
 
 QJsonArray changes(const Snapshot& before, const Snapshot& after) {
     QJsonArray result;
-    // A worktree that could not be read before the turn cannot be vouched for: the review
-    // does not count.
-    if (!before.local)
+    // An absent side cannot prove a local edit or branch switch by the reviewer.
+    if ((before.localExpected || after.localExpected) && (!before.local || !after.local))
         result.append(
             QJsonObject{{QStringLiteral("field"), QStringLiteral("worktree")},
-                        {QStringLiteral("before"), QStringLiteral("unreadable")},
+                        {QStringLiteral("before"),
+                         before.local ? QStringLiteral("readable") : QStringLiteral("unreadable")},
                         {QStringLiteral("after"),
                          after.local ? QStringLiteral("readable") : QStringLiteral("unreadable")}});
-    if (before.local) {
+    if (before.local && after.local) {
         add(result, QStringLiteral("head"), before.head, after.head);
         add(result, QStringLiteral("symbolic_ref"), before.symbolicRef, after.symbolicRef);
-        add(result, QStringLiteral("status"), before.statusHash,
-            after.local ? after.statusHash : QStringLiteral("unreadable"));
+        add(result, QStringLiteral("status"), before.statusHash, after.statusHash);
     }
     add(result, QStringLiteral("task_head"), before.taskHead, after.taskHead);
     if (before.remote && after.remote)
         add(result, QStringLiteral("remote_head"), before.remoteHead, after.remoteHead);
     return result;
+}
+
+bool sourceUnavailable(const QJsonArray& changes) {
+    for (const auto& value : changes) {
+        const auto change = value.toObject();
+        if (change.value("field") == "worktree" &&
+            (change.value("before") == "unreadable" || change.value("after") == "unreadable"))
+            return true;
+    }
+    return false;
 }
 
 bool remoteCompared(const Scope& scope, const Snapshot& before, const Snapshot& after) {

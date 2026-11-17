@@ -3,6 +3,7 @@
 #include "KetTokens.h"
 #include "workspace/SidebarFilterText.h"
 #include "workspace/SidebarRepositoryList.h"
+#include "workspace/SidebarRepositoryListDetail.h"
 #include <QLabel>
 #include <QPushButton>
 #include <QResizeEvent>
@@ -16,10 +17,30 @@ void SidebarRepositoryList::setFilterText(const QString& text) {
     if (filterText_ == text)
         return;
     filterText_ = text;
-    applyPresentation();
+    // The normal tree only builds its preview rows. Materialize matching history through the
+    // existing per-group diff, rather than building every hidden conversation while typing.
+    presentGroups(repositories_);
 }
-// Filtering changes visibility only. The full model, pins, selection and saved folds stay intact,
-// and both local and selected-machine projections take this same path on every refresh.
+QSet<QString>
+SidebarRepositoryList::listedConversationIds(const SidebarRepository& repository) const {
+    const QString query = filterText_.trimmed();
+    if (query.isEmpty())
+        return sidebar_list::previewedConversationIds(repository.conversations,
+                                                      showAllPaths_.contains(repository.path));
+    const bool repositoryMatch = repository.name.contains(query, Qt::CaseInsensitive) ||
+                                 repository.path.contains(query, Qt::CaseInsensitive);
+    QSet<QString> ids;
+    for (const QVariant& value : repository.conversations) {
+        const auto conversation = value.toMap();
+        if (repositoryMatch || conversation.value(QStringLiteral("title"))
+                                   .toString()
+                                   .contains(query, Qt::CaseInsensitive))
+            ids.insert(conversation.value(QStringLiteral("id")).toString());
+    }
+    return ids;
+}
+// Filtering only changes the shown tree. The full model, pins, selection and saved folds stay
+// intact, and both local and selected-machine projections take this same path on every refresh.
 void SidebarRepositoryList::applyFilter() {
     const auto& appearance = ket::Appearance::instance();
     auto palette = filterEmpty_->palette();

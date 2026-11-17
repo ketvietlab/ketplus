@@ -1,5 +1,11 @@
 # Daemon identity and agent permissions audit — T-1
 
+> Historical snapshot: the findings and status below describe the original
+> report scope, not the latest remediation state. See the
+> [current remediation register](remediation-status.md) for reviewed merge evidence
+> and remaining gates. The [accepted report version](https://github.com/ketvietlab/ketplus/blob/9cf3a535d1eeadcb3c70c78ad61455a179648cbb/docs/security-audit/daemon-agent.md)
+> remains available unchanged; this annotation does not revise its conclusions.
+
 Review date: 2026-11-16. Public baseline: `7c12c773372b1d63eae867b7a6f8dcfefb6cdbbb`
 (the audit branch and `integration` HEAD when the task was received).
 

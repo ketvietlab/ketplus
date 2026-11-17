@@ -14,6 +14,7 @@
 #include <QDir>
 #include <QLabel>
 #include <QLineEdit>
+#include <QPointer>
 #include <QSettings>
 #include <QSignalSpy>
 #include <QStandardPaths>
@@ -146,9 +147,6 @@ class SidebarFilterTest final : public QObject {
         sidebar.setRepositories(data);
         QCOMPARE(input->text(), QStringLiteral("Needle"));
         QCOMPARE(shownGroups(*sidebar.repositoryList()), before);
-        auto* selected = sidebar.findChild<ket::SidebarRow*>("productConversationButton");
-        QVERIFY(selected && selected->property("selectedConversation").toBool());
-        QVERIFY(selected->isChecked());
         QCOMPARE(activated.count(), 0);
         QCOMPARE(repository.count(), 0);
         row["title"] = "Renamed away";
@@ -158,7 +156,39 @@ class SidebarFilterTest final : public QObject {
         input->clear();
         QCOMPARE(shownGroups(*sidebar.repositoryList()),
                  (QStringList{"/synthetic/alpha", "/synthetic/tools/beta", "/synthetic/empty"}));
+        auto* selected = sidebar.findChild<ket::SidebarRow*>("productConversationButton");
+        QVERIFY(selected && selected->property("selectedConversation").toBool());
+        QCOMPARE(selected->property("conversationId").toString(), QString("active"));
+        QVERIFY(selected->isChecked());
         QCOMPARE(activated.count(), 0);
+    }
+    void historyMatchesMaterializeWithoutBuildingUnmatchedHistory() {
+        SidebarRepositoryList list;
+        list.resize(240, 600);
+        auto data = fixture();
+        data[1].teams.clear();
+        data[1].conversations.clear();
+        for (int i = 0; i < 2500; ++i)
+            data[1].conversations << conversation(QString::number(i),
+                                                  i == 2499 ? "Deep history match"
+                                                            : "Conversation " + QString::number(i));
+        list.setRepositories(data);
+        list.show();
+        QCOMPARE(list.findChildren<ket::SidebarRow*>("productConversationButton").size(), 6);
+        list.setFilterText("deep history");
+        QCOMPARE(shownRows(list), QStringList{"2499"});
+        QCOMPARE(list.findChildren<ket::SidebarRow*>("productConversationButton").size(), 1);
+        QPointer<ket::SidebarRow> kept =
+            list.findChild<ket::SidebarRow*>("productConversationButton");
+        auto hidden = data[1].conversations[100].toMap();
+        hidden["title"] = "Unrelated title changed";
+        data[1].conversations[100] = hidden;
+        list.setRepositories(data);
+        QVERIFY(kept);
+        QCOMPARE(shownRows(list), QStringList{"2499"});
+        list.setFilterText({});
+        QCOMPARE(list.findChildren<ket::SidebarRow*>("productConversationButton").size(), 6);
+        QCOMPARE(shownGroups(list).size(), 3);
     }
     void filteringDoesNotRewritePinsOrOrder() {
         QTemporaryDir dirs;

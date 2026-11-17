@@ -27,6 +27,8 @@ struct Scope final {
 };
 
 struct Snapshot final {
+    // An intentionally remote-only scope has no local checkout to lose.
+    bool localExpected{true};
     bool local{false};
     QString head;
     QString symbolicRef;
@@ -44,6 +46,9 @@ void capture(QObject* owner, const Scope& scope, std::function<void(Snapshot)> d
 // What changed, as [{"field", "before", "after"}]; empty when nothing did. A remote that did not
 // answer before or after is not compared.
 [[nodiscard]] QJsonArray changes(const Snapshot& before, const Snapshot& after);
+
+// Missing/unreadable checkout data invalidates source availability, not actor integrity.
+[[nodiscard]] bool sourceUnavailable(const QJsonArray& changes);
 
 // Whether the remote branch head could be compared.
 [[nodiscard]] bool remoteCompared(const Scope& scope, const Snapshot& before,

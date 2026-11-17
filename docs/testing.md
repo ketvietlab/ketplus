@@ -286,6 +286,14 @@ includes `review-guard.test.mjs` and `review-profile.test.mjs`, and the daemon's
 `ketplus_agent_messaging_tests`. The sidecar tests use a fake SDK that runs every
 command and edit the guard allows, so a wrong allow changes the test checkout.
 
+Bounded review policy changes additionally cover `ketplus_team_review_policy_tests`,
+`ketplus_team_finding_resolution_tests`, `ketplus_team_finding_routing_tests`,
+`ketplus_team_verdict_tests`,
+`ketplus_team_review_place_tests` and `ketplus_team_language_tests` (ADR 0132).
+Fake-host receipt tests establish consumer gates; the finding routing suite checks
+actual three-revision Git proofs, authenticated host receipt closure and attacks
+using ignored gitlinks/replacement trees. Required full Pro checks still apply.
+
 A team reviewer's verify turn writes only in its scratch directory (ADR 0067). Build there:
 `cmake -B <scratch>/build`, `xcodebuild -derivedDataPath <scratch>/DerivedData
 -clonedSourcePackagesDirPath <scratch>/SourcePackages`, and run a script that writes into
@@ -536,6 +544,11 @@ the corresponding Atlas mock first.
   backlog probe asserts the delete command stays under 500 ms and each purge
   pass under 250 ms. `ketplus_daemon_cloud_privacy_tests` covers 413 retry, late
   202 and a fresh upload of a deleted generation's residual history.
+- Paged live catalog (ADR 0131): run `ketplus_provider_deletion_tests` (bounded,
+  complete, ordered pages over the frame limit; malformed requests) and
+  `ketplus_desktop_daemon_client_tests` (refresh and discovery read every page).
+  `ketplus_sidebar_scale_tests` covers building only the rows the sidebar shows.
+  `benchmarks/run-large-workspace.sh` measures the real app with a large install.
 - Live-only discovery (ADR 0092): run provider deletion, Desktop daemon client,
   Desktop session discovery, lifecycle and headless CLI targets. Real temporary
   daemons with fake providers cover 20k/100k retained tombstones and zero repeated

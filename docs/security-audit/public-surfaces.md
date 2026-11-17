@@ -1,5 +1,11 @@
 # Public surfaces and sandbox audit
 
+> Historical snapshot: the findings and status below describe the original
+> report scope, not the latest remediation state. See the
+> [current remediation register](remediation-status.md) for reviewed merge evidence
+> and remaining gates. The [accepted report version](https://github.com/ketvietlab/ketplus/blob/05ee9a8ad4adb57870b610f659052c6e03a024d1/docs/security-audit/public-surfaces.md)
+> remains available unchanged; this annotation does not revise its conclusions.
+
 Audit date: 2026-11-16. Task: T-2. Audited integration commit:
 `7c12c773372b1d63eae867b7a6f8dcfefb6cdbbb`.
 

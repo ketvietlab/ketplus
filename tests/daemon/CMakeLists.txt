@@ -141,6 +141,9 @@ ketplus_add_daemon_test(ketplus_agent_urgent_delivery_tests AgentUrgentDeliveryT
 ketplus_add_daemon_test(ketplus_team_store_tests TeamStoreTest.cpp)
 ketplus_add_daemon_test(ketplus_team_risk_policy_tests TeamRiskPolicyTest.cpp)
 ketplus_add_daemon_test(ketplus_team_routing_tools_tests TeamRoutingToolsTest.cpp)
+ketplus_add_daemon_test(ketplus_team_review_policy_tests TeamReviewPolicyTest.cpp)
+ketplus_add_daemon_test(ketplus_team_finding_resolution_tests TeamFindingResolutionTest.cpp)
+ketplus_add_daemon_test(ketplus_team_finding_routing_tests TeamFindingRoutingTest.cpp)
 ketplus_add_daemon_test(ketplus_team_protocol_tests TeamProtocolTest.cpp)
 ketplus_add_daemon_test(ketplus_team_task_tests TeamTaskTest.cpp)
 ketplus_add_daemon_test(ketplus_team_task_git_tests TeamTaskGitTest.cpp)
@@ -279,6 +282,7 @@ if(KETPLUS_SIDECAR_TEST_NODE)
         "${CMAKE_CURRENT_SOURCE_DIR}/claude-sidecar/steer.test.mjs"
         "${CMAKE_CURRENT_SOURCE_DIR}/claude-sidecar/fork.test.mjs"
         "${CMAKE_CURRENT_SOURCE_DIR}/claude-sidecar/background-tasks.test.mjs"
+        "${CMAKE_CURRENT_SOURCE_DIR}/claude-sidecar/model-catalog.test.mjs"
         "${PROJECT_SOURCE_DIR}/apps/daemon/providers/claude-sidecar/test/session-delete.test.mjs"
         "${PROJECT_SOURCE_DIR}/apps/daemon/providers/claude-sidecar/test/review-guard.test.mjs"
         "${PROJECT_SOURCE_DIR}/apps/daemon/providers/claude-sidecar/test/review-profile.test.mjs")

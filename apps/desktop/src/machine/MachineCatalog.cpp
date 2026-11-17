@@ -1,6 +1,8 @@
 #include "machine/MachineCatalog.h"
 
+#include <QJsonArray>
 #include <QJsonObject>
+#include <QPointer>
 #include <QTimer>
 
 #include <memory>
@@ -14,6 +16,44 @@ bool changesConversationList(const QString& type) {
     return type == QLatin1String("user.message") || type == QLatin1String("turn.started") ||
            type == QLatin1String("turn.completed") || type == QLatin1String("session.created") ||
            type == QLatin1String("session.title") || type == QLatin1String("session.deleted");
+}
+
+// The live conversation list in pages (ADR 0131), returned as one "sessions" array: a
+// machine with thousands of conversations is larger than one frame. A daemon without pages
+// answers with the whole list at once.
+void listConversationPages(const QPointer<remote::MachineBackend>& backend, const QString& after,
+                           const std::shared_ptr<QJsonObject>& catalog,
+                           remote::MachineBackend::Callback done) {
+    QJsonObject options{{QStringLiteral("deleted_sessions_page_version"), 1},
+                        {QStringLiteral("session_catalog_live_only"), true},
+                        {QStringLiteral("live_sessions_page_version"), 1}};
+    if (!after.isEmpty())
+        options.insert(QStringLiteral("live_sessions_after"), after);
+    backend->listConversations(options, [backend, after, catalog, done = std::move(done)](
+                                            const QJsonObject& result, const QString& error) {
+        if (!error.isEmpty()) {
+            done(result, error);
+            return;
+        }
+        if (after.isEmpty()) {
+            *catalog = result;
+        } else {
+            QJsonArray sessions = catalog->value(QStringLiteral("sessions")).toArray();
+            for (const auto& session : result.value(QStringLiteral("sessions")).toArray())
+                sessions.append(session);
+            catalog->insert(QStringLiteral("sessions"), sessions);
+        }
+        const QString next = result.value(QStringLiteral("live_sessions_next")).toString();
+        // Each page must move forward; anything else ends the walk with what was read.
+        if (backend.isNull() || next.isEmpty() ||
+            !result.contains(QStringLiteral("live_sessions_page_version")) ||
+            next.toUtf8() <= after.toUtf8()) {
+            catalog->remove(QStringLiteral("live_sessions_next"));
+            done(*catalog, {});
+            return;
+        }
+        listConversationPages(backend, next, catalog, done);
+    });
 }
 
 } // namespace
@@ -121,15 +161,13 @@ void MachineCatalog::refresh() {
                     listing->error = error;
                 finish();
             });
-        backend_->listConversations(
-            {{QStringLiteral("deleted_sessions_page_version"), 1},
-             {QStringLiteral("session_catalog_live_only"), true}},
-            [listing, finish](const QJsonObject& result, const QString& error) {
-                listing->conversations = result;
-                if (!error.isEmpty() && listing->error.isEmpty())
-                    listing->error = error;
-                finish();
-            });
+        listConversationPages(backend_, {}, std::make_shared<QJsonObject>(),
+                              [listing, finish](const QJsonObject& result, const QString& error) {
+                                  listing->conversations = result;
+                                  if (!error.isEmpty() && listing->error.isEmpty())
+                                      listing->error = error;
+                                  finish();
+                              });
     });
 }
 

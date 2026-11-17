@@ -917,6 +917,11 @@ Incremental discovery uses `session_catalog_live_only: true` with page version 1
 request, no tombstone query or deletion signals, and the same wire-byte guard.
 Older paged daemons return page one with live sessions; discovery ignores its
 deletion fields. Initial/reconnect reconciliation still walks the full catalog.
+Live sessions themselves are read in opt-in keyset pages by session id
+(`live_sessions_page_version: 1`, feature `session.catalog_pages/1`, at most 512
+rows and 512 KiB each; [ADR 0131](decisions/0131-paged-live-session-catalog.md)),
+so a catalog of thousands of conversations no longer exceeds the frame. Both
+readers return the pages as one `sessions` array; continuations are live-only.
 The tombstone, cleanup-work and purge-marker inserts must each affect one row.
 Each per-generation state delete must leave no matching row, and a history batch
 that removes nothing while rows remain fails the deletion. A failed statement or commit

@@ -459,7 +459,9 @@ its multi-repository grouping.
 The native sidebar's kit text field filters the existing repository/conversation tree in place.
 It compares repository names/paths and conversation titles case-insensitively, without searching
 transcripts or requesting a search API. Repository matches retain the whole group; title matches
-retain their repository/team ancestors. Filtering changes visibility, not projections, selection,
+retain their repository/team ancestors. The tree materializes matching history rows using its
+existing per-group diff; unmatched hidden history stays unbuilt. Filtering changes presentation,
+not projections, selection,
 pins, ordering or saved folds. The query is temporary window state and survives model updates.
 Ctrl+Alt+K (Cmd+Option+K on macOS) focuses it; Ctrl+K remains an editor chord prefix.
 

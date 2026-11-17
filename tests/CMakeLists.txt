@@ -154,6 +154,8 @@ target_link_libraries(ketplus_sidebar_filter_tests PRIVATE Qt6::Test ketplus_des
 ketplus_add_gui_test(ketplus_sidebar_repository_order_tests SidebarRepositoryOrderTest.cpp)
 target_link_libraries(ketplus_sidebar_repository_order_tests PRIVATE Qt6::Test
                       ketplus_desktop_shell)
+ketplus_add_gui_test(ketplus_sidebar_scale_tests SidebarScaleTest.cpp)
+target_link_libraries(ketplus_sidebar_scale_tests PRIVATE Qt6::Test ketplus_desktop_shell)
 
 ketplus_add_gui_test(ketplus_team_dialogs_tests TeamDialogsTest.cpp)
 target_link_libraries(ketplus_team_dialogs_tests PRIVATE Qt6::Test ketplus_desktop_shell)

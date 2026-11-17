@@ -346,15 +346,18 @@ TeamResult TeamCoordinator::setCriteria(const qint64 teamId, const QString& task
 // gets the pass it asked for. Checked as the task enters review and again as a reviewer
 // takes it, since the limit can be lowered while it waits in the queue.
 bool TeamCoordinator::blockAtLoweredLimit(Team& team, Task& task, QList<Update>& updates) {
-    if (task.round <= 0 || task.roundLimit <= team.maxRounds || task.round < team.maxRounds)
+    const int normal = std::min(2, team.maxRounds);
+    const int limit =
+        task.arbitrationHead == task.headCommit ? std::max(normal, task.arbitratedRound) : normal;
+    if (task.round < limit)
         return false;
-    task.roundLimit = team.maxRounds;
+    task.roundLimit = limit;
     task.resumeState = state::inProgress;
     task.reviewBlock = QStringLiteral("round_limit");
     task.question =
-        roundLimitQuestion(team.language, task.round, team.maxRounds) +
+        roundLimitQuestion(team.language, task.round, limit) +
         say(team.language, QT_TRANSLATE_NOOP("Team", " The team's Max review passes is now %1."))
-            .arg(team.maxRounds);
+            .arg(limit);
     applyMove(team, task, state::blocked, QStringLiteral("daemon"), task.question, updates);
     updates.append(
         {.kind = QStringLiteral("round_limit"),
@@ -362,7 +365,7 @@ bool TeamCoordinator::blockAtLoweredLimit(Team& team, Task& task, QList<Update>&
                      QT_TRANSLATE_NOOP("Team", "%1 had %2 review passes; the team now allows %3."))
                      .arg(task.id)
                      .arg(task.round)
-                     .arg(team.maxRounds),
+                     .arg(limit),
          .taskId = task.id,
          .actionable = true});
     return true;
