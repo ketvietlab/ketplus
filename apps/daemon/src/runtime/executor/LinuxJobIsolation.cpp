@@ -22,17 +22,25 @@
 namespace ketplus::daemon::executor {
 #ifdef Q_OS_LINUX
 namespace {
-bool writeMap(const char* path, const QByteArray& data) {
+constexpr auto namespaceRequirement = "user/mount/PID/cgroup namespaces are required";
+int isolationFailure(const char* reason, const char* stage, const char* operation,
+                     int error = errno) {
+    dprintf(STDERR_FILENO, "containment_unavailable: %s [stage=%s op=%s] (errno=%d)\n", reason,
+            stage, operation, error);
+    return 125;
+}
+int writeMap(const char* path, const QByteArray& data, const char* stage) {
     const int fd = open(path, O_WRONLY | O_CLOEXEC);
     if (fd < 0)
-        return false;
-    const bool success = write(fd, data.constData(), size_t(data.size())) == data.size();
+        return isolationFailure(namespaceRequirement, stage, "open");
+    const auto written = write(fd, data.constData(), size_t(data.size()));
+    // Closing the descriptor must not replace the failure's errno. A short
+    // write has no guaranteed errno, so diagnose it as EIO deterministically.
+    const int writeError = written < 0 ? errno : EIO;
     close(fd);
-    return success;
-}
-int isolationFailure(const char* reason) {
-    dprintf(STDERR_FILENO, "containment_unavailable: %s (errno=%d)\n", reason, errno);
-    return 125;
+    return written == data.size()
+               ? 0
+               : isolationFailure(namespaceRequirement, stage, "write", writeError);
 }
 void closeAuthorityDescriptors() {
 #ifdef SYS_close_range
@@ -83,15 +91,22 @@ int linuxIsolationLaunch(const QJsonObject& execution, bool probe) {
         argumentPointers.append(arg.data());
     argumentPointers.append(nullptr);
     const auto uid = getuid(), gid = getgid();
-    if (uid == 0 || unshare(CLONE_NEWUSER) != 0 || !writeMap("/proc/self/setgroups", "deny") ||
-        !writeMap("/proc/self/uid_map", "0 " + QByteArray::number(uid) + " 1") ||
-        !writeMap("/proc/self/gid_map", "0 " + QByteArray::number(gid) + " 1") ||
-        unshare(CLONE_NEWNS | CLONE_NEWPID | CLONE_NEWCGROUP) != 0 ||
-        mount(nullptr, "/", nullptr, MS_REC | MS_PRIVATE, nullptr) != 0)
-        return isolationFailure("user/mount/PID/cgroup namespaces are required");
+    if (uid == 0)
+        return isolationFailure("a non-root daemon user is required", "caller_uid",
+                                "require_non_root", EPERM);
+    if (unshare(CLONE_NEWUSER) != 0)
+        return isolationFailure(namespaceRequirement, "user_namespace", "unshare");
+    if (writeMap("/proc/self/setgroups", "deny", "setgroups") != 0 ||
+        writeMap("/proc/self/uid_map", "0 " + QByteArray::number(uid) + " 1", "uid_map") != 0 ||
+        writeMap("/proc/self/gid_map", "0 " + QByteArray::number(gid) + " 1", "gid_map") != 0)
+        return 125;
+    if (unshare(CLONE_NEWNS | CLONE_NEWPID | CLONE_NEWCGROUP) != 0)
+        return isolationFailure(namespaceRequirement, "mount_pid_cgroup_namespaces", "unshare");
+    if (mount(nullptr, "/", nullptr, MS_REC | MS_PRIVATE, nullptr) != 0)
+        return isolationFailure(namespaceRequirement, "mount_propagation", "mount");
     const pid_t init = fork();
     if (init < 0)
-        return isolationFailure("namespace init fork failed");
+        return isolationFailure("namespace init fork failed", "namespace_init", "fork");
     if (init > 0) {
         // Keep the wrapper alive until namespace PID 1 exits. The kernel then
         // kills every remaining namespace member, including detached children.
@@ -103,19 +118,21 @@ int linuxIsolationLaunch(const QJsonObject& execution, bool probe) {
         return waited < 0 ? 125 : WIFEXITED(status) ? WEXITSTATUS(status) : 128 + WTERMSIG(status);
     }
     if (mount("proc", "/proc", "proc", MS_NOSUID | MS_NODEV | MS_NOEXEC, nullptr) != 0)
-        _exit(isolationFailure("an isolated proc mount is required"));
+        _exit(isolationFailure("an isolated proc mount is required", "proc_mount", "mount"));
     char mountpoint[] = "/tmp/ketplus-cgroup-view-XXXXXX";
     if (!mkdtemp(mountpoint))
-        _exit(isolationFailure("a private cgroup view directory is required"));
+        _exit(isolationFailure("a private cgroup view directory is required", "cgroup_directory",
+                               "mkdtemp"));
     if (mount("none", mountpoint, "cgroup2", 0, nullptr) != 0)
-        _exit(isolationFailure("a namespace-rooted cgroup mount is required"));
+        _exit(isolationFailure("a namespace-rooted cgroup mount is required", "cgroup_mount",
+                               "mount"));
     if (mount(mountpoint, "/sys/fs/cgroup", nullptr, MS_BIND, nullptr) != 0)
-        _exit(isolationFailure("an isolated cgroup view is required"));
+        _exit(isolationFailure("an isolated cgroup view is required", "cgroup_bind", "mount"));
     umount2(mountpoint, MNT_DETACH);
     rmdir(mountpoint);
     closeAuthorityDescriptors();
     if (prctl(PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0) != 0)
-        _exit(isolationFailure("no_new_privs failed"));
+        _exit(isolationFailure("no_new_privs failed", "no_new_privs", "prctl"));
     if (probe) {
         const int fd = open("/proc/self/cgroup", O_RDONLY | O_CLOEXEC);
         char content[128]{};

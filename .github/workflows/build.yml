@@ -55,6 +55,36 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y ninja-build libssl-dev libgl1-mesa-dev patchelf
       - name: Configure independent daemon
         run: cmake -S . -B build/daemon -G Ninja -DCMAKE_BUILD_TYPE=Release -DKETPLUS_PRODUCTION_RELEASE=ON -DKETPLUS_EDITION=pro -DKETPLUS_BUILD_DESKTOP=OFF -DKETPLUS_BUILD_TESTS=ON
+      - name: Record containment prerequisite facts (read-only)
+        run: |
+          python3 - <<'PY'
+          import json, os
+          from pathlib import Path
+          def read(path):
+              try:
+                  return Path(path).read_text().strip()
+              except OSError:
+                  return None
+          def socket_present(path):
+              try:
+                  return path.is_socket()
+              except OSError:
+                  return None
+          mounts = read('/proc/mounts')
+          cgroup = next((line.split() for line in (mounts or '').splitlines()
+                         if len(line.split()) >= 4 and line.split()[1] == '/sys/fs/cgroup'), None)
+          runtime = Path(os.environ.get('XDG_RUNTIME_DIR', f'/run/user/{os.getuid()}'))
+          print(json.dumps({
+              'diagnostic_only': True,
+              'uid': os.getuid(),
+              'unprivileged_userns_clone': read('/proc/sys/kernel/unprivileged_userns_clone'),
+              'apparmor_restrict_unprivileged_userns': read('/proc/sys/kernel/apparmor_restrict_unprivileged_userns'),
+              'user_bus_socket_present': socket_present(runtime / 'bus'),
+              'cgroup_filesystem': cgroup[2] if cgroup else None,
+              'cgroup_read_only': 'ro' in cgroup[3].split(',') if cgroup else None,
+              'cgroup_nsdelegate': 'nsdelegate' in cgroup[3].split(',') if cgroup else None,
+          }, sort_keys=True))
+          PY
       - name: Build and test without a display or provider quota
         run: |
           cmake --build build/daemon --parallel 4

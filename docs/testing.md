@@ -864,6 +864,29 @@ capabilities reject start with `containment_unavailable`; do not lower host
 policy to make the suite pass. A read-only cgroup mount alone, PGID cleanup or
 same-UID delegation is not migration-containment evidence.
 
+Namespace setup errors preserve `containment_unavailable` and exit status 125,
+and add bounded `stage`/`op` fields: non-root admission, user-namespace unshare,
+setgroups/UID/GID-map open or write, the combined mount/PID/cgroup unshare, mount
+propagation, and subsequent namespace-init/mount setup. Mapping failures preserve
+the failing operation's errno across descriptor cleanup; a short write reports
+EIO, and root refusal reports EPERM instead of an unrelated stale errno. These
+labels identify a failed operation, not the host policy responsible for it.
+
+`ketplus_linux_isolation_diagnostics_tests` is a Linux-only fault-injection unit
+suite. Its test subprocesses link the actual isolation source with test-only
+syscall wrappers: no namespace, mount or workload descendant is created, and
+setup stops at an injected fork failure. It checks each initial failure stage, errno preservation
+when close overwrites errno, and unchanged refusal status. It needs no privileged
+guest, but is not a production-executor acceptance test. Run it with
+`ctest --test-dir build/daemon-dev -R '^ketplus_linux_isolation_diagnostics_tests$' --output-on-failure`.
+
+The Linux CI job also records passive UID, userns/AppArmor sysctl values, user-bus
+socket presence and cgroup mount facts. It does not run a containment probe,
+alter sysctls, start a user manager or change test selection/status. These facts
+and historical ARM64 primitive evidence do not establish the current runner's
+capabilities. A successful unit suite or macOS run cannot establish Linux managed
+process ownership, descendant wake/cancellation or production acceptance.
+
 The opt-in `ketplus_linux_job_executor_tests` runs the real packaged helper and
 registry. It covers missing-manager admission, durable retry/output, double-fork/
 setsid descendants and migration attempts, timeout during forks, supervisor
