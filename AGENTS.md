@@ -104,6 +104,8 @@ still takes colours or metrics from that stylesheet or from `ThemePalette`:
 - `modules/remote`: daemon IPC client, relay (Control v2) client, and the
   `ketplus_control_crypto` keys/credentials/sign-in target the daemon also links.
 - `modules/computer`: computer use settings and provider MCP launch.
+- `modules/runner`: runner job support; `src/snapshot` creates, packs and applies worktree
+  snapshots with the system git.
 - `tests`: Pro and cross-boundary integration tests.
 - `modules/accounts` and `modules/router`: reserved; create each only with its
   first real implementation.
