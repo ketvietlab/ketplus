@@ -27,6 +27,7 @@ target_link_libraries(ketplus_daemon_core PUBLIC
     ketplus_computer_tools
     ketplus_product_version
     LibDataChannel::LibDataChannelStatic
+    ketplus_peer_link
 )
 target_include_directories(ketplus_daemon_core PUBLIC
     "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>"

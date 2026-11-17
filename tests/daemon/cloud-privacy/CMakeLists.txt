@@ -38,7 +38,7 @@ target_include_directories(r03_privacy_core PUBLIC "${DAEMON}" "${REPO}/modules/
   "${REPO}/modules/computer/src"
   "${CMAKE_CURRENT_BINARY_DIR}")
 target_link_libraries(r03_privacy_core PUBLIC Qt6::Concurrent Qt6::Core Qt6::Gui Qt6::Network Qt6::Sql Qt6::WebSockets
-  OpenSSL::Crypto LibDataChannel::LibDataChannelStatic)
+  OpenSSL::Crypto LibDataChannel::LibDataChannelStatic ketplus_peer_link)
 if(APPLE)
   # Linked like the daemon; the Claude login entries are not used by these tests.
   target_link_libraries(r03_privacy_core PRIVATE "-framework Security" "-framework CoreFoundation")

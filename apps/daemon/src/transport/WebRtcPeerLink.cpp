@@ -7,11 +7,28 @@
 #include <array>
 #include <atomic>
 #include <mutex>
+#include <optional>
 #include <rtc/rtc.hpp>
 #include <utility>
+#include <vector>
 
 namespace ketplus::daemon::transport {
+namespace {
+// Only SHA-2 digests of at least 256 bits are accepted as an expected fingerprint.
+QString fingerprintText(const rtc::CertificateFingerprint& value) {
+    using Algorithm = rtc::CertificateFingerprint::Algorithm;
+    if (!value.isValid() ||
+        (value.algorithm != Algorithm::Sha256 && value.algorithm != Algorithm::Sha384 &&
+         value.algorithm != Algorithm::Sha512))
+        return {};
+    return QString::fromStdString(
+               rtc::CertificateFingerprint::AlgorithmIdentifier(value.algorithm)) +
+           QLatin1Char(' ') + QString::fromStdString(value.value).toUpper();
+}
+} // namespace
+
 struct WebRtcPeerLink::Impl {
+    enum class Role { None, Answerer, Offerer };
     struct Delivery {
         std::mutex mutex;
         WebRtcPeerLink* owner{nullptr};
@@ -26,6 +43,97 @@ struct WebRtcPeerLink::Impl {
     bool stopped{false};
     bool iceConnected{false};
     SelectedPathDecision pathDecision;
+    Role role{Role::None};
+    QString localFingerprint;
+    // Offerer only: the caller's expected fingerprint, checked against the answer and then
+    // against the certificate DTLS actually verified before any frame passes either way.
+    QString expectedFingerprint;
+    bool answered{false};
+    bool verified{false};
+    std::vector<rtc::Candidate> pendingCandidates;
+
+    bool trusted(WebRtcPeerLink* owner) {
+        if (role != Role::Offerer || verified)
+            return true;
+        QString actual;
+        try {
+            if (peer && answered)
+                actual = fingerprintText(peer->remoteFingerprint());
+        } catch (const std::exception&) {
+        }
+        if (actual.isEmpty() || actual != expectedFingerprint) {
+            owner->close();
+            return false;
+        }
+        verified = true;
+        return true;
+    }
+
+    // Both roles use the same bounded configuration. Returns nothing for refused ICE servers.
+    static std::optional<rtc::Configuration> configuration(const QJsonArray& iceServers) {
+        rtc::Configuration config;
+        config.disableFingerprintVerification = false;
+        config.maxMessageSize = FrameCodec::messageLimit;
+        if (iceServers.size() > 8)
+            return std::nullopt;
+        for (const auto& value : iceServers) {
+            const auto server = value.toObject();
+            auto urls = server.value("urls").toArray();
+            if (server.value("urls").isString())
+                urls = QJsonArray{server.value("urls")};
+            if (urls.size() > 8)
+                return std::nullopt;
+            for (const auto& url : urls) {
+                const auto text = url.toString();
+                if (text.size() > 2048 || (!text.startsWith("stun:") && !text.startsWith("turn:")))
+                    continue; // libjuice supports UDP only; the relay supplies host-specific URLs.
+                rtc::IceServer ice(text.toStdString());
+                ice.username = server.value("username").toString().toStdString();
+                ice.password = server.value("credential").toString().toStdString();
+                config.iceServers.push_back(std::move(ice));
+            }
+        }
+        return config;
+    }
+
+    // Connection-level callbacks shared by both roles. Each only enqueues onto the Qt thread.
+    void wire() {
+        const auto state = delivery;
+        peer->onLocalDescription([state](rtc::Description description) {
+            const auto sdp = QString::fromStdString(std::string(description));
+            const auto own = description.fingerprint();
+            const auto print = own ? fingerprintText(*own) : QString();
+            post(state, [sdp, print](auto* target) {
+                target->impl_->localFingerprint = print;
+                emit target->localDescription(sdp);
+            });
+        });
+        peer->onLocalCandidate([state](rtc::Candidate candidate) {
+            const auto text = QString::fromStdString(std::string(candidate));
+            const auto mid = QString::fromStdString(candidate.mid());
+            post(state, [text, mid](auto* target) { emit target->localCandidate(text, mid); });
+        });
+        peer->onGatheringStateChange([state](rtc::PeerConnection::GatheringState value) {
+            if (value == rtc::PeerConnection::GatheringState::Complete)
+                post(state, [](auto* target) { emit target->localCandidate({}, {}); });
+        });
+        peer->onStateChange([state](rtc::PeerConnection::State value) {
+            if (value == rtc::PeerConnection::State::Failed ||
+                value == rtc::PeerConnection::State::Closed)
+                post(state, [](auto* target) { target->close(); });
+        });
+        peer->onIceStateChange([state](rtc::PeerConnection::IceState value) {
+            post(state, [value](auto* target) {
+                auto& impl = *target->impl_;
+                const bool connected = value == rtc::PeerConnection::IceState::Connected ||
+                                       value == rtc::PeerConnection::IceState::Completed;
+                if (connected && impl.open)
+                    impl.reportPath(target, !impl.iceConnected,
+                                    value == rtc::PeerConnection::IceState::Completed);
+                impl.iceConnected = connected;
+            });
+        });
+    }
 
     void reportPath(WebRtcPeerLink* owner, bool reopened, bool completed = false) {
         rtc::Candidate local, remote;
@@ -79,6 +187,8 @@ struct WebRtcPeerLink::Impl {
                 auto& impl = *target->impl_;
                 if (!impl.open && std::all_of(impl.channels.begin(), impl.channels.end(),
                                               [](const auto& ch) { return ch && ch->isOpen(); })) {
+                    if (!impl.trusted(target))
+                        return;
                     impl.open = true;
                     impl.reportPath(target, false);
                     emit target->opened();
@@ -113,6 +223,8 @@ struct WebRtcPeerLink::Impl {
                 message);
             post(state, [state, index, bytes, binary](auto* target) {
                 state->pending.fetch_sub(1);
+                if (!target->impl_->trusted(target))
+                    return;
                 emit target->received(static_cast<Channel>(index), bytes, binary);
             });
         });
@@ -137,60 +249,13 @@ bool WebRtcPeerLink::answer(const QString& offer, const QJsonArray& iceServers) 
     if (impl_->peer || impl_->stopped || offer.toUtf8().size() > 16 * 1024)
         return false;
     try {
-        rtc::Configuration config;
-        config.disableFingerprintVerification = false;
-        config.maxMessageSize = FrameCodec::messageLimit;
-        if (iceServers.size() > 8)
+        auto config = Impl::configuration(iceServers);
+        if (!config)
             return false;
-        for (const auto& value : iceServers) {
-            const auto server = value.toObject();
-            auto urls = server.value("urls").toArray();
-            if (server.value("urls").isString())
-                urls = QJsonArray{server.value("urls")};
-            if (urls.size() > 8)
-                return false;
-            for (const auto& url : urls) {
-                const auto text = url.toString();
-                if (text.size() > 2048 || (!text.startsWith("stun:") && !text.startsWith("turn:")))
-                    continue; // libjuice supports UDP only; the relay supplies host-specific URLs.
-                rtc::IceServer ice(text.toStdString());
-                ice.username = server.value("username").toString().toStdString();
-                ice.password = server.value("credential").toString().toStdString();
-                config.iceServers.push_back(std::move(ice));
-            }
-        }
         const auto state = impl_->delivery;
-        impl_->peer = std::make_shared<rtc::PeerConnection>(config);
-        impl_->peer->onLocalDescription([state](rtc::Description description) {
-            const auto sdp = QString::fromStdString(std::string(description));
-            Impl::post(state, [sdp](auto* target) { emit target->localDescription(sdp); });
-        });
-        impl_->peer->onLocalCandidate([state](rtc::Candidate candidate) {
-            const auto text = QString::fromStdString(std::string(candidate));
-            const auto mid = QString::fromStdString(candidate.mid());
-            Impl::post(state,
-                       [text, mid](auto* target) { emit target->localCandidate(text, mid); });
-        });
-        impl_->peer->onGatheringStateChange([state](rtc::PeerConnection::GatheringState value) {
-            if (value == rtc::PeerConnection::GatheringState::Complete)
-                Impl::post(state, [](auto* target) { emit target->localCandidate({}, {}); });
-        });
-        impl_->peer->onStateChange([state](rtc::PeerConnection::State value) {
-            if (value == rtc::PeerConnection::State::Failed ||
-                value == rtc::PeerConnection::State::Closed)
-                Impl::post(state, [](auto* target) { target->close(); });
-        });
-        impl_->peer->onIceStateChange([state](rtc::PeerConnection::IceState value) {
-            Impl::post(state, [value](auto* target) {
-                auto& impl = *target->impl_;
-                const bool connected = value == rtc::PeerConnection::IceState::Connected ||
-                                       value == rtc::PeerConnection::IceState::Completed;
-                if (connected && impl.open)
-                    impl.reportPath(target, !impl.iceConnected,
-                                    value == rtc::PeerConnection::IceState::Completed);
-                impl.iceConnected = connected;
-            });
-        });
+        impl_->role = Impl::Role::Answerer;
+        impl_->peer = std::make_shared<rtc::PeerConnection>(*config);
+        impl_->wire();
         impl_->peer->onDataChannel([state](std::shared_ptr<rtc::DataChannel> channel) {
             if (state->channels.fetch_add(1) >= 3) {
                 channel->close();
@@ -209,13 +274,80 @@ bool WebRtcPeerLink::answer(const QString& offer, const QJsonArray& iceServers) 
     }
 }
 
+bool WebRtcPeerLink::offer(const QJsonArray& iceServers) {
+    if (impl_->peer || impl_->stopped)
+        return false;
+    try {
+        auto config = Impl::configuration(iceServers);
+        if (!config)
+            return false;
+        // One explicit offer after all three channels exist, not one per channel.
+        config->disableAutoNegotiation = true;
+        const auto state = impl_->delivery;
+        impl_->role = Impl::Role::Offerer;
+        impl_->peer = std::make_shared<rtc::PeerConnection>(*config);
+        impl_->wire();
+        // The answering side never opens channels of its own.
+        impl_->peer->onDataChannel([state](std::shared_ptr<rtc::DataChannel> channel) {
+            channel->close();
+            Impl::post(state, [](auto* target) { target->close(); });
+        });
+        for (const char* label : {"control", "events", "bulk"}) {
+            impl_->attach(this, impl_->peer->createDataChannel(label));
+            if (impl_->stopped)
+                return false;
+        }
+        impl_->peer->setLocalDescription(rtc::Description::Type::Offer);
+        return true;
+    } catch (const std::exception&) {
+        close();
+        return false;
+    }
+}
+
+bool WebRtcPeerLink::acceptAnswer(const QString& answer, const QString& expectedRemoteFingerprint) {
+    if (impl_->role != Impl::Role::Offerer || impl_->answered || impl_->stopped)
+        return false;
+    const auto expected = normalizedFingerprint(expectedRemoteFingerprint);
+    const auto refuse = [this] {
+        close();
+        return false;
+    };
+    if (expected.isEmpty() || answer.toUtf8().size() > 16 * 1024)
+        return refuse();
+    try {
+        rtc::Description description(answer.toStdString(), "answer");
+        const auto offered = description.fingerprint();
+        // Refused before the answer is applied, so ICE and DTLS never start with that peer.
+        if (!offered || fingerprintText(*offered) != expected)
+            return refuse();
+        impl_->expectedFingerprint = expected;
+        impl_->answered = true;
+        impl_->peer->setRemoteDescription(std::move(description));
+        for (auto& pending : std::exchange(impl_->pendingCandidates, {}))
+            impl_->peer->addRemoteCandidate(std::move(pending));
+        return true;
+    } catch (const std::exception&) {
+        // Native exception messages can contain IPs, SDP or credentials. Never log them.
+        return refuse();
+    }
+}
+
 bool WebRtcPeerLink::candidate(const QString& candidate, const QString& mid) {
     if (!impl_->peer || impl_->stopped || candidate.size() > 1024 || mid.size() > 64)
         return false;
     if (candidate.isEmpty())
         return true;
     try {
-        impl_->peer->addRemoteCandidate(rtc::Candidate(candidate.toStdString(), mid.toStdString()));
+        rtc::Candidate remote(candidate.toStdString(), mid.toStdString());
+        // An offerer may hear candidates before the answer; keep a bounded few until then.
+        if (impl_->role == Impl::Role::Offerer && !impl_->answered) {
+            if (impl_->pendingCandidates.size() >= 32)
+                return false;
+            impl_->pendingCandidates.push_back(std::move(remote));
+            return true;
+        }
+        impl_->peer->addRemoteCandidate(std::move(remote));
         return true;
     } catch (const std::exception&) {
         return false;
@@ -225,6 +357,9 @@ bool WebRtcPeerLink::candidate(const QString& candidate, const QString& mid) {
 bool WebRtcPeerLink::send(const Packet& packet) {
     const auto& channel = impl_->channels.at(size_t(packet.channel));
     if (impl_->stopped || !channel || !channel->isOpen())
+        return false;
+    // The offerer sends nothing before the peer's certificate matched the expected fingerprint.
+    if (impl_->role == Impl::Role::Offerer && !impl_->open)
         return false;
     try {
         if (packet.binary)
@@ -238,6 +373,20 @@ bool WebRtcPeerLink::send(const Packet& packet) {
         close();
         return false;
     }
+}
+
+QString WebRtcPeerLink::localFingerprint() const { return impl_->localFingerprint; }
+
+QString WebRtcPeerLink::normalizedFingerprint(const QString& fingerprint) {
+    const auto parts = fingerprint.trimmed().split(QLatin1Char(' '), Qt::SkipEmptyParts);
+    if (parts.size() != 2 || parts.at(1).size() > 256)
+        return {};
+    using Algorithm = rtc::CertificateFingerprint::Algorithm;
+    const auto name = parts.at(0).toLower().toStdString();
+    for (const auto algorithm : {Algorithm::Sha256, Algorithm::Sha384, Algorithm::Sha512})
+        if (name == rtc::CertificateFingerprint::AlgorithmIdentifier(algorithm))
+            return fingerprintText({algorithm, parts.at(1).toStdString()});
+    return {};
 }
 
 quint64 WebRtcPeerLink::buffered(Channel channel) const {

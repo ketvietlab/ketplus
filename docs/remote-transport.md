@@ -325,6 +325,17 @@ not depend on Control v2 HTTP internals:
 - **Frame codec and transfer reassembly**: with caps, unit-tested without a network.
 - **Threading**: libdatachannel calls back on its own threads. Every callback is queued onto the
   daemon's main thread, and none blocks.
+- **`ketplus_peer_link`**: the static library target (defined in `cmake/WebRtc.cmake`) that
+  builds `PeerLink`, `WebRtcPeerLink`, `FrameCodec`, `SendQueue` and `SelectedPath` from
+  `apps/daemon/src/transport/` with QtCore and libdatachannel only. `ketplus_daemon_core` links
+  it; `RemotePeers` and `Signaling` stay in the daemon.
+- **`WebRtcPeerLink` roles**: `answer()` is the host side described above. `offer()` creates the
+  three channels and the offer; `acceptAnswer(sdp, expectedFingerprint)` requires the peer's DTLS
+  fingerprint (`sha-256`, `sha-384` or `sha-512`) from the caller. A mismatch with the answer's
+  `a=fingerprint` refuses the answer and closes the link; the offerer also compares the
+  certificate DTLS verified before `opened()`, before passing any received frame and before
+  `send()` succeeds. `localFingerprint()` returns this end's fingerprint. Candidates that arrive
+  before the answer are held, at most 32. Channels the answering side opens close the link.
 
 On iOS, `KetPlusRemoteCore` gets a matching `PeerLink` over Google's WebRTC, and
 `HTTPControlPlaneClient` stays the relay path. A path selector above them picks one. Desktop's

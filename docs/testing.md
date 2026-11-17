@@ -1011,7 +1011,7 @@ running daemon.
 
 ### WebRTC host phase 3
 
-Build `ketplus_daemon_peer_transport_tests`, `ketplus_daemon_relay_wakeups_tests`,
+Build `ketplus_daemon_peer_transport_tests`, `ketplus_peer_link_tests`, `ketplus_daemon_relay_wakeups_tests`,
 `ketplus_daemon_cloud_privacy_tests`, `ketplus_cloud_trust_lifecycle_tests`,
 `ketplus_sender_key_cache_tests` and
 `ketplus_daemon_context_relay_tests` in a
@@ -1021,6 +1021,12 @@ started. It covers transfer caps/order/expiry, strict send priority, grants,
 revocation, supersede/epochs, subscriptions, cloud-safe encryption and the same
 command retried over both paths. No user daemon or provider account is accessed.
 Physical devices/TURN require a separate explicitly configured local test stack.
+`ketplus_peer_link_tests` links only `ketplus_peer_link`: a `WebRtcPeerLink` offerer against an
+answerer over loopback carries frames on all three channels both ways, a transfer of exactly
+8 MiB both ways and a refused 8 MiB + 1 transfer; a wrong expected fingerprint refuses the
+answer, and a rewritten answer fingerprint fails DTLS, with no frame either way; closing or
+destroying a link while negotiating or mid-transfer is safe. On macOS, also run it under
+`MallocStackLogging=1 leaks --atExit --` after changing link lifetimes.
 
 `ketplus_cloud_trust_lifecycle_tests` holds native fake HTTP replies across sign-out and
 re-enrollment (including the same machine/workspace), and independently changes each scope

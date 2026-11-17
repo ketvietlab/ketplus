@@ -1,11 +1,9 @@
 # Also read by tests/daemon/cloud-privacy, which builds these against in-memory credentials.
+# PeerLink, WebRtcPeerLink and the frame codec build as ketplus_peer_link (cmake/WebRtc.cmake).
 set(KETPLUS_DAEMON_CORE_SOURCES
     src/cloud/CloudControlTransport.cpp
-    src/transport/FrameCodec.cpp
-    src/transport/PeerLink.h
     src/transport/RemotePeers.cpp
     src/transport/Signaling.cpp
-    src/transport/WebRtcPeerLink.cpp
     src/atlas/AtlasLiveRuntime.cpp
     src/atlas/AtlasLiveTunnel.cpp
     src/atlas/AtlasTunnelCodec.cpp
