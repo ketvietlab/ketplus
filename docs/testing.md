@@ -897,6 +897,19 @@ allowance. The ledger requires `decision`, `maximum_per_provider`,
 `sent_or_uncertain` fields. Reservation occurs before delivery; errors and
 timeouts do not refund it.
 
+The separately authorized **D-7** additional Cursor turn uses
+`KETPLUS_CURSOR_BOUNDED_REFRESH=D-7` and a distinct private ledger whose
+`decision` is `D-7`. It retains the common owner/no-recall/no-retry/per-provider
+fields above, plus `allowed_providers: ["cursor"]`, `maximum_total: 1`,
+`previous_ledger` and `previous_ledger_sha256`. The previous ledger must still
+be the unchanged D-3 ledger with all three provider allowances consumed and
+the same owner. D-7 reserves its own Cursor count before forwarding and cannot
+authorize Codex/Copilot or reset/refund D-3. Never recreate a consumed D-7
+ledger. The quota-free proposal suite covers rejection of changed parents,
+wrong scope/owner/decision, recall/retry, and reused allowances. The same
+control/attestation, cheap named model, text-only, no-tools and history-refresh
+barriers apply; no production mutation is enabled by this additional probe.
+
 These probes keep official inherited provider authentication, create a new
 synthetic session and empty temporary cwd, and never scan existing history.
 They pin cheap named models and check control/MCP before delivery. Cursor's

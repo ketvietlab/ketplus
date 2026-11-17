@@ -42,6 +42,27 @@ def approved_discovery(observed):
     return spawned, listed, bool(spawned) and spawned <= listed
 
 
+def validate_allowance(config, budget, provider):
+    decision = config["mode"]
+    assert decision in ["D-3", "D-7"] and budget["decision"] == decision
+    assert budget["maximum_per_provider"] == 1
+    assert budget["owner_conversation"] == config["owner"] and config["head"]
+    assert not budget["retry_allowed"] and not budget["recall_allowed"]
+    assert budget[provider]["sent_or_uncertain"] == 0
+    if decision == "D-7":
+        # A separate user-approved extra Cursor allowance, never a reset/refund
+        # of D-3. Bind it to the already consumed, unchanged parent ledger.
+        assert provider == "cursor" and budget["allowed_providers"] == ["cursor"]
+        assert budget["maximum_total"] == 1
+        previous = pathlib.Path(budget["previous_ledger"]).read_bytes()
+        assert hashlib.sha256(previous).hexdigest() == budget["previous_ledger_sha256"]
+        parent = json.loads(previous)
+        assert parent["decision"] == "D-3" and parent["owner_conversation"] == config["owner"]
+        assert all(parent[name]["sent_or_uncertain"] == 1 for name in ["codex", "cursor", "copilot"])
+    if provider == "copilot":
+        assert decision == "D-3" and budget.get("copilot_auto_decision") == "D-6"
+
+
 def make_attestation(config, epoch):
     from private_attestation import Attestation
     session = config["approved_session"]
@@ -290,12 +311,7 @@ def main():
                 with open(str(ledger) + ".lock", "w") as budget_lock:
                     fcntl.flock(budget_lock, fcntl.LOCK_EX)
                     budget = json.loads(ledger.read_text())
-                    assert budget["decision"] == "D-3" and budget["maximum_per_provider"] == 1
-                    assert budget["owner_conversation"] == config["owner"] and not budget["retry_allowed"]
-                    assert config["head"]
-                    assert not budget["recall_allowed"] and budget[provider]["sent_or_uncertain"] == 0
-                    if copilot:
-                        assert budget.get("copilot_auto_decision") == "D-6"
+                    validate_allowance(config, budget, provider)
                     budget[provider].update(sent_or_uncertain=1, model=model, head=config["head"],
                                              auth_route="inherited-provider-bootstrap", status="reserved_before_delivery",
                                              session_id=params["sessionId"], synthetic_cwd=config["work"])

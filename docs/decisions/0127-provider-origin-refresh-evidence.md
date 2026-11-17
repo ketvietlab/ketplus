@@ -786,3 +786,37 @@ regression methods (6.381 s), including nested lifecycle/barrier subcases;
 CTest bodies, skipped before provider launch (0.28 s). Python AST, both Node
 syntax checks and `git diff --check` pass. No C++ source changed, so no native
 rebuild or broad runtime matrix is used as evidence for this test-only patch.
+
+### D-7 additional Cursor allowance
+
+After the offline corrections received independent **no findings** at
+`a372f7301417968b332c1c2bbcb3883fba9dce60`, the user separately authorized
+**one additional Cursor turn (D-7)**. This is not a refund or reset of D-3.
+The additional private ledger is bound by SHA-256 to the unchanged consumed
+D-3 ledger, with the same owner, Cursor-only scope, total/per-provider maximum
+one, and no recall or automatic retry. Reservation is durable before forwarding;
+an ambiguous timeout remains consumed. Mock tests reject altered parent data,
+wrong decision/owner/provider, widened scope, recall/retry and a reused allowance.
+
+The test retains the same approved synthetic cwd/server identity and official
+inherited auth route, explicitly selects `claude-haiku-5-5-low`, and requires
+native cheap-model ACK plus exact injected-worker current readiness before
+delivery. No tools or mutation grants are issued. The adapter's same-ID
+replacement check now reads current `ready`, rather than historical `attested`.
+No-model control precedes the only additional text-only prompt; failure stops
+without automatic model retry. The replacement transport may restore history
+and readiness but cannot forward another prompt. Cursor production mutation
+remains **DENY** pending sufficient evidence and independent review.
+
+Before the additional native run, quota-free checks pass **8/8** proposal/budget
+methods (3.078 s) and **9/9** attestation/diagnostic methods (8.380 s).
+The installed Cursor module and the approved synthetic fixture retain their
+pinned hashes and exact canonical launch identity. The
+[official Cursor pricing table](https://cursor.com/docs/models-and-pricing),
+checked again for this allowance, lists Haiku 5.5 at $0.10 input/$0.50 output
+per million tokens; explicit native model selection must still ACK before any
+prompt. No automatic model fallback is permitted.
+
+The focused Cursor test target rebuild succeeds (existing unrelated compiler
+warnings remain); its default opt-in body passes/skips before any provider
+launch (0.86 s). Changed C++ formatting, Python AST and diff checks pass.

@@ -94,7 +94,7 @@ class CursorBoundedRefreshTest final : public QObject {
   private slots:
     void realHistoryAndMcpReplacementWithoutRecall() {
         const auto mode = qEnvironmentVariable("KETPLUS_CURSOR_BOUNDED_REFRESH");
-        if (mode != "D-3" && mode != "control")
+        if (mode != "D-3" && mode != "D-7" && mode != "control")
             QSKIP("Requires explicit quota authorization or a no-model control opt-in.");
 #ifndef Q_OS_UNIX
         QSKIP("This bounded owned-process observer requires Unix.");
@@ -257,7 +257,7 @@ class CursorBoundedRefreshTest final : public QObject {
             refreshReady |= row.value("event") == "tools_list" && row.value("epoch") == "two";
             if (attested)
                 refreshReady |= row.value("event") == "injected_attestation" &&
-                                row.value("epoch") == "two" && row.value("attested").toBool();
+                                row.value("epoch") == "two" && row.value("ready").toBool();
             oldGone |= row.value("event") == "provider" && row.value("epoch") == "two" &&
                        row.value("prior_mcp_alive").toInt() == 0;
         }
@@ -268,9 +268,10 @@ class CursorBoundedRefreshTest final : public QObject {
         QVERIFY(adapter.releaseSessionTransport("t3-bounded-owner"));
         adapter.stop();
         QTRY_VERIFY(exited(log));
-        qInfo("D-3 Cursor: one explicit Haiku low turn; same-ID replay before any recall; "
+        qInfo("%s Cursor: one explicit Haiku low turn; same-ID replay before any recall; "
               "new MCP transport attested and old processes exited. Inspect injected inventory "
-              "evidence separately; no production mutation is enabled by this probe.");
+              "evidence separately; no production mutation is enabled by this probe.",
+              qPrintable(mode));
     }
 };
 QTEST_GUILESS_MAIN(CursorBoundedRefreshTest)

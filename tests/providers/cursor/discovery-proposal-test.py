@@ -185,7 +185,41 @@ send({id:1,method:'initialize',params:{protocolVersion:'2024-11-05'}});
             with self.subTest(provider=provider):
                 self.mock_allowance(provider)
 
-    def mock_allowance(self, provider_name):
+    def test_extra_cursor_decision_preserves_consumed_parent_and_cannot_be_reused(self):
+        self.mock_allowance("cursor", "D-7")
+
+    def test_extra_cursor_decision_rejects_wrong_scope_or_changed_parent(self):
+        spec = importlib.util.spec_from_file_location("bounded", HERE / "adapter-bounded-fixture.py")
+        bounded = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(bounded)
+        with tempfile.TemporaryDirectory() as directory:
+            parent = pathlib.Path(directory) / "consumed-d3.json"
+            consumed = dict(decision="D-3", owner_conversation=1,
+                            **{name: dict(sent_or_uncertain=1) for name in ["codex", "cursor", "copilot"]})
+            parent.write_text(json.dumps(consumed))
+            budget = dict(decision="D-7", maximum_per_provider=1, maximum_total=1, allowed_providers=["cursor"],
+                          owner_conversation=1, recall_allowed=False, retry_allowed=False,
+                          previous_ledger=str(parent), previous_ledger_sha256=hashlib.sha256(parent.read_bytes()).hexdigest(),
+                          **{name: dict(sent_or_uncertain=0) for name in ["codex", "cursor", "copilot"]})
+            config = dict(mode="D-7", owner=1, head="mock-no-provider")
+            bounded.validate_allowance(config, budget, "cursor")
+            for provider in ["codex", "copilot"]:
+                with self.assertRaises(AssertionError):
+                    bounded.validate_allowance(config, budget, provider)
+            for fields in [dict(maximum_total=2), dict(allowed_providers=["cursor", "codex"]),
+                           dict(decision="D-3"), dict(owner_conversation=2), dict(retry_allowed=True),
+                           dict(recall_allowed=True), dict(cursor=dict(sent_or_uncertain=1))]:
+                with self.subTest(fields=list(fields)), self.assertRaises(AssertionError):
+                    bounded.validate_allowance(config, dict(budget, **fields), "cursor")
+            consumed["cursor"]["sent_or_uncertain"] = 0
+            parent.write_text(json.dumps(consumed))
+            with self.assertRaises(AssertionError):
+                bounded.validate_allowance(config, budget, "cursor")
+            budget["previous_ledger_sha256"] = hashlib.sha256(parent.read_bytes()).hexdigest()
+            with self.assertRaises(AssertionError):
+                bounded.validate_allowance(config, budget, "cursor")
+
+    def mock_allowance(self, provider_name, decision="D-3"):
         with tempfile.TemporaryDirectory() as temporary:
             root = pathlib.Path(temporary)
             provider = root / "fake-provider"
@@ -200,14 +234,22 @@ for line in sys.stdin:
 ''')
             provider.chmod(0o700)
             ledger = root / "mock-budget.json"
-            ledger.write_text(json.dumps(dict(decision="D-3", maximum_per_provider=1, owner_conversation=1,
-                                             recall_allowed=False, retry_allowed=False,
-                                             copilot_auto_decision="D-6", **{provider_name:dict(sent_or_uncertain=0)})))
+            budget = dict(decision=decision, maximum_per_provider=1, owner_conversation=1,
+                          recall_allowed=False, retry_allowed=False,
+                          copilot_auto_decision="D-6", **{provider_name: dict(sent_or_uncertain=0)})
+            if decision == "D-7":
+                parent = root / "consumed-d3.json"
+                parent_bytes = json.dumps(dict(decision="D-3", owner_conversation=1,
+                    **{name: dict(sent_or_uncertain=1) for name in ["codex", "cursor", "copilot"]})).encode()
+                parent.write_bytes(parent_bytes)
+                budget.update(allowed_providers=["cursor"], maximum_total=1, previous_ledger=str(parent),
+                              previous_ledger_sha256=hashlib.sha256(parent_bytes).hexdigest())
+            ledger.write_text(json.dumps(budget))
             log = root / "events.jsonl"
             log.write_text(json.dumps(dict(event="tools_list", epoch="one", pid=0)) + "\n")
             config = root / "launch.json"
             config.write_text(json.dumps(dict(executable=str(provider), work=str(root), log=str(log),
-                                             mode="D-3", ledger=str(ledger), head="mock-no-provider", owner=1,
+                                             mode=decision, ledger=str(ledger), head="mock-no-provider", owner=1,
                                              provider=provider_name)))
             process = subprocess.Popen([sys.executable, "-B", str(HERE / "adapter-bounded-fixture.py"),
                                         str(config), "acp"], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
@@ -232,6 +274,8 @@ for line in sys.stdin:
                 events = [json.loads(line) for line in log.read_text().splitlines()]
                 self.assertEqual(sum(row["event"] == "model_request_forwarded" for row in events), 1)
                 self.assertTrue(any(row["event"] == "provider_exit" and row["child_exited"] for row in events))
+                if decision == "D-7":
+                    self.assertEqual(parent.read_bytes(), parent_bytes)
             finally:
                 if process.poll() is None:
                     process.terminate()
