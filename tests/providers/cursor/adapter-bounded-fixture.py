@@ -18,6 +18,7 @@ import threading
 import time
 
 from bounded_diagnostics import Diagnostics, numeric
+import cursor_extra_budget
 
 sys.dont_write_bytecode = True
 MODEL = "claude-haiku-5-5-low"
@@ -44,6 +45,9 @@ def approved_discovery(observed):
 
 def validate_allowance(config, budget, provider):
     decision = config["mode"]
+    if decision == "cursor-extra-10":
+        cursor_extra_budget.validate(config, budget, provider)
+        return
     assert decision in ["D-3", "D-7"] and budget["decision"] == decision
     assert budget["maximum_per_provider"] == 1
     assert budget["owner_conversation"] == config["owner"] and config["head"]
@@ -314,7 +318,11 @@ def main():
                     fcntl.flock(budget_lock, fcntl.LOCK_EX)
                     budget = json.loads(ledger.read_text())
                     validate_allowance(config, budget, provider)
-                    budget[provider].update(sent_or_uncertain=1, model=model, head=config["head"],
+                    if config["mode"] == "cursor-extra-10":
+                        cursor_extra_budget.record_reservation(config, budget, model, params["sessionId"])
+                    else:
+                        budget[provider]["sent_or_uncertain"] = 1
+                    budget[provider].update(model=model, head=config["head"],
                                              auth_route="inherited-provider-bootstrap", status="reserved_before_delivery",
                                              session_id=params["sessionId"], synthetic_cwd=config["work"])
                     temporary = ledger.with_suffix(".pending")
@@ -323,7 +331,8 @@ def main():
                         output.flush()
                         os.fsync(output.fileno())
                     temporary.replace(ledger)
-                record("model_request_forwarded")
+                record("model_request_forwarded", ordinal=budget[provider]["sent_or_uncertain"],
+                       purpose=config["purpose"] if config["mode"] == "cursor-extra-10" else "single_authorized_probe")
             if "id" in value:
                 pending[str(value["id"])] = (method, params)
                 diagnostics.sent(value["id"], method)

@@ -132,7 +132,7 @@ class CursorBoundedRefreshTest final : public QObject {
 
     void realHistoryAndMcpReplacementWithoutRecall() {
         const auto mode = qEnvironmentVariable("KETPLUS_CURSOR_BOUNDED_REFRESH");
-        if (mode != "D-3" && mode != "D-7" && mode != "control")
+        if (mode != "D-3" && mode != "D-7" && mode != "cursor-extra-10" && mode != "control")
             QSKIP("Requires explicit quota authorization or a no-model control opt-in.");
 #ifndef Q_OS_UNIX
         QSKIP("This bounded owned-process observer requires Unix.");
@@ -187,6 +187,9 @@ class CursorBoundedRefreshTest final : public QObject {
                     {"work", work},
                     {"log", log},
                     {"mode", mode},
+                    {"purpose", qEnvironmentVariable("KETPLUS_CURSOR_TEST_PURPOSE")},
+                    {"authorization_reference",
+                     qEnvironmentVariable("KETPLUS_CURSOR_EXTRA_REFERENCE")},
                     {"approval_log", proposal.isEmpty() ? QString{} : proposal + "/events.jsonl"},
                     {"attestation", attested},
                     {"approved_session", approvedSession},

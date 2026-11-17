@@ -188,6 +188,9 @@ send({id:1,method:'initialize',params:{protocolVersion:'2024-11-05'}});
     def test_extra_cursor_decision_preserves_consumed_parent_and_cannot_be_reused(self):
         self.mock_allowance("cursor", "D-7")
 
+    def test_ten_extra_prompts_reserve_before_forward_and_eleventh_is_denied(self):
+        self.mock_allowance("cursor", "cursor-extra-10")
+
     def test_extra_cursor_decision_rejects_wrong_scope_or_changed_parent(self):
         spec = importlib.util.spec_from_file_location("bounded", HERE / "adapter-bounded-fixture.py")
         bounded = importlib.util.module_from_spec(spec)
@@ -224,11 +227,14 @@ send({id:1,method:'initialize',params:{protocolVersion:'2024-11-05'}});
             root = pathlib.Path(temporary)
             provider = root / "fake-provider"
             provider.write_text("#!" + sys.executable + "\nPROVIDER=" + repr(provider_name) + "\nLEDGER=" + repr(str(root / "mock-budget.json")) + "\n" + '''import sys,json
+forwarded=0
 for line in sys.stdin:
  r=json.loads(line)
  if r["method"]=="session/prompt" and r["params"]["prompt"]==[{"type":"text","text":"/model --session auto"}]:
   print(json.dumps({"jsonrpc":"2.0","method":"session/update","params":{"update":{"sessionUpdate":"config_option_update","configOptions":[]}}}),flush=True)
- elif r["method"]=="session/prompt": assert json.loads(open(LEDGER).read())[PROVIDER]["sent_or_uncertain"]==1
+ elif r["method"]=="session/prompt":
+  forwarded+=1
+  assert json.loads(open(LEDGER).read())[PROVIDER]["sent_or_uncertain"]==forwarded
  value={"configOptions":[{"id":"model","currentValue":"claude-haiku-5-5"}]} if r["method"]=="session/set_config_option" else {"stopReason":"end_turn"}
  print(json.dumps({"jsonrpc":"2.0","id":r["id"],"result":value}),flush=True)
 ''')
@@ -237,20 +243,35 @@ for line in sys.stdin:
             budget = dict(decision=decision, maximum_per_provider=1, owner_conversation=1,
                           recall_allowed=False, retry_allowed=False,
                           copilot_auto_decision="D-6", **{provider_name: dict(sent_or_uncertain=0)})
-            if decision == "D-7":
+            parents = {}
+            if decision in ["D-7", "cursor-extra-10"]:
                 parent = root / "consumed-d3.json"
                 parent_bytes = json.dumps(dict(decision="D-3", owner_conversation=1,
                     **{name: dict(sent_or_uncertain=1) for name in ["codex", "cursor", "copilot"]})).encode()
                 parent.write_bytes(parent_bytes)
+                parents[parent] = parent_bytes
                 budget.update(allowed_providers=["cursor"], maximum_total=1, previous_ledger=str(parent),
                               previous_ledger_sha256=hashlib.sha256(parent_bytes).hexdigest())
+            if decision == "cursor-extra-10":
+                d7 = root / "consumed-d7.json"
+                d7.write_text(json.dumps(dict(decision="D-7", owner_conversation=1, cursor=dict(sent_or_uncertain=1),
+                                             previous_ledger_sha256=hashlib.sha256(parent_bytes).hexdigest())))
+                parents[d7] = d7.read_bytes()
+                budget.pop("decision")  # Direct user instruction, not a new decision answer.
+                budget.update(scope="cursor-extra-10", maximum_total=10, maximum_per_provider=10,
+                              allowed_providers=["cursor"], recall_allowed=True, invocations=[],
+                              authorization=dict(kind="direct_user_instruction", reference="mock criterion",
+                                  conversation=1, date="mock-date", quote="synthetic grant", relay="mock-relay"),
+                              parent_ledgers=[dict(decision=name, path=str(path), sha256=hashlib.sha256(content).hexdigest())
+                                              for name, (path, content) in zip(["D-3", "D-7"], parents.items())])
             ledger.write_text(json.dumps(budget))
             log = root / "events.jsonl"
             log.write_text(json.dumps(dict(event="tools_list", epoch="one", pid=0)) + "\n")
             config = root / "launch.json"
             config.write_text(json.dumps(dict(executable=str(provider), work=str(root), log=str(log),
                                              mode=decision, ledger=str(ledger), head="mock-no-provider", owner=1,
-                                             provider=provider_name)))
+                                             provider=provider_name, purpose="canonical_failure_diagnostic",
+                                             authorization_reference="mock criterion")))
             process = subprocess.Popen([sys.executable, "-B", str(HERE / "adapter-bounded-fixture.py"),
                                         str(config), "acp"], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                        stderr=subprocess.DEVNULL, text=True)
@@ -265,17 +286,23 @@ for line in sys.stdin:
                 self.assertEqual(receive()["id"], 1)
                 marker = "T3_BOUNDED_COPILOT_ALPHA" if provider_name == "copilot" else "T3_BOUNDED_CURSOR_ALPHA"
                 prompt = dict(sessionId="mock-session", prompt=[dict(type="text", text=marker)])
-                send(2, "session/prompt", prompt)
-                self.assertEqual(receive()["id"], 2)
-                self.assertEqual(json.loads(ledger.read_text())[provider_name]["sent_or_uncertain"], 1)
+                maximum = 10 if decision == "cursor-extra-10" else 1
+                for ordinal in range(1, maximum + 1):
+                    send(ordinal + 1, "session/prompt", prompt)
+                    self.assertEqual(receive()["id"], ordinal + 1)
+                    self.assertEqual(json.loads(ledger.read_text())[provider_name]["sent_or_uncertain"], ordinal)
                 self.assertEqual(stat.S_IMODE(ledger.stat().st_mode), 0o600)
-                send(3, "session/prompt", prompt)
+                send(maximum + 2, "session/prompt", prompt)
                 process.wait(timeout=5)
                 events = [json.loads(line) for line in log.read_text().splitlines()]
-                self.assertEqual(sum(row["event"] == "model_request_forwarded" for row in events), 1)
+                self.assertEqual(sum(row["event"] == "model_request_forwarded" for row in events), maximum)
                 self.assertTrue(any(row["event"] == "provider_exit" and row["child_exited"] for row in events))
-                if decision == "D-7":
-                    self.assertEqual(parent.read_bytes(), parent_bytes)
+                for path, original in parents.items():
+                    self.assertEqual(path.read_bytes(), original)
+                if decision == "cursor-extra-10":
+                    journal = json.loads(ledger.read_text())["invocations"]
+                    self.assertEqual([row["ordinal"] for row in journal], list(range(1, 11)))
+                    self.assertTrue(all(row["status"] == "reserved_before_delivery" for row in journal))
             finally:
                 if process.poll() is None:
                     process.terminate()

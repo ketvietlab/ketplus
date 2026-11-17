@@ -910,6 +910,29 @@ wrong scope/owner/decision, recall/retry, and reused allowances. The same
 control/attestation, cheap named model, text-only, no-tools and history-refresh
 barriers apply; no production mutation is enabled by this additional probe.
 
+A later direct user instruction authorizes a separate **ten-prompt Cursor**
+budget. Use `KETPLUS_CURSOR_BOUNDED_REFRESH=cursor-extra-10`, the existing private
+ledger/owner/head variables, `KETPLUS_CURSOR_EXTRA_REFERENCE` matching its audit
+reference, and an explicit `KETPLUS_CURSOR_TEST_PURPOSE` (initially
+`canonical_failure_diagnostic`). This is a direct instruction, not a fabricated
+decision answer. The ledger has `scope: "cursor-extra-10"`, Cursor-only scope,
+total/per-provider maxima of ten, `authorization` metadata and two `parent_ledgers`
+entries binding the unchanged consumed D-3 and D-7 files by SHA-256. Parent owners,
+consumed counters and the D-7-to-D-3 hash chain must match. Private authorization
+metadata stays out of source and prompt text.
+
+The `invocations` journal records each reserved ordinal, purpose, source head and
+model. Counter/journal mismatch, altered parents, broadened scope, reused ordinals
+or an eleventh prompt are rejected. Atomic reservation remains before forwarding;
+an error or ambiguous timeout consumes the ordinal. The owner chooses each next
+verification step explicitly and stops once sufficient evidence is obtained;
+there is no automatic retry loop. The current fixture still forwards only its
+first prompt and intercepts the replacement prompt after real same-ID load.
+Any later follow-up/recall that is explicitly added must also consume an ordinal.
+Quota-free tests include `python3 -B tests/providers/cursor/extra-budget-test.py`
+and the integrated ten-fake-prompt/eleventh-refused proposal case. These tests
+cannot authorize a live provider run by themselves.
+
 These probes keep official inherited provider authentication, create a new
 synthetic session and empty temporary cwd, and never scan existing history.
 They pin cheap named models and check control/MCP before delivery. Cursor's

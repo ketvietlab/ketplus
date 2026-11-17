@@ -889,3 +889,31 @@ proves the adapter's conditional refusal path without weakening it. It still
 does not establish which payload occurred in D-7. A bounded read of the existing
 scoped worker log finds no entry associated with that owned synthetic ID, so it
 cannot supply the missing canonical reason. No further native prompt is sent.
+
+### Separate ten-prompt Cursor validation budget
+
+The user subsequently supplies a direct additional allowance of at most ten
+Cursor prompts. This does not reset the exhausted D-3 or D-7 ledgers. Its
+private audit record retains the original instruction reference as
+`direct_user_instruction`, without inventing a new decision answer. The new
+Cursor-only ledger binds both consumed parents and their existing hash chain;
+only the assigned owner may reserve each new invocation. A monotonically
+numbered journal records purpose, source head and model in a durable atomic
+reservation before forwarding. Ambiguous delivery stays consumed. No Codex/Copilot allowance,
+auth/configuration/approval change or production mutation enable is added.
+
+The initial additional probe has one purpose: capture the bounded canonical
+failure classification missing from the D-7 artifact, using the same explicit
+Haiku low model and approved synthetic launch identity. No-model readiness
+control precedes delivery. Failure stops for metadata classification rather
+than triggering consecutive retries. Completion permits the existing same-ID
+load/refresh verification with its replacement prompt intercepted. Any future
+authorized follow-up must be counted separately, and validation stops before
+the maximum if the required evidence is already sufficient.
+
+Preparation checks pass without a native model request: four additional-budget
+unit cases, nine proposal/adapter fixture cases and ten attestation regressions.
+The focused Cursor test target rebuilds, and its default CTest invocation passes
+the classifier while skipping the opt-in native case. Live results must be
+recorded separately; these preparation checks do not consume or attest a model
+turn.
