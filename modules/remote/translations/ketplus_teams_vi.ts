@@ -682,6 +682,18 @@ Lane nào cũng được: %2</translation>
             <translation>Mọi thứ chạy trên một provider. Provider thứ hai cho review độc lập hơn.</translation>
         </message>
         <message>
+            <source>Filter by repository name/path or conversation title (%1)</source>
+            <translation>Lọc theo tên/đường dẫn kho mã hoặc tiêu đề hội thoại (%1)</translation>
+        </message>
+        <message>
+            <source>Filter repos / conversations</source>
+            <translation>Lọc kho mã / hội thoại</translation>
+        </message>
+        <message>
+            <source>Filter repositories and conversations</source>
+            <translation>Lọc kho mã và hội thoại</translation>
+        </message>
+        <message>
             <source>findings</source>
             <translation>có lỗi</translation>
         </message>
@@ -928,6 +940,10 @@ Lane nào cũng được: %2</translation>
         <message>
             <source>No lane yet</source>
             <translation>Chưa có lane</translation>
+        </message>
+        <message>
+            <source>No matching repositories or conversations</source>
+            <translation>Không có kho mã hoặc hội thoại phù hợp</translation>
         </message>
         <message>
             <source>No task is %1.</source>

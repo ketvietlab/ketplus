@@ -68,6 +68,8 @@ add_library(ketplus_desktop_support STATIC
     src/workspace/SidebarControls.h
     src/workspace/ActivityBar.h
     src/workspace/SymbolIcons.h
+    src/workspace/SidebarRepositoryListFilter.cpp
+    src/workspace/SidebarFilterText.h
     src/workspace/SidebarRepositoryList.cpp
     src/workspace/SidebarRepositoryList.h
     src/workspace/SidebarRepositoryListDetail.h

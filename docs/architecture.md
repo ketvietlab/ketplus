@@ -458,7 +458,16 @@ composition. It does not render a worktree rail; the execution picker owns
 checkout selection, and worktrees are created for a conversation (ADR 0111). The native shell retains
 its multi-repository grouping.
 
-Pro Quick search wraps the kit CommandPalette in a transparent native popup so it
+The native sidebar's kit text field filters the existing repository/conversation tree in place.
+It compares repository names/paths and conversation titles case-insensitively, without searching
+transcripts or requesting a search API. Repository matches retain the whole group; title matches
+retain their repository/team ancestors. The tree materializes matching history rows using its
+existing per-group diff; unmatched hidden history stays unbuilt. Filtering changes presentation,
+not projections, selection,
+pins, ordering or saved folds. The query is temporary window state and survives model updates.
+Ctrl+Alt+K (Cmd+Option+K on macOS) focuses it; Ctrl+K remains an editor chord prefix.
+
+Global Spotlight (Ctrl+P, Cmd+P on macOS) wraps the kit CommandPalette in a transparent native popup so it
 stays above the embedded QQuickView. Product filtering retains ranked name/path
 matches and Atlas IDs; unavailable entries cannot activate and produce an explicit
 empty-state explanation when they are the only matches. Context menus use kit

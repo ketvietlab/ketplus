@@ -7,6 +7,7 @@
 #include "workspace/SidebarRepositoryList.h"
 #include "workspace/SidebarRepositoryListDetail.h"
 
+#include <QLabel>
 #include <QMenu>
 #include <QPushButton>
 #include <QSizePolicy>
@@ -42,7 +43,6 @@ QSet<QString> previewedConversationIds(const QVariantList& conversations, const 
 
 } // namespace sidebar_list
 
-using sidebar_list::previewedConversationIds;
 using sidebar_list::runningAgentSender;
 
 QStringList SidebarRepositoryList::groupStructure(const SidebarRepository& repository) const {
@@ -63,8 +63,7 @@ QStringList SidebarRepositoryList::groupStructure(const SidebarRepository& repos
         }
     }
     // Only the rows that are built: a title further down the history changes nothing shown.
-    const QSet<QString> preview =
-        previewedConversationIds(repository.conversations, showAllPaths_.contains(repository.path));
+    const QSet<QString> preview = listedConversationIds(repository);
     structure << QStringLiteral("more:%1").arg(repository.conversations.size() >
                                                sidebar_list::kPreviewConversationCount);
     for (const QVariant& value : repository.conversations) {
@@ -133,8 +132,7 @@ QWidget* SidebarRepositoryList::createGroup(const SidebarRepository& repository)
                 [this, path = repository.path] { emit newConversationRequested(path); });
         held->addPart(section);
     }
-    const QSet<QString> preview =
-        previewedConversationIds(repository.conversations, showAllPaths_.contains(repository.path));
+    const QSet<QString> preview = listedConversationIds(repository);
     for (const QVariant& value : repository.conversations) {
         const QVariantMap conversation = value.toMap();
         if (!preview.contains(conversation.value(QStringLiteral("id")).toString()))
@@ -230,6 +228,7 @@ void SidebarRepositoryList::presentGroups(const QVector<SidebarRepository>& repo
         // flickered. Show it now, before updates are enabled again.
         group->show();
     }
+    layout_->addWidget(filterEmpty_);
     orderFocusChain();
     built_ = true;
     updateRows(repositories);
