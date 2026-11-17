@@ -154,8 +154,11 @@ class TeamFindingRoutingTest final : public QObject {
         receipts.retain(scope, task, *proof.evidence);
         QVERIFY(receipts.lookup(scope, task, proof.evidence->id));
         ++task.changedRevision;
-        QVERIFY(!receipts.lookup(scope, task, proof.evidence->id));
+        QVERIFY(receipts.lookup(scope, task, proof.evidence->id));
         --task.changedRevision;
+        task.reviewFindings->findings[0].evidence += " changed";
+        QVERIFY(!receipts.lookup(scope, task, proof.evidence->id));
+        task.reviewFindings->findings[0].evidence.chop(8);
         for (const QString& severity : {"p0", "p1", "unknown"}) {
             task.reviewFindings->findings[0].severity = severity;
             QVERIFY(!teams::RoutingEvidence::produce(scope, task, head).evidence);
