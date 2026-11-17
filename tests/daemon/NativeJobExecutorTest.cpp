@@ -367,7 +367,13 @@ class NativeJobExecutorTest final : public QObject {
         executor.execute(command);
         const auto again = executor.receive("running").value("root_identity").toObject();
         QCOMPARE(again, first);
-        QCOMPARE(executor.receive("done").value("state"), "completed");
+        const auto done = executor.receive("done");
+        if (done.value("state") != "completed")
+            qWarning().noquote()
+                << "Reconnect completion receipt:"
+                << QJsonDocument(done).toJson(QJsonDocument::Compact) << "Persisted receipt:"
+                << QJsonDocument(executor.receipt()).toJson(QJsonDocument::Compact);
+        QCOMPARE(done.value("state"), "completed");
     }
 
     void timeoutReclaimsKnownChildrenBeforeReporting() {
