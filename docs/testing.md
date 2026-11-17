@@ -944,6 +944,21 @@ Load diagnostics distinguish an optional response echo from the requested load
 identity: `echo_present=false` has `echo_matches_requested=null`. A successful
 ACP load may return an empty object; an absent echo is not an identity mismatch.
 
+The separate inventory continuation uses purpose `injected_epoch_inventory`,
+`KETPLUS_CURSOR_INVENTORY_ORIGIN=extra-ordinal-2` and
+`KETPLUS_CURSOR_ORIGIN_SUMMARY` pointing to the private ordinal-two summary.
+It accepts only the extra ledger with two consumed invocations, the matching
+owner/cwd and the completed second invocation's original ID. Its summary hash,
+completed-history outcome and confirmed cleanup must match. Composer non-fast,
+attestation and no-tool gates remain required. This is separate from the old
+D-3-only `READ_OWN_HISTORY` control; changing its purpose label is not a shortcut.
+The wrapper rejects `session/new`, wrong IDs, failed loads, mismatched echoes,
+absent/wrong-session history and duplicate prompts before reservation. Control
+mode consumes nothing; live mode can reserve ordinal three exactly once. The
+inventory path stops after that one prompt and requires inventory attributed to
+its fresh injected worker before reporting success. Run the quota-free boundary
+fixture with `python3 -B tests/providers/cursor/inventory-origin-test.py`.
+
 These probes keep official inherited provider authentication, create a new
 synthetic session and empty temporary cwd, and never scan existing history.
 The native observer can record `assistant_refusal_rule` with only an allowlisted

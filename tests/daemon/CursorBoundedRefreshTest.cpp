@@ -146,6 +146,10 @@ class CursorBoundedRefreshTest final : public QObject {
         const auto root = QFileInfo(directory.path()).canonicalFilePath();
         const auto proposal = qEnvironmentVariable("KETPLUS_CURSOR_APPROVED_PROPOSAL");
         const bool attested = qEnvironmentVariable("KETPLUS_CURSOR_ATTESTED_PROBE") == "1";
+        const auto purpose = qEnvironmentVariable("KETPLUS_CURSOR_TEST_PURPOSE");
+        const auto inventoryOrigin = qEnvironmentVariable("KETPLUS_CURSOR_INVENTORY_ORIGIN");
+        QVERIFY(inventoryOrigin.isEmpty() || inventoryOrigin == "extra-ordinal-2");
+        const bool inventoryProbe = !inventoryOrigin.isEmpty();
         const auto model =
             qEnvironmentVariable("KETPLUS_CURSOR_TEST_MODEL", "claude-haiku-5-5-low");
         QVERIFY(model == "claude-haiku-5-5-low" || model == "composer-2.5");
@@ -163,6 +167,31 @@ class CursorBoundedRefreshTest final : public QObject {
         const auto work =
             proposal.isEmpty() ? root + "/work" : approvedSession.value("cwd").toString();
         QString ownHistory;
+        if (inventoryProbe) {
+            QVERIFY(attested && (mode == "control" || mode == "cursor-extra-10"));
+            QCOMPARE(model, "composer-2.5");
+            QCOMPARE(purpose, "injected_epoch_inventory");
+            QVERIFY(qEnvironmentVariable("KETPLUS_CURSOR_READ_OWN_HISTORY").isEmpty());
+            QFile ledger(qEnvironmentVariable("KETPLUS_BOUNDED_TEST_LEDGER"));
+            QVERIFY(ledger.open(QIODevice::ReadOnly));
+            const auto budget = QJsonDocument::fromJson(ledger.readAll()).object();
+            const int owner = qEnvironmentVariableIntValue("KETPLUS_BOUNDED_TEST_OWNER");
+            QVERIFY(owner > 0);
+            QCOMPARE(budget.value("owner_conversation").toInt(), owner);
+            QCOMPARE(budget.value("scope").toString(), "cursor-extra-10");
+            const auto cursor = budget.value("cursor").toObject();
+            QCOMPARE(cursor.value("sent_or_uncertain").toInt(), 2);
+            QCOMPARE(cursor.value("synthetic_cwd").toString(), work);
+            const auto invocations = budget.value("invocations").toArray();
+            QCOMPARE(invocations.size(), 2);
+            const auto origin = invocations.at(1).toObject();
+            QCOMPARE(origin.value("ordinal").toInt(), 2);
+            QCOMPARE(origin.value("purpose").toString(), "completed_history_refresh");
+            QCOMPARE(origin.value("status").toString(), "completed_with_history_replay");
+            ownHistory = origin.value("session_id").toString();
+            QVERIFY(!ownHistory.isEmpty());
+            QCOMPARE(cursor.value("session_id").toString(), ownHistory);
+        }
         if (qEnvironmentVariable("KETPLUS_CURSOR_READ_OWN_HISTORY") == "1") {
             // An official read of only this probe's ID; never a model retry or
             // a scan of personal history. Control mode intercepts every prompt.
@@ -192,7 +221,9 @@ class CursorBoundedRefreshTest final : public QObject {
                     {"log", log},
                     {"mode", mode},
                     {"model", model},
-                    {"purpose", qEnvironmentVariable("KETPLUS_CURSOR_TEST_PURPOSE")},
+                    {"purpose", purpose},
+                    {"inventory_resume", inventoryProbe ? ownHistory : QString{}},
+                    {"origin_summary", qEnvironmentVariable("KETPLUS_CURSOR_ORIGIN_SUMMARY")},
                     {"authorization_reference",
                      qEnvironmentVariable("KETPLUS_CURSOR_EXTRA_REFERENCE")},
                     {"approval_log", proposal.isEmpty() ? QString{} : proposal + "/events.jsonl"},
@@ -287,6 +318,35 @@ class CursorBoundedRefreshTest final : public QObject {
             return;
         }
         QCOMPARE(forwarded, 1);
+        if (inventoryProbe) {
+            bool history = false;
+            for (const auto& row : events(log)) {
+                QVERIFY(row.value("event") != "provider_tool_call");
+                history |= row.value("event") == "history_marker" &&
+                           row.value("kind") == "agent_message_chunk";
+            }
+            QVERIFY(history);
+            QVERIFY(adapter.releaseSessionTransport("t3-bounded-owner"));
+            adapter.stop();
+            QTRY_VERIFY(exited(log));
+            QCOMPARE(nativeRequests, 0);
+            bool inventory = false;
+            for (const auto& row : events(log))
+                if (row.value("event") == "injected_attestation_final") {
+                    QCOMPARE(row.value("epoch").toString(), "one");
+                    QCOMPARE(row.value("injected_workers").toInt(), 1);
+                    QCOMPARE(row.value("rejected").toInt(), 0);
+                    QVERIFY(row.value("attested").toBool());
+                    QVERIFY(!row.value("ready").toBool());
+                    QVERIFY(!row.value("forbidden").toBool());
+                    QVERIFY(row.value("revoked").toBool());
+                    inventory |= row.value("inventory").toBool();
+                }
+            QVERIFY(inventory);
+            qInfo("Cursor owned ordinal-two history loaded before one inventory prompt; "
+                  "fresh injected inventory observed and owned transport exited.");
+            return;
+        }
         const auto second = call(adapter, setup("two", id));
         QVERIFY2(!second.contains("probe_error"),
                  qPrintable(second.value("probe_error").toString()));

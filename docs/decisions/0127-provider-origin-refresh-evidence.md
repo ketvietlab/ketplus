@@ -1033,3 +1033,32 @@ presence, so its specific echo shape is not inferred. Future diagnostics separat
 `echo_present` and nullable `echo_matches_requested`; quota-free cases cover
 absent, matching and mismatched echoes. The original native artifacts are kept
 unchanged, and no native request is repeated for this metadata correction.
+
+### Inventory continuation fixture with an explicit owned-history origin
+
+The next purpose, `injected_epoch_inventory`, has a separate continuation path;
+it does not widen the legacy D-3 read control or reuse the completion purpose.
+Before launching a worker, the wrapper validates the extra ledger, frozen parent
+hashes, assigned owner, cwd and second invocation's completed-history outcome.
+It binds the requested original session ID and summary bytes to that invocation.
+Only the known non-fast Composer choice and the existing attested launch identity
+are accepted. A new session or another ID is rejected, without a fallback.
+
+Successful loading alone is insufficient: the owned ID must replay the assistant
+marker before model/MCP readiness and the reservation barrier. An explicit failed
+load, conflicting ID echo, absent or wrong-session replay, and repeated prompt
+all block forwarding and reservation. The live continuation may reserve ordinal
+three once; its control consumes nothing. After one completion it closes the
+owned transport and requires inventory from the exact fresh injected worker,
+with revocation and no forbidden calls. It does not start another turn or refresh
+automatically. Eight quota-free cases cover the origin and summary bindings,
+once-only reservation, no-model control, failed load, missing/wrong replay and
+conflicting echo, using only a fake provider and mock observer. They cannot
+substitute for native inventory evidence or enable production mutation.
+
+Preparation validation passes without a native provider request: the eight new
+origin/wrapper cases, 12 proposal/model cases, 11 attestation/diagnostic cases and
+four budget cases. The focused C++ target rebuilds and its default classifier /
+native-skip CTest passes; AST, formatting and diff checks pass. A read-only check
+of the actual private ledger and bound ordinal-two summary also passes before
+any continuation worker is started.

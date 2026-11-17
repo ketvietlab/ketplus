@@ -30,7 +30,7 @@ def cursor_model(config):
     assert model in [MODEL, "composer-2.5"]
     if model == "composer-2.5":
         assert config["mode"] in ["control", "cursor-extra-10"]
-        assert config["purpose"] == "completed_history_refresh"
+        assert config["purpose"] in ["completed_history_refresh", "injected_epoch_inventory"]
     return model
 
 
@@ -116,6 +116,10 @@ def main():
     provider = config.get("provider", "cursor")
     copilot = provider == "copilot"
     model = "auto" if copilot else cursor_model(config)
+    inventory_id = None
+    if config.get("purpose") == "injected_epoch_inventory":
+        assert not copilot
+        inventory_id = cursor_extra_budget.inventory_origin(config, json.loads(pathlib.Path(config["ledger"]).read_text()))
     marker = "T3_BOUNDED_COPILOT_ALPHA" if copilot else MARKER
     if "acp" not in args and "--acp" not in args:
         os.execv(config["executable"], [config["executable"], *args])
@@ -172,6 +176,9 @@ def main():
     selected = False
     replaying = False
     replay_text = ""
+    inventory_loaded = False
+    inventory_history_seen = False
+    inventory_forwarded = False
     auto_control = threading.Event()
     auto_pending = False
     auto_text = ""
@@ -182,6 +189,7 @@ def main():
 
     def read():
         nonlocal selected, replaying, replay_text, auto_text, auto_success, auto_config_update
+        nonlocal inventory_loaded, inventory_history_seen
         for line in process.stdout:
             try:
                 value = json.loads(line)
@@ -224,16 +232,22 @@ def main():
                     selected, current = cheap_model_ack(model, value.get("result", {}).get("configOptions", []))
                     record("cheap_model_ack", accepted=selected, current=current)
                 if method == "session/load":
+                    if inventory_id:
+                        result = value.get("result", {})
+                        inventory_loaded = ("error" not in value and params.get("sessionId") == inventory_id and
+                                            ("sessionId" not in result or result["sessionId"] == inventory_id))
                     code = value.get("error", {}).get("code")
                     record("load_ack", success="error" not in value,
                            error_code=numeric(code),
                            **load_echo(value.get("result", {}), params.get("sessionId")))
                     replaying = False
-            if value.get("method") == "session/update" and replaying:
+            if (value.get("method") == "session/update" and replaying and
+                    (not inventory_id or value.get("params", {}).get("sessionId") == inventory_id)):
                 update = value.get("params", {}).get("update", {})
                 if update.get("sessionUpdate") == "agent_message_chunk":
                     replay_text = (replay_text + update.get("content", {}).get("text", ""))[-2 * len(marker):]
                 if marker in replay_text:
+                    inventory_history_seen = True
                     record("history_marker", kind=update.get("sessionUpdate"))
             emit(value)
 
@@ -267,6 +281,12 @@ def main():
             if method:
                 record("client_method", method=method)
             params = value.get("params", {})
+            if inventory_id and (method == "session/new" or
+                                 method == "session/load" and params.get("sessionId") != inventory_id):
+                record("inventory_origin_rejected")
+                emit(dict(jsonrpc="2.0", id=value["id"], error=dict(
+                    code=-32000, message="Inventory probe requires its owned completed session; no fallback.")))
+                continue
             if attestation and method in ["session/new", "session/load"]:
                 expected = config["approved_session"]
                 if params.get("cwd") != expected["cwd"] or params.get("mcpServers") != expected["mcpServers"]:
@@ -274,6 +294,12 @@ def main():
                         code=-32000, message="Approved injected launch tuple changed; no prompt sent.")))
                     continue
             if method == "session/prompt":
+                if inventory_id and (not inventory_loaded or not inventory_history_seen or
+                                     params.get("sessionId") != inventory_id or inventory_forwarded):
+                    record("inventory_prompt_rejected")
+                    emit(dict(jsonrpc="2.0", id=value["id"], error=dict(
+                        code=-32000, message="Inventory load/history/once-only barrier failed; no prompt sent.")))
+                    continue
                 # The adapter adds host context, so inspect only for our exact
                 # synthetic marker. The second prompt is never sent to a model.
                 valid = marker in json.dumps(params.get("prompt", []))
@@ -358,6 +384,7 @@ def main():
                         output.flush()
                         os.fsync(output.fileno())
                     temporary.replace(ledger)
+                inventory_forwarded = inventory_id is not None
                 record("model_request_forwarded", ordinal=budget[provider]["sent_or_uncertain"],
                        purpose=config["purpose"] if config["mode"] == "cursor-extra-10" else "single_authorized_probe")
             if "id" in value:

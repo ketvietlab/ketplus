@@ -43,8 +43,33 @@ def validate(config, budget, provider):
                for row in budget["invocations"])
 
 
+def inventory_origin(config, budget):
+    assert config["mode"] in ["control", "cursor-extra-10"]
+    validate(dict(config, mode="cursor-extra-10"), budget, "cursor")
+    assert config["purpose"] == "injected_epoch_inventory" and config["model"] == "composer-2.5"
+    assert config["attestation"] is True and budget["cursor"]["sent_or_uncertain"] == 2
+    origin = budget["invocations"][1]
+    assert origin["ordinal"] == 2 and origin["purpose"] == "completed_history_refresh"
+    assert origin["model"] == "composer-2.5" and origin["status"] == "completed_with_history_replay"
+    assert origin["history_verified"] is True and origin["cleanup_confirmed"] is True
+    session_id = origin["session_id"]
+    assert type(session_id) is str and session_id
+    assert config["inventory_resume"] == budget["cursor"]["session_id"] == session_id
+    assert config["work"] == budget["cursor"]["synthetic_cwd"]
+    content = pathlib.Path(config["origin_summary"]).read_bytes()
+    assert hashlib.sha256(content).hexdigest() == origin["summary_sha256"]
+    summary = json.loads(content)
+    assert summary["head"] == origin["head"] and summary["ordinal"] == summary["used"] == 2
+    assert summary["returncode"] == 0 and summary["forwarded"] == 1
+    assert summary["history_marker"] is True and summary["cleanup_confirmed"] is True
+    assert summary["canonical"][0] == dict(phase="adapter_turn", reason="completed")
+    return session_id
+
+
 def record_reservation(config, budget, model, session_id):
     validate(config, budget, "cursor")
+    if config["purpose"] == "injected_epoch_inventory":
+        assert model == "composer-2.5" and session_id == inventory_origin(config, budget)
     ordinal = budget["cursor"]["sent_or_uncertain"] + 1
     budget["cursor"].update(sent_or_uncertain=ordinal)
     budget["invocations"].append(dict(ordinal=ordinal, provider="cursor", purpose=config["purpose"],
