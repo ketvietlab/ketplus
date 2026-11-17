@@ -113,6 +113,13 @@ if(APPLE OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
     add_dependencies(ketplus_managed_task_ipc_tests ketplus_job_executor)
 endif()
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    ketplus_add_daemon_test(ketplus_linux_isolation_diagnostics_tests LinuxIsolationDiagnosticsTest.cpp)
+    target_sources(ketplus_linux_isolation_diagnostics_tests PRIVATE
+        ../../apps/daemon/src/runtime/executor/LinuxJobIsolation.cpp)
+    # Test-only syscall interception: no real namespaces/mounts/children are created.
+    foreach(call getuid getgid unshare open open64 write close mount fork)
+        target_link_options(ketplus_linux_isolation_diagnostics_tests PRIVATE "-Wl,--wrap=${call}")
+    endforeach()
     ketplus_add_daemon_test(ketplus_linux_job_executor_tests LinuxJobExecutorTest.cpp)
     target_compile_definitions(ketplus_linux_job_executor_tests PRIVATE
         KETPLUS_JOB_EXECUTOR_PATH="$<TARGET_FILE:ketplus_job_executor>")
