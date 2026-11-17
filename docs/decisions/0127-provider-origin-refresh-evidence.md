@@ -452,3 +452,74 @@ does not approve a server or change global settings. The official
 [Cursor MCP command reference](https://cursor.com/docs/cli/mcp) documents the
 `list-tools` route. No repeated empty-session load probes, provider-storage
 edits, user-history reads, or additional provider installations were used.
+
+### Reviewable Cursor discovery approval proposal
+
+This proposal has **not** been approved or executed. It authorizes no model
+prompt. The existing team ledger stays Codex 1/1, Cursor 0/1, Copilot 0/1.
+
+`tests/providers/cursor/discovery-proposal.py --prepare --root <new-private-root>`
+creates a review manifest, a project-scoped `.cursor/mcp.json`, an ACP
+`session-new.json`, and exact commands in `REVIEW.txt`. It never calls an approval
+API. The fixed fixture source checksum is recorded, and serving refuses a source
+change after review. Its unique server identity starts with
+`ketplus_t3_cursor_discovery_`; the prepared manifest supplies the complete name,
+canonical cwd, executable, args and empty environment. Do not approve the real
+`ketplus_agents` server, a wildcard or another server in its place.
+
+The sole exposed tool is **t3_probe_status**. It returns the constant
+`synthetic-ready`, accepts no input, and declares read-only/non-destructive/
+idempotent/closed-world annotations. It exposes no shell, file, URL, real daemon,
+credential, background mutation or cleanup operation. Project tool policy denies
+all MCP/native tool calls; discovery itself needs no tool-execution permission.
+Server audit records contain only method names and owned PIDs. An independent
+stdio self-test verifies the single-tool inventory, static result, rejection of
+`background_task_start`, private manifest permissions and matching CLI/ACP launch
+tuples; it does not launch a provider or approve a connection.
+
+The supported [configuration override](https://cursor.com/docs/cli/reference/configuration)
+`CURSOR_CONFIG_DIR` is kept separate from inherited HOME/auth. Installed CLI
+2026.11.11-043ef28 also resolves project MCP approval state through its data root
+(`CURSOR_DATA_DIR`), rather than the config root. This data-root behavior and the
+approval-key binding to canonical workspace/server definition were checked in
+the distributed CLI implementation; they are version-specific observations,
+not an undocumented approval-file API for us to write. With **both** roots set
+to private proposal directories, official `agent status` still reports
+authenticated. The no-model `mcp list-tools` control returns the expected
+unapproved-server error, launches no fixture, and creates no approval entry.
+
+After the user reviews the manifest and approves the exact operation, the
+official [MCP commands](https://cursor.com/docs/cli/mcp) are:
+
+```sh
+cd "$fixture_root/work"
+# Confirm the reviewed installed version before executing an approval.
+agent --version
+CURSOR_CONFIG_DIR="$fixture_root/config" CURSOR_DATA_DIR="$fixture_root/data" \
+  agent mcp enable "$exact_server_identity"
+CURSOR_CONFIG_DIR="$fixture_root/config" CURSOR_DATA_DIR="$fixture_root/data" \
+  agent mcp list-tools "$exact_server_identity"
+# Revoke loading through the official CLI:
+CURSOR_CONFIG_DIR="$fixture_root/config" CURSOR_DATA_DIR="$fixture_root/data" \
+  agent mcp disable "$exact_server_identity"
+```
+
+`enable` persists a workspace/server-specific approval in the isolated data
+root's project state, not for one session. The expected location is
+`<data>/projects/<workspace-key>/mcp-approvals.json`; the actual write boundary
+remains to be checked after user approval. `disable` prevents loading but need
+not erase the old approval entry. After owned processes exit, deleting only the
+entire proposal root removes its definition and isolated approval/disabled state.
+No default user setting, personal approval entry or authentication store is
+edited. Do not use `--approve-mcps`, `--trust`, global tool allowlists or manual
+approval-hash insertion as a substitute.
+
+CLI project discovery and ACP request injection are **separate controls**. The
+prepared ACP payload uses the identical canonical cwd, name, command, args and
+empty env as the project fixture; it does not assume that matching declarations
+transfer approval or force eager discovery. After approved CLI discovery, test
+only initialize/new with that ACP payload, and then the actual adapter's
+intercepted-prompt control. If the provider still defers `tools/list`, stop and
+report the unresolved boundary. A passing CLI control alone cannot enable
+Cursor mutation or release a model prompt. The existing pre-model fence stays
+in place throughout this proposal.

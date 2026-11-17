@@ -907,6 +907,20 @@ response. History replay and MCP readiness come from the actual provider,
 not that synthetic cancellation response. Both tests observe owned-process
 cleanup; neither asks a model to recall history.
 
+The Cursor discovery-approval proposal is separate from those model probes:
+
+```sh
+python3 -B tests/providers/cursor/discovery-proposal-test.py
+python3 -B tests/providers/cursor/discovery-proposal.py --prepare --root /path/to/new-private-directory
+```
+
+The two quota-free tests use Python fixtures only. They verify the static
+single-tool inventory, rejected mutation, matching project/ACP launch tuples,
+private ledger writes before forwarding and refusal to reuse a mock allowance.
+Preparation starts no provider and executes no approval. Review its manifest,
+checksum and `REVIEW.txt` before seeking the user's approval for the exact
+native enable command. See the [proposal scope and revocation](decisions/0127-provider-origin-refresh-evidence.md#reviewable-cursor-discovery-approval-proposal).
+
 The earlier empty-session controls are retained for reference, not a loop to
 repeat when their hypotheses and errors have not changed:
 

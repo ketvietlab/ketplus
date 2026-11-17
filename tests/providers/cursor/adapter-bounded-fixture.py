@@ -136,7 +136,7 @@ def main():
                     budget["cursor"].update(sent_or_uncertain=1, model=MODEL, head=config["head"],
                                              auth_route="inherited-provider-bootstrap", status="reserved_before_delivery")
                     temporary = ledger.with_suffix(".pending")
-                    with temporary.open("w", opener=lambda path, flags: os.open(path, flags, 0o600)) as output:
+                    with open(temporary, "w", opener=lambda path, flags: os.open(path, flags, 0o600)) as output:
                         json.dump(budget, output, indent=2)
                         output.flush()
                         os.fsync(output.fileno())
