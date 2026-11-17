@@ -917,3 +917,24 @@ The focused Cursor test target rebuilds, and its default CTest invocation passes
 the classifier while skipping the opt-in native case. Live results must be
 recorded separately; these preparation checks do not consume or attest a model
 turn.
+
+The first additional run at source head
+`047c4da369ab87300fc892ffc67f3b651d55aa2a` consumes **1/10**. Its preceding
+no-model control passes with zero forwarded prompts and confirmed owned-process
+cleanup. The live adapter accepts the same explicit Haiku low model and sends
+one synthetic text prompt. The injected instance supplies inventory. Native
+prompt RPC returns a response without a numeric error, but the canonical adapter
+reports `adapter_runtime: plan_limit_pattern`, followed by
+`adapter_turn: failed`. Thus this artifact identifies the plan-wording refusal
+path that an RPC success alone could not distinguish. It does not establish the
+account's exact entitlement, the affected set of models, or the cause of the
+earlier D-7 run.
+
+The run stops after that failure: no consecutive retry, history load, recall or
+second prompt is attempted. All recorded owned processes exit. The private
+ordinal retains the outcome and summary hash; both consumed parent ledger hashes
+remain unchanged. Nine additional Cursor prompts remain unspent. Completed
+history and same-ID refresh remain unverified for Cursor, and its production
+mutation gate remains denied. The next verification must address the classified
+refusal before another deliberate model request; fresh login, broader approval
+or an automatic model fallback is not implied by this result.
