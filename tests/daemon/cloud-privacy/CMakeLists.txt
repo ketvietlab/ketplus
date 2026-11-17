@@ -23,7 +23,7 @@ add_library(r03_privacy_core STATIC MemoryCredentials.cpp ${KETPLUS_DAEMON_CORE_
   "${REPO}/modules/remote/src/TeamLanguage.cpp"
   "${REPO}/modules/remote/src/TranscriptVisibility.cpp"
   "${REPO}/modules/remote/src/Schedule.cpp"
-  "${REPO}/modules/remote/src/cloud/CloudCrypto.cpp" "${REPO}/modules/remote/src/cloud/BrowserSignIn.cpp"
+  "${REPO}/modules/remote/src/cloud/CloudCrypto.cpp" "${REPO}/modules/remote/src/cloud/CryptoPrimitives.cpp" "${REPO}/modules/remote/src/cloud/BrowserSignIn.cpp"
   "${REPO}/modules/computer/src/ComputerAgentInstructions.cpp"
   "${REPO}/modules/computer/src/ComputerToolLaunch.cpp"
   "${REPO}/modules/remote/src/DaemonCredentialFile.cpp"
