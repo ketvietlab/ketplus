@@ -893,9 +893,16 @@ The script does not install dependencies or modify sysctls, mount permissions or
 AppArmor policy. A skipped opt-in suite is not Linux executor acceptance.
 
 Review regressions cover a successful descendant waking its parked managed child
-both with free slots and with its root's four slots occupied. The macOS executor
-test captures an audit-token signal target, makes the process exec a new image
-while retaining PID/birth, and verifies that sending the old target does not
+both with free slots and with its root's four slots occupied. A regression
+fixture also gates the fake provider's first start reply: a provider-side log entry
+does not prove the host has received the turn ID. The descendant test waits for
+that observed ID before injecting its completion, including the gated-start row;
+the process and parent completion assertions keep their original time limits.
+Failures print the parent/leaf and child-session state, while the native executor
+reconnect case prints its completion and persisted receipts when it fails. These
+diagnostics do not classify cleanup uncertainty as successful completion.
+The macOS executor test captures an audit-token signal target, makes the process
+exec a new image while retaining PID/birth, and verifies that sending the old target does not
 signal the new incarnation. Linux's stalled-manager fixture uses an independent
 POSIX Unix-socket listener that accepts DBus connections without answering auth:
 admission times out after six seconds while a timer keeps advancing and another

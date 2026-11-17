@@ -376,16 +376,34 @@ class ManagedTaskHostTest final : public QObject {
 
     void successfulDescendantResumesParkedChild_data() {
         QTest::addColumn<int>("fillers");
-        QTest::newRow("available-slots") << 0;
-        QTest::newRow("root-quota-pressure") << 3;
+        QTest::addColumn<bool>("deferProviderStart");
+        QTest::newRow("available-slots") << 0 << false;
+        QTest::newRow("root-quota-pressure") << 3 << false;
+        QTest::newRow("deferred-provider-start") << 0 << true;
     }
 
     void successfulDescendantResumesParkedChild() {
         QFETCH(int, fillers);
+        QFETCH(bool, deferProviderStart);
         QTemporaryDir directory;
         const auto cwd = QFileInfo(directory.path()).canonicalFilePath();
         const auto log = directory.filePath("provider.log");
         QVERIFY(writeFakeCodex(directory.filePath("fake-codex"), log));
+        const auto startRelease = directory.filePath("fake-codex.release");
+        if (deferProviderStart) {
+            QFile script(directory.filePath("fake-codex"));
+            QVERIFY(script.open(QIODevice::ReadWrite));
+            auto source = script.readAll();
+            const QByteArray marker("        log('turn:' + thread_id)\n");
+            QCOMPARE(source.count(marker), 1);
+            source.replace(marker,
+                           marker + "        if text == 'hang':\n"
+                                    "            while not os.path.exists(__file__ + '.release'):\n"
+                                    "                time.sleep(0.005)\n");
+            QVERIFY(script.resize(0));
+            QVERIFY(script.seek(0));
+            QCOMPARE(script.write(source), source.size());
+        }
         LocalJournal journal(directory.filePath("journal.sqlite"));
         QVERIFY(seed(journal, cwd));
         CodexAdapter adapter(directory.filePath("fake-codex"));
@@ -420,12 +438,39 @@ class ManagedTaskHostTest final : public QObject {
                                         process(cwd, {"/usr/bin/printf", "child result"}), child);
         const auto leaf = descendant.value("task").toObject().value("task_id").toString();
         QVERIFY2(!leaf.isEmpty(), qPrintable(QJsonDocument(descendant).toJson()));
+        const auto failureDiagnostics = qScopeGuard([&] {
+            if (!QTest::currentTestFailed())
+                return;
+            QJsonArray sessions;
+            for (const auto& session : journal.sessions())
+                sessions.append(QJsonObject{{"id", session.id},
+                                            {"state", session.state},
+                                            {"turn_id", session.turnId},
+                                            {"turn_sequence", session.currentTurnSequence},
+                                            {"awaiting_reply", session.awaitingReply}});
+            qWarning().noquote() << "Descendant completion diagnostics:"
+                                 << QJsonDocument(QJsonObject{{"parent", task(host, id)},
+                                                              {"leaf", task(host, leaf, child)},
+                                                              {"sessions", sessions},
+                                                              {"provider_turns", turns(log)}})
+                                        .toJson(QJsonDocument::Compact);
+        });
         if (fillers == 3)
             QCOMPARE(task(host, leaf, child).value("state"), "queued");
-        StoredSession active;
-        for (const auto& session : journal.sessions())
-            if (session.id == child)
-                active = session;
+        if (deferProviderStart) {
+            QFile release(startRelease);
+            QVERIFY(release.open(QIODevice::WriteOnly));
+        }
+        const auto activeChild = [&] {
+            for (const auto& session : journal.sessions())
+                if (session.id == child)
+                    return session;
+            return StoredSession{};
+        };
+        // The fixture logs the request before replying to turn/start. A log line
+        // does not prove the host has received the turn ID we are completing.
+        QTRY_VERIFY_WITH_TIMEOUT(!activeChild().turnId.isEmpty(), 6000);
+        const auto active = activeChild();
         emit adapter.notificationReceived(
             "turn/completed",
             {{"threadId", active.threadId},
