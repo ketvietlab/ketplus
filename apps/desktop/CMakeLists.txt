@@ -704,6 +704,7 @@ qt6_deploy_runtime_dependencies(
     NO_TRANSLATIONS
     DEPLOY_TOOL_OPTIONS
         \"-executable=KetPlus.app/Contents/Helpers/ketplus_daemon\"
+        \"-executable=KetPlus.app/Contents/Helpers/ketplus_job_executor\"
 )
 set(KETPLUS_APP_BUNDLE \"\${QT_DEPLOY_PREFIX}/KetPlus.app\")
 include(\"${PROJECT_SOURCE_DIR}/packaging/macos/SignDeployedFrameworks.cmake\")"
