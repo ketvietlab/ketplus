@@ -55,15 +55,20 @@ def worker(log):
             if request is None:
                 continue
             method = message.get("method")
+            record(log, "mcp_method", method=method, epoch=epoch)
             if method == "initialize":
-                result = dict(protocolVersion="2024-11-05", capabilities=dict(tools={}),
+                result = dict(protocolVersion=message.get("params", {}).get("protocolVersion", "2024-11-05"), capabilities=dict(tools={}),
                               serverInfo=dict(name="t3-bounded", version=epoch))
             elif method == "tools/list":
                 record(log, "tools_list", epoch=epoch)
-                names = ["background_task_start", "background_task_list", "background_task_get",
+                names = ["agents_whoami", "background_task_start", "background_task_list", "background_task_get",
                          "background_task_stop", "background_task_output", "t3_epoch_" + epoch]
                 result = dict(tools=[dict(name=name, description="Synthetic discovery only",
                                          inputSchema=dict(type="object", properties={})) for name in names])
+            elif method == "resources/list":
+                result = dict(resources=[])
+            elif method == "resources/templates/list":
+                result = dict(resourceTemplates=[])
             else:
                 if method == "tools/call":
                     record(log, "unexpected_tool", epoch=epoch)

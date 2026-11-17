@@ -68,6 +68,8 @@ def main():
             except ValueError:
                 continue
             request = pending.pop(str(value.get("id")), None) if "method" not in value else None
+            if value.get("method") and "id" in value:
+                record("native_request", method=value["method"])
             if request:
                 method, params = request
                 if method == "session/set_config_option" and params.get("configId") == "model":
@@ -75,7 +77,7 @@ def main():
                         current = option.get("currentValue", "")
                         if option.get("id") == "model":
                             selected = current.startswith("claude-haiku-5-5") and "fast=true" not in current
-                            record("cheap_model_ack", accepted=selected)
+                            record("cheap_model_ack", accepted=selected, current=current)
                 if method == "session/load":
                     record("load_ack", success="error" not in value,
                            same_id=value.get("result", {}).get("sessionId") == params.get("sessionId"))
@@ -96,6 +98,8 @@ def main():
         for line in sys.stdin:
             value = json.loads(line)
             method = value.get("method")
+            if method:
+                record("client_method", method=method)
             params = value.get("params", {})
             if method == "session/prompt":
                 # The adapter adds host context, so inspect only for our exact
