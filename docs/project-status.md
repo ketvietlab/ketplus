@@ -755,9 +755,11 @@ Linux store policy, signed upgrade prompts and platform release acceptance remai
   a private immutable file for that bootstrap. A separately approved single Auto
   turn also passes actual CopilotAdapter completed-history/same-ID/MCP replacement
   and process-closure checks; managed mutation is enabled subject to each turn's
-  transport ACK and daemon policy. Authenticated Cursor controls ACK the cheap
-  model but defer tool discovery. Real Cursor history/MCP verification remains
-  open. Cursor therefore receives no mutation credential and exposes only background
+  transport ACK and daemon policy. Cursor's scoped private observer verifies its
+  injected handshake; one authorized cheap-model prompt exposes that instance's
+  inventory lazily, but the native turn fails before completed-history validation.
+  Cursor completed-history/refresh verification remains open. It therefore
+  receives no mutation credential and exposes only background
   registry read tools; direct mutation returns a capability error. Its
   foreground behavior remains available. See the
   [provider evidence and gaps](decisions/0127-provider-origin-refresh-evidence.md).

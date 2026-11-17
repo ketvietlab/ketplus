@@ -71,7 +71,7 @@ def main():
         with lock:
             print(json.dumps(value), flush=True)
 
-    prior_workers = {row["pid"] for row in prior if row["event"] == "mcp"}
+    prior_workers = {row.get("child_pid", row["pid"]) for row in prior if row["event"] == "mcp"}
     prior_native = {row["child_pid"] for row in prior if row["event"] == "provider"}
     native_alive = sum(alive(pid) for pid in prior_native)
     if native_alive:
@@ -157,6 +157,15 @@ def main():
                     record("provider_model_report", model=reported)
             if request:
                 method, params = request
+                if method == "session/prompt":
+                    # Preserve bounded diagnostics, never raw provider errors
+                    # (they may contain tokens, endpoints or prompt text).
+                    code = value.get("error", {}).get("code")
+                    reason = value.get("result", {}).get("stopReason")
+                    record("native_prompt_response", error_code=code if isinstance(code, int) else None,
+                           stop_reason=reason if reason in ["end_turn", "max_tokens", "refusal", "cancelled",
+                                                            "max_turn_requests"] else None,
+                           failed="error" in value)
                 if method == "session/set_config_option" and params.get("configId") == "model":
                     for option in value.get("result", {}).get("configOptions", []):
                         current = option.get("currentValue", "")
@@ -164,7 +173,9 @@ def main():
                             selected = current.startswith("claude-haiku-5-5") and "fast=true" not in current
                             record("cheap_model_ack", accepted=selected, current=current)
                 if method == "session/load":
+                    code = value.get("error", {}).get("code")
                     record("load_ack", success="error" not in value,
+                           error_code=code if isinstance(code, int) else None,
                            same_id=value.get("result", {}).get("sessionId") == params.get("sessionId"))
                     replaying = False
             if value.get("method") == "session/update" and replaying:

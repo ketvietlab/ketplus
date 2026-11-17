@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """Quota-free proposal and allowance tests; only Python fixture processes run."""
 import json
+import os
 import importlib.util
 import hashlib
 import pathlib
@@ -17,6 +18,24 @@ PROPOSAL = HERE / "discovery-proposal.py"
 
 
 class DiscoveryProposalTest(unittest.TestCase):
+    def test_live_observed_mcp_child_blocks_replacement_before_any_provider_start(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary)
+            log = root / "events.jsonl"
+            # New observer rows carry the actual worker in child_pid. The log
+            # writer PID must not be mistaken for that still-live worker.
+            log.write_text(json.dumps(dict(event="mcp", pid=0, child_pid=os.getpid())) + "\n")
+            config = root / "launch.json"
+            config.write_text(json.dumps(dict(executable="must-not-start", work=str(root),
+                                             log=str(log), mode="control")))
+            result = subprocess.run([sys.executable, "-B", str(HERE / "adapter-bounded-fixture.py"),
+                                     str(config), "acp"], capture_output=True, text=True, timeout=3)
+            self.assertNotEqual(result.returncode, 0)
+            events = list(map(json.loads, log.read_text().splitlines()))
+            self.assertTrue(any(row["event"] == "closure_barrier_failed" and row["prior_mcp_alive"] == 1
+                                for row in events))
+            self.assertFalse(any(row["event"] == "provider" for row in events))
+
     def test_real_node_preload_attests_owned_stdio_without_changing_fixture(self):
         for block_tool in [False, True]:
             with self.subTest(block_tool=block_tool):

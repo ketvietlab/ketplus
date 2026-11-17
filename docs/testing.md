@@ -949,6 +949,13 @@ project instance listing tools never establishes discovery for a separate
 request-injected instance. Test-only `NODE_OPTIONS` instrumentation is restricted
 to owned probe processes; no installed files, auth or default settings change.
 
+`KETPLUS_CURSOR_READ_OWN_HISTORY=1` is a separate no-model diagnostic after the
+allowance is consumed. It requires attested `control` mode and the existing
+private ledger/owner. Only that ledger's synthetic Cursor ID and matching cwd
+can be loaded; the target never scans history or delivers a native prompt.
+It reports whether the known synthetic assistant marker replays, without
+turning a failed or partial turn into completed-history evidence.
+
 The earlier empty-session controls are retained for reference, not a loop to
 repeat when their hypotheses and errors have not changed:
 

@@ -688,3 +688,49 @@ handshake, nonce/epoch/tuple/peer spoof rejection, same-parent project exclusion
 and blocking tools/call before it reaches the Python fixture. The ledger remains
 2/3 before the authorized Cursor text-only delivery; production mutation remains
 disabled.
+
+### Cursor one-shot result and exhausted allowance
+
+The final checkpoint no-model attestation control passes (14.13 s). At
+`59a52152b447dcd9967f12323138dc0b9abd46b2`, the sole authorized Cursor
+text-only prompt is then forwarded after exact-instance attestation, cheap-model
+ACK and ledger reservation. Requested model is `claude-haiku-5-5-low`; native
+configuration ACK reports `claude-haiku-5-5`. The exact injected worker lists
+its approved single read-only tool after prompt delivery. Project inventory is
+not credited. No native permission request, ACP tool call, fixture tools/call,
+rejected observer event or changed approval is observed. All owned recorded
+processes exit.
+
+The turn nevertheless takes the native failure path before the test can verify
+completion: **live test fails in 15.44 s**. There is no second transport/load
+phase and no completed-history/refresh claim. The checkpoint observer did not
+retain the native prompt error code, so the cause is undetermined; the scoped
+worker log's LSP warnings do not establish causation. Forwarding an ACP prompt
+also does not prove successful delivery to the model backend. The request is
+counted consumed, including that uncertainty, without refund or retry.
+
+The whole-team ledger is now **Codex 1/1, Cursor 1/1, Copilot 1/1: 3/3 consumed**.
+Cursor mutation stays disabled. Follow-up diagnostics may load only the already
+recorded synthetic ID using the official API, with all native prompts
+intercepted; they cannot spend another model turn. Future probe responses record
+only bounded numeric error codes and known stop-reason enums, never raw errors.
+The observer's replacement guard also now handles both common-worker PID rows
+and preload rows carrying the actual worker in `child_pid`. A quota-free
+regression proves that a live recorded MCP child prevents provider startup.
+This correction does not turn the failed one-transport run into closure evidence.
+
+One subsequent **no-model** official load addresses only that ledger-recorded
+synthetic ID and canonical cwd. The production adapter forwards initialize and
+`session/load`; the provider refuses load with **-32602** (test fails in 9.75 s).
+It sends neither session/new nor a native prompt, performs no fallback, and
+does not scan existing history. All recorded owned PIDs exit. This does not
+identify the preceding prompt failure's cause or establish completed history.
+The allowance stays 3/3; no further native model request or load retry is made.
+
+Final quota-free fixture checks pass **6/6 (1.612 s)**, including both supported
+MCP PID-row formats and rejection before provider startup when an observed
+worker is still alive. The three default opt-in bodies skip before provider
+launch and pass **3/3 (0.16 s)**. C++ formatting, Python AST, Node syntax and
+diff checks pass. Remaining validation is Cursor's native prompt failure and
+completed-history/same-ID refresh after a successful turn. Further inference
+requires a new explicit allowance; the current ledger cannot be reused.

@@ -73,11 +73,14 @@ struct Cleanup {
 QJsonObject call(CursorAdapter& adapter, const QJsonObject& params) {
     auto result = std::make_shared<QJsonObject>();
     auto done = std::make_shared<bool>(false);
-    adapter.call("turn/start", params,
-                 [result, done](const QJsonObject& value, const QString& error) {
-                     *result = error.isEmpty() ? value : QJsonObject{{"probe_error", error}};
-                     *done = true;
-                 });
+    adapter.call(
+        "turn/start", params, [result, done](const QJsonObject& value, const QString& error) {
+            *result = error.isEmpty()
+                          ? value
+                          : QJsonObject{{"probe_error", "Provider setup/load failed; inspect "
+                                                        "bounded observer codes."}};
+            *done = true;
+        });
     QElapsedTimer timer;
     timer.start();
     while (!*done && timer.elapsed() < 30000)
@@ -117,6 +120,24 @@ class CursorBoundedRefreshTest final : public QObject {
         }
         const auto work =
             proposal.isEmpty() ? root + "/work" : approvedSession.value("cwd").toString();
+        QString ownHistory;
+        if (qEnvironmentVariable("KETPLUS_CURSOR_READ_OWN_HISTORY") == "1") {
+            // An official read of only this probe's ID; never a model retry or
+            // a scan of personal history. Control mode intercepts every prompt.
+            QVERIFY(attested && mode == "control");
+            QFile ledger(qEnvironmentVariable("KETPLUS_BOUNDED_TEST_LEDGER"));
+            QVERIFY(ledger.open(QIODevice::ReadOnly));
+            const auto budget = QJsonDocument::fromJson(ledger.readAll()).object();
+            const int owner = qEnvironmentVariableIntValue("KETPLUS_BOUNDED_TEST_OWNER");
+            QVERIFY(owner > 0);
+            QCOMPARE(budget.value("owner_conversation").toInt(), owner);
+            QCOMPARE(budget.value("decision").toString(), "D-3");
+            const auto cursor = budget.value("cursor").toObject();
+            QCOMPARE(cursor.value("sent_or_uncertain").toInt(), 1);
+            QCOMPARE(cursor.value("synthetic_cwd").toString(), work);
+            ownHistory = cursor.value("session_id").toString();
+            QVERIFY(!ownHistory.isEmpty());
+        }
         const auto log = root + "/processes.jsonl";
         QVERIFY(QDir().mkpath(work));
         const auto config = root + "/launch.json";
@@ -180,11 +201,13 @@ class CursorBoundedRefreshTest final : public QObject {
                 {"agentMcpServer", server},
                 {"prompt", "Reply exactly T3_BOUNDED_CURSOR_ALPHA. Do not use tools."}};
         };
-        const auto first = call(adapter, setup("one"));
+        const auto first = call(adapter, setup("one", ownHistory));
         QVERIFY2(!first.contains("probe_error"), qPrintable(first.value("probe_error").toString()));
         QCOMPARE(first.value("managedTransportEpoch"), "one");
         const auto id = first.value("thread").toObject().value("id").toString();
         QVERIFY(!id.isEmpty());
+        if (!ownHistory.isEmpty())
+            QCOMPARE(id, ownHistory);
         QTRY_VERIFY_WITH_TIMEOUT(completed > 0 || failed, 120000);
         QVERIFY2(!failed, "Provider/control failed; no automatic retry is permitted.");
         QCOMPARE(nativeRequests, 0);
@@ -201,6 +224,14 @@ class CursorBoundedRefreshTest final : public QObject {
             QCOMPARE(forwarded, 0);
             adapter.stop();
             QTRY_VERIFY(exited(log));
+            if (!ownHistory.isEmpty()) {
+                bool marker = false;
+                for (const auto& row : events(log))
+                    marker |= row.value("event") == "history_marker";
+                qInfo("Owned synthetic same-ID load ACK; assistant marker replay: %s; zero "
+                      "native prompts.",
+                      marker ? "present" : "absent");
+            }
             qInfo("Cursor actual adapter: transport/model readiness control; zero model "
                   "turns.");
             return;
