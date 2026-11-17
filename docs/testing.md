@@ -883,6 +883,30 @@ owned rollout; the test reads its marker without editing storage. This does not
 test completed-turn history or model recall. See the
 [provider gaps](decisions/0127-provider-origin-refresh-evidence.md).
 
+The separate `ketplus_codex_bounded_refresh_tests` and
+`ketplus_cursor_bounded_refresh_tests` targets default to skipping before any CLI
+launch. They are not part of the quota-free acceptance matrix. A live run needs
+an explicit provider opt-in (`KETPLUS_CODEX_BOUNDED_REFRESH=D-3` or
+`KETPLUS_CURSOR_BOUNDED_REFRESH=D-3`), the installed executable in
+`KETPLUS_CODEX_TEST_BINARY` / `KETPLUS_CURSOR_TEST_BINARY`, and the decision
+owner's existing private ledger in `KETPLUS_BOUNDED_TEST_LEDGER`. Supply the
+verified source head in `KETPLUS_BOUNDED_TEST_HEAD` and ledger owner in
+`KETPLUS_BOUNDED_TEST_OWNER`. Never create a fresh ledger to repeat a consumed
+allowance. The ledger requires `decision`, `maximum_per_provider`,
+`owner_conversation`, `recall_allowed`, `retry_allowed`, and per-provider
+`sent_or_uncertain` fields. Reservation occurs before delivery; errors and
+timeouts do not refund it.
+
+These probes keep official inherited provider authentication, create a new
+synthetic session and empty temporary cwd, and never scan existing history.
+They pin cheap named models and check control/MCP before delivery. Cursor's
+`control` opt-in intercepts the first prompt before the provider, without
+reserving quota. Its live run passes only the initial authorized prompt;
+the replacement transport's prompt is intercepted after the real load/model
+response. History replay and MCP readiness come from the actual provider,
+not that synthetic cancellation response. Both tests observe owned-process
+cleanup; neither asks a model to recall history.
+
 The earlier empty-session controls are retained for reference, not a loop to
 repeat when their hypotheses and errors have not changed:
 

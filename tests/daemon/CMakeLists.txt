@@ -139,6 +139,13 @@ ketplus_add_daemon_test(ketplus_codex_session_isolation_tests CodexSessionIsolat
 ketplus_add_daemon_test(ketplus_codex_offline_refresh_tests CodexOfflineRefreshTest.cpp)
 target_compile_definitions(ketplus_codex_offline_refresh_tests PRIVATE
     KETPLUS_CODEX_OFFLINE_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/../providers/codex/adapter-offline-fixture.py")
+ketplus_add_daemon_test(ketplus_codex_bounded_refresh_tests CodexBoundedRefreshTest.cpp)
+target_compile_definitions(ketplus_codex_bounded_refresh_tests PRIVATE
+    KETPLUS_CODEX_LIVE_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/../providers/codex/adapter-live-fixture.py")
+ketplus_add_daemon_test(ketplus_cursor_bounded_refresh_tests CursorBoundedRefreshTest.cpp)
+target_compile_definitions(ketplus_cursor_bounded_refresh_tests PRIVATE
+    KETPLUS_CODEX_LIVE_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/../providers/codex/adapter-live-fixture.py"
+    KETPLUS_CURSOR_LIVE_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/../providers/cursor/adapter-bounded-fixture.py")
 ketplus_add_daemon_test(ketplus_daemon_cursor_adapter_tests CursorAdapterTest.cpp)
 ketplus_add_daemon_test(ketplus_cursor_catalog_bounds_tests CursorCatalogBoundsTest.cpp)
 ketplus_add_daemon_test(ketplus_daemon_session_fork_tests SessionForkTest.cpp)

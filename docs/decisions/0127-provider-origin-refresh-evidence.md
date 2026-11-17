@@ -295,20 +295,22 @@ On 2026-11-17, the user approved the proposed bounded follow-up. Its budget is
 at most one synthetic text-only model turn per Codex, Cursor and Copilot, three
 in total, with one developer holding the team budget. It excludes recall turns
 and automatic retries. A request whose delivery is uncertain consumes that
-provider's allowance. Authentication uses the official flow in a separate test
-profile; approval does not authorize copying a personal profile or transcript.
+provider's allowance. Authentication uses the official provider integration;
+approval does not authorize copying a personal profile or transcript. Synthetic
+session data and cwd are separate from the authentication integration.
 A pinned Copilot CLI may be prepared in a test-only directory. Control/MCP
 verification must succeed before any model turn is sent. This decision changes
 the earlier access boundary, not the provider acceptance criteria.
 
-The checkpoint has consumed **Codex 0/1, Cursor 0/1, Copilot 0/1** live model
-turns. No login flow has been started and no credential has been copied. Clean
+The initial checkpoint consumed **Codex 0/1, Cursor 0/1, Copilot 0/1** live model
+turns. No login flow was started and no credential was copied. Clean
 child environments retain executable/locale essentials only, use separate homes
 and provider configuration directories, and do not inherit authentication or
 user configuration. Codex additionally forces file credential storage in its
 test profile: `login status` exits 1 and reports not logged in. Cursor `status`
-exits 0 but reports not authenticated. Both require user authentication before
-the completed-turn test can proceed. Official references describe
+exits 0 but reports not authenticated. Those isolated profiles lacked auth;
+this did not assess the existing KetPlus authentication integration. See the
+corrected follow-up below. Official references describe
 [Codex file storage and login](https://learn.chatgpt.com/docs/auth) and
 [Cursor login](https://cursor.com/docs/cli/reference/authentication).
 
@@ -363,9 +365,9 @@ history/epoch proof. Copilot's previously missing executable gap is closed for
 this pinned test environment; the standalone process-launch MCP control also
 passes. Completed history and real production-adapter refresh remain unverified.
 Cursor/Copilot mutation gates stay
-in place. The next external step is official user login into the separate test
-profiles, coordinated by the leader; no request to increase the approved budget
-is needed at this checkpoint.
+in place. The initial suggested next step was login into those profiles; that
+test-environment choice is superseded by the official-auth follow-up below.
+The approved budget has not been increased.
 
 The final build and focused Host-origin/ACP-isolation/Copilot-adapter/tool/catalog/
 CLI CTest matrix pass **6/6 (59.65 s)**; Python compilation and diff checks pass.
@@ -375,3 +377,43 @@ has its own 3 s fixture budget; the intentional `session/load` timeout remains
 500 ms and production deadlines are unchanged. The corrected real launch-MCP
 control passes without inference. These checks do not complete the real history
 or mutation-support acceptance criteria.
+
+## Official authentication route and bounded probe follow-up
+
+The clean-HOME login checkpoint above was a test-environment mismatch. The user
+confirmed that all three providers already work through KetPlus. The follow-up
+therefore keeps the inherited provider environment and official credential-store
+integration used by the production adapters, and separates only the new
+synthetic conversation and cwd. It does not copy credentials, inspect previous
+transcripts, modify default auth/configuration, or restart a shared process.
+Codex `login status` and Cursor `status` confirm authentication through that
+route. Copilot's ACP initialize/new control succeeds; that alone is not a model
+entitlement check.
+
+Available cheap named models are checked before delivery: Codex advertises
+`gpt-6-luna` with low effort; Cursor advertises `claude-haiku-5-5-low` without
+thinking/fast mode. The [Codex model guide](https://learn.chatgpt.com/docs/models)
+describes Luna as an efficient model; the
+[Cursor pricing table](https://cursor.com/docs/models-and-pricing) lists Haiku
+5.5 at $0.10 input / $0.50 output per million tokens at this checkpoint. These
+are explicit selections, with no default or more expensive fallback.
+
+Copilot CLI 1.0.112 does not advertise a model selector in the authenticated-route
+ACP session response. The documented informational `/model` command reports that
+its picker is interactive-only. On the newly created synthetic session,
+`/model --session claude-haiku-5.5` returns **only Auto mode is available on your
+plan**. No model prompt is sent. This is an explicit-model entitlement boundary,
+not evidence that the provider is broken or that another login is required.
+The [official CLI reference](https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-command-reference)
+documents the session-scoped model command. The existing strict adapter model
+selection also refuses an unadvertised named model before prompting. Auto is
+not used to bypass the user's cheap explicit-model constraint; Copilot mutation
+remains gated pending a supported, verifiable selection and real history test.
+
+The opt-in production-adapter probes keep their external decision ledger across
+runs and reserve before actual model delivery. Cursor's observer also checks
+the real model ACK and MCP discovery before passing any prompt. It intercepts
+the replacement transport's prompt after the provider's real load/model reply,
+so history replay can be inspected without a second/recall turn. That observer
+does not invent history, write provider storage, or replace a load ACK. The
+bounded tests skip by default and are excluded from quota-free regression runs.
