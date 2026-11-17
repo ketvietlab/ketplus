@@ -18,6 +18,17 @@ PROPOSAL = HERE / "discovery-proposal.py"
 
 
 class DiscoveryProposalTest(unittest.TestCase):
+    def test_load_without_an_optional_echo_does_not_report_an_identity_mismatch(self):
+        spec = importlib.util.spec_from_file_location("bounded", HERE / "adapter-bounded-fixture.py")
+        bounded = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(bounded)
+        self.assertEqual(bounded.load_echo({}, "owned-synthetic"),
+                         dict(echo_present=False, echo_matches_requested=None))
+        self.assertEqual(bounded.load_echo(dict(sessionId="owned-synthetic"), "owned-synthetic"),
+                         dict(echo_present=True, echo_matches_requested=True))
+        self.assertEqual(bounded.load_echo(dict(sessionId="different"), "owned-synthetic"),
+                         dict(echo_present=True, echo_matches_requested=False))
+
     def test_explicit_cheap_models_refuse_auto_fast_default_or_mismatched_ack(self):
         spec = importlib.util.spec_from_file_location("bounded", HERE / "adapter-bounded-fixture.py")
         bounded = importlib.util.module_from_spec(spec)

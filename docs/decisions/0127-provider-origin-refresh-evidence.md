@@ -1004,3 +1004,32 @@ The preparation's quota-free checks pass: 11/11 proposal/model-guard fixtures,
 target rebuilds and its default classifier/native-skip CTest passes. The Composer
 fixture exercises durable reservations and the same eleventh-prompt refusal;
 separate negative cases reject conflicting fast settings and mismatched ACKs.
+
+The second additional live probe at source head
+`3f4266ef5b05c8fa175f97db9524902325093a5f` passes in **31.802 seconds**, consuming
+**2/10** in total. The preceding no-model control passes with zero forwarding;
+both native model ACKs name `composer-2.5`. Exactly one synthetic prompt reaches
+the provider, completes canonically, and returns the expected assistant marker.
+The adapter then closes the owned old transport, confirms old provider/MCP exit,
+starts a replacement epoch and successfully loads the requested original ID.
+The assistant marker is replayed during that load, before the replacement prompt
+is intercepted locally. No native recall, second prompt, tool call or permission
+request is forwarded. All recorded owned processes exit; both parent ledger
+hashes remain unchanged.
+
+Inventory is observed on the first injected instance. The replacement instance
+has an attributed initialization handshake, but its inventory remains unobserved
+without another native prompt. This is completed-history and transport-refresh
+evidence, not full refreshed-inventory proof. Cursor mutation stays denied;
+eight additional prompts remain unspent pending review and a deliberate next
+verification step.
+
+The preserved run's legacy `load_ack.same_id=false` field compares an optional
+response echo, rather than the loaded request identity. It must not be presented
+as an observed identity mismatch: the actual test verifies the original requested
+ID survives and its assistant marker replays. The [ACP session-loading contract](https://agentclientprotocol.com/protocol/v1/session-setup)
+permits an empty successful load result. The old artifact does not retain echo
+presence, so its specific echo shape is not inferred. Future diagnostics separate
+`echo_present` and nullable `echo_matches_requested`; quota-free cases cover
+absent, matching and mismatched echoes. The original native artifacts are kept
+unchanged, and no native request is repeated for this metadata correction.

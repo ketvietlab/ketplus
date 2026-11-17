@@ -48,6 +48,13 @@ def cheap_model_ack(model, options):
     return bool(accepted), current if accepted else "unmatched"
 
 
+def load_echo(result, requested):
+    # ACP load may return an empty object; identity belongs to the request.
+    present = "sessionId" in result
+    return dict(echo_present=present,
+                echo_matches_requested=result.get("sessionId") == requested if present else None)
+
+
 def rows(path):
     return [json.loads(line) for line in path.read_text().splitlines()] if path.exists() else []
 
@@ -220,7 +227,7 @@ def main():
                     code = value.get("error", {}).get("code")
                     record("load_ack", success="error" not in value,
                            error_code=numeric(code),
-                           same_id=value.get("result", {}).get("sessionId") == params.get("sessionId"))
+                           **load_echo(value.get("result", {}), params.get("sessionId")))
                     replaying = False
             if value.get("method") == "session/update" and replaying:
                 update = value.get("params", {}).get("update", {})

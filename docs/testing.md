@@ -940,6 +940,9 @@ the control or additional-budget mode. Its ACK must name the non-fast base ID or
 explicit `[fast=false]` form and must not carry a conflicting fast option. Auto,
 default, fast variants and mismatched ACKs fail the barrier. This opt-in changes
 only the synthetic session, never the provider's default configuration.
+Load diagnostics distinguish an optional response echo from the requested load
+identity: `echo_present=false` has `echo_matches_requested=null`. A successful
+ACP load may return an empty object; an absent echo is not an identity mismatch.
 
 These probes keep official inherited provider authentication, create a new
 synthetic session and empty temporary cwd, and never scan existing history.
