@@ -727,7 +727,7 @@ does not scan existing history. All recorded owned PIDs exit. This does not
 identify the preceding prompt failure's cause or establish completed history.
 The allowance stays 3/3; no further native model request or load retry is made.
 
-Final quota-free fixture checks pass **6/6 (1.612 s)**, including both supported
+Final quota-free fixture checks pass **6/6 (1.718 s)**, including both supported
 MCP PID-row formats and rejection before provider startup when an observed
 worker is still alive. The three default opt-in bodies skip before provider
 launch and pass **3/3 (0.16 s)**. C++ formatting, Python AST, Node syntax and

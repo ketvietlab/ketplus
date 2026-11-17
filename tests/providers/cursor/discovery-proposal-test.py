@@ -19,12 +19,19 @@ PROPOSAL = HERE / "discovery-proposal.py"
 
 class DiscoveryProposalTest(unittest.TestCase):
     def test_live_observed_mcp_child_blocks_replacement_before_any_provider_start(self):
+        for field in ["pid", "child_pid"]:
+            with self.subTest(worker_pid_field=field):
+                self.live_worker_blocks_replacement(field)
+
+    def live_worker_blocks_replacement(self, field):
         with tempfile.TemporaryDirectory() as temporary:
             root = pathlib.Path(temporary)
             log = root / "events.jsonl"
             # New observer rows carry the actual worker in child_pid. The log
             # writer PID must not be mistaken for that still-live worker.
-            log.write_text(json.dumps(dict(event="mcp", pid=0, child_pid=os.getpid())) + "\n")
+            row = dict(event="mcp", pid=0)
+            row[field] = os.getpid()
+            log.write_text(json.dumps(row) + "\n")
             config = root / "launch.json"
             config.write_text(json.dumps(dict(executable="must-not-start", work=str(root),
                                              log=str(log), mode="control")))
