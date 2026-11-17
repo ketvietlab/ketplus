@@ -1,4 +1,5 @@
 // ADR 0114 §6: tasks with one owner, states, criteria and an append-only history.
+#include "teams/TeamCompletionPolicy.h"
 #include "teams/TeamCoordinator.h"
 
 #include "storage/LocalJournal.h"
@@ -419,7 +420,7 @@ void TeamCoordinator::applyMove(Team& team, Task& task, const QString& to, const
 
 TeamResult TeamCoordinator::moveTask(const qint64 teamId, const QString& taskId, const QString& to,
                                      const QString& actor, const QString& note,
-                                     const QString& reportedHead) {
+                                     const QString& reportedHead, const bool userOverride) {
     Team* team = mutableTeam(teamId);
     if (!team)
         return {.error = notFound()};
@@ -440,12 +441,29 @@ TeamResult TeamCoordinator::moveTask(const qint64 teamId, const QString& taskId,
     };
     QList<Update> updates;
     QString reason = note.trimmed();
+    if (userOverride) {
+        if (role != QStringLiteral("user") || to != state::done || reason.isEmpty())
+            return {.error = refusal(QStringLiteral("role_forbidden"),
+                                     QStringLiteral("Only an authenticated user explicitly "
+                                                    "overrides completion, with a note."))};
+        if (from == state::done)
+            return invalid(QStringLiteral("a done task stays done."));
+        finishTask(*team, *task, actor, reason, QStringLiteral("user_completion_override"),
+                   {{QStringLiteral("authority"), QStringLiteral("authenticated_user")},
+                    {QStringLiteral("verified_merge"), false},
+                    {QStringLiteral("reviewer_verdict"), false}},
+                   updates);
+        if (auto failed = commit(*team, before, actor, updates))
+            return {.error = failed};
+        return {.teamId = teamId};
+    }
     if (to == state::inProgress) {
         if (!owner && !daemon)
             return {.error =
                         refusal(QStringLiteral("not_owner"),
                                 QStringLiteral("Only the owner of %1 starts it.").arg(taskId))};
-        if (from != state::todo && from != state::blocked && !(daemon && from == state::inReview))
+        if (from != state::todo && from != state::blocked && !(daemon && from == state::inReview) &&
+            from != state::ready)
             return invalid(QStringLiteral("only a task in To do or Blocked starts."));
         for (const QString& dependency : task->dependsOn) {
             const Task* other = team->task(dependency);
@@ -459,6 +477,11 @@ TeamResult TeamCoordinator::moveTask(const qint64 teamId, const QString& taskId,
                 other.state == state::inProgress)
                 return invalid(QStringLiteral("finish %1 first; a developer works on one task.")
                                    .arg(other.id));
+        if (from == state::ready)
+            invalidateAcceptance(*team, *task,
+                                 QStringLiteral("The owner resumed work; acceptance "
+                                                "must be obtained again."),
+                                 updates);
         task->question.clear();
         task->resumeState.clear();
     } else if (to == state::inReview) {
@@ -518,11 +541,9 @@ TeamResult TeamCoordinator::moveTask(const qint64 teamId, const QString& taskId,
         task->assignmentHeld = false;
         task->question.clear();
     } else if (to == state::ready || to == state::done) {
-        if (!daemon)
-            return {.error = refusal(QStringLiteral("role_forbidden"),
-                                     QStringLiteral("KetPlus marks a task %1: after its review, or "
-                                                    "when the integration branch contains it.")
-                                         .arg(to))};
+        return {.error = refusal(QStringLiteral("role_forbidden"),
+                                 QStringLiteral("Ready and Done require the validated acceptance "
+                                                "and completion paths, not a state assertion."))};
     } else {
         return {.error = refusal(QStringLiteral("invalid_payload"),
                                  QStringLiteral("Unknown state %1.").arg(to))};

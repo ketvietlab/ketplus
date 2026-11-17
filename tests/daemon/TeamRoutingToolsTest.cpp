@@ -1,6 +1,7 @@
 #include "AgentTestFixture.h"
 #include "agents/AgentTeamTools.h"
 #include "teams/TeamAgentTasks.h"
+#include "teams/TeamCompletionPolicy.h"
 #include "teams/TeamRoutingEvidence.h"
 
 #include <QEventLoop>
@@ -360,6 +361,7 @@ class TeamRoutingToolsTest final : public QObject {
         QTest::addColumn<QString>("attack");
         QTest::newRow("ordinary-prose") << QString{};
         QTest::newRow("concurrent-only") << QString("concurrent-only");
+        QTest::newRow("origin-swap") << QString("origin-swap");
         QTest::newRow("ignored-gitlink") << QString("ignored-gitlink");
         QTest::newRow("replaced-base-tree") << QString("replaced-base-tree");
     }
@@ -455,6 +457,11 @@ class TeamRoutingToolsTest final : public QObject {
         const QString head = commit(worktree);
         QVERIFY(!head.isEmpty());
         QTRY_VERIFY_WITH_TIMEOUT(!fixture.host->teamChecksPending(), 10000);
+        // Origin is read as metadata only. Explicitly prohibit HTTPS transport
+        // so periodic merge probes cannot contact this synthetic remote.
+        QVERIFY(git(repository, {"config", "protocol.https.allow", "never"}));
+        QVERIFY(
+            git(repository, {"remote", "add", "origin", "https://github.com/example/project.git"}));
         const auto idle = [&] {
             const auto current = fixture.agents(leader, "agents.team_get").value("team").toObject();
             for (const auto& member : current.value("members").toArray())
@@ -582,6 +589,8 @@ class TeamRoutingToolsTest final : public QObject {
             }
             QVERIFY(git(worktree, {"reset", "--hard", head}));
             verify.insert("head_commit", head);
+            QTRY_VERIFY_WITH_TIMEOUT(!fixture.host->teamChecksPending(), 10000);
+            QTRY_VERIFY_WITH_TIMEOUT(readTask().value("outside_lane").toArray().isEmpty(), 10000);
         }
         verify.insert("expected_team_revision", revision());
         QList<QJsonObject> duplicateReplies;
@@ -638,12 +647,15 @@ class TeamRoutingToolsTest final : public QObject {
         QCOMPARE(accepted.value("conclusion_source").toString(), QString("leader_policy"));
         QCOMPARE(accepted.value("reviewer_verdict").toBool(true), false);
         QCOMPARE(accepted.value("authorization_granted").toBool(true), false);
-        QCOMPARE(readTask().value("state").toString(), QString("in_progress"));
+        QCOMPARE(readTask().value("state").toString(), QString("ready"));
+        QCOMPARE(
+            readTask().value("completion_acceptance").toObject().value("repository_id").toString(),
+            teams::completion::repositoryId("https://github.com/example/project"));
         QCOMPARE(readTask().value("round").toInt(), 0);
         const auto row =
             fixture.agents(leader, "agents.team_tasks").value("tasks").toArray().first().toObject();
         QCOMPARE(row.value("routing_decision").toObject().value("actor").toString(), leader);
-        QCOMPARE(row.value("state").toString(), QString("in_progress"));
+        QCOMPARE(row.value("state").toString(), QString("ready"));
         QCOMPARE(row.value("routing_status").toString(), QString("historical"));
         // Read the real recorded audit through the paired projection, without
         // adopting a leader identity or changing task/reviewer state.
@@ -661,7 +673,7 @@ class TeamRoutingToolsTest final : public QObject {
         QTRY_VERIFY_WITH_TIMEOUT(phoneRead, 10000);
         QVERIFY2(phoneTask.value("ok").toBool(), qPrintable(text(phoneTask)));
         const auto projected = phoneTask.value("task").toObject();
-        QCOMPARE(projected.value("state").toString(), QString("in_progress"));
+        QCOMPARE(projected.value("state").toString(), QString("ready"));
         QCOMPARE(projected.value("round").toInt(), 0);
         QCOMPARE(projected.value("routing_status").toString(), QString("historical"));
         const auto projectedDecision = projected.value("routing_decision").toObject();
@@ -674,10 +686,25 @@ class TeamRoutingToolsTest final : public QObject {
         QCOMPARE(fixture.agents(leader, "agents.team_task_route_decide", decide)
                      .value("error_code")
                      .toString(),
-                 QString("review_required"));
+                 QString("review_locked"));
+        if (attack == "origin-swap") {
+            QVERIFY(git(repository, {"remote", "set-url", "origin",
+                                     "https://github.com/example/other-project.git"}));
+            // Same real head and branch; only repository identity changed.
+            const auto denied = fixture.agents(
+                leader, "agents.team_task_close",
+                {{"task_id", "T-1"}, {"evidence", head}, {"note", "Check the accepted head"}});
+            QCOMPARE(denied.value("error_code").toString(), QString("stale_revision"));
+            return;
+        }
         // No receipt for a material semantic edit; confidence cannot compensate.
         QVERIFY(write(worktree, "docs/prose.md", "This now changes the approval rule.\n"));
         const QString changedHead = commit(worktree);
+        QVERIFY(fixture
+                    .agents(developer, "agents.team_task_update",
+                            {{"task_id", "T-1"}, {"state", "in_progress"}})
+                    .value("ok")
+                    .toBool());
         verify.insert("expected_team_revision", revision());
         verify.insert("head_commit", changedHead);
         QCOMPARE(deferred(fixture, developer, "agents.team_task_route_verify", verify)
@@ -687,11 +714,13 @@ class TeamRoutingToolsTest final : public QObject {
         decide.remove("evidence_id");
         decide.insert("head_commit", changedHead);
         decide.insert("route", "auto");
+        decide.insert("expected_team_revision", revision());
         const auto conservative = fixture.agents(leader, "agents.team_task_route_decide", decide);
         QVERIFY2(conservative.value("ok").toBool(), qPrintable(text(conservative)));
         QCOMPARE(conservative.value("routing_decision").toObject().value("route").toString(),
                  QString("developer_reviewer"));
-        QCOMPARE(readTask().value("state").toString(), QString("in_progress"));
+        QVERIFY(readTask().value("state").toString() != "ready");
+        QVERIFY(readTask().value("state").toString() != "done");
         // Local UI cannot forge the leader's actor/session binding.
         auto clientPayload = decide;
         clientPayload.insert("actor_session", leader);
@@ -711,6 +740,20 @@ class TeamRoutingToolsTest final : public QObject {
             QTRY_VERIFY_WITH_TIMEOUT(refused, 10000);
             QCOMPARE(phoneRefused.value("error_code").toString(), QString("role_forbidden"));
         }
+        QVERIFY(!fixture
+                     .agents(developer, "agents.team_task_update",
+                             {{"task_id", "T-1"}, {"state", "done"}, {"user_override", true}})
+                     .value("ok")
+                     .toBool());
+        const auto userClosed = fixture.host->handleCommand(
+            request("team.task.move", {{"team_id", teamId},
+                                       {"task_id", "T-1"},
+                                       {"state", "done"},
+                                       {"user_override", true},
+                                       {"note", "Explicit synthetic user completion override"}}),
+            "desktop-test");
+        QVERIFY2(userClosed.value("ok").toBool(), qPrintable(text(userClosed)));
+        QCOMPARE(readTask().value("state").toString(), QString("done"));
     }
 
     void toolSchemasCannotSubmitEvidenceFacts() {

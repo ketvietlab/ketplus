@@ -1,6 +1,7 @@
 // ADR 0118: the pull request probe. `gh` is the tool the app's agents already use and sign in
 // with; without it, or offline, every pull request is unknown and nothing is marked done.
 #include "runtime/TeamPullRequests.h"
+#include "teams/TeamCompletionPolicy.h"
 
 #include <QElapsedTimer>
 #include <QJsonDocument>
@@ -40,8 +41,9 @@ teams::PullRequestFact askOne(const QString& directory, const QString& program, 
     environment.insert(QStringLiteral("GH_NO_UPDATE_NOTIFIER"), QStringLiteral("1"));
     environment.insert(QStringLiteral("GIT_TERMINAL_PROMPT"), QStringLiteral("0"));
     process.setProcessEnvironment(environment);
-    process.start(program, {QStringLiteral("pr"), QStringLiteral("view"), url,
-                            QStringLiteral("--json"), QStringLiteral("state,mergeCommit")});
+    process.start(program,
+                  {QStringLiteral("pr"), QStringLiteral("view"), url, QStringLiteral("--json"),
+                   QStringLiteral("state,mergeCommit,headRefOid,headRefName,baseRefName,url")});
     if (!process.waitForStarted(5000))
         return failure(QStringLiteral("gh could not be started."));
     // In short steps, so a daemon that stops does not wait for the network.
@@ -84,7 +86,12 @@ teams::PullRequestFact parse(const QByteArray& json) {
                                .toString();
     return {.state = state,
             .mergeCommit = state == QStringLiteral("merged") ? commit : QString{},
-            .error = {}};
+            .error = {},
+            .headCommit = object.value(QStringLiteral("headRefOid")).toString(),
+            .headBranch = object.value(QStringLiteral("headRefName")).toString(),
+            .baseBranch = object.value(QStringLiteral("baseRefName")).toString(),
+            .url = object.value(QStringLiteral("url")).toString(),
+            .repositoryId = teams::completion::repositoryId(object.value("url").toString())};
 }
 
 QHash<QString, teams::PullRequestFact> ask(const QString& directory, const QStringList& urls,

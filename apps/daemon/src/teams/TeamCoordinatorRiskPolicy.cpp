@@ -1,3 +1,4 @@
+#include "teams/TeamCompletionPolicy.h"
 #include "teams/TeamCoordinator.h"
 
 #include <QDateTime>
@@ -163,8 +164,52 @@ TeamResult TeamCoordinator::decideRoute(const qint64 teamId, const QString& task
                         .data = data};
     if (!taskId.isEmpty())
         addHistory(*team->task(taskId), actor, QStringLiteral("risk_route"), update.text, data);
-    if (const auto error = commit(*team, before, actor, {update}))
+    QList<Update> updates{update};
+    if (!taskId.isEmpty()) {
+        task = team->task(taskId);
+        task->headCommit = decision.revision;
+        if (decision.route == risk::Route::DeveloperLeader) {
+            applyMove(*team, *task, state::ready, actor, "host-verified leader acceptance",
+                      updates);
+            completion::seal(*team, *task, "leader_policy", actor,
+                             host_->completionRepository(*team, *task));
+            offerMerges(*team, updates);
+        } else {
+            // Unsupported proof takes the existing independent-review path, not
+            // another leader pass or a fake reviewer verdict.
+            applyMove(*team, *task, state::inReview, actor, "independent review required", updates);
+        }
+    }
+    if (const auto error = commit(*team, before, actor, updates))
         return {.error = error};
     return {.teamId = teamId};
 }
+void TeamCoordinator::invalidateAcceptance(Team& team, Task& task, const QString& reason,
+                                           QList<Update>& updates) {
+    task.acceptance.reset();
+    task.mergeOffered = false;
+    task.leaderMayMerge = false;
+    task.resumeState = state::inProgress;
+    task.reviewBlock = QStringLiteral("acceptance_stale");
+    task.question = reason;
+    for (Decision& decision : team.decisions)
+        if (decision.taskId == task.id && decision.kind == "merge" && decision.state == "open") {
+            decision.state = QStringLiteral("withdrawn");
+            decision.reason = QStringLiteral("acceptance_stale");
+            decision.answeredAt = nowIso();
+        }
+    applyMove(team, task, state::blocked, QStringLiteral("daemon"), reason, updates);
+}
+
+void TeamCoordinator::refreshAcceptances(Team& team, QList<Update>& updates) {
+    for (Task& task : team.tasks) {
+        if (task.state != state::ready || completion::valid(team, task))
+            continue;
+        invalidateAcceptance(team, task,
+                             QStringLiteral("Acceptance changed; report the current committed "
+                                            "work and obtain fresh proof or independent review."),
+                             updates);
+    }
+}
+
 } // namespace ketplus::daemon::teams

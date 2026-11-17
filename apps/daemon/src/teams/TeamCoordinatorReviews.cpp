@@ -1,6 +1,7 @@
 // ADR 0114 §2: a reviewer of the team reviews each task on the engine of ADR 0067 — a `review`
 // message with the verdict line — triggered by the task entering In review instead of by a
 // finished turn, queued first in first out instead of skipped.
+#include "teams/TeamCompletionPolicy.h"
 #include "teams/TeamCoordinator.h"
 
 #include "agents/ReviewVerdict.h"
@@ -512,6 +513,8 @@ void TeamCoordinator::recordReview(const QString& reviewerSession, const QString
                           QT_TRANSLATE_NOOP("Team", "reviewed, nonblocking preferences only")),
                 updates);
             told(!noFindings, false);
+            completion::seal(*team, *task, "independent_review", reviewerSession,
+                             host_->completionRepository(*team, *task));
             offerMerges(*team, updates);
         } else {
             addHistory(

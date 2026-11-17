@@ -1,4 +1,5 @@
 #include "storage/LocalJournal.h"
+#include "teams/TeamCompletionPolicy.h"
 #include "teams/TeamCoordinator.h"
 
 #include <QFile>
@@ -37,6 +38,12 @@ class Host final : public TeamHostPort {
     bool dirty{false};
     bool unreadable{false};
     int allocations{0};
+    QHash<QString, PullRequestFact> pullRequests;
+    QString origin{completion::repositoryId("https://github.com/example/project")};
+    QString completionRepository(const Team&, const Task&) const override { return origin; }
+    void askPullRequests(const Team&, const QStringList&, PullRequestsDone done) override {
+        done(pullRequests);
+    }
     Host() {
         for (const QString& id :
              {QStringLiteral("lead"), QStringLiteral("dev"), QStringLiteral("rev")})
@@ -151,12 +158,13 @@ class TeamRiskPolicyTest final : public QObject {
         const auto replay = request();
         QVERIFY2(error(replay).isEmpty(), "Verified low risk must be accepted");
         const Task& t = *teams_->team(team_)->task(task_);
-        QCOMPARE(t.state, state::inProgress);
+        QCOMPARE(t.state, state::ready);
         QVERIFY(t.routingDecision);
         QCOMPARE(t.routingDecision->route, risk::Route::DeveloperLeader);
         QCOMPARE(t.routingDecision->followUp, QStringLiteral("merge_then_acceptance"));
-        QCOMPARE(t.history.size(), original + 1);
-        QCOMPARE(t.history.last().kind, QStringLiteral("risk_route"));
+        QVERIFY(t.history.size() > original);
+        QVERIFY(t.acceptance);
+        QVERIFY(completion::valid(*teams_->team(team_), t));
         QCOMPARE(t.routingDecision->evidenceIds.size(), 3);
         QCOMPARE(error(replay), QStringLiteral("stale_team"));
         teams_.reset();
@@ -167,6 +175,153 @@ class TeamRiskPolicyTest final : public QObject {
         QCOMPARE(restored->revision, head);
         QCOMPARE(restored->actor, QStringLiteral("lead"));
         QCOMPARE(teams_->team(team_)->lastRoutingDecision->route, risk::Route::DeveloperLeader);
+    }
+    void verifiedRouteMustReachReadyAtTheProvenHead() {
+        QVERIFY(error(request()).isEmpty());
+        const Task& task = *teams_->team(team_)->task(task_);
+        QCOMPARE(task.state, state::ready);
+        QCOMPARE(task.headCommit, head);
+        QCOMPARE(task.round, 0);
+        QVERIFY(!task.reviewFindings);
+    }
+    void mandatoryReviewCannotBeClosedByAnInventedCommit() {
+        host_->evidence.reset();
+        QVERIFY(error(request("auto")).isEmpty());
+        const auto closed = teams_->closeTask(team_, task_, QString(40, 'f'),
+                                              "Caller says this was merged.", "lead");
+        QVERIFY(closed.error);
+        QCOMPARE(closed.error->code, QString("review_required"));
+        QVERIFY(teams_->team(team_)->task(task_)->state != state::done);
+    }
+    void mandatoryReviewCannotBeBypassedByAMergedPullRequest() {
+        const QString url = "https://github.com/example/project/pull/1";
+        QVERIFY(teams_->updateTask(team_, task_, {{"pull_request", url}}, "dev").ok());
+        host_->evidence.reset();
+        QVERIFY(error(request("auto")).isEmpty());
+        host_->pullRequests.insert(url, {.state = "merged", .mergeCommit = QString(40, 'e')});
+        teams_->setPullRequestPeriod(60000, 0);
+        teams_->checkMerged(team_);
+        QVERIFY(teams_->team(team_)->task(task_)->state != state::done);
+    }
+    void verifiedPullRequestCompletesOnlyItsAcceptedHead_data() {
+        QTest::addColumn<QString>("change");
+        for (const QString& value : {"none", "pr_head", "branch", "base", "origin",
+                                     "origin_changed", "live_head", "dirty", "missing_facts"})
+            QTest::newRow(qPrintable(value)) << value;
+    }
+    void verifiedPullRequestCompletesOnlyItsAcceptedHead() {
+        QFETCH(QString, change);
+        const QString url = "https://github.com/example/project/pull/1";
+        QVERIFY(teams_->updateTask(team_, task_, {{"pull_request", url}}, "dev").ok());
+        refreshEvidence();
+        QVERIFY(error(request()).isEmpty());
+        QCOMPARE(teams_->team(team_)->task(task_)->state, state::ready);
+        PullRequestFact fact{.state = "merged",
+                             .mergeCommit = QString(40, 'e'),
+                             .error = {},
+                             .headCommit = head,
+                             .headBranch = "fix/synthetic",
+                             .baseBranch = "integration",
+                             .url = url,
+                             .repositoryId = host_->origin};
+        if (change == "pr_head")
+            fact.headCommit = QString(40, 'f');
+        if (change == "branch")
+            fact.headBranch = "other";
+        if (change == "base")
+            fact.baseBranch = "develop";
+        if (change == "origin")
+            fact.repositoryId = QString(64, 'a');
+        if (change == "origin_changed")
+            host_->origin = QString(64, 'a');
+        if (change == "live_head")
+            host_->currentHead = QString(40, 'f');
+        if (change == "dirty")
+            host_->dirty = true;
+        if (change == "missing_facts")
+            fact.headCommit.clear();
+        host_->pullRequests.insert(url, fact);
+        teams_->setPullRequestPeriod(60000, 0);
+        teams_->checkMerged(team_);
+        QCOMPARE(teams_->team(team_)->task(task_)->state == state::done, change == "none");
+        if (change == "none") {
+            const auto& history = teams_->team(team_)->task(task_)->history;
+            QVERIFY(history.last().kind == "merged");
+            QCOMPARE(history.last().data.value("accepted_head").toString(), head);
+        }
+    }
+    void policyOrTaskChangesInvalidateAcceptance() {
+        QVERIFY(error(request()).isEmpty());
+        QVERIFY(teams_->updateTask(team_, task_, {{"note", "Unrelated result note"}}, "dev").ok());
+        QCOMPARE(teams_->team(team_)->task(task_)->state, state::ready);
+        QVERIFY(
+            teams_->updateTask(team_, task_, {{"description", "New material scope"}}, "lead").ok());
+        const Task& task = *teams_->team(team_)->task(task_);
+        QCOMPARE(task.state, state::blocked);
+        QVERIFY(!task.acceptance);
+        QCOMPARE(task.reviewBlock, QString("acceptance_stale"));
+        QVERIFY(teams_->closeTask(team_, task_, head, "Not a proof.", "lead").error);
+    }
+    void callerHashCannotCompleteEvenAnAcceptedTask() {
+        QVERIFY(error(request()).isEmpty());
+        QVERIFY(teams_->closeTask(team_, task_, QString(40, 'f'), "Claimed merge", "lead").error);
+        QVERIFY(teams_->closeTask(team_, task_, head, "Request a real merge check", "lead").ok());
+        QCOMPARE(teams_->team(team_)->task(task_)->state, state::ready);
+    }
+    void intentionalUserOverrideIsDistinctAndCannotBeUsedByAnAgent() {
+        QVERIFY(teams_->moveTask(team_, task_, state::done, "dev", "Override", {}, true).error);
+        QVERIFY(teams_->moveTask(team_, task_, state::done, "lead", "Override", {}, true).error);
+        QVERIFY(teams_->moveTask(team_, task_, state::done, "user", {}, {}, true).error);
+        QVERIFY(
+            teams_->moveTask(team_, task_, state::done, "user", "Explicit user decision", {}, true)
+                .ok());
+        QCOMPARE(teams_->team(team_)->task(task_)->state, state::done);
+        QCOMPARE(teams_->team(team_)->task(task_)->history.last().kind,
+                 QString("user_completion_override"));
+    }
+    void acceptanceSerializationCannotGrantLegacyOrReboundAuthority() {
+        QVERIFY(error(request()).isEmpty());
+        const auto original = toJson(*teams_->team(team_));
+        for (const QString& mutation : {"missing", "version", "head", "context", "actor", "team"}) {
+            auto data = original;
+            auto tasks = data.value("tasks").toArray();
+            auto task = tasks[0].toObject();
+            auto acceptance = task.value("completion_acceptance").toObject();
+            if (mutation == "missing")
+                task.remove("completion_acceptance");
+            else {
+                if (mutation == "version")
+                    acceptance["version"] = 999;
+                if (mutation == "head")
+                    acceptance["head"] = QString(40, 'f');
+                if (mutation == "context")
+                    acceptance["context"] = QString(64, 'f');
+                if (mutation == "actor")
+                    acceptance["actor"] = "dev";
+                task["completion_acceptance"] = acceptance;
+            }
+            tasks[0] = task;
+            data["tasks"] = tasks;
+            if (mutation == "team")
+                data["id"] = QString::number(team_ + 1);
+            const auto restored = teamFromJson(data);
+            QVERIFY(!completion::valid(restored, *restored.task(task_)));
+        }
+        const auto restored = teamFromJson(original);
+        QVERIFY(completion::valid(restored, *restored.task(task_)));
+    }
+    void repositoryIdentityIsOpaqueAndIgnoresCredentials() {
+        const auto expected = completion::repositoryId("https://github.com/example/project");
+        QVERIFY(risk::evidenceId(expected));
+        QCOMPARE(expected, completion::repositoryId("git@github.com:example/project.git"));
+        QCOMPARE(expected, completion::repositoryId(
+                               "https://fixture:synthetic@github.com/example/project.git"));
+        QCOMPARE(expected, completion::repositoryId("https://github.com/example/project/pull/1"));
+        QVERIFY(expected != completion::repositoryId("https://github.com/example/fork"));
+        QVERIFY(completion::repositoryId("/not/a/remote").isEmpty());
+        QVERIFY(completion::repositoryId("https://github.com:8443/example/project").isEmpty());
+        QVERIFY(
+            completion::repositoryId("https://github.com/example/project?scope=other").isEmpty());
     }
     void adviceDoesNotAllocateATaskOrWorktree() {
         for (const QString& kind : {QStringLiteral("explanation"), QStringLiteral("proposal"),

@@ -213,6 +213,9 @@ class TeamMergeTest final : public QObject {
             QVERIFY(teams_->update(team_, {{"merge_policy", policy}}, "user").ok());
             const QString first = task("Api");
             const QString second = task("Cart");
+            // The dependent review assesses the dependency's committed head;
+            // completion of that same head must only release the merge gate.
+            pass(first, "dev1");
             // The leader makes Cart depend on Api while Cart is already under way.
             QVERIFY(teams_->assignTask(team_, second, "dev2", "lead").ok());
             QVERIFY(teams_->moveTask(team_, second, state::inProgress, "dev2").ok());
@@ -222,8 +225,7 @@ class TeamMergeTest final : public QObject {
             finishReview(*teams_, "rev", "Verdict: no findings", true);
             QCOMPARE(get(second).state, state::ready);
             QVERIFY2(!get(second).mergeOffered, qPrintable(policy));
-            QCOMPARE(merges().size(), 0);
-            pass(first, "dev1");
+            QCOMPARE(merges().size(), policy == "user" ? 1 : 0);
             QVERIFY(get(first).mergeOffered);
             QVERIFY2(!get(second).mergeOffered, qPrintable(policy));
             host_.merged.insert(first);
@@ -297,10 +299,9 @@ class TeamMergeTest final : public QObject {
         host_.merged.remove(id);
         host_.answer();
         QCOMPARE(team().integrationBranch, QStringLiteral("release-other"));
-        QCOMPARE(get(id).state, state::ready);
-        QCOMPARE(host_.asked, asked + 1);
-        host_.answer();
-        QCOMPARE(get(id).state, state::ready);
+        QCOMPARE(get(id).state, state::blocked);
+        QCOMPARE(get(id).reviewBlock, QStringLiteral("acceptance_stale"));
+        QCOMPARE(host_.asked, asked);
         QVERIFY(!teams_->checksOpen());
     }
 
@@ -329,11 +330,12 @@ class TeamMergeTest final : public QObject {
         // Nothing moved: it stays ready.
         teams_->memberTurnEnded("dev1");
         QCOMPARE(get(id).state, state::ready);
-        host_.heads.insert(get(id).branch, "later");
+        const QString later(40, 'c');
+        host_.heads.insert(get(id).branch, later);
         teams_->memberTurnEnded("dev1");
         QCOMPARE(get(id).state, state::blocked);
         QCOMPARE(get(id).resumeState, state::inProgress);
-        QVERIFY(get(id).question.contains("later"));
+        QVERIFY(get(id).question.contains(later.left(12)));
         QVERIFY(!get(id).mergeOffered && !get(id).leaderMayMerge);
         QCOMPARE(merges().first()->state, QStringLiteral("withdrawn"));
         // Reviewed again at the new commit, it is offered again.
@@ -341,20 +343,21 @@ class TeamMergeTest final : public QObject {
         QVERIFY(teams_->moveTask(team_, id, state::inReview, "dev1").ok());
         finishReview(*teams_, "rev", "Verdict: no findings", true);
         QCOMPARE(get(id).state, state::ready);
-        QCOMPARE(get(id).headCommit, QStringLiteral("later"));
+        QCOMPARE(get(id).headCommit, later);
         QCOMPARE(merges().size(), 2);
         teams_->memberTurnEnded("dev1");
         QCOMPARE(get(id).state, state::ready);
     }
 
-    void aMergeWithCommitsAfterTheReviewIsDoneAndReported() {
+    void unreviewedMergedCommitsCannotCompleteATask() {
         const QString id = task("Cart");
         pass(id, "dev1");
-        host_.heads.insert(get(id).branch, "later");
+        host_.heads.insert(get(id).branch, QString(40, 'c'));
         host_.merged.insert(id);
         teams_->memberTurnEnded("lead");
-        QCOMPARE(get(id).state, state::done);
-        QCOMPARE(updates("merged_unreviewed"), 1);
+        QCOMPARE(get(id).state, state::blocked);
+        QVERIFY(!get(id).acceptance);
+        QCOMPARE(updates("merged_unreviewed"), 0);
     }
 
     void theAncestorCheckOnARealRepository() {

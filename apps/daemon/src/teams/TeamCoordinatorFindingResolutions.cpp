@@ -1,4 +1,5 @@
 // Leader arbitration is separate from a reviewer verdict and never completes a merge.
+#include "teams/TeamCompletionPolicy.h"
 #include "teams/TeamCoordinator.h"
 
 #include <algorithm>
@@ -124,6 +125,8 @@ TeamResult TeamCoordinator::acceptReview(const qint64 teamId, const QString& tas
                 {"follow_up", "merge_into_integration_after_acceptance"}});
     QList<Update> updates;
     applyMove(*team, *task, state::ready, actor, "bounded findings verified by leader", updates);
+    completion::seal(*team, *task, "leader_targeted_verification", actor,
+                     host_->completionRepository(*team, *task));
     offerMerges(*team, updates);
     if (auto error = commit(*team, before, actor, updates))
         return {.error = error, .teamId = teamId};

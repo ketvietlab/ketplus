@@ -150,6 +150,17 @@ inline constexpr qsizetype maximumWholeHistoryText = 65536;
 [[nodiscard]] QString cutText(QString text, qsizetype bound, const QString& hint = {});
 [[nodiscard]] QJsonObject boundedData(QJsonObject data);
 
+// Written only by the daemon after validated review/policy acceptance. This is
+// durable provenance, not a caller-supplied receipt or a claim that a merge ran.
+struct TaskAcceptance final {
+    QString head;
+    QString context;
+    QString source;
+    QString actor;
+    QString at;
+    QString repositoryId;
+};
+
 struct Task final {
     QString id;
     QString title;
@@ -170,6 +181,7 @@ struct Task final {
     QString headCommit;
     QString pullRequest;
     std::optional<risk::Decision> routingDecision;
+    std::optional<TaskAcceptance> acceptance;
     // Structured findings of the last completed review; never a permission token.
     std::optional<review_policy::Record> reviewFindings;
     // T-90 (ADR 0123): the repository and integration branch the task works in when they are

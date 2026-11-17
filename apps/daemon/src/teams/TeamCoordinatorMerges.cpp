@@ -1,6 +1,7 @@
 // ADR 0114 §5 and open point 3: who merges a reviewed task, and how the daemon knows it is
 // merged. The daemon never merges; it notices the integration branch containing the task's
 // branch, the same way for a merge in the app and one made by hand.
+#include "teams/TeamCompletionPolicy.h"
 #include "teams/TeamCoordinator.h"
 
 namespace ketplus::daemon::teams {
@@ -17,7 +18,8 @@ bool dependenciesDone(const Team& team, const Task& task) {
 
 void TeamCoordinator::offerMerges(Team& team, QList<Update>& updates) {
     for (Task& task : team.tasks) {
-        if (task.state != state::ready || task.mergeOffered || !dependenciesDone(team, task) ||
+        if (task.state != state::ready || task.mergeOffered || !completion::valid(team, task) ||
+            !dependenciesDone(team, task) ||
             (task.reviewFindings && review_policy::blocks(*task.reviewFindings)))
             continue;
         task.mergeOffered = true;
@@ -112,6 +114,7 @@ void TeamCoordinator::applyMergeFacts(const qint64 teamId, const QList<Task>& as
     // A ready task was reviewed at one commit (ADR 0114 §5). Commits added to its branch
     // after that were never reviewed.
     QHash<QString, QString> moved;
+    QSet<QString> scopeChanged;
     for (const Task& was : asked) {
         const Task* task = std::as_const(*team).task(was.id);
         const auto fact = facts.constFind(was.id);
@@ -119,8 +122,13 @@ void TeamCoordinator::applyMergeFacts(const qint64 teamId, const QList<Task>& as
         // about again by the next check.
         if (!task || fact == facts.cend() || task->state != state::ready ||
             task->branch != was.branch || task->headCommit != was.headCommit ||
+            !completion::valid(*team, *task) ||
             (task->reviewFindings && review_policy::blocks(*task->reviewFindings)))
             continue;
+        if (host_->completionRepository(*team, *task) != task->acceptance->repositoryId) {
+            scopeChanged.insert(task->id);
+            continue;
+        }
         // T-38: git speaks only of a branch with commits of its own, handed to review at one
         // of them. A branch still at its base is contained in any branch it was cut from: its
         // work is elsewhere, as in another repository's pull request (ADR 0118).
@@ -131,15 +139,21 @@ void TeamCoordinator::applyMergeFacts(const qint64 teamId, const QList<Task>& as
         // A task that records a pull request is the pull request's to finish (ADR 0118): its
         // branch can be contained without its work being merged, as after it took in the
         // integration branch, or when the work is in another repository.
-        if (fact->merged && *fact->merged && !recordsPullRequest(*task))
+        if (completion::canFinish(*team, *task) && fact->head == task->headCommit && fact->merged &&
+            *fact->merged && !recordsPullRequest(*task))
             merged.append(task->id);
     }
-    if (merged.isEmpty() && moved.isEmpty())
+    if (merged.isEmpty() && moved.isEmpty() && scopeChanged.isEmpty())
         return;
     team = mutableTeam(teamId);
     // Before any pointer into the team: the copy shares its lists until they detach.
     const Team before = *team;
     QList<Update> updates;
+    for (const QString& id : scopeChanged)
+        invalidateAcceptance(*team, *team->task(id),
+                             QStringLiteral("The execution repository origin changed after "
+                                            "acceptance; obtain fresh proof or review."),
+                             updates);
     const auto withdrawMerge = [&](const QString& id, const QString& reason) {
         // A merge decision nobody needs any more, as when the user merged by hand.
         for (Decision& decision : team->decisions)
@@ -177,6 +191,8 @@ void TeamCoordinator::applyMergeFacts(const qint64 teamId, const QList<Task>& as
     }
     for (auto it = moved.cbegin(); it != moved.cend(); ++it) {
         Task* task = team->task(it.key());
+        task->acceptance.reset();
+        task->reviewBlock = QStringLiteral("acceptance_stale");
         task->mergeOffered = false;
         task->leaderMayMerge = false;
         task->resumeState = state::inProgress;

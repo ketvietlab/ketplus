@@ -2,6 +2,12 @@
 
 Status: accepted (2026-11-12). Amends ADR 0114 (open point 3 and §6).
 
+Amended by [ADR 0134](0134-exact-head-task-completion.md): a merged PR now needs
+exact-head acceptance and trusted repository/branch/base facts. A leader's URL
+or hash requests verification and no longer closes a task by itself. The original
+unconditional rules below describe the historical contract, not an exception to
+the current review gates. Explicit user override is audited separately.
+
 ## Context
 
 ADR 0114 decides that a task is done only when local git says the team repository's

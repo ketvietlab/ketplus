@@ -124,6 +124,11 @@ struct PullRequestFact final {
     QString state;
     QString mergeCommit;
     QString error;
+    QString headCommit;
+    QString headBranch;
+    QString baseBranch;
+    QString url;
+    QString repositoryId;
 };
 using PullRequestsDone = std::function<void(const QHash<QString, PullRequestFact>&)>;
 // T-40: the comment a review on the pull request left there: its link, or the error in
@@ -270,6 +275,10 @@ class TeamHostPort {
     [[nodiscard]] virtual QString taskCommit(const Team& team, const Task& task) const {
         (void)team;
         (void)task;
+        return {};
+    }
+    // Opaque canonical origin, read from the execution repository by the host.
+    [[nodiscard]] virtual QString completionRepository(const Team&, const Task&) const {
         return {};
     }
     // T-38: the commit of the task's branch when it is the task's own (team_git::ownHead);
@@ -463,7 +472,7 @@ class TeamCoordinator : public QObject {
     // names for work done outside the task's branch (T-38, TeamCoordinatorAttribution.cpp).
     TeamResult moveTask(qint64 teamId, const QString& taskId, const QString& to,
                         const QString& actor, const QString& note = {},
-                        const QString& reportedHead = {});
+                        const QString& reportedHead = {}, bool userOverride = false);
     TeamResult setCriteria(qint64 teamId, const QString& taskId, const QStringList& texts,
                            const QString& actor);
     // T-38 (TeamCoordinatorAllowedPaths.cpp): the paths any lane may change, for the whole
@@ -703,6 +712,9 @@ class TeamCoordinator : public QObject {
     void applyPullRequestFacts(qint64 teamId, const QHash<QString, PullRequestFact>& facts);
     // Moves a task that is not done to done (ADR 0118): withdraws its merge decisions and its
     // place with the reviewer, and records `kind` with `data` in its history.
+    void invalidateAcceptance(Team& team, Task& task, const QString& reason,
+                              QList<Update>& updates);
+    void refreshAcceptances(Team& team, QList<Update>& updates);
     void finishTask(Team& team, Task& task, const QString& actor, const QString& reason,
                     const QString& kind, const QJsonObject& data, QList<Update>& updates);
     // The goal_reached update, when every task is done.

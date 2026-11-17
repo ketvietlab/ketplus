@@ -79,8 +79,19 @@ class TeamDoneTest final : public QObject {
         QCOMPARE(get(id).state, to);
     }
     void merge(const QString& url = pullRequest) {
-        host_.pullRequests.insert(
-            url, {.state = QStringLiteral("merged"), .mergeCommit = mergeCommit, .error = {}});
+        for (const Task& task : team().tasks)
+            if (task.pullRequest == url) {
+                host_.pullRequests.insert(
+                    url, {.state = QStringLiteral("merged"),
+                          .mergeCommit = mergeCommit,
+                          .error = {},
+                          .headCommit = task.headCommit,
+                          .headBranch = task.branch,
+                          .baseBranch = taskScope(team(), task).integrationBranch,
+                          .url = url,
+                          .repositoryId = host_.completionRepository(team(), task)});
+                return;
+            }
     }
     const Team& team() { return *teams_->team(team_); }
     const Task& get(const QString& id) { return *team().task(id); }
@@ -117,7 +128,7 @@ class TeamDoneTest final : public QObject {
 
     // Criteria 1 and 2: from every state that is not done, with the pull request and the merge
     // commit in the history, and nothing left waiting for the task.
-    void aMergedPullRequestMakesTheTaskDoneFromEveryOpenState() {
+    void aMergedPullRequestCompletesOnlyAcceptedReadyWork() {
         const QStringList states{state::todo, state::inProgress, state::inReview, state::ready,
                                  state::blocked};
         for (const QString& from : states) {
@@ -130,7 +141,12 @@ class TeamDoneTest final : public QObject {
             QVERIFY2(get(id).state == from, qPrintable(from));
             merge();
             teams_->checkPullRequests(team_);
-            QVERIFY2(get(id).state == state::done, qPrintable(from));
+            if (from != state::ready) {
+                QCOMPARE(get(id).state, from);
+                QVERIFY(history(id, "merged").isEmpty());
+                continue;
+            }
+            QCOMPARE(get(id).state, state::done);
             const QList<HistoryEntry> merged = history(id, "merged");
             QCOMPARE(merged.size(), 1);
             QVERIFY(merged.first().text.contains(pullRequest));
@@ -144,7 +160,7 @@ class TeamDoneTest final : public QObject {
         }
     }
 
-    void theAnswerOfAReviewOfAMergedTaskChangesNothing() {
+    void aMergedPullRequestCannotDiscardAnInFlightReview() {
         const QString id = task("Cart");
         recordPullRequest(id);
         bringTo(id, state::inReview);
@@ -152,10 +168,10 @@ class TeamDoneTest final : public QObject {
         const QString request = firstReviews(team()).message;
         merge();
         teams_->checkPullRequests(team_);
-        QCOMPARE(get(id).state, state::done);
-        QVERIFY(firstReviews(team()).reviewing.isEmpty());
+        QCOMPARE(get(id).state, state::inReview);
+        QCOMPARE(firstReviews(team()).message, request);
         teams_->reviewFinished("rev", request, "Verdict: findings\n- a bug", false);
-        QCOMPARE(get(id).state, state::done);
+        QVERIFY(get(id).state != state::done);
     }
 
     void aMergeDecisionOfAMergedReadyTaskIsWithdrawn() {
@@ -173,9 +189,9 @@ class TeamDoneTest final : public QObject {
     void workMergedWhileTheDaemonWasStoppedIsReconciledAtLoad() {
         const QString id = task("Cart");
         recordPullRequest(id);
-        bringTo(id, state::inProgress);
-        teams_.reset();
+        bringTo(id, state::ready);
         merge();
+        teams_.reset();
         open();
         QCOMPARE(get(id).state, state::done);
     }
@@ -187,12 +203,13 @@ class TeamDoneTest final : public QObject {
         // The work is in another repository: the team branch keeps pointing at the commit it
         // was cut from, which the integration branch contains.
         host_.heads.insert(QStringLiteral("team/%1/%2").arg(team_).arg(id), QStringLiteral("base"));
-        bringTo(id, state::ready);
-        // T-38: no commit of its own gives the task no head.
+        bringTo(id, state::inReview);
+        finishReview(*teams_, "rev", "Verdict: no findings", true);
+        // An unreadable/unattributed source cannot mint exact-head acceptance.
         QVERIFY(get(id).headCommit.isEmpty());
         host_.merged.insert(id);
         teams_->checkMerged(team_);
-        QCOMPARE(get(id).state, state::ready);
+        QCOMPARE(get(id).state, state::blocked);
         QVERIFY(history(id, "merged").isEmpty());
     }
 
@@ -228,6 +245,7 @@ class TeamDoneTest final : public QObject {
         const QString first = task("Api");
         const QString second = task("Cart", {first});
         recordPullRequest(first);
+        bringTo(first, state::ready);
         QVERIFY(teams_->assignTask(team_, second, "dev2", "lead").ok());
         const TeamResult refused = teams_->moveTask(team_, second, state::inProgress, "dev2");
         QVERIFY(!refused.ok());
@@ -335,14 +353,18 @@ class TeamDoneTest final : public QObject {
         QCOMPARE(host_.pullRequestAsks.at(1).first(), url(1));
         for (const QStringList& asked : host_.pullRequestAsks)
             QVERIFY(asked.size() <= TeamCoordinator::maxPullRequestsPerCheck);
-        for (int i = 1; i < count; ++i)
-            QVERIFY2(get(ids.at(i)).state == state::done, qPrintable(ids.at(i)));
+        for (int i = 1; i < count; ++i) {
+            // Fair probing is not authorization: these To do tasks have no
+            // accepted head and must stay unfinished despite remote merge facts.
+            QVERIFY(get(ids.at(i)).state != state::done);
+            QVERIFY(!history(ids.at(i), "pull_request").isEmpty());
+        }
         QVERIFY(get(ids.first()).state != state::done);
         QCOMPARE(history(ids.first(), "pull_request").size(), 1);
     }
 
     // Criterion 6.
-    void theLeaderClosesATaskByHandAndNobodyElseMay() {
+    void theLeaderCannotReplaceReviewAndMergeProofWithAHash() {
         const QString id = task("Cart");
         bringTo(id, state::inProgress);
         for (const QString& actor : {"dev1", "rev", "user"}) {
@@ -355,15 +377,17 @@ class TeamDoneTest final : public QObject {
         QCOMPARE(teams_->closeTask(team_, id, mergeCommit, " ", "lead").error->code,
                  QStringLiteral("invalid_payload"));
         QCOMPARE(get(id).state, state::inProgress);
-        QVERIFY(
-            teams_->closeTask(team_, id, mergeCommit, "Merged with the api change.", "lead").ok());
+        QCOMPARE(teams_->closeTask(team_, id, mergeCommit, "Claimed merge", "lead").error->code,
+                 QStringLiteral("review_required"));
+        QVERIFY(teams_->moveTask(team_, id, state::done, "user", "Intentional override", {}, true)
+                    .ok());
         QCOMPARE(get(id).state, state::done);
-        const QList<HistoryEntry> closed = history(id, "closed");
+        const QList<HistoryEntry> closed = history(id, "user_completion_override");
         QCOMPARE(closed.size(), 1);
-        QCOMPARE(closed.first().actor, QStringLiteral("lead"));
-        QCOMPARE(closed.first().data.value("by").toString(), QStringLiteral("Lead"));
-        QCOMPARE(closed.first().data.value("evidence").toString(), mergeCommit);
-        QVERIFY(closed.first().text.contains(mergeCommit));
+        QCOMPARE(closed.first().actor, QStringLiteral("user"));
+        QCOMPARE(closed.first().data.value("authority").toString(),
+                 QStringLiteral("authenticated_user"));
+        QCOMPARE(closed.first().data.value("verified_merge").toBool(true), false);
         QCOMPARE(teams_->closeTask(team_, id, pullRequest, "Again", "lead").error->code,
                  QStringLiteral("invalid_transition"));
     }
