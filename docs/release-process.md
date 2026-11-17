@@ -124,6 +124,11 @@ A production desktop release additionally requires:
 - an About surface that identifies the source revision;
 - no tokens, transcripts, or signing material in the repository or packages.
 
+Collect the [staged inventory and digest-bound component review](artifact-inventory.md)
+for each platform artifact. Its completeness/integrity gate must pass with reviewed
+notices and source materials; final archive payload, legal sufficiency, signing and
+release approval remain separate requirements. The tooling never authorizes publication.
+
 Update preparation validates a filename-safe bundle version and readable HTML/Markdown
 notes before creating an archive. Existing archive or notes destinations, including
 dangling symlinks, are refused rather than overwritten (ADR 0082). This preflight

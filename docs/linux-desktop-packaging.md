@@ -39,6 +39,11 @@ disabled, and the production control policy; it does not change account or
 service configuration. Qt 6.11.1, Node and browser/sidecar dependencies use their
 existing pins. The AppImage runtime is pinned by immutable asset ID and SHA-256
 in `appimage-runtime.json`; a download or cache hash mismatch aborts packaging.
+Before assembling either format, a pinned notice supplement restores the MIT
+library notice missing from `standardwebhooks@1.1.1`'s published npm archive.
+A package-manifest/notice mismatch fails assembly, and a different existing
+upstream LICENSE is never overwritten. This does not conclude SDK redistribution
+rights or the remaining Qt/Chromium/source-offer review.
 
 The build uses three compiler jobs and `SOURCE_DATE_EPOCH` from the public source
 commit. Package timestamps and ownership are normalized. Dependency downloads,
@@ -96,7 +101,12 @@ sandbox inside the disposable container; the shipped launcher never does.
 No browser session, hosted account, provider quota or external network is used.
 
 Artifacts include both packages, `BUILD-METADATA.json`, a preliminary SPDX 2.3
-inventory and `SHA256SUMS`. `publicationAuthorized` is always false; a successful
+inventory and `SHA256SUMS`. After assembly, offline extraction inventories the entire
+deb (control metadata and wrapper/data tree) and AppImage (actual runtime prefix plus
+SquashFS root). Each format's `deb-evidence/` or `appimage-evidence/` contains a detailed
+file/component SBOM, an unapproved review template and `ARTIFACT-EVIDENCE.json` binding
+the package, metadata, inventory and SBOM digests. See [artifact inventory](artifact-inventory.md)
+for the fail-closed review check and its limits. `publicationAuthorized` is always false; a successful
 smoke test does not satisfy the remaining licensing or release-signing gates.
 The release checklist must add complete transitive notices, corresponding source
 and any relinking materials, a per-platform audit, and Debian repository signing.

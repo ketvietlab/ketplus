@@ -10,12 +10,18 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+import sys
 import tempfile
 import urllib.request
 import uuid
 
 HERE = Path(__file__).resolve().parent
 REPO = HERE.parent.parent
+sys.path.insert(0, str(HERE.parent))
+sys.path.insert(0, str(HERE))
+from artifact_inventory import bind_artifacts, encoded, write_evidence
+from payload_evidence import extract_payload, reconcile_recipe_sources
+from notice_supplements import install_supplements
 
 
 def run(*args, **kwargs):
@@ -227,6 +233,7 @@ def main():
     prefix.mkdir(parents=True)
     run("cmake", "--install", build, "--prefix", prefix)
     validate_prefix(prefix)
+    install_supplements(prefix, REPO, json.loads((HERE / "npm-notice-supplements.json").read_text()))
     info = build_info(prefix, args.expected_control_url)
     if info.get("product_version") != args.version:
         raise ValueError("Installed daemon version differs from the package version")
@@ -237,14 +244,29 @@ def main():
     runtime_cache.mkdir(exist_ok=True)
     runtime = verified_runtime(runtime_cache, arch, pin)
     write_sbom(prefix, out, info, args.version, args.qt_version, arch, pin, epoch)
+    source_commit = run("git", "-C", REPO, "rev-parse", "HEAD", capture_output=True,
+                        text=True).stdout.strip()
+    if not source_commit.startswith(info["build_revision"]):
+        raise ValueError("Installed build identity differs from the packaging source commit")
     artifacts = [make_deb(prefix, work, out, args.version, deb_arch, epoch),
                  make_appimage(prefix, appdir, work, out, args.version, arch, runtime, epoch)]
     metadata = {"edition": "pro", "architecture": arch, "version": args.version,
                 "qtVersion": args.qt_version, "daemonBuildInfo": info,
-                "sourceDateEpoch": epoch, "signed": False, "publicationAuthorized": False}
+                "sourceDateEpoch": epoch, "sourceCommit": source_commit,
+                "signed": False, "publicationAuthorized": False}
     (out / "BUILD-METADATA.json").write_text(json.dumps(metadata, indent=2, sort_keys=True) + "\n")
-    files = artifacts + [out / "BUILD-METADATA.json", out / "SBOM.spdx.json"]
-    (out / "SHA256SUMS").write_text("".join(f"{digest(path)}  {path.name}\n" for path in sorted(files)))
+    for kind, artifact in zip(("deb", "appimage"), artifacts):
+        payload = work / (kind + "-final-payload")
+        layout = extract_payload(artifact, payload, kind, run, runtime)
+        evidence = out / (kind + "-evidence")
+        write_evidence(payload, evidence, source_commit, "linux-" + arch, epoch)
+        reconcile_recipe_sources(payload, evidence, kind, source_commit, args.version, pin)
+        binding = bind_artifacts(evidence, [artifact], out / "BUILD-METADATA.json", base_dir=out)
+        binding["payloadLayout"] = layout
+        (evidence / "ARTIFACT-EVIDENCE.json").write_bytes(encoded(binding))
+    files = sorted(path for path in out.rglob("*") if path.is_file())
+    (out / "SHA256SUMS").write_text("".join(
+        f"{digest(path)}  {path.relative_to(out).as_posix()}\n" for path in files))
     print("Engineering artifacts created; no signing, upload or publication was performed.")
 
 

@@ -68,6 +68,16 @@ add_library(ketplus_ui STATIC
     src/ui/AboutDialog.h
 )
 target_link_libraries(ketplus_ui PUBLIC Qt6::Widgets PRIVATE Qt6::Concurrent PUBLIC KetQt::Tokens KetQt::Icons KetQt::Widgets)
+set(ketplus_about_identity "${CMAKE_CURRENT_BINARY_DIR}/generated/AboutSourceIdentity.h")
+file(MAKE_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/generated")
+add_custom_target(ketplus_about_source_identity
+    COMMAND "${CMAKE_COMMAND}" "-DSOURCE_DIR=${CMAKE_CURRENT_SOURCE_DIR}"
+        "-DOUTPUT=${ketplus_about_identity}"
+        -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/GenerateSourceIdentity.cmake"
+    BYPRODUCTS "${ketplus_about_identity}"
+    VERBATIM)
+add_dependencies(ketplus_ui ketplus_about_source_identity)
+target_include_directories(ketplus_ui PRIVATE "${CMAKE_CURRENT_BINARY_DIR}/generated")
 target_include_directories(ketplus_ui PUBLIC
     "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>"
 )
@@ -422,9 +432,12 @@ if(KETPLUS_CM_BUILD_APP)
         RUNTIME DESTINATION bin
     )
 
+    set(ketplus_app_licenses "share/licenses/ketplus-cm")
+    if(APPLE)
+        set(ketplus_app_licenses "KetPlus CM.app/Contents/Resources/licenses")
+    endif()
     install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/../LICENSE" THIRD_PARTY_NOTICES.md
-        DESTINATION share/licenses/ketplus-cm
-    )
+        DESTINATION "${ketplus_app_licenses}")
     if(UNIX AND NOT APPLE)
         # The desktop entry and the hicolor icons (assets/icons/generate-app-icons.sh).
         install(FILES assets/linux/ketplus.desktop DESTINATION share/applications)
@@ -432,7 +445,7 @@ if(KETPLUS_CM_BUILD_APP)
     endif()
     # THIRD_PARTY_NOTICES.md names these texts by their path in this tree.
     install(DIRECTORY third_party/licenses/
-        DESTINATION share/licenses/ketplus-cm/third_party/licenses
+        DESTINATION "${ketplus_app_licenses}/third_party/licenses"
     )
 endif()
 

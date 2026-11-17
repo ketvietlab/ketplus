@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "supplements": [
+    {
+      "declaredLicense": "MIT",
+      "manifestSha256": "686397f0f0202e0b693cfd3f6241d7a8da3df326f9642867a484fbbd295690b6",
+      "name": "standardwebhooks",
+      "noticeFile": "packaging/licenses/standardwebhooks-MIT.txt",
+      "noticeSha256": "5ec8c7b26b64d881a6706617bed25c049f97f2f35de034c756de8546fd6dbe27",
+      "packageRoot": "lib/ketplus/claude-sidecar/node_modules/standardwebhooks",
+      "source": "https://github.com/standard-webhooks/standard-webhooks/blob/b4d2c14fc5b4ccff3ff271e3b087dff812254c59/libraries/LICENSE",
+      "version": "1.1.1"
+    }
+  ]
+}

@@ -1,0 +1,22 @@
+{
+  "artifactEvidenceSha256": "680b6cfbb5939e35485ea5115de34e9d9c8075c94ca90334744ba55a53ef1af7",
+  "errors": [
+    "component-identity-or-license-unresolved",
+    "component-notices-missing",
+    "component-source-materials-missing",
+    "embedded-or-dependency-evidence-missing"
+  ],
+  "inventoryLicenseGatePassed": false,
+  "inventorySha256": "6bef535398ea978c715cf7f54a2b21579367cf155fb7bd46e96a3e87773491f4",
+  "platform": "linux-aarch64",
+  "publicationAuthorized": false,
+  "remainingReleaseChecks": [
+    "Final archive payload extraction and comparison",
+    "Source/notice legal sufficiency and availability",
+    "Platform build/smoke, signing and release approval"
+  ],
+  "reviewSha256": "0753abc3940a9e4facfc6c4ff3a8c3389481902aff88da5c2d3c0b84a2b3c266",
+  "reviewedSbomSha256": null,
+  "schemaVersion": 1,
+  "sourceCommit": "5b9417abc8b9b9fcf5a20301397eed9e1644ba27"
+}

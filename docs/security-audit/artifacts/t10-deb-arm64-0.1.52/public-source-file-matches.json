@@ -1,0 +1,359 @@
+{
+  "opt/ketplus-pro/ketplus-pro": [
+    "packaging/linux/run-desktop.sh"
+  ],
+  "opt/ketplus-pro/lib/ketplus/agent-skills/enterprise-grade/LICENSE": [
+    "core/resources/color-schemes/KetDesignSystem-LICENSE.txt",
+    "ketplus.ketatlas/licenses/Ket-Design-System-MIT.txt",
+    "assets/agent-skills/ket-design-system/LICENSE",
+    "assets/agent-skills/ket-atlas/LICENSE",
+    "assets/agent-skills/enterprise-grade/LICENSE"
+  ],
+  "opt/ketplus-pro/lib/ketplus/agent-skills/enterprise-grade/SKILL.md": [
+    "assets/agent-skills/enterprise-grade/SKILL.md"
+  ],
+  "opt/ketplus-pro/lib/ketplus/agent-skills/ket-atlas/LICENSE": [
+    "core/resources/color-schemes/KetDesignSystem-LICENSE.txt",
+    "ketplus.ketatlas/licenses/Ket-Design-System-MIT.txt",
+    "assets/agent-skills/ket-design-system/LICENSE",
+    "assets/agent-skills/ket-atlas/LICENSE",
+    "assets/agent-skills/enterprise-grade/LICENSE"
+  ],
+  "opt/ketplus-pro/lib/ketplus/agent-skills/ket-atlas/SKILL.md": [
+    "assets/agent-skills/ket-atlas/SKILL.md"
+  ],
+  "opt/ketplus-pro/lib/ketplus/agent-skills/ket-design-system/LICENSE": [
+    "core/resources/color-schemes/KetDesignSystem-LICENSE.txt",
+    "ketplus.ketatlas/licenses/Ket-Design-System-MIT.txt",
+    "assets/agent-skills/ket-design-system/LICENSE",
+    "assets/agent-skills/ket-atlas/LICENSE",
+    "assets/agent-skills/enterprise-grade/LICENSE"
+  ],
+  "opt/ketplus-pro/lib/ketplus/agent-skills/ket-design-system/SKILL.md": [
+    "assets/agent-skills/ket-design-system/SKILL.md"
+  ],
+  "opt/ketplus-pro/lib/ketplus/agent-skills/ket-design-system/references/flow.md": [
+    "assets/agent-skills/ket-design-system/references/flow.md"
+  ],
+  "opt/ketplus-pro/lib/ketplus/agent-skills/ket-design-system/references/ketsuite.md": [
+    "assets/agent-skills/ket-design-system/references/ketsuite.md"
+  ],
+  "opt/ketplus-pro/lib/ketplus/agent-skills/ket-design-system/references/verification.md": [
+    "assets/agent-skills/ket-design-system/references/verification.md"
+  ],
+  "opt/ketplus-pro/lib/ketplus/agent-skills/ket-design-system/references/visual-contract.md": [
+    "assets/agent-skills/ket-design-system/references/visual-contract.md"
+  ],
+  "opt/ketplus-pro/lib/ketplus/claude-sidecar/authentication.mjs": [
+    "apps/daemon/providers/claude-sidecar/authentication.mjs"
+  ],
+  "opt/ketplus-pro/lib/ketplus/claude-sidecar/index.mjs": [
+    "apps/daemon/providers/claude-sidecar/index.mjs"
+  ],
+  "opt/ketplus-pro/lib/ketplus/claude-sidecar/input.mjs": [
+    "apps/daemon/providers/claude-sidecar/input.mjs"
+  ],
+  "opt/ketplus-pro/lib/ketplus/claude-sidecar/package-lock.json": [
+    "apps/daemon/providers/claude-sidecar/package-lock.json"
+  ],
+  "opt/ketplus-pro/lib/ketplus/claude-sidecar/package.json": [
+    "apps/daemon/providers/claude-sidecar/package.json"
+  ],
+  "opt/ketplus-pro/lib/ketplus/claude-sidecar/resume.mjs": [
+    "apps/daemon/providers/claude-sidecar/resume.mjs"
+  ],
+  "opt/ketplus-pro/lib/ketplus/claude-sidecar/review-guard.mjs": [
+    "apps/daemon/providers/claude-sidecar/review-guard.mjs"
+  ],
+  "opt/ketplus-pro/lib/ketplus/claude-sidecar/session-delete.mjs": [
+    "apps/daemon/providers/claude-sidecar/session-delete.mjs"
+  ],
+  "opt/ketplus-pro/lib/ketplus/claude-sidecar/session-usage.mjs": [
+    "apps/daemon/providers/claude-sidecar/session-usage.mjs"
+  ],
+  "opt/ketplus-pro/lib/ketplus/claude-sidecar/tasks.mjs": [
+    "apps/daemon/providers/claude-sidecar/tasks.mjs"
+  ],
+  "opt/ketplus-pro/lib/ketplus/claude-sidecar/transcript.mjs": [
+    "apps/daemon/providers/claude-sidecar/transcript.mjs"
+  ],
+  "opt/ketplus-pro/lib/ketplus/ketplus-browser/.claude/skills/ketplus-browser/SKILL.md": [
+    "apps/browser/.claude/skills/ketplus-browser/SKILL.md"
+  ],
+  "opt/ketplus-pro/lib/ketplus/ketplus-browser/.claude/skills/ketplus-browser/references/protocol.md": [
+    "apps/browser/.claude/skills/ketplus-browser/references/protocol.md"
+  ],
+  "opt/ketplus-pro/lib/ketplus/ketplus-browser/.claude/skills/ketplus-browser/scripts/browser-rpc.mjs": [
+    "apps/browser/.claude/skills/ketplus-browser/scripts/browser-rpc.mjs"
+  ],
+  "opt/ketplus-pro/lib/ketplus/ketplus-browser/package-lock.json": [
+    "apps/browser/package-lock.json"
+  ],
+  "opt/ketplus-pro/lib/ketplus/ketplus-browser/package.json": [
+    "apps/browser/package.json"
+  ],
+  "opt/ketplus-pro/lib/ketplus/ketplus-browser/src/browser-service.mjs": [
+    "apps/browser/src/browser-service.mjs"
+  ],
+  "opt/ketplus-pro/lib/ketplus/ketplus-browser/src/check-engine.mjs": [
+    "apps/browser/src/check-engine.mjs"
+  ],
+  "opt/ketplus-pro/lib/ketplus/ketplus-browser/src/cli.mjs": [
+    "apps/browser/src/cli.mjs"
+  ],
+  "opt/ketplus-pro/lib/ketplus/ketplus-browser/src/comparator.mjs": [
+    "apps/browser/src/comparator.mjs"
+  ],
+  "opt/ketplus-pro/lib/ketplus/ketplus-browser/src/compare-urls.mjs": [
+    "apps/browser/src/compare-urls.mjs"
+  ],
+  "opt/ketplus-pro/lib/ketplus/ketplus-browser/src/engine-installer.mjs": [
+    "apps/browser/src/engine-installer.mjs"
+  ],
+  "opt/ketplus-pro/lib/ketplus/ketplus-browser/src/engine.mjs": [
+    "apps/browser/src/engine.mjs"
+  ],
+  "opt/ketplus-pro/lib/ketplus/ketplus-browser/src/errors.mjs": [
+    "apps/browser/src/errors.mjs"
+  ],
+  "opt/ketplus-pro/lib/ketplus/ketplus-browser/src/inspection.mjs": [
+    "apps/browser/src/inspection.mjs"
+  ],
+  "opt/ketplus-pro/lib/ketplus/ketplus-browser/src/instructions.mjs": [
+    "apps/browser/src/instructions.mjs"
+  ],
+  "opt/ketplus-pro/lib/ketplus/ketplus-browser/src/mcp.mjs": [
+    "apps/browser/src/mcp.mjs"
+  ],
+  "opt/ketplus-pro/lib/ketplus/ketplus-browser/src/network-address.mjs": [
+    "apps/browser/src/network-address.mjs"
+  ],
+  "opt/ketplus-pro/lib/ketplus/ketplus-browser/src/observation.mjs": [
+    "apps/browser/src/observation.mjs"
+  ],
+  "opt/ketplus-pro/lib/ketplus/ketplus-browser/src/origin-policy.mjs": [
+    "apps/browser/src/origin-policy.mjs"
+  ],
+  "opt/ketplus-pro/lib/ketplus/ketplus-browser/src/origin-proxy.mjs": [
+    "apps/browser/src/origin-proxy.mjs"
+  ],
+  "opt/ketplus-pro/lib/ketplus/ketplus-browser/src/page-diagnostics.mjs": [
+    "apps/browser/src/page-diagnostics.mjs"
+  ],
+  "opt/ketplus-pro/lib/ketplus/ketplus-browser/src/protocol.mjs": [
+    "apps/browser/src/protocol.mjs"
+  ],
+  "opt/ketplus-pro/lib/ketplus/ketplus-browser/src/redaction.mjs": [
+    "apps/browser/src/redaction.mjs"
+  ],
+  "opt/ketplus-pro/share/applications/ketplus-pro.desktop": [
+    "packaging/linux/ketplus-pro.desktop"
+  ],
+  "opt/ketplus-pro/share/icons/hicolor/128x128/apps/ketplus-pro.png": [
+    "packaging/linux/hicolor/128x128/apps/ketplus-pro.png",
+    "core/assets/linux/hicolor/128x128/apps/ketplus.png"
+  ],
+  "opt/ketplus-pro/share/icons/hicolor/16x16/apps/ketplus-pro.png": [
+    "packaging/linux/hicolor/16x16/apps/ketplus-pro.png",
+    "core/assets/linux/hicolor/16x16/apps/ketplus.png"
+  ],
+  "opt/ketplus-pro/share/icons/hicolor/256x256/apps/ketplus-pro.png": [
+    "packaging/linux/hicolor/256x256/apps/ketplus-pro.png",
+    "core/assets/linux/hicolor/256x256/apps/ketplus.png"
+  ],
+  "opt/ketplus-pro/share/icons/hicolor/32x32/apps/ketplus-pro.png": [
+    "packaging/linux/hicolor/32x32/apps/ketplus-pro.png",
+    "core/assets/linux/hicolor/32x32/apps/ketplus.png"
+  ],
+  "opt/ketplus-pro/share/icons/hicolor/48x48/apps/ketplus-pro.png": [
+    "packaging/linux/hicolor/48x48/apps/ketplus-pro.png",
+    "core/assets/linux/hicolor/48x48/apps/ketplus.png"
+  ],
+  "opt/ketplus-pro/share/icons/hicolor/512x512/apps/ketplus-pro.png": [
+    "packaging/linux/hicolor/512x512/apps/ketplus-pro.png",
+    "core/assets/linux/hicolor/512x512/apps/ketplus.png"
+  ],
+  "opt/ketplus-pro/share/icons/hicolor/64x64/apps/ketplus-pro.png": [
+    "packaging/linux/hicolor/64x64/apps/ketplus-pro.png",
+    "core/assets/linux/hicolor/64x64/apps/ketplus.png"
+  ],
+  "opt/ketplus-pro/share/licenses/ketplus/AppImage-runtime.txt": [
+    "third_party/licenses/AppImage-runtime.txt"
+  ],
+  "opt/ketplus-pro/share/licenses/ketplus/Dracula-MIT.txt": [
+    "core/third_party/licenses/Dracula-MIT.txt",
+    "third_party/licenses/Dracula-MIT.txt"
+  ],
+  "opt/ketplus-pro/share/licenses/ketplus/JetBrains-Themes-Apache-2.0.txt": [
+    "core/third_party/licenses/JetBrains-Themes-Apache-2.0.txt",
+    "third_party/licenses/JetBrains-Themes-Apache-2.0.txt"
+  ],
+  "opt/ketplus-pro/share/licenses/ketplus/JetBrains-Themes-NOTICE.txt": [
+    "core/third_party/licenses/JetBrains-Themes-NOTICE.txt",
+    "third_party/licenses/JetBrains-Themes-NOTICE.txt"
+  ],
+  "opt/ketplus-pro/share/licenses/ketplus/KET-Sans-Mono-OFL-1.1.txt": [
+    "core/third_party/licenses/KET-Sans-Mono-OFL-1.1.txt",
+    "core/assets/fonts/KET-Sans-Mono-OFL-1.1.txt",
+    "third_party/licenses/KET-Sans-Mono-OFL-1.1.txt",
+    "ketplus.ketatlas/licenses/KET-Sans-Mono-OFL-1.1.txt",
+    "ketplus.ketatlas/licenses/KET-Sans-OFL-1.1.txt"
+  ],
+  "opt/ketplus-pro/share/licenses/ketplus/KET-Sans-OFL-1.1.txt": [
+    "core/third_party/licenses/KET-Sans-OFL-1.1.txt",
+    "third_party/licenses/KET-Sans-OFL-1.1.txt"
+  ],
+  "opt/ketplus-pro/share/licenses/ketplus/Ket-Design-System-MIT.txt": [
+    "core/third_party/licenses/Ket-Design-System-MIT.txt",
+    "third_party/licenses/Ket-Design-System-MIT.txt"
+  ],
+  "opt/ketplus-pro/share/licenses/ketplus/Ket-Symbol-CC-BY-4.0.txt": [
+    "core/third_party/licenses/Ket-Symbol-CC-BY-4.0.txt",
+    "third_party/licenses/Ket-Symbol-CC-BY-4.0.txt"
+  ],
+  "opt/ketplus-pro/share/licenses/ketplus/KetPlus-CM-MPL-2.0.txt": [
+    "LICENSE",
+    "core/third_party/licenses/KetPlus-Syntax-MPL-2.0.txt",
+    "core/third_party/licenses/KetQt-MPL-2.0.txt",
+    "third_party/licenses/KetPlus-Syntax-MPL-2.0.txt",
+    "third_party/licenses/KetQt-MPL-2.0.txt",
+    "third_party/licenses/KetPlus-CM-MPL-2.0.txt",
+    "third_party/licenses/libjuice-MPL-2.0.txt",
+    "third_party/licenses/libdatachannel-MPL-2.0.txt"
+  ],
+  "opt/ketplus-pro/share/licenses/ketplus/KetPlus-Syntax-MPL-2.0.txt": [
+    "LICENSE",
+    "core/third_party/licenses/KetPlus-Syntax-MPL-2.0.txt",
+    "core/third_party/licenses/KetQt-MPL-2.0.txt",
+    "third_party/licenses/KetPlus-Syntax-MPL-2.0.txt",
+    "third_party/licenses/KetQt-MPL-2.0.txt",
+    "third_party/licenses/KetPlus-CM-MPL-2.0.txt",
+    "third_party/licenses/libjuice-MPL-2.0.txt",
+    "third_party/licenses/libdatachannel-MPL-2.0.txt"
+  ],
+  "opt/ketplus-pro/share/licenses/ketplus/KetQt-MPL-2.0.txt": [
+    "LICENSE",
+    "core/third_party/licenses/KetPlus-Syntax-MPL-2.0.txt",
+    "core/third_party/licenses/KetQt-MPL-2.0.txt",
+    "third_party/licenses/KetPlus-Syntax-MPL-2.0.txt",
+    "third_party/licenses/KetQt-MPL-2.0.txt",
+    "third_party/licenses/KetPlus-CM-MPL-2.0.txt",
+    "third_party/licenses/libjuice-MPL-2.0.txt",
+    "third_party/licenses/libdatachannel-MPL-2.0.txt"
+  ],
+  "opt/ketplus-pro/share/licenses/ketplus/LICENSE": [
+    "LICENSE",
+    "core/third_party/licenses/KetPlus-Syntax-MPL-2.0.txt",
+    "core/third_party/licenses/KetQt-MPL-2.0.txt",
+    "third_party/licenses/KetPlus-Syntax-MPL-2.0.txt",
+    "third_party/licenses/KetQt-MPL-2.0.txt",
+    "third_party/licenses/KetPlus-CM-MPL-2.0.txt",
+    "third_party/licenses/libjuice-MPL-2.0.txt",
+    "third_party/licenses/libdatachannel-MPL-2.0.txt"
+  ],
+  "opt/ketplus-pro/share/licenses/ketplus/Lexilla.txt": [
+    "core/third_party/licenses/Lexilla.txt",
+    "core/third_party/licenses/Scintilla.txt",
+    "third_party/licenses/Lexilla.txt",
+    "third_party/licenses/Scintilla.txt"
+  ],
+  "opt/ketplus-pro/share/licenses/ketplus/Nord-MIT.txt": [
+    "core/third_party/licenses/Nord-MIT.txt",
+    "third_party/licenses/Nord-MIT.txt"
+  ],
+  "opt/ketplus-pro/share/licenses/ketplus/OneDarkPro-MIT.txt": [
+    "core/third_party/licenses/OneDarkPro-MIT.txt",
+    "third_party/licenses/OneDarkPro-MIT.txt"
+  ],
+  "opt/ketplus-pro/share/licenses/ketplus/OpenSSL-Apache-2.0.txt": [
+    "third_party/licenses/OpenSSL-Apache-2.0.txt"
+  ],
+  "opt/ketplus-pro/share/licenses/ketplus/Scintilla.txt": [
+    "core/third_party/licenses/Lexilla.txt",
+    "core/third_party/licenses/Scintilla.txt",
+    "third_party/licenses/Lexilla.txt",
+    "third_party/licenses/Scintilla.txt"
+  ],
+  "opt/ketplus-pro/share/licenses/ketplus/Solarized-MIT.txt": [
+    "core/third_party/licenses/Solarized-MIT.txt",
+    "third_party/licenses/Solarized-MIT.txt"
+  ],
+  "opt/ketplus-pro/share/licenses/ketplus/Sparkle-MIT.txt": [
+    "third_party/licenses/Sparkle-MIT.txt"
+  ],
+  "opt/ketplus-pro/share/licenses/ketplus/THIRD_PARTY_NOTICES.md": [
+    "THIRD_PARTY_NOTICES.md"
+  ],
+  "opt/ketplus-pro/share/licenses/ketplus/VSCode-Themes-MIT.txt": [
+    "core/third_party/licenses/VSCode-Themes-MIT.txt",
+    "third_party/licenses/VSCode-Themes-MIT.txt"
+  ],
+  "opt/ketplus-pro/share/licenses/ketplus/libdatachannel-MPL-2.0.txt": [
+    "LICENSE",
+    "core/third_party/licenses/KetPlus-Syntax-MPL-2.0.txt",
+    "core/third_party/licenses/KetQt-MPL-2.0.txt",
+    "third_party/licenses/KetPlus-Syntax-MPL-2.0.txt",
+    "third_party/licenses/KetQt-MPL-2.0.txt",
+    "third_party/licenses/KetPlus-CM-MPL-2.0.txt",
+    "third_party/licenses/libjuice-MPL-2.0.txt",
+    "third_party/licenses/libdatachannel-MPL-2.0.txt"
+  ],
+  "opt/ketplus-pro/share/licenses/ketplus/libjuice-MPL-2.0.txt": [
+    "LICENSE",
+    "core/third_party/licenses/KetPlus-Syntax-MPL-2.0.txt",
+    "core/third_party/licenses/KetQt-MPL-2.0.txt",
+    "third_party/licenses/KetPlus-Syntax-MPL-2.0.txt",
+    "third_party/licenses/KetQt-MPL-2.0.txt",
+    "third_party/licenses/KetPlus-CM-MPL-2.0.txt",
+    "third_party/licenses/libjuice-MPL-2.0.txt",
+    "third_party/licenses/libdatachannel-MPL-2.0.txt"
+  ],
+  "opt/ketplus-pro/share/licenses/ketplus/libvterm-MIT.txt": [
+    "core/third_party/licenses/libvterm-MIT.txt",
+    "third_party/licenses/libvterm-MIT.txt"
+  ],
+  "opt/ketplus-pro/share/licenses/ketplus/miniz-MIT.txt": [
+    "core/third_party/licenses/miniz-MIT.txt",
+    "third_party/licenses/miniz-MIT.txt"
+  ],
+  "opt/ketplus-pro/share/licenses/ketplus/plog-MIT.txt": [
+    "third_party/licenses/plog-MIT.txt"
+  ],
+  "opt/ketplus-pro/share/licenses/ketplus/usrsctp-BSD-3-Clause.txt": [
+    "third_party/licenses/usrsctp-BSD-3-Clause.txt"
+  ],
+  "opt/ketplus-pro/share/systemd/user/ketplus-daemon.service": [
+    "packaging/linux/ketplus-daemon.service"
+  ],
+  "usr/share/applications/ketplus-pro.desktop": [
+    "packaging/linux/ketplus-pro.desktop"
+  ],
+  "usr/share/icons/hicolor/128x128/apps/ketplus-pro.png": [
+    "packaging/linux/hicolor/128x128/apps/ketplus-pro.png",
+    "core/assets/linux/hicolor/128x128/apps/ketplus.png"
+  ],
+  "usr/share/icons/hicolor/16x16/apps/ketplus-pro.png": [
+    "packaging/linux/hicolor/16x16/apps/ketplus-pro.png",
+    "core/assets/linux/hicolor/16x16/apps/ketplus.png"
+  ],
+  "usr/share/icons/hicolor/256x256/apps/ketplus-pro.png": [
+    "packaging/linux/hicolor/256x256/apps/ketplus-pro.png",
+    "core/assets/linux/hicolor/256x256/apps/ketplus.png"
+  ],
+  "usr/share/icons/hicolor/32x32/apps/ketplus-pro.png": [
+    "packaging/linux/hicolor/32x32/apps/ketplus-pro.png",
+    "core/assets/linux/hicolor/32x32/apps/ketplus.png"
+  ],
+  "usr/share/icons/hicolor/48x48/apps/ketplus-pro.png": [
+    "packaging/linux/hicolor/48x48/apps/ketplus-pro.png",
+    "core/assets/linux/hicolor/48x48/apps/ketplus.png"
+  ],
+  "usr/share/icons/hicolor/512x512/apps/ketplus-pro.png": [
+    "packaging/linux/hicolor/512x512/apps/ketplus-pro.png",
+    "core/assets/linux/hicolor/512x512/apps/ketplus.png"
+  ],
+  "usr/share/icons/hicolor/64x64/apps/ketplus-pro.png": [
+    "packaging/linux/hicolor/64x64/apps/ketplus-pro.png",
+    "core/assets/linux/hicolor/64x64/apps/ketplus.png"
+  ]
+}

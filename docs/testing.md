@@ -332,6 +332,24 @@ full Pro matrix results, initial failures, one isolated retry and platform skips
 
 ## Minimum verification
 
+Staged inventory/review-gate changes run
+`python3 -m unittest discover -s tests/hygiene -p 'test_*.py'` and
+`python3 tests/packaging/test_linux_desktop_packages.py`. These use disposable
+staging/artifacts and no SDK, network, provider quota or signing keys. They verify
+evidence integrity/completeness; actual per-platform package, source/notice,
+signing and final release acceptance remain separate in
+[artifact inventory](artifact-inventory.md).
+The npm archive comparator uses synthetic lock-pinned tarballs in those tests;
+real archive collection is a separate read-only provenance exercise. Notice
+supplement tests reject changed package manifests, changed pins, escaping paths
+and attempts to overwrite a different upstream notice.
+
+Shared About changes run `ketplus_brand_lockup_tests` and the full Lite suite
+offscreen. The focused target checks edition/platform notice layouts, public source
+identity, keyboard URL actions, missing files and live light/dark/zoom layout at the
+Lite minimum window size. `KETPLUS_ABOUT_CAPTURE_DIR` saves representative Qt renders
+for visual review; URL actions are intercepted without opening a browser.
+
 Linux Pro packaging changes run `tests/packaging/test_linux_desktop_packages.py`,
 the offscreen bundled-browser/Claude-adapter tests and production build-info
 checks through `packaging/linux/build-desktop.sh`. Verify both actual package
