@@ -1,5 +1,6 @@
 #include "snapshot/WorktreeSnapshot.h"
 
+#include "snapshot/ExcludeRules.h"
 #include "snapshot/RepositoryLayout.h"
 
 #include <QCryptographicHash>
@@ -52,7 +53,7 @@ QString readAlternate(const QString& store) {
 
 // Creates the store on first use and binds it to the repository's object directory.
 std::optional<Error> prepareStore(const SealedGit& git, const QString& storePath,
-                                  const RepositoryLayout& layout) {
+                                  const RepositoryLayout& layout, const ExcludeSources& sources) {
     if (!QDir::isAbsolutePath(storePath))
         return Error{ErrorCode::InvalidArgument, QStringLiteral("store path must be absolute")};
     const QString storeRoot = QDir::cleanPath(storePath);
@@ -96,11 +97,9 @@ std::optional<Error> prepareStore(const SealedGit& git, const QString& storePath
     } else if (auto error = writeFileAtomically(binding, wanted)) {
         return error;
     }
-    // The repository's info/exclude, so files it ignores stay out of the snapshot. Global
-    // excludes (core.excludesFile) live in user configuration, which is never read.
-    QByteArray exclude;
-    if (QFile file(layout.excludeFile); file.open(QIODevice::ReadOnly))
-        exclude = file.readAll();
+    // core.excludesFile and the repository's info/exclude, so a file the user's git hides
+    // stays out of the snapshot. The worktree's .gitignore files are read in place.
+    const QByteArray exclude = collectExcludeRules(git, layout, sources);
     QDir().mkpath(QDir(storeRoot).filePath(QStringLiteral("info")));
     return writeFileAtomically(QDir(storeRoot).filePath(QStringLiteral("info/exclude")), exclude);
 }
@@ -153,7 +152,9 @@ Result<Snapshot> createSnapshot(const SnapshotRequest& request, const GitTool& t
     const auto layout = readRepositoryLayout(request.worktreePath);
     if (!layout)
         return layout.error();
-    if (auto error = prepareStore(git, request.storePath, layout.value()))
+    if (auto error = prepareStore(git, request.storePath, layout.value(),
+                                  request.excludeSources ? *request.excludeSources
+                                                         : excludeSourcesFromEnvironment()))
         return *error;
     const QString store = QDir::cleanPath(request.storePath);
 

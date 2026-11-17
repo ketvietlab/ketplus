@@ -56,6 +56,10 @@ class SealedGit {
     [[nodiscard]] Result<GitOutput> initBare(const QString& path,
                                              const QString& objectFormat = {}) const;
 
+    // One value from one config file, read as data: `git config --file`, which follows no
+    // include directives and runs nothing. Empty when the file or key is absent or unreadable.
+    [[nodiscard]] QString readConfigValue(const QString& file, const QString& key) const;
+
     [[nodiscard]] QProcessEnvironment environment() const;
     [[nodiscard]] static QStringList sealedOptions();
 

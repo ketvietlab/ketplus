@@ -1,11 +1,14 @@
 #pragma once
 
+#include "snapshot/ExcludeRules.h"
 #include "snapshot/SealedGit.h"
 #include "snapshot/SnapshotResult.h"
 
 #include <QByteArray>
 #include <QString>
 #include <QStringList>
+
+#include <optional>
 
 // Desktop side of a runner job's source: freeze a worktree's current state, including
 // uncommitted and untracked changes, as a commit in a KetPlus-owned store, then pack what a
@@ -18,6 +21,8 @@ struct SnapshotRequest {
     // It reads the repository's objects without ever writing to them, and is bound to one
     // repository (all of that repository's worktrees may share it).
     QString storePath;
+    // Where core.excludesFile is looked up; unset uses the caller's environment.
+    std::optional<ExcludeSources> excludeSources = std::nullopt;
 };
 
 struct Snapshot {
@@ -33,7 +38,7 @@ struct Snapshot {
 
 // Captures the worktree as it is now: every tracked path with its current content (staged
 // or not), deletions, renames, the executable bit and symlinks, plus untracked files that are
-// not ignored by .gitignore or the repository's info/exclude. Global excludes are not read.
+// not ignored by .gitignore, the repository's info/exclude or core.excludesFile.
 [[nodiscard]] Result<Snapshot> createSnapshot(const SnapshotRequest& request,
                                               const GitTool& tool = {});
 

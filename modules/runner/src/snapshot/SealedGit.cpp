@@ -1,6 +1,7 @@
 #include "snapshot/SealedGit.h"
 
 #include <QDir>
+#include <QFileInfo>
 #include <QProcess>
 #include <QRegularExpression>
 
@@ -145,6 +146,16 @@ Result<GitOutput> SealedGit::initBare(const QString& path, const QString& object
     QProcessEnvironment environment = this->environment();
     environment.insert(QStringLiteral("GIT_TEMPLATE_DIR"), sealedHome());
     return start(arguments, environment, {});
+}
+
+QString SealedGit::readConfigValue(const QString& file, const QString& key) const {
+    if (file.isEmpty() || !QFileInfo(file).isFile())
+        return {};
+    const auto value = start(
+        sealedOptions() + QStringList{QStringLiteral("config"), QStringLiteral("--no-includes"),
+                                      QStringLiteral("--file"), file, QStringLiteral("--get"), key},
+        environment(), {});
+    return value ? QString::fromUtf8(value.value().out).trimmed() : QString();
 }
 
 Result<GitOutput> SealedGit::start(const QStringList& arguments,

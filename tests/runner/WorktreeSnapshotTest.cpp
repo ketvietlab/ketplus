@@ -151,6 +151,10 @@ class EnvironmentGuard {
                                      : std::nullopt);
         qputenv(name, value);
     }
+    void unset(const char* name) {
+        set(name, {});
+        qunsetenv(name);
+    }
     ~EnvironmentGuard() {
         for (auto it = m_saved.cbegin(); it != m_saved.cend(); ++it) {
             if (it.value())
@@ -193,6 +197,7 @@ class WorktreeSnapshotTest : public QObject {
     void hostileTreeCannotLeaveWorkspace();
     void symlinksCannotRedirectWrites();
     void submodulesAndLfsAreReportedNotSent();
+    void userExcludesFileIsHonoured();
 
   private:
     QString path(const QString& relative) const { return m_root->filePath(relative); }
@@ -203,6 +208,7 @@ class WorktreeSnapshotTest : public QObject {
     QString hashOf(const QByteArray& content);
 
     std::unique_ptr<QTemporaryDir> m_root;
+    std::unique_ptr<EnvironmentGuard> m_environment;
     QString m_home;
 };
 
@@ -222,9 +228,18 @@ void WorktreeSnapshotTest::init() {
     QVERIFY(m_root->isValid());
     m_home = path(QStringLiteral("home"));
     QDir().mkpath(m_home);
+    // The library reads core.excludesFile from the caller's environment; the developer's own
+    // configuration must not shape any test.
+    m_environment = std::make_unique<EnvironmentGuard>();
+    m_environment->set("HOME", m_home.toUtf8());
+    m_environment->set("XDG_CONFIG_HOME", (m_home + QStringLiteral("/.config")).toUtf8());
+    m_environment->unset("GIT_CONFIG_GLOBAL");
 }
 
-void WorktreeSnapshotTest::cleanup() { m_root.reset(); }
+void WorktreeSnapshotTest::cleanup() {
+    m_environment.reset();
+    m_root.reset();
+}
 
 QString WorktreeSnapshotTest::makeRepository(const QString& name) {
     const QString repo = path(name);
@@ -838,7 +853,8 @@ void WorktreeSnapshotTest::gitRunsSealed() {
 
     // Hostile user and process environment, as a caller might inherit it.
     const QString hostileHome = path(QStringLiteral("hostile-home"));
-    QVERIFY(writeFile(QDir(hostileHome).filePath(QStringLiteral(".gitignore-global")), "*.txt\n"));
+    QVERIFY(writeFile(QDir(hostileHome).filePath(QStringLiteral(".gitignore-global")),
+                      "globally-ignored.txt\n"));
     QVERIFY(writeFile(QDir(hostileHome).filePath(QStringLiteral(".config/git/attributes")),
                       "* filter=evil\n"));
     const QString globalConfig = QDir(hostileHome).filePath(QStringLiteral(".gitconfig"));
@@ -861,6 +877,7 @@ void WorktreeSnapshotTest::gitRunsSealed() {
 
     QVERIFY(writeFile(QDir(repo).filePath(QStringLiteral("a.txt")), "hello\n"));
     QVERIFY(writeFile(QDir(repo).filePath(QStringLiteral("u.txt")), "world\n"));
+    QVERIFY(writeFile(QDir(repo).filePath(QStringLiteral("globally-ignored.txt")), "hidden\n"));
     const auto repoBefore = fingerprint(repo);
     const QString store = path(QStringLiteral("store"));
     const auto snapshot = createSnapshot({repo, store});
@@ -878,11 +895,12 @@ void WorktreeSnapshotTest::gitRunsSealed() {
     QCOMPARE(fingerprint(repo), repoBefore);
 
     // Nothing ran, and contents are the raw bytes: no clean on the way in, no smudge out,
-    // no global excludes dropping u.txt, no autocrlf.
+    // no autocrlf. The excludes file the configuration names is still read as data.
     QCOMPARE(QDir(markers).entryList(QDir::Files | QDir::Hidden), QStringList());
     const auto tree = treeOf(store, snapshot.value().commit);
     QCOMPARE(tree.value(QStringLiteral("a.txt")).content, QByteArray("hello\n"));
     QCOMPARE(tree.value(QStringLiteral("u.txt")).content, QByteArray("world\n"));
+    QVERIFY(!tree.contains(QStringLiteral("globally-ignored.txt")));
     QCOMPARE(readFile(QDir(workspace).filePath(QStringLiteral("a.txt"))), QByteArray("hello\n"));
     QCOMPARE(readFile(QDir(workspace).filePath(QStringLiteral("u.txt"))), QByteArray("world\n"));
     // No sample hooks or other template content in the KetPlus-owned repositories either.
@@ -1069,6 +1087,96 @@ void WorktreeSnapshotTest::submodulesAndLfsAreReportedNotSent() {
     QCOMPARE(readFile(QDir(workspace).filePath(QStringLiteral("assets/model.bin"))), pointer);
     QVERIFY(QFileInfo(QDir(workspace).filePath(QStringLiteral("vendor/lib"))).isDir());
     QVERIFY(QDir(QDir(workspace).filePath(QStringLiteral("vendor/lib"))).isEmpty());
+}
+
+void WorktreeSnapshotTest::userExcludesFileIsHonoured() {
+    const QString repo = makeRepository(QStringLiteral("repo"));
+    QVERIFY(writeFile(QDir(repo).filePath(QStringLiteral("tracked.txt")), "tracked\n"));
+    GIT(add, repo, {QStringLiteral("add"), QStringLiteral("-A")});
+    GIT(commit, repo, {QStringLiteral("commit"), QStringLiteral("-qm"), QStringLiteral("base")});
+    for (const char* name : {".env", "key.pem", ".idea/workspace.xml", "local.secret",
+                             "keep-negated.pem", "plain.txt"})
+        QVERIFY(writeFile(QDir(repo).filePath(QString::fromLatin1(name)), "x\n"));
+    const QString xdg = QDir(m_home).filePath(QStringLiteral(".config"));
+    QVERIFY(writeFile(QDir(xdg).filePath(QStringLiteral("git/ignore")), ".env\n"));
+
+    // Each case against the git the user runs, with the same configuration in place: the
+    // snapshot's untracked files must be exactly what `git status` would show.
+    const auto check = [&](const QString& label, const QStringList& gitEnvironment,
+                           const ExcludeSources& sources, const QStringList& expected) {
+        const auto shown =
+            runGitIn(m_home, repo,
+                     {QStringLiteral("ls-files"), QStringLiteral("-z"), QStringLiteral("--others"),
+                      QStringLiteral("--exclude-standard")},
+                     {}, gitEnvironment);
+        QVERIFY2(shown.ok, qPrintable(shown.err));
+        QStringList fromGit;
+        for (const QByteArray& item : shown.out.split('\0'))
+            if (!item.isEmpty())
+                fromGit << QString::fromUtf8(item);
+        fromGit.sort();
+        QCOMPARE(fromGit, expected);
+
+        const QString store = path(QStringLiteral("store-") + label);
+        const auto snapshot = createSnapshot({repo, store, sources});
+        QVERIFY2(snapshot.ok(), qPrintable(snapshot.error().message));
+        QStringList untracked = treeOf(store, snapshot.value().commit).keys();
+        untracked.removeAll(QStringLiteral("tracked.txt"));
+        untracked.sort();
+        QCOMPARE(untracked, expected);
+    };
+
+    // 1. No core.excludesFile anywhere: git's default $XDG_CONFIG_HOME/git/ignore.
+    const QString globalConfig = QDir(m_home).filePath(QStringLiteral(".gitconfig"));
+    check(QStringLiteral("default"),
+          {QStringLiteral("GIT_CONFIG_GLOBAL=") + globalConfig,
+           QStringLiteral("XDG_CONFIG_HOME=") + xdg},
+          {m_home, xdg, {}},
+          {QStringLiteral(".idea/workspace.xml"), QStringLiteral("keep-negated.pem"),
+           QStringLiteral("key.pem"), QStringLiteral("local.secret"), QStringLiteral("plain.txt")});
+
+    // 2. ~/.gitconfig names a file under ~; it replaces the default, so .env shows again.
+    QVERIFY(writeFile(QDir(m_home).filePath(QStringLiteral("custom-ignore")),
+                      "*.pem\n!keep-negated.pem\n.idea/\n"));
+    QVERIFY(writeFile(globalConfig, "[core]\n\texcludesFile = ~/custom-ignore\n"));
+    check(QStringLiteral("home"),
+          {QStringLiteral("GIT_CONFIG_GLOBAL=") + globalConfig,
+           QStringLiteral("XDG_CONFIG_HOME=") + xdg},
+          {m_home, xdg, {}},
+          {QStringLiteral(".env"), QStringLiteral("keep-negated.pem"),
+           QStringLiteral("local.secret"), QStringLiteral("plain.txt")});
+
+    // 3. The repository's own config wins over the global one, with a worktree-relative
+    //    path; info/exclude still applies on top.
+    QVERIFY(writeFile(QDir(repo).filePath(QStringLiteral("repo-ignore")), "local.secret\n"));
+    GIT(local, repo,
+        {QStringLiteral("config"), QStringLiteral("core.excludesFile"),
+         QStringLiteral("repo-ignore")});
+    QVERIFY(writeFile(QDir(repo).filePath(QStringLiteral(".git/info/exclude")), "plain.txt\n"));
+    check(QStringLiteral("repo"),
+          {QStringLiteral("GIT_CONFIG_GLOBAL=") + globalConfig,
+           QStringLiteral("XDG_CONFIG_HOME=") + xdg},
+          {m_home, xdg, {}},
+          {QStringLiteral(".env"), QStringLiteral(".idea/workspace.xml"),
+           QStringLiteral("keep-negated.pem"), QStringLiteral("key.pem"),
+           QStringLiteral("repo-ignore")});
+    GIT(unsetLocal, repo,
+        {QStringLiteral("config"), QStringLiteral("--unset"), QStringLiteral("core.excludesFile")});
+    QVERIFY(writeFile(QDir(repo).filePath(QStringLiteral(".git/info/exclude")), ""));
+
+    // 4. GIT_CONFIG_GLOBAL in the caller's environment replaces ~/.gitconfig, as for git.
+    const QString alternative = path(QStringLiteral("alt.gitconfig"));
+    QVERIFY(writeFile(path(QStringLiteral("alt-ignore")), "plain.txt\n"));
+    QVERIFY(writeFile(alternative, QByteArray("[core]\n\texcludesFile = ") +
+                                       path(QStringLiteral("alt-ignore")).toUtf8() + "\n"));
+    m_environment->set("GIT_CONFIG_GLOBAL", alternative.toUtf8());
+    check(QStringLiteral("environment"),
+          {QStringLiteral("GIT_CONFIG_GLOBAL=") + alternative,
+           QStringLiteral("XDG_CONFIG_HOME=") + xdg},
+          excludeSourcesFromEnvironment(),
+          {QStringLiteral(".env"), QStringLiteral(".idea/workspace.xml"),
+           QStringLiteral("keep-negated.pem"), QStringLiteral("key.pem"),
+           QStringLiteral("local.secret"), QStringLiteral("repo-ignore")});
 }
 
 QTEST_GUILESS_MAIN(WorktreeSnapshotTest)

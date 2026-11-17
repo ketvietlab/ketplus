@@ -1,5 +1,7 @@
 # Worktree snapshots for runner jobs: create, pack and apply with the system git.
 add_library(ketplus_runner_snapshot STATIC
+    src/snapshot/ExcludeRules.cpp
+    src/snapshot/ExcludeRules.h
     src/snapshot/RepositoryLayout.cpp
     src/snapshot/RepositoryLayout.h
     src/snapshot/SealedGit.cpp
