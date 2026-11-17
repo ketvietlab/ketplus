@@ -907,6 +907,18 @@ response. History replay and MCP readiness come from the actual provider,
 not that synthetic cancellation response. Both tests observe owned-process
 cleanup; neither asks a model to recall history.
 
+`ketplus_copilot_bounded_refresh_tests` follows the same opt-in pattern with
+`KETPLUS_COPILOT_BOUNDED_REFRESH`, `KETPLUS_COPILOT_TEST_BINARY` and the existing
+ledger/owner/head variables. Its default body also skips before CLI launch.
+The separately approved D-6 Auto mode requires `copilot_auto_decision: "D-6"`
+in that ledger; this changes the allowed model mode, not the allowance count.
+The observer passes process-local `--model auto`, disables exposed model tools,
+and checks the official session-scoped Auto configuration response and MCP
+discovery before reserving/forwarding the one synthetic model prompt. The
+replacement prompt is intercepted after real same-ID load. Underlying model
+IDs are recorded only when the inspected ACP fields explicitly disclose them.
+No default provider configuration is changed.
+
 The Cursor discovery-approval proposal is separate from those model probes:
 
 ```sh

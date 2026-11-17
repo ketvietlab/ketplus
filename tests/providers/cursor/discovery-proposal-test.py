@@ -38,13 +38,20 @@ class DiscoveryProposalTest(unittest.TestCase):
             self.assertIn("error", replies[3])
 
     def test_mock_allowance_is_written_before_forward_and_cannot_be_reused(self):
+        for provider in ["cursor", "copilot"]:
+            with self.subTest(provider=provider):
+                self.mock_allowance(provider)
+
+    def mock_allowance(self, provider_name):
         with tempfile.TemporaryDirectory() as temporary:
             root = pathlib.Path(temporary)
             provider = root / "fake-provider"
-            provider.write_text("#!" + sys.executable + "\nLEDGER=" + repr(str(root / "mock-budget.json")) + "\n" + '''import sys,json
+            provider.write_text("#!" + sys.executable + "\nPROVIDER=" + repr(provider_name) + "\nLEDGER=" + repr(str(root / "mock-budget.json")) + "\n" + '''import sys,json
 for line in sys.stdin:
  r=json.loads(line)
- if r["method"]=="session/prompt": assert json.loads(open(LEDGER).read())["cursor"]["sent_or_uncertain"]==1
+ if r["method"]=="session/prompt" and r["params"]["prompt"]==[{"type":"text","text":"/model --session auto"}]:
+  print(json.dumps({"jsonrpc":"2.0","method":"session/update","params":{"update":{"sessionUpdate":"config_option_update","configOptions":[]}}}),flush=True)
+ elif r["method"]=="session/prompt": assert json.loads(open(LEDGER).read())[PROVIDER]["sent_or_uncertain"]==1
  value={"configOptions":[{"id":"model","currentValue":"claude-haiku-5-5"}]} if r["method"]=="session/set_config_option" else {"stopReason":"end_turn"}
  print(json.dumps({"jsonrpc":"2.0","id":r["id"],"result":value}),flush=True)
 ''')
@@ -52,12 +59,13 @@ for line in sys.stdin:
             ledger = root / "mock-budget.json"
             ledger.write_text(json.dumps(dict(decision="D-3", maximum_per_provider=1, owner_conversation=1,
                                              recall_allowed=False, retry_allowed=False,
-                                             cursor=dict(sent_or_uncertain=0))))
+                                             copilot_auto_decision="D-6", **{provider_name:dict(sent_or_uncertain=0)})))
             log = root / "events.jsonl"
             log.write_text(json.dumps(dict(event="tools_list", epoch="one", pid=0)) + "\n")
             config = root / "launch.json"
             config.write_text(json.dumps(dict(executable=str(provider), work=str(root), log=str(log),
-                                             mode="D-3", ledger=str(ledger), head="mock-no-provider", owner=1)))
+                                             mode="D-3", ledger=str(ledger), head="mock-no-provider", owner=1,
+                                             provider=provider_name)))
             process = subprocess.Popen([sys.executable, "-B", str(HERE / "adapter-bounded-fixture.py"),
                                         str(config), "acp"], stdin=subprocess.PIPE, stdout=subprocess.PIPE,
                                        stderr=subprocess.DEVNULL, text=True)
@@ -70,10 +78,11 @@ for line in sys.stdin:
                     return json.loads(process.stdout.readline())
                 send(1, "session/set_config_option", dict(configId="model"))
                 self.assertEqual(receive()["id"], 1)
-                prompt = dict(prompt=[dict(type="text", text="T3_BOUNDED_CURSOR_ALPHA")])
+                marker = "T3_BOUNDED_COPILOT_ALPHA" if provider_name == "copilot" else "T3_BOUNDED_CURSOR_ALPHA"
+                prompt = dict(sessionId="mock-session", prompt=[dict(type="text", text=marker)])
                 send(2, "session/prompt", prompt)
                 self.assertEqual(receive()["id"], 2)
-                self.assertEqual(json.loads(ledger.read_text())["cursor"]["sent_or_uncertain"], 1)
+                self.assertEqual(json.loads(ledger.read_text())[provider_name]["sent_or_uncertain"], 1)
                 self.assertEqual(stat.S_IMODE(ledger.stat().st_mode), 0o600)
                 send(3, "session/prompt", prompt)
                 process.wait(timeout=5)

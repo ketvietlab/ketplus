@@ -523,3 +523,32 @@ intercepted-prompt control. If the provider still defers `tools/list`, stop and
 report the unresolved boundary. A passing CLI control alone cannot enable
 Cursor mutation or release a model prompt. The existing pre-model fence stays
 in place throughout this proposal.
+
+### D-6 Copilot Auto follow-up
+
+The user subsequently allowed **one Copilot Auto turn**. This is the existing
+Copilot 0/1 allowance from D-3, not an additional turn; Codex stays consumed at
+1/1 and Cursor's cheap named-model constraint is unchanged. Authentication keeps
+the existing official inherited route. No additional login, plan change or
+default configuration change is needed.
+
+The new opt-in `CopilotBoundedRefreshTest` uses the production concrete adapter,
+its private launch-MCP bootstrap and dedicated process lifecycle. The observer
+sets `--model auto` only on its owned test process. Before delivery it requires
+real MCP discovery and the official `/model --session auto` configuration
+response. CLI 1.0.112 acknowledges that command through
+`config_option_update` followed by a successful response, without prose; the
+observer accepts that actual structured ACK. It reserves the existing allowance
+before forwarding a valid synthetic marker and intercepts the refresh prompt.
+Any explicitly reported model ID is recorded; Auto is not a guessed underlying
+model name.
+
+The CLI's empty `--available-tools` value is deliberately avoided: a
+[first-party CLI issue](https://github.com/github/copilot-cli/issues/5306)
+reports that it exposes all tools on 1.0.105. The probe instead uses an explicit
+unmatched tool name and denies native permission requests. It also checks for
+both ACP tool-call notifications and attempted fixture tool calls. This report
+does not assume the older-version issue is fixed in 1.0.112. Control failures
+occur before any model reservation/delivery. The synthetic-marker gate also
+caught the new ACP tests using the Codex `input` shape rather than ACP's host
+`prompt` field; both ACP fixtures now use the actual adapter input shape.

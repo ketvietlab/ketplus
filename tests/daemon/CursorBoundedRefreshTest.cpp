@@ -153,10 +153,7 @@ class CursorBoundedRefreshTest final : public QObject {
                 {"model", "claude-haiku-5-5-low"},
                 {"permission", "read-only"},
                 {"agentMcpServer", server},
-                {"input",
-                 QJsonArray{QJsonObject{
-                     {"type", "text"},
-                     {"text", "Reply exactly T3_BOUNDED_CURSOR_ALPHA. Do not use tools."}}}}};
+                {"prompt", "Reply exactly T3_BOUNDED_CURSOR_ALPHA. Do not use tools."}};
         };
         const auto first = call(adapter, setup("one"));
         QVERIFY2(!first.contains("probe_error"), qPrintable(first.value("probe_error").toString()));
