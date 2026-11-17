@@ -37,6 +37,7 @@ struct GitRun {
     QString inputFile;            // or stdin read from this file.
     QString outputFile;           // stdout goes to this file instead of the result.
     QStringList extraEnvironment; // NAME=value pairs, e.g. a fixed author identity.
+    QStringList extraOptions;     // further -c NAME=value pairs, after the sealed ones
 };
 
 struct GitOutput {
@@ -56,9 +57,16 @@ class SealedGit {
     [[nodiscard]] Result<GitOutput> initBare(const QString& path,
                                              const QString& objectFormat = {}) const;
 
-    // One value from one config file, read as data: `git config --file`, which follows no
-    // include directives and runs nothing. Empty when the file or key is absent or unreadable.
-    [[nodiscard]] QString readConfigValue(const QString& file, const QString& key) const;
+    // The one git command the library runs against a user's repository: a read-only
+    // `git config --get-regexp` with the user's global configuration in view (`home`,
+    // `xdgConfigHome`, `globalConfig` as the user's git would see them; empty means unset),
+    // so git itself resolves include, includeIf, precedence and `~`. System configuration
+    // stays excluded. It writes nothing and runs no hook.
+    [[nodiscard]] Result<GitOutput> queryUserConfig(const QString& gitDir, const QString& workTree,
+                                                    const QString& home,
+                                                    const QString& xdgConfigHome,
+                                                    const QString& globalConfig,
+                                                    const QString& keyPattern) const;
 
     [[nodiscard]] QProcessEnvironment environment() const;
     [[nodiscard]] static QStringList sealedOptions();

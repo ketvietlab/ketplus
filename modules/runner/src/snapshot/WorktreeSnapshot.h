@@ -1,8 +1,8 @@
 #pragma once
 
-#include "snapshot/ExcludeRules.h"
 #include "snapshot/SealedGit.h"
 #include "snapshot/SnapshotResult.h"
+#include "snapshot/UserGitRules.h"
 
 #include <QByteArray>
 #include <QString>
@@ -21,8 +21,8 @@ struct SnapshotRequest {
     // It reads the repository's objects without ever writing to them, and is bound to one
     // repository (all of that repository's worktrees may share it).
     QString storePath;
-    // Where core.excludesFile is looked up; unset uses the caller's environment.
-    std::optional<ExcludeSources> excludeSources = std::nullopt;
+    // Where the user's git configuration is looked up; unset uses the caller's environment.
+    std::optional<UserGitSources> userGitSources = std::nullopt;
 };
 
 struct Snapshot {
@@ -31,14 +31,18 @@ struct Snapshot {
     // Gitlinks in the snapshot. Only the recorded commit id travels, never the submodule's
     // content; the caller warns that the runner sees an empty directory there.
     QStringList submodulePaths;
-    // Paths with the `filter=lfs` attribute. A tracked one keeps its index blob (normally the
-    // LFS pointer), never the large worktree content; an untracked one is left out entirely.
-    QStringList lfsPaths;
+    // Paths with a `filter` attribute, from .gitattributes, info/attributes or the user's
+    // core.attributesFile. No filter runs and no worktree content of these paths enters the
+    // snapshot: a tracked one keeps the blob its index already holds (the LFS pointer, or the
+    // encrypted form a filter such as git-crypt stored), an untracked one is left out.
+    QStringList lfsPaths;      // filter=lfs
+    QStringList filteredPaths; // any other filter
 };
 
 // Captures the worktree as it is now: every tracked path with its current content (staged
 // or not), deletions, renames, the executable bit and symlinks, plus untracked files that are
-// not ignored by .gitignore, the repository's info/exclude or core.excludesFile.
+// not ignored by .gitignore, the repository's info/exclude or the user's core.excludesFile.
+// Only one git command reads the user's repository: SealedGit::queryUserConfig.
 [[nodiscard]] Result<Snapshot> createSnapshot(const SnapshotRequest& request,
                                               const GitTool& tool = {});
 

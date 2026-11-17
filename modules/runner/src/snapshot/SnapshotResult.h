@@ -29,6 +29,7 @@ enum class ErrorCode {
 struct Error {
     ErrorCode code = ErrorCode::GitFailed;
     QString message;
+    int gitExitCode = -1; // a GitFailed command's exit status, when it ran to completion
 };
 
 template <typename T> class Result {

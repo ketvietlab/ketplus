@@ -198,6 +198,7 @@ class WorktreeSnapshotTest : public QObject {
     void symlinksCannotRedirectWrites();
     void submodulesAndLfsAreReportedNotSent();
     void userExcludesFileIsHonoured();
+    void filteredPathsAreNotRunNorSent();
 
   private:
     QString path(const QString& relative) const { return m_root->filePath(relative); }
@@ -206,6 +207,7 @@ class WorktreeSnapshotTest : public QObject {
     QMap<QString, Entry> workspaceOf(const QString& root, const QStringList& paths);
     QSet<QString> packObjects(const QString& packPath);
     QString hashOf(const QByteArray& content);
+    QByteArray packContent(const QString& packPath);
 
     std::unique_ptr<QTemporaryDir> m_root;
     std::unique_ptr<EnvironmentGuard> m_environment;
@@ -324,6 +326,23 @@ QSet<QString> WorktreeSnapshotTest::packObjects(const QString& packPath) {
             objects.insert(QString::fromLatin1(parts.at(1)));
     }
     return objects;
+}
+
+// Every object in a pack, decompressed and concatenated, to search for leaked bytes.
+QByteArray WorktreeSnapshotTest::packContent(const QString& packPath) {
+    QTemporaryDir scratch(path(QStringLiteral("packdump-XXXXXX")));
+    const QString repo = scratch.filePath(QStringLiteral("repo"));
+    runGitIn(m_home, scratch.path(),
+             {QStringLiteral("init"), QStringLiteral("-q"), QStringLiteral("--bare"), repo});
+    const QStringList dir{QStringLiteral("--git-dir=") + repo};
+    runGitIn(m_home, scratch.path(),
+             dir + QStringList{QStringLiteral("index-pack"), QStringLiteral("--stdin")},
+             readFile(packPath));
+    return runGitIn(m_home, scratch.path(),
+                    dir + QStringList{QStringLiteral("cat-file"),
+                                      QStringLiteral("--batch-all-objects"),
+                                      QStringLiteral("--batch")})
+        .out;
 }
 
 QString WorktreeSnapshotTest::hashOf(const QByteArray& content) {
@@ -835,7 +854,8 @@ void WorktreeSnapshotTest::gitRunsSealed() {
 
     // Hostile repository: attributes select a filter its config defines, hooks everywhere,
     // and an fsmonitor command.
-    QVERIFY(writeFile(QDir(repo).filePath(QStringLiteral(".gitattributes")), "* filter=evil\n"));
+    QVERIFY(
+        writeFile(QDir(repo).filePath(QStringLiteral(".gitattributes")), "*.dat filter=evil\n"));
     const QByteArray filter = QByteArray("[filter \"evil\"]\n\tclean = ") + touch.toUtf8() +
                               "\n\tsmudge = " + touch.toUtf8() + "\n\trequired = true\n";
     QFile config(QDir(repo).filePath(QStringLiteral(".git/config")));
@@ -856,7 +876,7 @@ void WorktreeSnapshotTest::gitRunsSealed() {
     QVERIFY(writeFile(QDir(hostileHome).filePath(QStringLiteral(".gitignore-global")),
                       "globally-ignored.txt\n"));
     QVERIFY(writeFile(QDir(hostileHome).filePath(QStringLiteral(".config/git/attributes")),
-                      "* filter=evil\n"));
+                      "*.cfg filter=evil\n"));
     const QString globalConfig = QDir(hostileHome).filePath(QStringLiteral(".gitconfig"));
     QVERIFY(writeFile(globalConfig, filter + "[core]\n\thooksPath = " + hooks.toUtf8() +
                                         "\n\tfsmonitor = " + touch.toUtf8() +
@@ -878,6 +898,8 @@ void WorktreeSnapshotTest::gitRunsSealed() {
     QVERIFY(writeFile(QDir(repo).filePath(QStringLiteral("a.txt")), "hello\n"));
     QVERIFY(writeFile(QDir(repo).filePath(QStringLiteral("u.txt")), "world\n"));
     QVERIFY(writeFile(QDir(repo).filePath(QStringLiteral("globally-ignored.txt")), "hidden\n"));
+    QVERIFY(writeFile(QDir(repo).filePath(QStringLiteral("data.dat")), "repo filtered\n"));
+    QVERIFY(writeFile(QDir(repo).filePath(QStringLiteral("user.cfg")), "user filtered\n"));
     const auto repoBefore = fingerprint(repo);
     const QString store = path(QStringLiteral("store"));
     const auto snapshot = createSnapshot({repo, store});
@@ -901,6 +923,12 @@ void WorktreeSnapshotTest::gitRunsSealed() {
     QCOMPARE(tree.value(QStringLiteral("a.txt")).content, QByteArray("hello\n"));
     QCOMPARE(tree.value(QStringLiteral("u.txt")).content, QByteArray("world\n"));
     QVERIFY(!tree.contains(QStringLiteral("globally-ignored.txt")));
+    // Paths the repository's or the user's attributes filter: listed, never sent, never run.
+    QStringList filtered = snapshot.value().filteredPaths;
+    filtered.sort();
+    QCOMPARE(filtered, (QStringList{QStringLiteral("data.dat"), QStringLiteral("user.cfg")}));
+    QVERIFY(!tree.contains(QStringLiteral("data.dat")));
+    QVERIFY(!tree.contains(QStringLiteral("user.cfg")));
     QCOMPARE(readFile(QDir(workspace).filePath(QStringLiteral("a.txt"))), QByteArray("hello\n"));
     QCOMPARE(readFile(QDir(workspace).filePath(QStringLiteral("u.txt"))), QByteArray("world\n"));
     // No sample hooks or other template content in the KetPlus-owned repositories either.
@@ -1103,7 +1131,7 @@ void WorktreeSnapshotTest::userExcludesFileIsHonoured() {
     // Each case against the git the user runs, with the same configuration in place: the
     // snapshot's untracked files must be exactly what `git status` would show.
     const auto check = [&](const QString& label, const QStringList& gitEnvironment,
-                           const ExcludeSources& sources, const QStringList& expected) {
+                           const UserGitSources& sources, const QStringList& expected) {
         const auto shown =
             runGitIn(m_home, repo,
                      {QStringLiteral("ls-files"), QStringLiteral("-z"), QStringLiteral("--others"),
@@ -1169,14 +1197,89 @@ void WorktreeSnapshotTest::userExcludesFileIsHonoured() {
     QVERIFY(writeFile(path(QStringLiteral("alt-ignore")), "plain.txt\n"));
     QVERIFY(writeFile(alternative, QByteArray("[core]\n\texcludesFile = ") +
                                        path(QStringLiteral("alt-ignore")).toUtf8() + "\n"));
+    // 5. An includeIf section matching this repository names the excludes file, with `~`.
+    QVERIFY(writeFile(QDir(m_home).filePath(QStringLiteral("included-ignore")), "key.pem\n"));
+    QVERIFY(writeFile(QDir(m_home).filePath(QStringLiteral("included.inc")),
+                      "[core]\n\texcludesFile = ~/included-ignore\n"));
+    QVERIFY(writeFile(globalConfig, QByteArray("[core]\n\texcludesFile = ~/custom-ignore\n"
+                                               "[includeIf \"gitdir:") +
+                                        repo.toUtf8() + "/\"]\n\tpath = " + m_home.toUtf8() +
+                                        "/included.inc\n"));
+    const auto repoBefore = fingerprint(repo);
+    check(QStringLiteral("include-if"),
+          {QStringLiteral("GIT_CONFIG_GLOBAL=") + globalConfig,
+           QStringLiteral("XDG_CONFIG_HOME=") + xdg},
+          {m_home, xdg, {}},
+          {QStringLiteral(".env"), QStringLiteral(".idea/workspace.xml"),
+           QStringLiteral("keep-negated.pem"), QStringLiteral("local.secret"),
+           QStringLiteral("plain.txt"), QStringLiteral("repo-ignore")});
+    // The configuration query is the one git command run on the user's repository.
+    QCOMPARE(fingerprint(repo), repoBefore);
+
     m_environment->set("GIT_CONFIG_GLOBAL", alternative.toUtf8());
     check(QStringLiteral("environment"),
           {QStringLiteral("GIT_CONFIG_GLOBAL=") + alternative,
            QStringLiteral("XDG_CONFIG_HOME=") + xdg},
-          excludeSourcesFromEnvironment(),
+          userGitSourcesFromEnvironment(),
           {QStringLiteral(".env"), QStringLiteral(".idea/workspace.xml"),
            QStringLiteral("keep-negated.pem"), QStringLiteral("key.pem"),
            QStringLiteral("local.secret"), QStringLiteral("repo-ignore")});
+}
+
+void WorktreeSnapshotTest::filteredPathsAreNotRunNorSent() {
+    const QString markers = path(QStringLiteral("markers"));
+    QDir().mkpath(markers);
+    // An "encrypting" filter: rot13, recording each run.
+    const QString filter = path(QStringLiteral("rot13.sh"));
+    QVERIFY(writeFile(filter, QByteArray("#!/bin/sh\ntouch \"") + markers.toUtf8() +
+                                  "/run-$$\"\ntr A-Za-z N-ZA-Mn-za-m\n"));
+    QVERIFY(setExecutable(filter, true));
+    const QString repo = makeRepository(QStringLiteral("repo"));
+    GIT(clean, repo, {QStringLiteral("config"), QStringLiteral("filter.crypt.clean"), filter});
+    GIT(smudge, repo, {QStringLiteral("config"), QStringLiteral("filter.crypt.smudge"), filter});
+    QVERIFY(writeFile(QDir(repo).filePath(QStringLiteral(".gitattributes")),
+                      "*.secret filter=crypt\n*.txt -filter\n"));
+    QVERIFY(writeFile(QDir(repo).filePath(QStringLiteral("app.secret")), "PLAINTEXT-ONE\n"));
+    QVERIFY(writeFile(QDir(repo).filePath(QStringLiteral("notes.txt")), "notes\n"));
+    GIT(add, repo, {QStringLiteral("add"), QStringLiteral("-A")});
+    GIT(commit, repo, {QStringLiteral("commit"), QStringLiteral("-qm"), QStringLiteral("base")});
+    GIT(stored, repo,
+        {QStringLiteral("cat-file"), QStringLiteral("blob"), QStringLiteral("HEAD:app.secret")});
+    QCOMPARE(stored.out, QByteArray("CYNVAGRKG-BAR\n")); // what the repository holds
+    QVERIFY(QDir(markers).removeRecursively());
+    QDir().mkpath(markers);
+
+    QVERIFY(writeFile(QDir(repo).filePath(QStringLiteral("app.secret")), "PLAINTEXT-TWO\n"));
+    QVERIFY(writeFile(QDir(repo).filePath(QStringLiteral("new.secret")), "PLAINTEXT-THREE\n"));
+    QVERIFY(writeFile(QDir(repo).filePath(QStringLiteral("notes.txt")), "notes edited\n"));
+    // A filter set only by the user's own attributes file counts too.
+    const QString xdg = QDir(m_home).filePath(QStringLiteral(".config"));
+    QVERIFY(
+        writeFile(QDir(xdg).filePath(QStringLiteral("git/attributes")), "*.key filter=crypt\n"));
+    QVERIFY(writeFile(QDir(repo).filePath(QStringLiteral("id.key")), "PLAINTEXT-FOUR\n"));
+
+    const QString store = path(QStringLiteral("store"));
+    const auto snapshot = createSnapshot({repo, store, UserGitSources{m_home, xdg, {}}});
+    EXPECT_OK(snapshot);
+    QStringList filtered = snapshot.value().filteredPaths;
+    filtered.sort();
+    QCOMPARE(filtered, (QStringList{QStringLiteral("app.secret"), QStringLiteral("id.key"),
+                                    QStringLiteral("new.secret")}));
+    QVERIFY(snapshot.value().lfsPaths.isEmpty());
+
+    const auto tree = treeOf(store, snapshot.value().commit);
+    QCOMPARE(tree.value(QStringLiteral("app.secret")).content, QByteArray("CYNVAGRKG-BAR\n"));
+    QVERIFY(!tree.contains(QStringLiteral("new.secret")));
+    QVERIFY(!tree.contains(QStringLiteral("id.key")));
+    QCOMPARE(tree.value(QStringLiteral("notes.txt")).content, QByteArray("notes edited\n"));
+
+    const auto pack =
+        writePack({store, snapshot.value().commit, {}, path(QStringLiteral("p.pack"))});
+    EXPECT_OK(pack);
+    const QByteArray content = packContent(pack.value().path);
+    QVERIFY(content.contains("notes edited")); // the dump really holds the pack's objects
+    QVERIFY(!content.contains("PLAINTEXT"));
+    QCOMPARE(QDir(markers).entryList(QDir::Files | QDir::Hidden), QStringList());
 }
 
 QTEST_GUILESS_MAIN(WorktreeSnapshotTest)

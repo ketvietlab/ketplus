@@ -1,13 +1,14 @@
 #include "snapshot/WorktreeSnapshot.h"
 
-#include "snapshot/ExcludeRules.h"
 #include "snapshot/RepositoryLayout.h"
+#include "snapshot/UserGitRules.h"
 
 #include <QCryptographicHash>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QSaveFile>
+#include <QSet>
 #include <QTemporaryDir>
 
 namespace ketplus::runner::snapshot {
@@ -53,7 +54,7 @@ QString readAlternate(const QString& store) {
 
 // Creates the store on first use and binds it to the repository's object directory.
 std::optional<Error> prepareStore(const SealedGit& git, const QString& storePath,
-                                  const RepositoryLayout& layout, const ExcludeSources& sources) {
+                                  const RepositoryLayout& layout) {
     if (!QDir::isAbsolutePath(storePath))
         return Error{ErrorCode::InvalidArgument, QStringLiteral("store path must be absolute")};
     const QString storeRoot = QDir::cleanPath(storePath);
@@ -97,9 +98,13 @@ std::optional<Error> prepareStore(const SealedGit& git, const QString& storePath
     } else if (auto error = writeFileAtomically(binding, wanted)) {
         return error;
     }
-    // core.excludesFile and the repository's info/exclude, so a file the user's git hides
-    // stays out of the snapshot. The worktree's .gitignore files are read in place.
-    const QByteArray exclude = collectExcludeRules(git, layout, sources);
+    // The repository's info/exclude; .gitignore files are read in place and the user's own
+    // excludes file is given per snapshot.
+    QByteArray exclude;
+    if (QFile file(layout.excludeFile); file.open(QIODevice::ReadOnly))
+        exclude = file.read(maxUserRulesFileBytes + 1);
+    if (exclude.size() > maxUserRulesFileBytes)
+        return Error{ErrorCode::UnsupportedRepository, QStringLiteral("info/exclude is too large")};
     QDir().mkpath(QDir(storeRoot).filePath(QStringLiteral("info")));
     return writeFileAtomically(QDir(storeRoot).filePath(QStringLiteral("info/exclude")), exclude);
 }
@@ -152,10 +157,13 @@ Result<Snapshot> createSnapshot(const SnapshotRequest& request, const GitTool& t
     const auto layout = readRepositoryLayout(request.worktreePath);
     if (!layout)
         return layout.error();
-    if (auto error = prepareStore(git, request.storePath, layout.value(),
-                                  request.excludeSources ? *request.excludeSources
-                                                         : excludeSourcesFromEnvironment()))
+    if (auto error = prepareStore(git, request.storePath, layout.value()))
         return *error;
+    const auto userRules = readUserGitRules(
+        git, layout.value(),
+        request.userGitSources ? *request.userGitSources : userGitSourcesFromEnvironment());
+    if (!userRules)
+        return userRules.error();
     const QString store = QDir::cleanPath(request.storePath);
 
     QTemporaryDir scratch(QDir(store).filePath(QStringLiteral("snapshot-XXXXXX")));
@@ -164,35 +172,62 @@ Result<Snapshot> createSnapshot(const SnapshotRequest& request, const GitTool& t
     const QString index = scratch.filePath(QStringLiteral("index"));
     if (auto error = copyIndex(layout.value(), store, index))
         return *error;
+    // The user's excludes and attributes files at their own low precedence, in place of the
+    // sealed /dev/null.
+    const QString userExcludes = scratch.filePath(QStringLiteral("excludes"));
+    const QString userAttributes = scratch.filePath(QStringLiteral("attributes"));
+    if (auto error = writeFileAtomically(userExcludes, userRules.value().excludes))
+        return *error;
+    if (auto error = writeFileAtomically(userAttributes, userRules.value().attributes))
+        return *error;
 
     GitRun run;
     run.gitDir = store;
     run.workTree = layout.value().workTree;
     run.indexFile = index;
-    const QString top = QStringLiteral(":(top)");
-    const QString lfs = QStringLiteral(":(top,attr:filter=lfs)");
-    const QString notLfs = QStringLiteral(":(top,exclude,attr:filter=lfs)");
+    run.extraOptions = {QStringLiteral("core.excludesFile=") + userExcludes,
+                        QStringLiteral("core.attributesFile=") + userAttributes};
+    // `filter` unspecified (!) or explicitly unset (-): the only paths whose worktree content
+    // may enter the snapshot.
+    const QString unfiltered = QStringLiteral(":(top,attr:!filter)");
+    const QString unsetFilter = QStringLiteral(":(top,attr:-filter)");
 
-    // Stage everything into the scratch index. LFS paths are excluded, so a tracked one keeps
-    // its pointer blob and an untracked one is never hashed.
-    run.arguments = {QStringLiteral("add"), QStringLiteral("--all"), QStringLiteral("--"), top,
-                     notLfs};
+    // Stage into the scratch index. Filtered paths are left out, so a tracked one keeps its
+    // index blob and an untracked one is never hashed.
+    run.arguments = {QStringLiteral("add"), QStringLiteral("--all"), QStringLiteral("--"),
+                     unfiltered, unsetFilter};
     if (const auto added = git.run(run); !added)
         return added.error();
 
+    const auto listFiles = [&](const QStringList& pathspecs) -> Result<QStringList> {
+        GitRun list = run;
+        list.arguments =
+            QStringList{QStringLiteral("ls-files"),           QStringLiteral("-z"),
+                        QStringLiteral("--cached"),           QStringLiteral("--others"),
+                        QStringLiteral("--exclude-standard"), QStringLiteral("--")} +
+            pathspecs;
+        const auto listed = git.run(list);
+        if (!listed)
+            return listed.error();
+        QStringList paths = splitNul(listed.value().out);
+        paths.removeDuplicates();
+        return paths;
+    };
     Snapshot snapshot;
-    run.arguments = {QStringLiteral("ls-files"),
-                     QStringLiteral("-z"),
-                     QStringLiteral("--cached"),
-                     QStringLiteral("--others"),
-                     QStringLiteral("--exclude-standard"),
-                     QStringLiteral("--"),
-                     lfs};
-    const auto lfsFiles = git.run(run);
+    const auto lfsFiles = listFiles({QStringLiteral(":(top,attr:filter=lfs)")});
     if (!lfsFiles)
         return lfsFiles.error();
-    snapshot.lfsPaths = splitNul(lfsFiles.value().out);
-    snapshot.lfsPaths.removeDuplicates();
+    snapshot.lfsPaths = lfsFiles.value();
+    const auto filteredFiles =
+        listFiles({QStringLiteral(":(top)"), QStringLiteral(":(top,exclude,attr:!filter)"),
+                   QStringLiteral(":(top,exclude,attr:-filter)")});
+    if (!filteredFiles)
+        return filteredFiles.error();
+    const QSet<QString> lfs(snapshot.lfsPaths.cbegin(), snapshot.lfsPaths.cend());
+    for (const QString& path : filteredFiles.value()) {
+        if (!lfs.contains(path))
+            snapshot.filteredPaths << path;
+    }
 
     run.arguments = {QStringLiteral("ls-files"), QStringLiteral("-z"), QStringLiteral("--stage")};
     const auto staged = git.run(run);

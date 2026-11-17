@@ -1,7 +1,6 @@
 #include "snapshot/SealedGit.h"
 
 #include <QDir>
-#include <QFileInfo>
 #include <QProcess>
 #include <QRegularExpression>
 
@@ -133,7 +132,10 @@ Result<GitOutput> SealedGit::run(const GitRun& run) const {
         if (equals > 0)
             environment.insert(pair.left(equals), pair.mid(equals + 1));
     }
-    return start(sealedOptions() + run.arguments, environment, run);
+    QStringList options = sealedOptions();
+    for (const QString& option : run.extraOptions)
+        options << QStringLiteral("-c") << option;
+    return start(options + run.arguments, environment, run);
 }
 
 Result<GitOutput> SealedGit::initBare(const QString& path, const QString& objectFormat) const {
@@ -148,14 +150,25 @@ Result<GitOutput> SealedGit::initBare(const QString& path, const QString& object
     return start(arguments, environment, {});
 }
 
-QString SealedGit::readConfigValue(const QString& file, const QString& key) const {
-    if (file.isEmpty() || !QFileInfo(file).isFile())
-        return {};
-    const auto value = start(
-        sealedOptions() + QStringList{QStringLiteral("config"), QStringLiteral("--no-includes"),
-                                      QStringLiteral("--file"), file, QStringLiteral("--get"), key},
-        environment(), {});
-    return value ? QString::fromUtf8(value.value().out).trimmed() : QString();
+Result<GitOutput> SealedGit::queryUserConfig(const QString& gitDir, const QString& workTree,
+                                             const QString& home, const QString& xdgConfigHome,
+                                             const QString& globalConfig,
+                                             const QString& keyPattern) const {
+    QProcessEnvironment environment = this->environment();
+    environment.insert(QStringLiteral("GIT_DIR"), gitDir);
+    environment.remove(QStringLiteral("GIT_CONFIG_GLOBAL"));
+    environment.remove(QStringLiteral("XDG_CONFIG_HOME"));
+    environment.insert(QStringLiteral("HOME"), home.isEmpty() ? sealedHome() : home);
+    if (!xdgConfigHome.isEmpty())
+        environment.insert(QStringLiteral("XDG_CONFIG_HOME"), xdgConfigHome);
+    if (!globalConfig.isEmpty())
+        environment.insert(QStringLiteral("GIT_CONFIG_GLOBAL"), globalConfig);
+    // No sealed -c options here: they would mask the very values being read.
+    GitRun io;
+    io.workTree = workTree;
+    return start({QStringLiteral("config"), QStringLiteral("--includes"),
+                  QStringLiteral("--type=path"), QStringLiteral("--get-regexp"), keyPattern},
+                 environment, io);
 }
 
 Result<GitOutput> SealedGit::start(const QStringList& arguments,
@@ -187,10 +200,13 @@ Result<GitOutput> SealedGit::start(const QStringList& arguments,
     }
     GitOutput output{process.readAllStandardOutput(), process.readAllStandardError()};
     if (process.exitStatus() != QProcess::NormalExit || process.exitCode() != 0) {
-        return Error{ErrorCode::GitFailed, QStringLiteral("%1 failed (%2): %3")
-                                               .arg(describe(arguments))
-                                               .arg(process.exitCode())
-                                               .arg(QString::fromUtf8(output.err).trimmed())};
+        Error error{ErrorCode::GitFailed, QStringLiteral("%1 failed (%2): %3")
+                                              .arg(describe(arguments))
+                                              .arg(process.exitCode())
+                                              .arg(QString::fromUtf8(output.err).trimmed())};
+        if (process.exitStatus() == QProcess::NormalExit)
+            error.gitExitCode = process.exitCode();
+        return error;
     }
     return output;
 }
