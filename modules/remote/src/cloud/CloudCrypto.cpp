@@ -32,15 +32,18 @@ QByteArray randomBytes(const int size, QString* error) {
     return bytes;
 }
 
-PKey rawPrivate(const QByteArray& raw, const int type) {
-    return PKey(EVP_PKEY_new_raw_private_key(
-                    type, nullptr, reinterpret_cast<const unsigned char*>(raw.constData()),
-                    static_cast<size_t>(raw.size())),
-                EVP_PKEY_free);
+// X25519 agreement keys for derive(). Every Ed25519 key goes through
+// ketplus_control_crypto_primitives.
+PKey x25519PrivateKey(const QByteArray& raw) {
+    return PKey(
+        EVP_PKEY_new_raw_private_key(EVP_PKEY_X25519, nullptr,
+                                     reinterpret_cast<const unsigned char*>(raw.constData()),
+                                     static_cast<size_t>(raw.size())),
+        EVP_PKEY_free);
 }
 
-PKey rawPublic(const QByteArray& raw, const int type) {
-    return PKey(EVP_PKEY_new_raw_public_key(type, nullptr,
+PKey x25519PublicKey(const QByteArray& raw) {
+    return PKey(EVP_PKEY_new_raw_public_key(EVP_PKEY_X25519, nullptr,
                                             reinterpret_cast<const unsigned char*>(raw.constData()),
                                             static_cast<size_t>(raw.size())),
                 EVP_PKEY_free);
@@ -422,8 +425,8 @@ QJsonObject CloudCrypto::encryptSealedBound(
 
 QByteArray CloudCrypto::derive(const QByteArray& privateBytes, const QByteArray& peerPublicKey,
                                const QByteArray& salt, QString* error) {
-    PKey privateKey = rawPrivate(privateBytes, EVP_PKEY_X25519);
-    PKey peer = rawPublic(peerPublicKey, EVP_PKEY_X25519);
+    PKey privateKey = x25519PrivateKey(privateBytes);
+    PKey peer = x25519PublicKey(peerPublicKey);
     PKeyContext deriveContext(EVP_PKEY_CTX_new(privateKey.get(), nullptr), EVP_PKEY_CTX_free);
     size_t sharedSize = 0;
     if (!privateKey || !peer || !deriveContext || EVP_PKEY_derive_init(deriveContext.get()) != 1 ||

@@ -7,6 +7,7 @@
 #include <QtTest>
 
 #include <limits>
+#include <utility>
 
 using ketplus::daemon::CloudCrypto;
 using ketplus::daemon::CredentialStore;
@@ -17,17 +18,30 @@ class ControlCryptoParityTest final : public QObject {
   private slots:
     void init() { r03::resetCredentials(); }
 
-    void canonicalMatches_data() {
+    // Expected bytes were produced by the CloudCrypto implementation before this extraction
+    // (origin/integration e52b057f), on exactly these inputs; both APIs must still produce them.
+    void canonicalMatchesThePreviousImplementation_data() {
         QTest::addColumn<QJsonArray>("values");
-        QTest::newRow("empty") << QJsonArray();
+        QTest::addColumn<QByteArray>("expected");
+        QTest::newRow("empty") << QJsonArray() << QByteArray::fromHex("5b5d");
         QTest::newRow("signature tuple")
             << QJsonArray{"ketplus", 2, "webrtc-answer", "pc_1", "workspace",
                           "machine", 1, "device",        "abc",  "2026-11-17T00:00:00.000Z",
-                          "def"};
-        QTest::newRow("unicode") << QJsonArray{
-            QStringLiteral("été"),        QStringLiteral("☃"),
-            QStringLiteral("\U0001F600"), QStringLiteral("quote\" back\\ \u0001\n"),
-            QStringLiteral("中文"),       QString()};
+                          "def"}
+            << QByteArray::fromHex("5b226b6574706c7573222c322c227765627274632d616e73776572222c22706"
+                                   "35f31222c22776f72"
+                                   "6b7370616365222c226d616368696e65222c312c22646576696365222c22616"
+                                   "263222c2232303236"
+                                   "2d31312d31375430303a30303a30302e3030305a222c22646566225d");
+        QTest::newRow("unicode") << QJsonArray{QStringLiteral("\u00E9t\u00E9"),
+                                               QStringLiteral("\u2603"),
+                                               QStringLiteral("\U0001F600"),
+                                               QStringLiteral("quote\" back\\ \u0001\n"),
+                                               QStringLiteral("\u4E2D\u6587"),
+                                               QString()}
+                                 << QByteArray::fromHex("5b22c3a974c3a9222c22e29883222c22f09f988022"
+                                                        "2c2271756f74655c22206261636b5c5c205c75"
+                                                        "303030315c6e222c22e4b8ade69687222c22225d");
         QTest::newRow("numbers") << QJsonArray{0,
                                                -0.0,
                                                1.5,
@@ -38,58 +52,94 @@ class ControlCryptoParityTest final : public QObject {
                                                qint64(9007199254740991),
                                                std::numeric_limits<qint64>::max(),
                                                std::numeric_limits<qint64>::min(),
-                                               0.1};
-        QTest::newRow("null and bool") << QJsonArray{QJsonValue(), true, false, QJsonValue()};
-        QTest::newRow("nested") << QJsonArray{
-            QJsonArray{QJsonArray{QJsonArray{"deep", QJsonValue()}}, QJsonArray()},
-            QJsonObject{{"b", 1}, {"a", QJsonArray{2, "x"}}}, "tail"};
+                                               0.1}
+                                 << QByteArray::fromHex(
+                                        "5b302c302c312e352c2d332c31652b3330302c35652d3332342c393030"
+                                        "3731393932353437343039"
+                                        "39322c393030373139393235343734303939312c393232333337323033"
+                                        "363835343737353830372c"
+                                        "2d393232333337323033363835343737353830382c302e315d");
+        QTest::newRow("null and bool")
+            << QJsonArray{QJsonValue(), true, false, QJsonValue()}
+            << QByteArray::fromHex("5b6e756c6c2c747275652c66616c73652c6e756c6c5d");
+        QTest::newRow("nested")
+            << QJsonArray{QJsonArray{QJsonArray{QJsonArray{"deep", QJsonValue()}}, QJsonArray()},
+                          QJsonObject{{"b", 1}, {"a", QJsonArray{2, "x"}}}, "tail"}
+            << QByteArray::fromHex("5b5b5b5b2264656570222c6e756c6c5d5d2c5b5d5d2c7b2261223a5b322c227"
+                                   "8225d2c2262223a31"
+                                   "7d2c227461696c225d");
     }
-    void canonicalMatches() {
+    void canonicalMatchesThePreviousImplementation() {
         QFETCH(QJsonArray, values);
-        QCOMPARE(primitives::canonical(values), CloudCrypto::canonical(values));
+        QFETCH(QByteArray, expected);
+        QCOMPARE(CloudCrypto::canonical(values), expected);
+        QCOMPARE(primitives::canonical(values), expected);
     }
 
-    void base64UrlMatches() {
-        QList<QByteArray> inputs{QByteArray(),
-                                 QByteArray("f"),
-                                 QByteArray("fo"),
-                                 QByteArray("foo"),
-                                 QByteArray::fromHex("fbfffe00ff"),
-                                 QStringLiteral("é\U0001F600").toUtf8()};
+    void base64UrlMatchesThePreviousImplementation() {
         QByteArray all;
         for (int i = 0; i < 256; ++i)
             all.append(char(i));
-        inputs.append(all);
-        for (const auto& bytes : inputs) {
-            QCOMPARE(primitives::base64Url(bytes), CloudCrypto::base64Url(bytes));
-            const auto text = QString::fromLatin1(CloudCrypto::base64Url(bytes));
-            QCOMPARE(primitives::fromBase64Url(text), CloudCrypto::fromBase64Url(text));
+        const QList<std::pair<QByteArray, QByteArray>> encoded{
+            {all,
+             QByteArray::fromHex(
+                 "41414543417751464267634943516f4c4441304f4478415245684d554652595847426b6147787764"
+                 "486838674953496a4a43556d4a7967704b6973734c5334764d4445794d7a51314e6a63344f546f37"
+                 "5044302d50304242516b4e4552555a4853456c4b5330784e546b395155564a54564656575631685a"
+                 "576c746358563566594746695932526c5a6d646f615770726247317562334278636e4e3064585a33"
+                 "65486c3665337839666e2d4167594b44684957476834694a696f754d6a5936506b4a47536b355356"
+                 "6c7065596d5a71626e4a32656e3643686f714f6b7061616e714b6d717136797472712d7773624b7a"
+                 "744c573274376935757275387662365f774d484377385446787366497963724c7a4d334f7a394452"
+                 "3074505531646258324e6e6132397a6433745f6734654c6a354f586d352d6a703675767337653776"
+                 "38504879385f5431397666342d6672375f50332d5f77")},
+            {QStringLiteral("\u00E9\U0001F600").toUtf8(), QByteArray::fromHex("77366e776e356941")},
+            {QByteArray::fromHex("fbfffe00ff"), QByteArray::fromHex("2d5f5f2d415038")}};
+        for (const auto& [bytes, expected] : encoded) {
+            QCOMPARE(CloudCrypto::base64Url(bytes), expected);
+            QCOMPARE(primitives::base64Url(bytes), expected);
+            QCOMPARE(CloudCrypto::fromBase64Url(QString::fromLatin1(expected)), bytes);
+            QCOMPARE(primitives::fromBase64Url(QString::fromLatin1(expected)), bytes);
         }
         // Lenient decoding of padding, the standard alphabet and junk stays as it was.
-        for (const auto& text : {QStringLiteral("Zg=="), QStringLiteral("+/+/"),
-                                 QStringLiteral("a b!"), QStringLiteral("éé"), QStringLiteral("Z")})
-            QCOMPARE(primitives::fromBase64Url(text), CloudCrypto::fromBase64Url(text));
+        const QList<std::pair<QString, QByteArray>> decoded{
+            {QStringLiteral("Zg=="), QByteArray::fromHex("66")},
+            {QStringLiteral("+/+/"), QByteArray::fromHex("")},
+            {QStringLiteral("a b!"), QByteArray::fromHex("69")},
+            {QStringLiteral("\u00E9\u00E9"), QByteArray::fromHex("")},
+            {QStringLiteral("Z"), QByteArray::fromHex("")}};
+        for (const auto& [text, expected] : decoded) {
+            QCOMPARE(CloudCrypto::fromBase64Url(text), expected);
+            QCOMPARE(primitives::fromBase64Url(text), expected);
+        }
     }
 
-    void keyFingerprintMatches() {
-        CredentialStore store("parity");
-        CloudCrypto crypto(&store);
-        const auto keys = crypto.publicKeys();
-        QVERIFY(!keys.isEmpty());
-        QList<QJsonObject> sets{keys, QJsonObject{}};
+    void keyFingerprintMatchesThePreviousImplementation() {
+        const QJsonObject keys{
+            {"signingPublicKey", QStringLiteral("11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo")},
+            {"agreementPublicKey", QStringLiteral("AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA")}};
+        const auto expected = QString::fromLatin1(QByteArray::fromHex(
+            "55674353524f735f57564463514856424858494569467975665375735379304937506d6159776f36"
+            "6d6b77"));
+        auto padded = keys;
+        padded["signingPublicKey"] = QStringLiteral("11qYAYKxCrfVS_7TyWQHOg7hcvPapiMlrwIaaPcHURo=");
         auto shortKey = keys;
         shortKey["signingPublicKey"] =
             QString::fromLatin1(primitives::base64Url(QByteArray(31, 'a')));
-        sets.append(shortKey);
         auto unicode = keys;
-        unicode["agreementPublicKey"] = QStringLiteral("é☃");
-        sets.append(unicode);
+        unicode["agreementPublicKey"] = QStringLiteral("\u00E9\u2603");
         auto number = keys;
         number["signingPublicKey"] = 42;
-        sets.append(number);
-        for (const auto& set : sets)
-            QCOMPARE(primitives::keyFingerprint(set), CloudCrypto::keyFingerprint(set));
-        QVERIFY(!CloudCrypto::keyFingerprint(keys).isEmpty());
+        const QList<std::pair<QJsonObject, QString>> cases{
+            {keys, expected},     {padded, expected},  {shortKey, QString()},
+            {unicode, QString()}, {number, QString()}, {QJsonObject{}, QString()}};
+        for (const auto& [set, want] : cases) {
+            QCOMPARE(CloudCrypto::keyFingerprint(set), want);
+            QCOMPARE(primitives::keyFingerprint(set), want);
+        }
+        QCOMPARE(primitives::keyFingerprint(
+                     primitives::fromBase64Url(keys["signingPublicKey"].toString()),
+                     primitives::fromBase64Url(keys["agreementPublicKey"].toString())),
+                 expected);
     }
 
     void storedKeySigningMatchesThePassedKeyPrimitive() {
