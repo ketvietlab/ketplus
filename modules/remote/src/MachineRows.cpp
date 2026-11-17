@@ -60,12 +60,22 @@ QVector<MachineRepository> repositoriesFromListing(const QJsonObject& result) {
         if (repository.label.isEmpty())
             repository.label = repository.id;
         repository.available = row.value(QLatin1String("available")).toBool(true);
+        repository.sidebarVisible = row.value(QLatin1String("sidebarVisible")).toBool(true);
         if (row.contains(QLatin1String("worktrees"))) {
+            bool visibleWorktree = false;
             for (const QJsonValue& item : row.value(QLatin1String("worktrees")).toArray()) {
                 MachineWorktree worktree = worktreeFrom(item.toObject(), repository.id);
-                if (!worktree.id.isEmpty())
+                if (!worktree.id.isEmpty()) {
                     repository.worktrees.append(worktree);
+                    visibleWorktree =
+                        visibleWorktree ||
+                        item.toObject().value(QLatin1String("sidebarVisible")).toBool(true);
+                }
             }
+            // Some adapters project group fields but preserve complete host-verified children.
+            // Derive the display flag from those children without discarding execution rows.
+            if (!row.contains(QLatin1String("sidebarVisible")) && !repository.worktrees.isEmpty())
+                repository.sidebarVisible = visibleWorktree;
         } else {
             repository.worktrees.append({repository.id,
                                          repository.label,
@@ -124,6 +134,43 @@ QVector<MachineConversation> conversationsFromListing(const QJsonObject& result)
         if (conversation.worktreeLabel.isEmpty())
             conversation.worktreeLabel = QFileInfo(conversation.worktreeId).fileName();
         conversation.repositoryId = text(row, {"repository_id", "repositoryId"});
+        if (row.value(QLatin1String("sidebar_repository_path")).isString()) {
+            conversation.sidebarPlacementProvided = true;
+            conversation.sidebarPlacementKnown = true;
+            conversation.sidebarRepositoryId =
+                row.value(QLatin1String("sidebar_repository_path")).toString();
+            conversation.sidebarRepositoryLabel =
+                QFileInfo(conversation.sidebarRepositoryId).fileName();
+        } else if (row.value(QLatin1String("sidebar_repository_fallback_path")).isString()) {
+            conversation.sidebarPlacementProvided = true;
+            conversation.sidebarRepositoryId =
+                row.value(QLatin1String("sidebar_repository_fallback_path")).toString();
+            conversation.sidebarRepositoryLabel =
+                QFileInfo(conversation.sidebarRepositoryId).fileName();
+        } else if (row.value(QLatin1String("sidebarPlacementKnown")).isBool()) {
+            conversation.sidebarPlacementProvided = true;
+            conversation.sidebarPlacementKnown =
+                row.value(QLatin1String("sidebarPlacementKnown")).toBool();
+            conversation.sidebarRepositoryId = text(row, {"sidebarRepositoryId"});
+            conversation.sidebarRepositoryLabel = text(row, {"sidebarRepositoryLabel"});
+        }
+        // Team membership wins for display only; execution routing above stays unchanged.
+        if (row.value(QLatin1String("sidebar_team_repository_path")).isString()) {
+            conversation.sidebarPlacementProvided = true;
+            conversation.sidebarPlacementKnown = true;
+            conversation.sidebarRepositoryId =
+                row.value(QLatin1String("sidebar_team_repository_path")).toString();
+            conversation.sidebarRepositoryLabel =
+                QFileInfo(conversation.sidebarRepositoryId).fileName();
+        } else {
+            const auto team = row.value(QLatin1String("team")).toObject();
+            if (team.value(QLatin1String("sidebarPlacementKnown")).toBool()) {
+                conversation.sidebarPlacementProvided = true;
+                conversation.sidebarPlacementKnown = true;
+                conversation.sidebarRepositoryId = text(team, {"sidebarRepositoryId"});
+                conversation.sidebarRepositoryLabel = text(team, {"sidebarRepositoryLabel"});
+            }
+        }
         conversation.state = text(row, {"state"});
         conversation.awaitingReply = row.value(QLatin1String("awaiting_reply")).toBool();
         conversations.append(conversation);

@@ -153,6 +153,17 @@ QList<QJsonObject> TeamDirectory::teams(const QString& repository) const {
     return list;
 }
 
+QList<QJsonObject> TeamDirectory::sidebarTeams(const QString& repository) const {
+    const auto wanted = normalizedRepository(repository);
+    QList<QJsonObject> list;
+    for (const auto& team : teams())
+        if (normalizedRepository(
+                team.value(QStringLiteral("sidebar_repository"))
+                    .toString(team.value(QStringLiteral("repository")).toString())) == wanted)
+            list.append(team);
+    return list;
+}
+
 std::optional<QJsonObject> TeamDirectory::team(const QString& teamId) const {
     const auto it = teams_.constFind(teamId);
     if (it == teams_.cend())

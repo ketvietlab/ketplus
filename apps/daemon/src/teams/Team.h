@@ -258,6 +258,9 @@ struct ReviewSlot final {
 struct Team final {
     qint64 id{0};
     QString repository;
+    // Sidebar placement is immutable; repository remains the mutable execution scope.
+    // Absent on legacy teams, empty for a team created without a repository.
+    std::optional<QString> sidebarRepository;
     QString name;
     QString goal;
     QString integrationBranch;

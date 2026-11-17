@@ -3,6 +3,7 @@
 #include "runtime/ApprovalBroker.h"
 
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QJsonDocument>
 #include <QPointer>
@@ -235,6 +236,57 @@ void SessionHost::rememberRepositoryIdentity(const QString& worktree) {
             },
             Qt::QueuedConnection);
     });
+}
+
+std::optional<QString> SessionHost::sidebarRepositoryAtCreation(const QString& path) const {
+    const QFileInfo origin(path);
+    if (!origin.isDir() || !origin.isReadable())
+        return std::nullopt;
+    const auto canonicalOrigin = origin.canonicalFilePath();
+    if (canonicalOrigin.isEmpty())
+        return std::nullopt;
+    QDir directory(canonicalOrigin);
+    // No Git process on the session-create path. A linked checkout's commondir is durable
+    // evidence of its repository, while the absence of .git through the ancestors is no-repo.
+    do {
+        if (QFileInfo(directory.filePath(QStringLiteral("HEAD"))).isFile() &&
+            QFileInfo(directory.filePath(QStringLiteral("objects"))).isDir())
+            return directory.canonicalPath();
+        const QFileInfo dotGit(directory.filePath(QStringLiteral(".git")));
+        if (dotGit.isDir())
+            return directory.canonicalPath();
+        if (dotGit.exists() || dotGit.isSymLink()) {
+            QFile pointer(dotGit.filePath());
+            if (!dotGit.isFile() || pointer.size() > 4096 || !pointer.open(QIODevice::ReadOnly))
+                return std::nullopt;
+            const auto line = QString::fromUtf8(pointer.readLine()).trimmed();
+            if (!line.startsWith(QLatin1String("gitdir:")))
+                return std::nullopt;
+            const QDir gitDirectory(directory.absoluteFilePath(line.mid(7).trimmed()));
+            QFile common(gitDirectory.filePath(QStringLiteral("commondir")));
+            if (common.exists()) {
+                if (common.size() > 4096 || !common.open(QIODevice::ReadOnly))
+                    return std::nullopt;
+                const auto commonPath = QString::fromUtf8(common.readLine()).trimmed();
+                if (commonPath.isEmpty())
+                    return std::nullopt;
+                const QFileInfo root(gitDirectory.absoluteFilePath(commonPath));
+                if (!root.isDir())
+                    return std::nullopt;
+                const auto canonical = root.canonicalFilePath();
+                if (canonical.isEmpty())
+                    return std::nullopt;
+                return QFileInfo(canonical).fileName() == QLatin1String(".git")
+                           ? QFileInfo(canonical).absolutePath()
+                           : canonical;
+            }
+            // A non-linked checkout may keep its Git directory elsewhere.
+            if (QFileInfo(gitDirectory.filePath(QStringLiteral("HEAD"))).isFile())
+                return directory.canonicalPath();
+            return std::nullopt;
+        }
+    } while (directory.cdUp());
+    return QStringLiteral("");
 }
 
 QJsonObject SessionHost::sessionWorktrees(const QJsonObject& request) {

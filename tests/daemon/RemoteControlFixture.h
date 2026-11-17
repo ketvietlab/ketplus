@@ -64,6 +64,12 @@ class RemoteControlTestAccess {
     static void verificationClock(ControlV2Client& client, std::function<qint64()> clock) {
         client.worktreeVerificationClock_ = std::move(clock);
     }
+    // A successful fixture verdict with a finite lease, to exercise the existing expiry path
+    // without changing the runtime's verification/cache policy.
+    static void verificationDeadline(ControlV2Client& client, qint64 until) {
+        for (auto& verdict : client.worktreeVerdicts_)
+            verdict.until = until;
+    }
     static void expireCredential(ControlV2Client& client) {
         client.credential_.insert("expiresAt", "2020-01-01T00:00:00.000Z");
     }

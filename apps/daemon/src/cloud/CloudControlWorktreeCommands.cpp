@@ -127,6 +127,8 @@ void CloudControlClient::executeWorktreeCommand(const QJsonObject& command,
         QJsonObject worktree;
         for (const auto* key : {"repositoryId", "worktreeId", "repositoryLabel", "worktreeLabel"})
             worktree.insert(QLatin1String(key), scope.value(QLatin1String(key)));
+        if (const auto visible = sidebarRepositoryVisible(worktreePath))
+            worktree.insert(QStringLiteral("sidebarVisible"), *visible);
         // What the phone can choose before the first message: the models, efforts and
         // permissions a conversation started here would begin with.
         host_->handleProviderQuery(

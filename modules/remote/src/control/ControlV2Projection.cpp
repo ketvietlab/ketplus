@@ -52,9 +52,44 @@ QString verifiedMetadata(const QJsonObject& metadata, QJsonObject* row) {
                             "repositoryId", "repositoryLabel", "worktreeId", "worktreeLabel"})
         row->insert(QLatin1String(key), metadata.value(QLatin1String(key)));
     row->insert("updatedAt", metadata.value("lastTurnStartedAt").toString());
+    if (metadata.contains("sidebarExecutionRepositoryVisible")) {
+        if (!metadata.value("sidebarExecutionRepositoryVisible").isBool())
+            return "invalid_session_metadata";
+        row->insert("sidebarExecutionRepositoryVisible",
+                    metadata.value("sidebarExecutionRepositoryVisible"));
+    }
     for (const auto* key : {"lastTurnOutcome", "number", "awaitingReply"})
         if (metadata.contains(QLatin1String(key)))
             row->insert(QLatin1String(key), metadata.value(QLatin1String(key)));
+    if (metadata.contains("sidebarPlacementKnown")) {
+        if (!metadata.value("sidebarPlacementKnown").isBool() ||
+            !boundedText(metadata.value("sidebarRepositoryId"), 128) ||
+            !boundedText(metadata.value("sidebarRepositoryLabel"), 512))
+            return "invalid_session_metadata";
+        for (const auto* key :
+             {"sidebarPlacementKnown", "sidebarRepositoryId", "sidebarRepositoryLabel"})
+            row->insert(QLatin1String(key), metadata.value(QLatin1String(key)));
+    }
+    // Membership and placement are display metadata; they never authorize a team command.
+    if (metadata.contains("team")) {
+        const auto team = metadata.value("team").toObject();
+        if (!boundedText(team.value("id"), 128) || !boundedText(team.value("role"), 32) ||
+            !team.value("revision").isDouble())
+            return "invalid_session_metadata";
+        QJsonObject verifiedTeam{{"id", team.value("id")},
+                                 {"revision", team.value("revision")},
+                                 {"role", team.value("role")}};
+        if (team.contains("sidebarPlacementKnown")) {
+            if (!team.value("sidebarPlacementKnown").isBool() ||
+                !boundedText(team.value("sidebarRepositoryId"), 128) ||
+                !boundedText(team.value("sidebarRepositoryLabel"), 512))
+                return "invalid_session_metadata";
+            for (const auto* key :
+                 {"sidebarPlacementKnown", "sidebarRepositoryId", "sidebarRepositoryLabel"})
+                verifiedTeam.insert(QLatin1String(key), team.value(QLatin1String(key)));
+        }
+        row->insert("team", verifiedTeam);
+    }
     return {};
 }
 } // namespace
@@ -257,9 +292,13 @@ void ControlV2Client::finishProjection(const std::shared_ptr<ProjectionState>& s
         if (entry.value("status").toString("active") != "active") {
             state->rejected.append(reject("worktree", entry, "unsigned_index_entry"));
         } else if (known) {
-            if (verdict->reason.isEmpty())
-                state->hostVerified.append(entry);
-            else
+            if (verdict->reason.isEmpty()) {
+                auto verified = entry;
+                verified.remove("sidebarVisible"); // never trust an index-supplied display flag
+                if (verdict->sidebarVisible)
+                    verified.insert("sidebarVisible", *verdict->sidebarVisible);
+                state->hostVerified.append(verified);
+            } else
                 state->rejected.append(reject("worktree", entry, verdict->reason, verdict->detail));
         } else if (scheduled < state->verifyBound) {
             // Lazy: the listing never waits for the host; worktreesVerified() announces the
@@ -344,8 +383,13 @@ void ControlV2Client::pumpWorktreeVerification() {
                             same &= echo.value(QLatin1String(field)).toString() ==
                                         entry.value(QLatin1String(field)).toString() &&
                                     boundedText(echo.value(QLatin1String(field)), 512);
+                        if (echo.contains("sidebarVisible") &&
+                            !echo.value("sidebarVisible").isBool())
+                            same = false;
                         if (!same)
                             verdict.reason = QStringLiteral("verification_failed");
+                        else if (echo.value("sidebarVisible").isBool())
+                            verdict.sidebarVisible = echo.value("sidebarVisible").toBool();
                     }
                     worktreeVerdicts_.insert(key, verdict);
                     emit worktreesVerified();
@@ -378,6 +422,8 @@ void ControlV2Client::assembleProjection(const std::shared_ptr<ProjectionState>&
                                             {"worktrees", QJsonArray{}}});
         }
         auto group = repositories.at(repositoryIndex.value(key)).toObject();
+        group.insert("sidebarVisible", group.value("sidebarVisible").toBool(false) ||
+                                           item.value("sidebarVisible").toBool(true));
         auto worktrees = group.value("worktrees").toArray();
         worktrees.append(item);
         group.insert("worktrees", worktrees);
@@ -396,6 +442,8 @@ void ControlV2Client::assembleProjection(const std::shared_ptr<ProjectionState>&
                          {"branch", row.value("branch")},
                          {"exists", row.value("worktreeExists")},
                          {"verified", "conversation"}};
+        if (row.value("sidebarExecutionRepositoryVisible").isBool())
+            item.insert("sidebarVisible", row.value("sidebarExecutionRepositoryVisible"));
         const auto entry = indexed.value(machine + '\n' + worktree);
         if (entry.value("repositoryId") == row.value("repositoryId"))
             for (const auto* revision : {"catalogRevision", "lifecycleRevision"})
@@ -403,16 +451,19 @@ void ControlV2Client::assembleProjection(const std::shared_ptr<ProjectionState>&
                     item.insert(QLatin1String(revision), entry.value(QLatin1String(revision)));
         add(machine, row.value("repositoryId"), row.value("repositoryLabel"), item);
     }
-    for (const auto& entry : std::as_const(state->hostVerified))
+    for (const auto& entry : std::as_const(state->hostVerified)) {
+        QJsonObject item{{"worktreeId", entry.value("worktreeId")},
+                         {"workspaceId", entry.value("workspaceId")},
+                         {"label", entry.value("worktreeLabel")},
+                         {"exists", true},
+                         {"catalogRevision", entry.value("catalogRevision")},
+                         {"lifecycleRevision", entry.value("lifecycleRevision")},
+                         {"verified", "host_read"}};
+        if (entry.value("sidebarVisible").isBool())
+            item.insert("sidebarVisible", entry.value("sidebarVisible"));
         add(entry.value("machineId").toString(), entry.value("repositoryId"),
-            entry.value("repositoryLabel"),
-            {{"worktreeId", entry.value("worktreeId")},
-             {"workspaceId", entry.value("workspaceId")},
-             {"label", entry.value("worktreeLabel")},
-             {"exists", true},
-             {"catalogRevision", entry.value("catalogRevision")},
-             {"lifecycleRevision", entry.value("lifecycleRevision")},
-             {"verified", "host_read"}});
+            entry.value("repositoryLabel"), item);
+    }
     const auto done = std::move(state->done);
     done(QJsonObject{{"repositories", repositories},
                      {"conversations", state->conversations},

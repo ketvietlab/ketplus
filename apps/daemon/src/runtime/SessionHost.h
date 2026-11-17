@@ -279,6 +279,9 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     // What worktreeCatalogRoot stores for an existing checkout, without git on this thread: a
     // turn start then holds up no other conversation's events (T-28).
     void rememberRepositoryIdentity(const QString& worktree);
+    // Read-only filesystem identity at creation; empty is confirmed no-repo, nullopt unknown.
+    [[nodiscard]] std::optional<QString>
+    sidebarRepositoryAtCreation(const QString& path) const override;
     [[nodiscard]] QJsonObject sessionWorktrees(const QJsonObject& request);
     [[nodiscard]] QJsonObject switchWorktree(const QJsonObject& request);
     // What git says about a switch's target; read on any thread.

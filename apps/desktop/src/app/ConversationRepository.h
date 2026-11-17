@@ -4,6 +4,13 @@
 #include <QFileInfo>
 
 namespace ketplus {
+inline bool isSidebarRepository(const QString& root) {
+    if (root.isEmpty())
+        return false;
+    return QFileInfo(QDir(root).filePath(QStringLiteral(".git"))).exists() ||
+           (QFileInfo(QDir(root).filePath(QStringLiteral("HEAD"))).isFile() &&
+            QFileInfo(QDir(root).filePath(QStringLiteral("objects"))).isDir());
+}
 // Exact execution roots have already been validated by the daemon. Resolve their
 // main checkout without spawning Git on the GUI thread.
 inline QString conversationRepositoryRoot(const QString& path) {

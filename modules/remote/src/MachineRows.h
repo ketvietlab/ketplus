@@ -29,6 +29,7 @@ struct MachineRepository final {
     QString path;
     bool available{true};
     QVector<MachineWorktree> worktrees;
+    bool sidebarVisible{true};
 
     friend bool operator==(const MachineRepository&, const MachineRepository&) = default;
 };
@@ -43,6 +44,11 @@ struct MachineConversation final {
     QString repositoryId; // empty when the route names only the worktree
     QString state;
     bool awaitingReply{false};
+    // Absent on older hosts; a known empty id means no repository, not the current worktree.
+    bool sidebarPlacementKnown{false};
+    bool sidebarPlacementProvided{false};
+    QString sidebarRepositoryId;
+    QString sidebarRepositoryLabel;
 
     [[nodiscard]] bool running() const {
         return state == QLatin1String("running") || state == QLatin1String("starting");
