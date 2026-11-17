@@ -1062,3 +1062,24 @@ four budget cases. The focused C++ target rebuilds and its default classifier /
 native-skip CTest passes; AST, formatting and diff checks pass. A read-only check
 of the actual private ledger and bound ordinal-two summary also passes before
 any continuation worker is started.
+
+The native continuation at source
+`e3dffe89e8b07cba1bf16a4fafaed281725a4704` passes in **16.348 seconds**.
+Its no-model control first loads the bound ordinal-two ID, replays the assistant
+marker, acknowledges Composer non-fast and exits with zero reservations. The
+live run repeats those controls, reserves ordinal three before forwarding, and
+completes exactly one native text prompt. Inventory is now observed on its one
+attributed injected worker after the owned history load; rejected events and
+forbidden calls are zero. No provider permission request or tool call occurs.
+All recorded owned processes exit and final readiness is revoked. The load
+response in these new runs has no ID echo, as permitted by ACP; no echo shape is
+retroactively inferred for the earlier run.
+
+The continuation uses a fresh host-observed launch/epoch, labelled `one` in its
+own artifact. It proves inventory after loading the original owned history in
+that fresh context; it does not rewrite the previous run's unobserved `two`
+inventory. Together the runs provide completion, cross-process history replay,
+old-context exit and attributed post-load inventory evidence. The extra budget
+is **3/10**, seven remain unspent, and both consumed parent hashes are unchanged.
+No further model request is made. Cursor's production mutation gate is still
+denied pending independent review of this boundary and the native evidence.
