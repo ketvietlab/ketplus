@@ -1083,3 +1083,29 @@ old-context exit and attributed post-load inventory evidence. The extra budget
 is **3/10**, seven remain unspent, and both consumed parent hashes are unchanged.
 No further model request is made. Cursor's production mutation gate is still
 denied pending independent review of this boundary and the native evidence.
+
+### Cursor capability delta after native evidence review
+
+Independent review of the post-load inventory boundary and native artifacts
+reports no findings at `430f67da4eec67082e3f8f5e52213b382bf4579d`. The separate
+capability delta now marks the Cursor implementation as supporting managed
+mutations, alongside Codex and Copilot. This permits preparation of a per-turn
+credential, not immediate authority: the host still waits for the dedicated
+transport's exact epoch ACK after required history restoration. Review policy,
+old turn/generation credentials, missing ACK and failed loads remain fail-closed.
+Unverified adapter implementations still expose no mutation capability.
+
+Concrete Cursor/Copilot host regressions check start/stop refusal before ACK,
+authorized dispatch after ACK, spoof rejection, review revocation and preserved
+registry reads. Delayed and missing ACK regressions run for concrete Codex,
+Cursor and Copilot adapters; the existing authorized-child policy snapshot and
+ACP isolation/failed-load/timeout/crash fixtures remain required checks. No new
+model request is needed for this gate delta. The extra ledger stays **3/10**;
+this code change awaits its own review and does not assert release completion.
+
+Focused validation rebuilds all six required C++ targets and passes their six
+default CTests in **29.22 seconds**: host origin, Cursor adapter, ACP isolation,
+mutation origin, background tools and bounded refresh. The bounded refresh native
+case is skipped before launching a CLI; the remaining adapter cases use fixtures.
+Changed C++ formatting and the diff check pass. No provider/model request is made
+by this validation.

@@ -861,6 +861,10 @@ local fixture processes, never a model. They cover review read/verify fences,
 missing/spoofed/expired origins, idle/drain and queued requests, accepted child
 policy snapshots, two-conversation process isolation, stale response IDs,
 history/MCP setup failure and timeout, and SDK close failure before actual exit.
+Concrete Cursor/Copilot host rows also verify start/stop rejection before ACK,
+authorized dispatch after ACK, review revocation and retained read access; an
+unverified adapter remains a negative capability control. Delayed/missing epoch
+ACK rows run with concrete Codex, Cursor and Copilot adapters.
 Synthetic history proves adapter behavior; it cannot prove installed-provider
 history preservation. Installed-provider controls remain explicit opt-ins.
 

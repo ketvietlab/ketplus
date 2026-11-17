@@ -16,13 +16,13 @@ namespace ketplus::daemon {
 namespace {
 class CatalogFixture final : public ProviderAdapter {
   public:
-    QString name() const override { return "cursor"; }
+    QString name() const override { return providerName; }
     QString executable() const override { return "fixture"; }
     QString missingMessage() const override { return "Fixture missing"; }
     bool isAvailable() const override { return true; }
     bool isReady() const override { return true; }
     bool supports(const QString&) const override { return true; }
-    bool supportsManagedMutations() const override { return true; } // Trusted synthetic bootstrap.
+    bool supportsManagedMutations() const override { return managedMutationSupport; }
     void runtimeStatus(std::function<void(const compat::Runtime&)> done) override { done({}); }
     void configurationCatalog(Callback done) override { pending = std::move(done); }
     void releaseCatalog() {
@@ -51,6 +51,8 @@ class CatalogFixture final : public ProviderAdapter {
         return allowRelease;
     }
     bool allowRelease = true;
+    QString providerName = "cursor";
+    bool managedMutationSupport = true;
     QStringList released;
     Callback pending;
 };
@@ -120,8 +122,9 @@ class ManagedTaskOriginHostTest final : public QObject {
     void concreteAcpMutationSupportStillRequiresExactEpochAck_data() {
         QTest::addColumn<QString>("name");
         QTest::addColumn<bool>("verified");
-        QTest::newRow("cursor") << "cursor" << false;
+        QTest::newRow("cursor") << "cursor" << true;
         QTest::newRow("copilot") << "copilot" << true;
+        QTest::newRow("unverified") << "unverified" << false;
     }
     void concreteAcpMutationSupportStillRequiresExactEpochAck() {
         QFETCH(QString, name);
@@ -132,7 +135,10 @@ class ManagedTaskOriginHostTest final : public QObject {
         CodexAdapter codex(directory.filePath("missing-codex"));
         CursorAdapter cursor(directory.filePath("missing-cursor"));
         CopilotAdapter copilot(directory.filePath("missing-copilot"));
-        SessionHost host(&journal, &codex, QList<ProviderAdapter*>{&cursor, &copilot});
+        CatalogFixture unverified;
+        unverified.providerName = "unverified";
+        unverified.managedMutationSupport = false;
+        SessionHost host(&journal, &codex, QList<ProviderAdapter*>{&cursor, &copilot, &unverified});
         host.setAgentEndpoint(directory.filePath("socket"), directory.filePath("mcp-helper"));
         auto& owner = host.sessions_["owner"];
         owner.stored.currentTurnSequence = 1;
@@ -143,6 +149,17 @@ class ManagedTaskOriginHostTest final : public QObject {
         QVERIFY(!bootstrap.transportEpoch.isEmpty());
         QCOMPARE(!bootstrap.credential.isEmpty(), verified);
         QVERIFY(!owner.mutationOrigin.authorize(bootstrap.credential, "owner", 1));
+        const auto token = host.agentToken("owner");
+        if (verified) {
+            auto request = child("before-ack");
+            request.insert(mutationOriginField, bootstrap.credential);
+            QCOMPARE(invoke(host, token, "session.task.start", request).value("error_code"),
+                     "stale_origin");
+            QCOMPARE(invoke(host, token, "session.task.stop",
+                            {{"task_id", "missing"}, {mutationOriginField, bootstrap.credential}})
+                         .value("error_code"),
+                     "stale_origin");
+        }
         QVERIFY(host.acknowledgeManagedTaskOrigin(
             owner, bootstrap.transportEpoch,
             {{"managedTransportEpoch", bootstrap.transportEpoch}}));
@@ -152,13 +169,25 @@ class ManagedTaskOriginHostTest final : public QObject {
         QCOMPARE(!launch->mutationCredential.isEmpty(), verified);
         if (verified) {
             QVERIFY(owner.mutationOrigin.authorize(bootstrap.credential, "owner", 1));
+            QCOMPARE(invoke(host, token, "session.task.stop",
+                            {{"task_id", "missing"}, {mutationOriginField, bootstrap.credential}})
+                         .value("error_code"),
+                     "task_not_found");
             host.prepareManagedTaskOrigin(owner,
                                           {{"execution_policy", "full"}, {"review_guard", true}});
             QVERIFY(!owner.mutationOrigin.authorize(bootstrap.credential, "owner", 1));
             QVERIFY(owner.mutationOrigin.bootstrap().credential.isEmpty());
+            auto request = child("after-review");
+            request.insert(mutationOriginField, bootstrap.credential);
+            QCOMPARE(invoke(host, token, "session.task.start", request).value("error_code"),
+                     "stale_origin");
+            QCOMPARE(invoke(host, token, "session.task.stop",
+                            {{"task_id", "missing"}, {mutationOriginField, bootstrap.credential}})
+                         .value("error_code"),
+                     "stale_origin");
+            QVERIFY(invoke(host, token, "session.task.list", {}).value("ok").toBool());
             return;
         }
-        const auto token = host.agentToken("owner");
         QCOMPARE(invoke(host, token, "session.task.start", child()).value("error_code"),
                  "mutation_refresh_unavailable");
         QCOMPARE(
@@ -167,12 +196,20 @@ class ManagedTaskOriginHostTest final : public QObject {
         QVERIFY(invoke(host, token, "session.task.list", {}).value("ok").toBool());
     }
 
+    void lateEpochCallbackCannotAcknowledgeReplacementOrMissingRefresh_data() {
+        QTest::addColumn<QString>("providerName");
+        for (const auto* name : {"codex", "cursor", "copilot"})
+            QTest::newRow(name) << name;
+    }
     void lateEpochCallbackCannotAcknowledgeReplacementOrMissingRefresh() {
+        QFETCH(QString, providerName);
         QTemporaryDir directory;
         LocalJournal journal(directory.filePath("journal.sqlite"));
-        QVERIFY(seed(journal, directory.path(), "codex"));
+        QVERIFY(seed(journal, directory.path(), providerName));
         CodexAdapter codex(directory.filePath("missing-codex"));
-        SessionHost host(&journal, &codex);
+        CursorAdapter cursor(directory.filePath("missing-cursor"));
+        CopilotAdapter copilot(directory.filePath("missing-copilot"));
+        SessionHost host(&journal, &codex, QList<ProviderAdapter*>{&cursor, &copilot});
         host.setAgentEndpoint(directory.filePath("socket"), directory.filePath("mcp-helper"));
         auto& owner = host.sessions_["owner"];
         owner.stored.currentTurnSequence = 1;

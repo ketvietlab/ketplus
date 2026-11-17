@@ -755,13 +755,14 @@ Linux store policy, signed upgrade prompts and platform release acceptance remai
   a private immutable file for that bootstrap. A separately approved single Auto
   turn also passes actual CopilotAdapter completed-history/same-ID/MCP replacement
   and process-closure checks; managed mutation is enabled subject to each turn's
-  transport ACK and daemon policy. Cursor's scoped private observer verifies its
-  injected handshake; one authorized cheap-model prompt exposes that instance's
-  inventory lazily, but the native turn fails before completed-history validation.
-  Cursor completed-history/refresh verification remains open. It therefore
-  receives no mutation credential and exposes only background
-  registry read tools; direct mutation returns a capability error. Its
-  foreground behavior remains available. See the
+  transport ACK and daemon policy. Cursor's `2026.11.11-043ef28` production-adapter
+  Composer non-fast probes now verify completed synthetic history, same-ID replay,
+  owned-context exit and inventory on the exact fresh injected worker after load.
+  The separate gate delta enables Cursor mutation capability; each turn still
+  requires successful history restoration and an exact transport-epoch ACK.
+  Reviews and stale/pending origins retain no mutation authority, while registry
+  reads keep their separate grants. This remains unmerged implementation and
+  validation evidence, not release or shared desktop acceptance. See the
   [provider evidence and gaps](decisions/0127-provider-origin-refresh-evidence.md).
 
 - Async assistant-question answers use the conversation's current execution-context

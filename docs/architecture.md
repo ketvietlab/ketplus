@@ -259,10 +259,13 @@ releases only its owned transports, including prior provider handoffs, before
 removing the local record. The offline adapter fixtures and installed-provider
 history validation gaps are recorded in the
 [refresh evidence](decisions/0127-provider-origin-refresh-evidence.md).
-Cursor mutation remains gated until real history/MCP refresh is verified:
-its epochs carry no mutation secret, and MCP discovery omits start/stop. A
-direct mutation attempt returns a capability error; foreground and registry reads
-keep their existing grants. An ACP fixture or load ACK cannot enable that gate.
+Cursor's installed `2026.11.11-043ef28` production-adapter probes verify completed
+synthetic history, same-ID replacement, old-context exit and inventory attributed
+to a fresh injected worker after load. Its implementation enables managed
+mutations using the same dedicated-process barrier and exact epoch ACK. Reviews,
+pending/missing ACKs and stale credentials still receive no mutation authority;
+registry reads retain their separate grants. Unverified adapters remain gated.
+Fixture or load-ACK success alone is not the native inventory evidence.
 Copilot's installed 1.0.112 production-adapter probe verifies completed synthetic
 history, same-ID replacement, MCP rotation and process exit with one authorized
 Auto turn. Its implementation enables managed mutations; each actual turn still
