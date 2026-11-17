@@ -153,11 +153,16 @@ async function listSupportedModels() {
   }
 }
 
+// The models an account may use change with its plan (a lapsed or renewed subscription), and
+// the sidecar outlives such changes. A live list is reused only briefly; the built-in fallback,
+// served when listing failed, is never kept, so the next request asks the SDK again.
+const catalogFreshMs = 5 * 60 * 1000;
 let catalogCache = null;
+let catalogCachedAt = 0;
 let catalogPromise = null;
 
 async function catalog() {
-  if (catalogCache) return catalogCache;
+  if (catalogCache && Date.now() - catalogCachedAt < catalogFreshMs) return catalogCache;
   if (!catalogPromise) {
     catalogPromise = (async () => {
       const fallback = fallbackCatalog();
@@ -175,12 +180,14 @@ async function catalog() {
         for (const extra of fallback.data) {
           if (!seen.has(extra.model)) data.push(extra);
         }
-        return data.length > 0 ? { data } : fallback;
+        return data.length > 0 ? { data, live: true } : fallback;
       } catch {
         return fallback;
       }
-    })().then((result) => {
-      catalogCache = result;
+    })().then(({ live, ...result }) => {
+      catalogCache = live ? result : null;
+      catalogCachedAt = Date.now();
+      catalogPromise = null;
       return result;
     });
   }
