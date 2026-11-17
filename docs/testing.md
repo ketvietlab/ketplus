@@ -790,7 +790,7 @@ Build `ketplus_execution_worktree_ui_tests`, `ketplus_daemon_worktree_context_te
 
 Build `ketplus_atlas_live_tunnel_tests`, `ketplus_atlas_live_runtime_tests`, and `ketplus_atlas_tunnel_fixture`. Run the first two with CTest; set `KETPLUS_KETATLAS_CLI` to a private KetAtlas 0.5.2 executable for the real-runtime test (otherwise that case explicitly skips). No provider invocation, credentials, user daemon or running desktop app is used.
 
-The codec/tunnel suite checks tampering, replay, direction/channel binding, credit-window crossing, binary EOF integrity and unregistered-origin refusal. The runtime suite starts a temporary project and renderer, verifies live reads after changing source, reattaches with fresh keys and stable source/ports, and checks process cleanup.
+The codec/tunnel suite checks tampering, replay, direction/channel binding, credit-window crossing, binary EOF integrity and unregistered-origin refusal. The runtime suite checks synthetic CLI readiness and startup cancellation. Its optional real-CLI case serves static project files, verifies live reads after changing source, reattaches with fresh keys and a stable viewer port, and checks process cleanup. It does not authorize a project renderer. `ketplus_atlas_access_tests` exercises paired-device static starts with a fake CLI, including refusal/cancel assertions and fresh starts after Stop. These remote assertions are not a renderer-permission API.
 
 Companion relay and mobile acceptance procedures are maintained privately. The public fixture executable remains available for native daemon tests.
 

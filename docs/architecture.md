@@ -152,6 +152,8 @@ Qt application shell
   Approval is not saved, and exact manifest/sidecar bytes and canonical paths are
   checked again immediately before launch. See
   [ADR 0128](decisions/0128-atlas-renderer-per-launch-consent.md).
+  Remote daemon viewers use static mode; their start/reattach requests have no
+  host-side renderer permission handoff and expose only the viewer origin.
   The registry tracks running viewers
   across worktrees, and stops them on a browser close or KétPlus Stop command.
   Edit opens the existing in-app Atlas Builder in the current worktree.

@@ -32,7 +32,7 @@ class AtlasLiveRuntime final : public QObject {
     QByteArray key_;
     QUrl relay_;
     QString bearer_, channel_, cli_;
-    quint16 viewerPort_{0}, rendererPort_{0};
+    quint16 viewerPort_{0};
     qint64 revision_{0};
     bool checkingVersion_{true}, stopped_{false}, launched_{false};
     bool outputStartsAtLineBoundary_{true};
