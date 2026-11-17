@@ -62,6 +62,15 @@ qt_add_resources(ketplus_team_language ketplus_team_translations
     BASE "${CMAKE_CURRENT_BINARY_DIR}"
     FILES ${ketplus_team_qm_files})
 
+# Control v2 primitives with keys passed in (canonical data, base64url, key fingerprints,
+# Ed25519): QtCore and OpenSSL only, no credential storage, network or IPC.
+add_library(ketplus_control_crypto_primitives STATIC
+    src/cloud/CryptoPrimitives.cpp src/cloud/CryptoPrimitives.h)
+target_link_libraries(ketplus_control_crypto_primitives PUBLIC Qt6::Core OpenSSL::Crypto)
+target_include_directories(ketplus_control_crypto_primitives PUBLIC
+    "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>")
+ketplus_enable_warnings(ketplus_control_crypto_primitives)
+
 # Device keys, credential storage and browser sign-in, shared by the host daemon and a
 # Desktop acting as a paired remote client.
 add_library(ketplus_control_crypto STATIC
@@ -70,7 +79,8 @@ add_library(ketplus_control_crypto STATIC
     src/cloud/CredentialBackend.cpp src/cloud/CredentialBackend.h
     src/cloud/BrowserSignIn.cpp src/cloud/BrowserSignIn.h
     src/cloud/ControlEndpoint.h src/cloud/HostPlatform.h)
-target_link_libraries(ketplus_control_crypto PUBLIC Qt6::Core Qt6::Network OpenSSL::Crypto ketplus_remote)
+target_link_libraries(ketplus_control_crypto PUBLIC Qt6::Core Qt6::Network OpenSSL::Crypto ketplus_remote
+    ketplus_control_crypto_primitives)
 target_include_directories(ketplus_control_crypto PUBLIC
     "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>")
 ketplus_enable_warnings(ketplus_control_crypto)
