@@ -75,7 +75,9 @@ QString quoted(const QString& value) {
     QString visible;
     for (const auto character : value) {
         if (character.category() == QChar::Other_Format ||
-            character.category() == QChar::Other_Control)
+            character.category() == QChar::Other_Control ||
+            character.category() == QChar::Separator_Line ||
+            character.category() == QChar::Separator_Paragraph)
             visible +=
                 QStringLiteral("\\u%1").arg(uint(character.unicode()), 4, 16, QLatin1Char('0'));
         else
@@ -113,9 +115,10 @@ AtlasRendererPermission AtlasRendererPermission::read(const AtlasDescriptor& atl
     const auto cwd = object.value(QStringLiteral("cwd"));
     if (!cwd.isUndefined() && (!cwd.isString() || cwd.toString().trimmed().isEmpty()))
         return invalid();
+    // Match the CLI's realpath(path.resolve(directory, cwd)): clean '..' before symlinks.
     result.workingDirectory =
-        QFileInfo(
-            QDir(directory).filePath(cwd.isUndefined() ? QStringLiteral(".") : cwd.toString()))
+        QFileInfo(QDir::cleanPath(QDir(directory).filePath(cwd.isUndefined() ? QStringLiteral(".")
+                                                                             : cwd.toString())))
             .canonicalFilePath();
     if (result.workingDirectory.isEmpty() || !QFileInfo(result.workingDirectory).isDir())
         return invalid();
