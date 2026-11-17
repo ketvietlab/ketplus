@@ -7,6 +7,7 @@
 #include "workspace/SidebarRepositoryList.h"
 #include "workspace/SidebarRepositoryListDetail.h"
 
+#include <QLabel>
 #include <QMenu>
 #include <QPushButton>
 #include <QSizePolicy>
