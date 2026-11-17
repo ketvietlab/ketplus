@@ -165,6 +165,7 @@ if(KETPLUS_REQUIRE_DEPLOYED_RUNTIME)
         COMMAND /usr/bin/otool -L
             "${KETPLUS_APP_BUNDLE}/Contents/MacOS/KetPlus"
             "${daemon}"
+            "${KETPLUS_APP_BUNDLE}/Contents/Helpers/ketplus_job_executor"
             "${KETPLUS_APP_BUNDLE}/Contents/Resources/qml/QtQuick/Controls/libqtquickcontrols2plugin.dylib"
         RESULT_VARIABLE otool_result
         OUTPUT_VARIABLE dependency_output
