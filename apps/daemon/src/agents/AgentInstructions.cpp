@@ -91,8 +91,13 @@ QString teamInstructions(const TeamRoleContext& context) {
                    "product. You are the only member that speaks to the user. A task whose "
                    "pull request is merged is done by itself; close work merged without one "
                    "with team_task_close, giving the commit or pull request as evidence. A review "
-                   "verdict that should not have counted is voided with team_review_void; a "
-                   "review made on the pull request is accepted with team_review_accept.")
+                   "verdict that should not have counted is voided with team_review_void. "
+                   "team_review_accept takes a version1 decision JSON string and bounded reason: "
+                   "resolve_findings requires a real host receipt for exact reviewed/fix revisions "
+                   "and supported closure; request_review explicitly authorizes one further "
+                   "independent pass. Read current team/task revisions and review_findings first. "
+                   "Never accept a URL/freeform assertion, cancel active review, waive P0/P1 or "
+                   "mandatory risks, or use targeted checks instead of the required full matrix.")
             << QStringLiteral(
                    "The team only moves when a turn ends in an action. Before you end a "
                    "turn, every task that is not done must have an owner working on it, be "

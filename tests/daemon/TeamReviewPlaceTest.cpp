@@ -62,6 +62,8 @@ class TeamReviewPlaceTest final : public QObject {
         return nullptr;
     }
     void again(const QString& id) {
+        if (task(id).state == state::blocked)
+            QVERIFY(teams_->moveTask(team_, id, state::inProgress, "dev1").ok());
         QVERIFY(teams_->moveTask(team_, id, state::inReview, "dev1").ok());
     }
 
@@ -147,17 +149,21 @@ class TeamReviewPlaceTest final : public QObject {
             logged = logged || (update.kind == "review_rounds" &&
                                 update.text == QStringLiteral("Max review passes: 4"));
         QVERIFY(logged);
-        // With four, findings of the third pass still go back to the owner.
+        // Stored settings remain compatible, but do not authorize a third content pass.
         const QString id = inReview();
-        for (int pass = 1; pass <= 3; ++pass) {
+        for (int pass = 1; pass <= 2; ++pass) {
             QVERIFY(
-                reviewsTo("rev").last().body.contains(QStringLiteral("(round %1 of 4)").arg(pass)));
+                reviewsTo("rev").last().body.contains(QStringLiteral("(round %1 of 2)").arg(pass)));
             finishReview(*teams_, "rev", "Verdict: findings", false);
-            QCOMPARE(task(id).state, state::inProgress);
-            again(id);
+            if (pass == 1) {
+                QCOMPARE(task(id).state, state::inProgress);
+                again(id);
+            }
         }
-        finishReview(*teams_, "rev", "Verdict: findings", false);
         QCOMPARE(task(id).state, state::blocked);
+        again(id);
+        QCOMPARE(task(id).state, state::blocked);
+        QCOMPARE(task(id).round, 2);
     }
 
     void aTeamSavedWithSixRoundsKeepsTwo() {
@@ -175,8 +181,8 @@ class TeamReviewPlaceTest final : public QObject {
         QVERIFY(reviewsTo("rev").first().body.contains("(round 1 of 1)"));
         finishReview(*teams_, "rev", "web/cart.ts:4 high: no total.\nVerdict: findings", false);
         QCOMPARE(task(id).state, state::blocked);
-        QCOMPARE(task(id).question,
-                 QStringLiteral("Review round limit reached (1 of 1) with findings."));
+        QVERIFY(task(id).question.startsWith(
+            QStringLiteral("Review round limit reached (1 of 1) with findings.")));
         // Exactly as the second round does with two: no message back to the owner.
         QVERIFY(reviewsTo("dev1").isEmpty());
         bool limit = false;
@@ -209,46 +215,34 @@ class TeamReviewPlaceTest final : public QObject {
             limit =
                 limit || (update.kind == "round_limit" && update.actionable && update.taskId == id);
         QVERIFY(limit);
-        // The leader can still hand it to review once more: it gets that pass.
+        // A plain state move does not constitute leader arbitration.
         QVERIFY(teams_->moveTask(team_, id, state::inProgress, "dev1").ok());
         again(id);
-        QCOMPARE(task(id).state, state::inReview);
-        QVERIFY(reviewsTo("rev").last().body.contains("(round 2 of 2)"));
-        finishReview(*teams_, "rev", "Verdict: findings", false);
         QCOMPARE(task(id).state, state::blocked);
-        QCOMPARE(task(id).question,
-                 QStringLiteral("Review round limit reached (2 of 2) with findings."));
+        QCOMPARE(task(id).round, 1);
     }
 
     // T-53 round 1 (L1): a limit lowered while the task waits behind another review applies
     // when the reviewer takes it, not one pass later.
     void aLimitLoweredWhileQueuedBlocksWhenTheReviewerTakesIt() {
-        QVERIFY(teams_->update(team_, {{"max_rounds", 3}}, "user").ok());
         const QString waiting = inReview();
-        for (int pass = 1; pass <= 2; ++pass) {
-            finishReview(*teams_, "rev", "Verdict: findings", false);
-            QCOMPARE(task(waiting).state, state::inProgress);
-            if (pass == 1)
-                again(waiting);
-        }
-        // The reviewer is busy with another task when it asks for its third pass.
+        finishReview(*teams_, "rev", "Verdict: findings", false);
+        QCOMPARE(task(waiting).state, state::inProgress);
         const QString other = inReview({}, QStringLiteral("dev2"));
         QVERIFY(!other.isEmpty());
-        QCOMPARE(task(other).round, 1);
         again(waiting);
         QCOMPARE(task(waiting).state, state::inReview);
-        QCOMPARE(task(waiting).round, 2);
-        QVERIFY(teams_->update(team_, {{"max_rounds", 2}}, "user").ok());
+        QCOMPARE(task(waiting).round, 1);
+        QVERIFY(teams_->update(team_, {{"max_rounds", 1}}, "user").ok());
         const int sent = reviewsTo("rev").size();
         finishReview(*teams_, "rev", "Verdict: findings", false);
         QCOMPARE(task(other).state, state::inProgress);
-        // Taken from the queue: past the new limit, so it goes to the leader.
         QTRY_COMPARE(task(waiting).state, state::blocked);
-        QCOMPARE(task(waiting).round, 2);
-        QCOMPARE(task(waiting).roundLimit, 2);
+        QCOMPARE(task(waiting).round, 1);
+        QCOMPARE(task(waiting).roundLimit, 1);
         QCOMPARE(reviewsTo("rev").size(), sent);
-        QVERIFY(task(waiting).question.contains("Max review passes is now 2"));
-        QCOMPARE(team().reviewSlot("rev")->reviewing, QString());
+        QVERIFY(task(waiting).question.contains("Max review passes is now 1"));
+        QVERIFY(team().reviewSlot("rev")->reviewing.isEmpty());
     }
 
     // A raised limit gives the task in progress its new passes at the next request.
@@ -261,9 +255,9 @@ class TeamReviewPlaceTest final : public QObject {
         QVERIFY(teams_->moveTask(team_, id, state::inProgress, "dev1").ok());
         again(id);
         QCOMPARE(task(id).state, state::inReview);
-        QVERIFY(reviewsTo("rev").last().body.contains("(round 2 of 3)"));
+        QVERIFY(reviewsTo("rev").last().body.contains("(round 2 of 2)"));
         finishReview(*teams_, "rev", "Verdict: findings", false);
-        QCOMPARE(task(id).state, state::inProgress);
+        QCOMPARE(task(id).state, state::blocked);
     }
 
     void onThePullRequestTheBoardKeepsTheVerdictAndTheLink() {
@@ -302,16 +296,14 @@ class TeamReviewPlaceTest final : public QObject {
         QVERIFY(task(id).question.startsWith(
             QStringLiteral("Review round limit reached (2 of 2) with findings.")));
         QVERIFY(task(id).question.contains(second));
-        // The leader's acceptance names the comment.
-        QVERIFY(teams_
-                    ->acceptReview(team_, id, pullRequest + "#pullrequestreview-9",
-                                   "Checked by hand", "lead")
-                    .ok());
-        const HistoryEntry* accepted = last(id, "review_accepted");
-        QVERIFY(accepted);
-        QCOMPARE(accepted->data.value("comment_url").toString(), second);
-        QVERIFY(accepted->text.contains(second));
-        QCOMPARE(task(id).state, state::ready);
+        // A public review URL is not an authoritative risk/check receipt.
+        QVERIFY(!teams_
+                     ->acceptReview(team_, id, pullRequest + "#pullrequestreview-9",
+                                    "checked_by_hand", "lead")
+                     .ok());
+        QVERIFY(!last(id, "review_accepted"));
+        QCOMPARE(task(id).reviewComment, second);
+        QCOMPARE(task(id).state, state::blocked);
     }
 
     void theCommentNamesNoFolderOfThisComputerAndNoMember() {

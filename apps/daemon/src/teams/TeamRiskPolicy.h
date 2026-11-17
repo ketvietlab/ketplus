@@ -27,6 +27,9 @@ struct VerifiedEvidence final {
     qint64 taskRevision{-1};
     QString id;
     QString revision;
+    // A separate host recipe must attest the reviewed baseline and all local fixes.
+    QString reviewedRevision;
+    bool localFixVerified{false};
     QMap<QString, Signal> domains;
     QStringList requiredChecks;
     QList<Check> checks;

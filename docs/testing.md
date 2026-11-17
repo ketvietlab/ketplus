@@ -286,6 +286,14 @@ includes `review-guard.test.mjs` and `review-profile.test.mjs`, and the daemon's
 `ketplus_agent_messaging_tests`. The sidecar tests use a fake SDK that runs every
 command and edit the guard allows, so a wrong allow changes the test checkout.
 
+Bounded review policy changes additionally cover `ketplus_team_review_policy_tests`,
+`ketplus_team_finding_resolution_tests`, `ketplus_team_finding_routing_tests`,
+`ketplus_team_verdict_tests`,
+`ketplus_team_review_place_tests` and `ketplus_team_language_tests` (ADR 0132).
+Fake-host receipt tests establish consumer gates; the finding routing suite checks
+actual three-revision Git proofs, authenticated host receipt closure and attacks
+using ignored gitlinks/replacement trees. Required full Pro checks still apply.
+
 A team reviewer's verify turn writes only in its scratch directory (ADR 0067). Build there:
 `cmake -B <scratch>/build`, `xcodebuild -derivedDataPath <scratch>/DerivedData
 -clonedSourcePackagesDirPath <scratch>/SourcePackages`, and run a script that writes into

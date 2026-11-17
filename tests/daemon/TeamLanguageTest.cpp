@@ -215,10 +215,29 @@ class TeamLanguageTest final : public QObject {
         teams_.reset();
         open();
         QVERIFY(teams_->update(team_, {{"language", language == "vi" ? "en" : "vi"}}, "user").ok());
-        QVERIFY(teams_->acceptReview(team_, id, "Local fixture review", "Checked by hand", "lead")
-                    .ok());
-        QCOMPARE(team().task(id)->state, state::ready);
-        QVERIFY(team().task(id)->reviewBlock.isEmpty());
+        QVERIFY(!teams_->acceptReview(team_, id, "Local fixture review", "checked", "lead").ok());
+        QCOMPARE(team().task(id)->state, state::blocked);
+        QCOMPARE(team().task(id)->reviewBlock,
+                 noVerdict ? QStringLiteral("no_verdict") : QStringLiteral("round_limit"));
+    }
+
+    void anInterruptedReviewKeepsItsProtocolReasonAndVietnameseMessage() {
+        start("vi");
+        const QString id = task("Cart");
+        QVERIFY(teams_->assignTask(team_, id, "dev1", "lead").ok());
+        QVERIFY(teams_->moveTask(team_, id, state::inProgress, "dev1").ok());
+        QVERIFY(teams_->moveTask(team_, id, state::inReview, "dev1").ok());
+        teams_->reviewTampered(
+            "rev", firstReviews(team()).message,
+            {QJsonObject{{"field", "worktree"}, {"before", "readable"}, {"after", "unreadable"}}});
+        const auto* interrupted = team().task(id);
+        QCOMPARE(interrupted->state, state::blocked);
+        QCOMPARE(interrupted->round, 0);
+        QCOMPARE(interrupted->reviewBlock, "review_interrupted");
+        QVERIFY(interrupted->question.startsWith(QStringLiteral("Khôi phục và xác minh")));
+        QVERIFY(updates("review_interrupted")
+                    .first()
+                    .text.contains(QStringLiteral("Không suy diễn rằng reviewer đã sửa mã")));
     }
 
     void ordinaryBlocksCannotMasqueradeAsReviewBlocks() {

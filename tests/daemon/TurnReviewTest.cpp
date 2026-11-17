@@ -292,6 +292,8 @@ class TurnReviewTest final : public QObject {
         QTest::newRow("new commit") << "git commit -qam tampered" << "head";
         QTest::newRow("dirty worktree") << "echo dirty > dirty.txt" << "status";
         QTest::newRow("switched branch") << "git checkout -q -b elsewhere" << "symbolic_ref";
+        QTest::newRow("detached head") << "git checkout -q --detach" << "symbolic_ref";
+        QTest::newRow("source removed") << "mv \"$PWD\" \"$PWD-unavailable\"" << "worktree";
     }
 
     void aCodexReviewIsCheckedAroundTheTurn() {
@@ -332,8 +334,9 @@ class TurnReviewTest final : public QObject {
             QVERIFY(lastNotice(fixture, working, "review_tampered").isEmpty());
             return;
         }
-        QTRY_VERIFY_WITH_TIMEOUT(!lastNotice(fixture, working, "review_tampered").isEmpty(), 10000);
-        const QJsonObject notice = lastNotice(fixture, working, "review_tampered");
+        const QString outcome = field == "worktree" ? "review_interrupted" : "review_tampered";
+        QTRY_VERIFY_WITH_TIMEOUT(!lastNotice(fixture, working, outcome).isEmpty(), 10000);
+        const QJsonObject notice = lastNotice(fixture, working, outcome);
         bool named = false;
         for (const QJsonValue& change : notice.value("changes").toArray())
             named = named || change.toObject().value("field").toString() == field;
@@ -345,11 +348,48 @@ class TurnReviewTest final : public QObject {
         const auto request = fixture.journal->agentMessage(notice.value("message_id").toString());
         QVERIFY(request);
         QCOMPARE(request->state, "failed");
-        QCOMPARE(request->error, "review_tampered");
+        QCOMPARE(request->error, outcome);
         // No round used: the next review of this exchange is round 1 again.
         QCOMPARE(fixture.journal->reviewRequestsInChain(request->chainId, working), 0);
         if (field == "status")
             QVERIFY(QFileInfo::exists(worktree + "/dirty.txt"));
+    }
+
+    void journalCountsOrdinaryReviewsButNotInterruptedOrTamperedAttempts() {
+        Fixture fixture;
+        QVERIFY(fixture.open());
+        const QString working = fixture.start("claude", "working");
+        const QString reviewer = fixture.start("claude", "reviewer");
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(working, "turn.completed"), 1, 5000);
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(reviewer, "turn.completed"), 1, 5000);
+        int expected = 0, attempt = 0;
+        for (const QString& outcome :
+             {QString{}, QString("review_interrupted"), QString("review_tampered"), QString{}}) {
+            AgentMessageRecord message;
+            message.id = QStringLiteral("count-attempt-%1").arg(++attempt);
+            message.chainId = "counted-chain";
+            message.hop = attempt;
+            message.fromSession = working;
+            message.fromGeneration = 1;
+            message.fromNumber = fixture.number(working);
+            message.toSession = reviewer;
+            message.toGeneration = 1;
+            message.toNumber = fixture.number(reviewer);
+            message.kind = "review";
+            message.expectReply = true;
+            message.body = "Review this exact source";
+            message.state = outcome.isEmpty() ? "delivered" : "failed";
+            message.error = outcome;
+            message.createdAt = QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs);
+            QString error;
+            QVERIFY2(fixture.journal->insertAgentMessage(message, &error), qPrintable(error));
+            if (outcome.isEmpty())
+                ++expected;
+            QCOMPARE(fixture.journal->reviewRequestsInChain(message.chainId, working), expected);
+            QCOMPARE(fixture.journal->reviewRequestsInChain(message.chainId, reviewer), 0);
+            QCOMPARE(fixture.journal->reviewRequestsInChain("other-chain", working), 0);
+        }
+        QCOMPARE(expected, 2);
     }
 
     // A worktree the daemon could not read before the review turn cannot be vouched for.
@@ -360,11 +400,22 @@ class TurnReviewTest final : public QObject {
         after.head = QStringLiteral("abc");
         const QJsonArray changed = review_integrity::changes(before, after);
         QCOMPARE(changed.size(), 1);
+        QVERIFY(review_integrity::sourceUnavailable(changed));
         QCOMPARE(changed.first().toObject().value("field").toString(), "worktree");
         QCOMPARE(changed.first().toObject().value("before").toString(), "unreadable");
         before.local = true;
         before.head = after.head;
         QVERIFY(review_integrity::changes(before, after).isEmpty());
+        before = {};
+        after = {};
+        before.localExpected = after.localExpected = false;
+        before.remote = after.remote = true;
+        before.remoteHead = after.remoteHead = "abc";
+        QVERIFY(review_integrity::changes(before, after).isEmpty());
+        after.remoteHead = "def";
+        const auto remoteChanged = review_integrity::changes(before, after);
+        QCOMPARE(remoteChanged.size(), 1);
+        QVERIFY(!review_integrity::sourceUnavailable(remoteChanged));
     }
 
     // The Claude guard is unchanged: a Claude review still runs read-only and is not checked.

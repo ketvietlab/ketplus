@@ -1069,3 +1069,14 @@ assertions. See [team-risk-routing.md](team-risk-routing.md). A route is an audi
 record, not a reviewer verdict, a user approval, completion or merge eligibility.
 Workflow consumption and general semantic verification remain separate work;
 there is no automatic cleanup capability.
+
+## Bounded review lifecycle (pending review)
+
+[ADR 0132](decisions/0132-bounded-review-arbitration.md) defines structured findings,
+leader arbitration after at most two automatic content rounds and separate source
+interruption handling. The implementation adds exact-revision consumer guards and separate host recipes
+for nonmandatory prose line-width fixes and unchanged outside-task preference
+deferrals over base/reviewed/current immutable Git objects. Unsupported, mandatory
+or material changes still require reviewer. Native validation follows
+`docs/testing.md`; independent review remains pending. This is not general
+automatic finding closure or resource cleanup.

@@ -72,6 +72,12 @@ class FakeHost final : public TeamHostPort {
         ++statusReads;
         return dirty.contains(worktree);
     }
+    std::optional<risk::VerifiedEvidence> routingEvidence(const Team&, const Task&,
+                                                          const QString& id) const override {
+        const auto it = routingReceipts.constFind(id);
+        return it == routingReceipts.cend() ? std::nullopt : std::optional(*it);
+    }
+    QHash<QString, risk::VerifiedEvidence> routingReceipts;
     QString taskCommit(const Team&, const Task& task) const override {
         return heads.value(task.branch, task.branch + QStringLiteral("@head"));
     }

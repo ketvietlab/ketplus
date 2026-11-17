@@ -245,16 +245,25 @@ QJsonArray teamTools() {
              {{QStringLiteral("task_id"), taskId},
               {QStringLiteral("reason"), text(QStringLiteral("Why the verdict does not count."))}},
              {QStringLiteral("task_id"), QStringLiteral("reason")}),
-        tool(QStringLiteral("team_review_accept"),
-             QStringLiteral("Leader: accept a review made outside the board, for example on the "
-                            "pull request. A task in review, or blocked by its review, becomes "
-                            "ready."),
-             {{QStringLiteral("task_id"), taskId},
-              {QStringLiteral("evidence"),
-               text(QStringLiteral("Where the review is: a pull request review or comment URL, "
-                                   "or what was checked."))},
-              {QStringLiteral("reason"), text(QStringLiteral("Why it is accepted."))}},
-             {QStringLiteral("task_id"), QStringLiteral("evidence"), QStringLiteral("reason")}),
+        tool(
+            QStringLiteral("team_review_accept"),
+            QStringLiteral(
+                "Leader: submit a version1 review decision. Resolve only host-verified bounded "
+                "findings, or explicitly authorize one further independent review. Does not cancel "
+                "active/queued review, create a reviewer verdict, merge or bypass user decisions."),
+            {{QStringLiteral("task_id"), taskId},
+             {QStringLiteral("evidence"),
+              text(QStringLiteral(
+                  "JSON string: version:1, action:resolve_findings|request_review, "
+                  "expected_team_revision, expected_task_revision, head_commit. resolve_findings "
+                  "also requires confidence integer >90, evidence_id from host route_verify, "
+                  "resolutions:[{id,status:fixed|deferred,reason,owner only when deferred}]. "
+                  "request_review accepts no evidence/resolutions/confidence. Read current "
+                  "task.review_findings; unsupported findings/legacy/P0/P1/mandatory risks require "
+                  "reviewer. URLs and caller risk/pass facts are not receipts."))},
+             {QStringLiteral("reason"),
+              text(QStringLiteral("Bounded lowercase reason code for this leader arbitration."))}},
+            {QStringLiteral("task_id"), QStringLiteral("evidence"), QStringLiteral("reason")}),
         tool(QStringLiteral("team_lane_set"),
              QStringLiteral("Leader: change a developer's lane and path prefixes. Logged in "
                             "Updates and in the history of the tasks it affects."),

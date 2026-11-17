@@ -2,10 +2,12 @@
 
 #include <QCryptographicHash>
 #include <QElapsedTimer>
+#include <QJsonDocument>
 #include <QProcess>
 #include <QProcessEnvironment>
 #include <QRegularExpression>
 #include <QUuid>
+#include <algorithm>
 
 namespace ketplus::daemon::teams {
 namespace {
@@ -111,6 +113,53 @@ bool decisionsOpen(const Team& team, const Task& task) {
             return true;
     return false;
 }
+// This is a separate finding-closure recipe, selected only from the daemon's
+// current review record. A submitter's severity or check assertion cannot select it.
+enum class Closure { Unsupported, LineWidth, PreferenceDeferral };
+Closure supportedClosure(const Team& team, const Task& task) {
+    if (!task.reviewFindings || task.reviewFindings->legacy ||
+        task.reviewFindings->round != task.round || task.round < 1 ||
+        task.reviewFindings->revision != task.headCommit ||
+        !review_policy::revision(task.reviewFindings->revision))
+        return Closure::Unsupported;
+    const auto* reviewer = team.member(task.reviewFindings->reviewer);
+    if (!reviewer || reviewer->role != role::reviewer)
+        return Closure::Unsupported;
+    Closure selected = Closure::Unsupported;
+    for (const auto& f : task.reviewFindings->findings) {
+        if (f.status == "non_blocking" && !review_policy::blocks(f))
+            continue;
+        if (f.status != "open" || !review_policy::leaderVerifiable(f) || f.mandatoryRule)
+            return Closure::Unsupported;
+        Closure candidate = Closure::Unsupported;
+        if ((f.impact == "behavior" || f.impact == "preference") && f.scope == "task" &&
+            f.closeWhen == "prose_line_width_80")
+            candidate = Closure::LineWidth;
+        if (review_policy::deferrable(f) && f.impact == "preference" &&
+            f.closeWhen == "owner_accepts_outside_preference")
+            candidate = Closure::PreferenceDeferral;
+        if (candidate == Closure::Unsupported ||
+            (selected != Closure::Unsupported && selected != candidate))
+            return Closure::Unsupported;
+        selected = candidate;
+    }
+    return selected;
+}
+std::optional<QList<QByteArray>> changedFiles(const QString& directory, const QString& before,
+                                              const QString& after) {
+    const auto paths =
+        git(directory, {"diff", "--no-ext-diff", "--no-textconv", "--no-renames", "--no-relative",
+                        "--ignore-submodules=none", "--name-only", "-z", before, after, "--"});
+    if (!paths || (!paths->isEmpty() && !paths->endsWith('\0')))
+        return std::nullopt;
+    return paths->isEmpty() ? QList<QByteArray>{} : paths->chopped(1).split('\0');
+}
+bool overWidth(const QByteArray& bytes) {
+    for (const auto& line : QString::fromUtf8(bytes).split('\n'))
+        if (line.toUcs4().size() > 80)
+            return true;
+    return false;
+}
 } // namespace
 
 RoutingEvidence::Result RoutingEvidence::produce(const Team& team, const Task& task,
@@ -130,15 +179,27 @@ RoutingEvidence::Result RoutingEvidence::produce(const Team& team, const Task& t
         task.worktree.isEmpty() || task.branch.isEmpty() || task.changedRevision < 0)
         return unknown(QStringLiteral("provenance_missing"));
     const Team scope = taskScope(team, task);
+    const bool reviewedTask = task.reviewFindings.has_value();
+    const Closure closure = reviewedTask ? supportedClosure(team, task) : Closure::Unsupported;
+    const bool fixing = closure == Closure::LineWidth;
+    const bool deferring = closure == Closure::PreferenceDeferral;
     if (!team.planApproved || task.assignmentHeld ||
         scope.integrationBranch != QStringLiteral("integration") ||
-        task.state != state::inProgress || task.round != 0 || !task.reviewBlock.isEmpty() ||
-        !task.reviewComment.isEmpty() || !task.outsideLane.isEmpty() || decisionsOpen(team, task))
+        task.state != state::inProgress || !task.reviewBlock.isEmpty() ||
+        !task.outsideLane.isEmpty() || decisionsOpen(team, task))
         return unknown(QStringLiteral("review_or_approval_required"));
-    for (const auto& entry : task.history)
-        if (entry.kind == QStringLiteral("verdict") ||
-            entry.kind == QStringLiteral("review_accepted"))
-            return unknown(QStringLiteral("review_history"));
+    if (reviewedTask) {
+        if (closure == Closure::Unsupported)
+            return unknown(QStringLiteral("finding_fix_unsupported"));
+    } else {
+        if (task.round != 0 || !task.reviewComment.isEmpty())
+            return unknown(QStringLiteral("review_or_approval_required"));
+        for (const auto& entry : task.history)
+            if (entry.kind == QStringLiteral("verdict") ||
+                entry.kind == QStringLiteral("review_accepted") ||
+                entry.kind == QStringLiteral("findings_resolved"))
+                return unknown(QStringLiteral("review_history"));
+    }
     const auto head = git(task.worktree, {QStringLiteral("rev-parse"), QStringLiteral("HEAD")});
     const auto branch = git(task.worktree, {QStringLiteral("symbolic-ref"),
                                             QStringLiteral("--short"), QStringLiteral("HEAD")});
@@ -152,17 +213,33 @@ RoutingEvidence::Result RoutingEvidence::produce(const Team& team, const Task& t
     if (!head || head->trimmed() != revision.toLatin1() || !branch ||
         branch->trimmed() != task.branch.toUtf8() || !clean || !clean->isEmpty() || !ancestor)
         return unknown(QStringLiteral("stale_revision"));
-    const auto paths = git(
-        task.worktree, {QStringLiteral("diff"), QStringLiteral("--no-ext-diff"),
-                        QStringLiteral("--no-textconv"), QStringLiteral("--no-renames"),
-                        QStringLiteral("--ignore-submodules=none"), QStringLiteral("--name-only"),
-                        QStringLiteral("-z"), task.baseCommit, revision, QStringLiteral("--")});
-    if (!paths || paths->isEmpty() || !paths->endsWith('\0'))
+    const auto paths = changedFiles(task.worktree, task.baseCommit, revision);
+    if (!paths || (!reviewedTask && paths->isEmpty()))
         return unknown(QStringLiteral("scope_unknown"));
-    const auto files = paths->chopped(1).split('\0');
-    if (files.size() > 8)
+    auto files = *paths;
+    QByteArray proof;
+    QString reviewed;
+    if (reviewedTask) {
+        reviewed = task.reviewFindings->revision;
+        if (deferring && reviewed != revision)
+            return unknown(QStringLiteral("deferral_revision_changed"));
+        if (!git(task.worktree, {"merge-base", "--is-ancestor", task.baseCommit, reviewed}) ||
+            !git(task.worktree, {"merge-base", "--is-ancestor", reviewed, revision}))
+            return unknown(QStringLiteral("reviewed_baseline_unknown"));
+        const auto initial = changedFiles(task.worktree, task.baseCommit, reviewed);
+        const auto fix = changedFiles(task.worktree, reviewed, revision);
+        if (!initial || !fix || (fixing && fix->isEmpty()))
+            return unknown(QStringLiteral("finding_fix_scope_unknown"));
+        files.append(*initial);
+        files.append(*fix);
+        proof += reviewed.toLatin1() + QJsonDocument(review_policy::toJson(*task.reviewFindings))
+                                           .toJson(QJsonDocument::Compact);
+    }
+    std::sort(files.begin(), files.end());
+    files.erase(std::unique(files.begin(), files.end()), files.end());
+    if (files.isEmpty() || files.size() > 8)
         return unknown(QStringLiteral("scope_too_large"));
-    QByteArray proof = paths.value();
+    bool correctedLongLine = false;
     static const QRegularExpression document(QStringLiteral("\\Adocs/[a-zA-Z0-9_./-]+\\.md\\z"));
     for (const QByteArray& file : files) {
         const QString path = QString::fromUtf8(file);
@@ -176,12 +253,22 @@ RoutingEvidence::Result RoutingEvidence::produce(const Team& team, const Task& t
         const auto newProse = prose(*after);
         if (!oldProse || !newProse || *oldProse != *newProse)
             return unknown(QStringLiteral("semantic_coverage_unknown"));
-        proof += digest(*before).toLatin1() + digest(*after).toLatin1();
+        proof += file + '\0' + digest(*before).toLatin1() + digest(*after).toLatin1();
+        if (reviewedTask) {
+            const auto baseline = blob(task.worktree, reviewed, path);
+            const auto baselineProse = baseline ? prose(*baseline) : std::nullopt;
+            if (!baselineProse || *baselineProse != *newProse || (fixing && overWidth(*after)))
+                return unknown(QStringLiteral("finding_fix_semantics_unknown"));
+            correctedLongLine = correctedLongLine || overWidth(*baseline);
+            proof += digest(*baseline).toLatin1();
+        }
     }
+    if (fixing && !correctedLongLine)
+        return unknown(QStringLiteral("finding_condition_not_demonstrated"));
     if (!git(task.worktree, {QStringLiteral("diff"), QStringLiteral("--no-ext-diff"),
-                             QStringLiteral("--no-textconv"), QStringLiteral("--check"),
-                             QStringLiteral("--ignore-submodules=none"), task.baseCommit, revision,
-                             QStringLiteral("--")}))
+                             QStringLiteral("--no-textconv"), QStringLiteral("--no-relative"),
+                             QStringLiteral("--check"), QStringLiteral("--ignore-submodules=none"),
+                             task.baseCommit, revision, QStringLiteral("--")}))
         return unknown(QStringLiteral("check_failed"));
     // Recheck after every recipe check. Concurrent edits cannot mint a clean receipt.
     const auto finalHead =
@@ -190,7 +277,9 @@ RoutingEvidence::Result RoutingEvidence::produce(const Team& team, const Task& t
         git(task.worktree,
             {QStringLiteral("status"), QStringLiteral("--porcelain=v1"),
              QStringLiteral("--untracked-files=all"), QStringLiteral("--ignore-submodules=none")});
-    if (!finalHead || *finalHead != *head || !finalClean || !finalClean->isEmpty())
+    const auto finalBranch = git(task.worktree, {"symbolic-ref", "--short", "HEAD"});
+    if (!finalHead || *finalHead != *head || !finalBranch || *finalBranch != *branch ||
+        !finalClean || !finalClean->isEmpty())
         return unknown(QStringLiteral("stale_revision"));
 
     risk::VerifiedEvidence evidence;
@@ -198,10 +287,17 @@ RoutingEvidence::Result RoutingEvidence::produce(const Team& team, const Task& t
     evidence.taskId = task.id;
     evidence.taskRevision = task.changedRevision;
     evidence.revision = revision;
-    evidence.id = digest(QUuid::createUuid().toRfc4122() + QByteArray("prose_reflow_v1") +
-                         QByteArray::number(team.id) + task.id.toUtf8() +
-                         QByteArray::number(task.changedRevision) + revision.toLatin1() +
-                         task.baseCommit.toLatin1() + proof);
+    const QString recipe = fixing      ? QStringLiteral("prose_line_width_fix_v1")
+                           : deferring ? QStringLiteral("prose_preference_deferral_v1")
+                                       : QStringLiteral("prose_reflow_v1");
+    if (reviewedTask) {
+        evidence.reviewedRevision = reviewed;
+        evidence.localFixVerified = fixing;
+    }
+    evidence.id =
+        digest(QUuid::createUuid().toRfc4122() + recipe.toUtf8() + QByteArray::number(team.id) +
+               task.id.toUtf8() + QByteArray::number(task.changedRevision) + revision.toLatin1() +
+               task.baseCommit.toLatin1() + proof);
     evidence.scopeEvidence = digest(evidence.id.toLatin1() + "scope" + proof);
     evidence.rollbackEvidence =
         digest(evidence.id.toLatin1() + "rollback" + task.baseCommit.toLatin1());
@@ -210,6 +306,11 @@ RoutingEvidence::Result RoutingEvidence::produce(const Team& team, const Task& t
     evidence.requiredChecks = {QStringLiteral("git_clean_revision"),
                                QStringLiteral("prose_reflow_equivalence"),
                                QStringLiteral("scope_modes"), QStringLiteral("git_diff_check")};
+    if (fixing)
+        evidence.requiredChecks << QStringLiteral("reviewed_prose_equivalence")
+                                << QStringLiteral("reviewed_prose_line_width_80");
+    if (deferring)
+        evidence.requiredChecks << QStringLiteral("reviewed_preference_nonblocking");
     for (const QString& name : evidence.requiredChecks)
         evidence.checks.append(
             {name, revision, digest(evidence.id.toLatin1() + name.toUtf8()), true});
@@ -219,7 +320,11 @@ RoutingEvidence::Result RoutingEvidence::produce(const Team& team, const Task& t
         evidence.unresolvedFailures = 0;
     // This recipe reads Git objects only. It approves no operation or unanswered decision.
     evidence.userApprovalsSatisfied = true;
-    return {evidence, QStringLiteral("verified_prose_reflow"), QStringLiteral("prose_reflow_v1")};
+    return {evidence,
+            fixing      ? QStringLiteral("verified_prose_line_width_fix")
+            : deferring ? QStringLiteral("verified_prose_preference_deferral")
+                        : QStringLiteral("verified_prose_reflow"),
+            recipe};
 }
 
 void RoutingEvidence::retain(const Team& team, const Task& task,

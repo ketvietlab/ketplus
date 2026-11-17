@@ -16,6 +16,10 @@
             <translation> Chuyển lại developer; bạn quyết định các lỗi ngoài phạm vi task.</translation>
         </message>
         <message>
+            <source> Leader arbitration with a reason is required; no further content round starts automatically.</source>
+            <translation> Cần leader phân xử kèm lý do; không tự động bắt đầu vòng review nội dung tiếp theo.</translation>
+        </message>
+        <message>
             <source> On the pull request: %1</source>
             <translation> Trên pull request: %1</translation>
         </message>
@@ -770,6 +774,10 @@ Lane nào cũng được: %2</translation>
             <translation>Xem file; ở chế độ lập kế hoạch.</translation>
         </message>
         <message>
+            <source>Inspect the source changes and explicitly request a new review; no verdict was accepted.</source>
+            <translation>Kiểm tra các thay đổi mã nguồn và yêu cầu một lượt review mới rõ ràng; chưa chấp nhận kết luận nào.</translation>
+        </message>
+        <message>
             <source>Integration branch</source>
             <translation>Branch tích hợp</translation>
         </message>
@@ -1166,6 +1174,10 @@ Lane nào cũng được: %2</translation>
             <translation>Kho mã…</translation>
         </message>
         <message>
+            <source>Restore and verify the reviewed source before explicitly retrying the review.</source>
+            <translation>Khôi phục và xác minh mã nguồn được review trước khi yêu cầu review lại rõ ràng.</translation>
+        </message>
+        <message>
             <source>Resume</source>
             <translation>Chạy tiếp</translation>
         </message>
@@ -1174,20 +1186,12 @@ Lane nào cũng được: %2</translation>
             <translation>Chạy tiếp lượt tự động</translation>
         </message>
         <message>
-            <source>review accepted by %1</source>
-            <translation>%1 đã chấp nhận review</translation>
-        </message>
-        <message>
-            <source>Review accepted by %1 with the review on the pull request (%2; last comment %3): %4</source>
-            <translation>%1 đã chấp nhận review với review trên pull request (%2; bình luận cuối %3): %4</translation>
-        </message>
-        <message>
-            <source>Review accepted by %1, made outside the board (%2): %3</source>
-            <translation>%1 đã chấp nhận review, làm ngoài board (%2): %3</translation>
-        </message>
-        <message>
             <source>Review for %1</source>
             <translation>Review cho %1</translation>
+        </message>
+        <message>
+            <source>Review gate satisfied with audited findings. Branch %1 into %2.</source>
+            <translation>Đã đáp ứng điều kiện review và ghi nhận xử lý finding. Nhánh %1 vào %2.</translation>
         </message>
         <message>
             <source>Review on</source>
@@ -1208,6 +1212,10 @@ Lane nào cũng được: %2</translation>
         <message>
             <source>reviewed, no findings</source>
             <translation>đã review, không có lỗi</translation>
+        </message>
+        <message>
+            <source>reviewed, nonblocking preferences only</source>
+            <translation>đã review, chỉ còn preference không chặn</translation>
         </message>
         <message>
             <source>Reviewer</source>
@@ -1258,8 +1266,12 @@ Lane nào cũng được: %2</translation>
             <translation>Vai trò</translation>
         </message>
         <message>
-            <source>Round %1 does not count: %2 changed the branch during the review (%3). Nothing was reverted.</source>
-            <translation>Vòng %1 không được tính: %2 đã thay đổi branch trong lúc review (%3). Không có gì bị hoàn tác.</translation>
+            <source>Round %1 interrupted: reviewed source is unavailable (%2). No reviewer edit is inferred.</source>
+            <translation>Vòng %1 bị gián đoạn: không truy cập được mã nguồn đang review (%2). Không suy diễn rằng reviewer đã sửa mã.</translation>
+        </message>
+        <message>
+            <source>Round %1 invalidated: readable source snapshots differ (%2). Nothing was reverted.</source>
+            <translation>Vòng %1 không hợp lệ: các ảnh chụp mã nguồn đọc được khác nhau (%2). Không có thay đổi nào bị hoàn tác.</translation>
         </message>
         <message>
             <source>round %1 voided</source>
@@ -1278,12 +1290,20 @@ Lane nào cũng được: %2</translation>
             <translation>Vòng %1: không có lỗi.</translation>
         </message>
         <message>
+            <source>Round %1: no verdict after %2 replies. The round is not counted; restore the review prerequisites and explicitly request review again.</source>
+            <translation>Vòng %1: chưa có kết luận sau %2 lượt trả lời. Vòng này không được tính; hãy khôi phục điều kiện review và yêu cầu review lại rõ ràng.</translation>
+        </message>
+        <message>
             <source>Round %1: no verdict again. The round is not counted; the leader decides.</source>
             <translation>Vòng %1: lại không có kết luận. Vòng này không được tính; leader quyết định.</translation>
         </message>
         <message>
             <source>Round %1: no verdict. The reply had no verdict line; the round is not counted and the reviewer is asked again.</source>
             <translation>Vòng %1: không có kết luận. Câu trả lời thiếu dòng kết luận; vòng này không được tính và reviewer được hỏi lại.</translation>
+        </message>
+        <message>
+            <source>Round %1: nonblocking findings.</source>
+            <translation>Vòng %1: các finding không chặn.</translation>
         </message>
         <message>
             <source>Save</source>
@@ -1494,16 +1514,8 @@ Lane nào cũng được: %2</translation>
             <translation>Conversation của người nhận trước rời %1 khi lượt của nó kết thúc: %2</translation>
         </message>
         <message>
-            <source>The review of round %1 changed the branch again, so it does not count. Check the branch, then hand the task to review again or hand it over.</source>
-            <translation>Lượt review của vòng %1 lại thay đổi branch nên không được tính. Hãy kiểm tra branch, rồi chuyển task sang review lại hoặc bàn giao nó.</translation>
-        </message>
-        <message>
             <source>The review of round %1 did not finish (%2). Hand the task to review again, or hand it over.</source>
             <translation>Review vòng %1 chưa xong (%2). Hãy gửi review lại task, hoặc chuyển giao nó.</translation>
-        </message>
-        <message>
-            <source>The review of round %1 has no verdict after %2 replies. Accept it with team_review_accept, or hand the task to review again.</source>
-            <translation>Vòng review %1 chưa có kết luận sau %2 câu trả lời. Chấp nhận bằng team_review_accept, hoặc chuyển task sang review lại.</translation>
         </message>
         <message>
             <source>The reviewer is the queue</source>
