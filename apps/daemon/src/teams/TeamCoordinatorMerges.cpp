@@ -17,7 +17,8 @@ bool dependenciesDone(const Team& team, const Task& task) {
 
 void TeamCoordinator::offerMerges(Team& team, QList<Update>& updates) {
     for (Task& task : team.tasks) {
-        if (task.state != state::ready || task.mergeOffered || !dependenciesDone(team, task))
+        if (task.state != state::ready || task.mergeOffered || !dependenciesDone(team, task) ||
+            (task.reviewFindings && review_policy::blocks(*task.reviewFindings)))
             continue;
         task.mergeOffered = true;
         // The setting at the moment the task can be merged applies (ADR 0114 §5).
@@ -27,9 +28,16 @@ void TeamCoordinator::offerMerges(Team& team, QList<Update>& updates) {
                 team, QStringLiteral("merge"),
                 say(team.language, QT_TRANSLATE_NOOP("Team", "Merge %1 \"%2\"?"))
                     .arg(task.id, task.title),
-                say(team.language,
-                    QT_TRANSLATE_NOOP("Team", "Reviewed with no findings. Branch %1 into %2."))
-                    .arg(task.branch, taskScope(team, task).integrationBranch),
+                task.reviewFindings && !task.reviewFindings->findings.isEmpty()
+                    ? say(team.language,
+                          QT_TRANSLATE_NOOP(
+                              "Team",
+                              "Review gate satisfied with audited findings. Branch %1 into %2."))
+                          .arg(task.branch, taskScope(team, task).integrationBranch)
+                    : say(team.language,
+                          QT_TRANSLATE_NOOP("Team",
+                                            "Reviewed with no findings. Branch %1 into %2."))
+                          .arg(task.branch, taskScope(team, task).integrationBranch),
                 {say(team.language, QT_TRANSLATE_NOOP("Team", "I merge it myself")), leaderMerges},
                 leaderMerges, task.id, QStringLiteral("daemon"));
             addHistory(task, QStringLiteral("daemon"), QStringLiteral("merge"),
@@ -47,12 +55,13 @@ void TeamCoordinator::offerMerges(Team& team, QList<Update>& updates) {
                        say(team.language,
                            QT_TRANSLATE_NOOP("Team", "Ready for the leader to merge into %1."))
                            .arg(taskScope(team, task).integrationBranch));
-            updates.append({.kind = QStringLiteral("merge_ready"),
-                            .text = say(team.language,
-                                        QT_TRANSLATE_NOOP("Team", "%1 can be merged into %2: %3."))
-                                        .arg(task.id, taskScope(team, task).integrationBranch, task.branch),
-                            .taskId = task.id,
-                            .actionable = true});
+            updates.append(
+                {.kind = QStringLiteral("merge_ready"),
+                 .text =
+                     say(team.language, QT_TRANSLATE_NOOP("Team", "%1 can be merged into %2: %3."))
+                         .arg(task.id, taskScope(team, task).integrationBranch, task.branch),
+                 .taskId = task.id,
+                 .actionable = true});
         }
     }
 }
@@ -109,7 +118,8 @@ void TeamCoordinator::applyMergeFacts(const qint64 teamId, const QList<Task>& as
         // Git was asked about the task as it was. One that moved on meanwhile is asked
         // about again by the next check.
         if (!task || fact == facts.cend() || task->state != state::ready ||
-            task->branch != was.branch || task->headCommit != was.headCommit)
+            task->branch != was.branch || task->headCommit != was.headCommit ||
+            (task->reviewFindings && review_policy::blocks(*task->reviewFindings)))
             continue;
         // T-38: git speaks only of a branch with commits of its own, handed to review at one
         // of them. A branch still at its base is contained in any branch it was cut from: its

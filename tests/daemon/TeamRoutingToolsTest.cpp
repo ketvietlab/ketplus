@@ -141,6 +141,8 @@ class TeamRoutingToolsTest final : public QObject {
         QCOMPARE(teams::risk::evaluate(&*produced.evidence, 99).route,
                  teams::risk::Route::DeveloperLeader);
         QCOMPARE(produced.evidence->checks.size(), 4);
+        QVERIFY(!produced.evidence->localFixVerified);
+        QVERIFY(produced.evidence->reviewedRevision.isEmpty());
         teams::RoutingEvidence store;
         store.retain(scope, work, *produced.evidence);
         const QString id = produced.evidence->id;

@@ -1,14 +1,14 @@
 // ketplus#295 (ADR 0114 §2): a Codex reviewer reviews with Full access, and the broker compares
 // the task's branch before and after each of its review turns. A change voids that review: the
-// round is not counted, the task stays In review, its history and the leader say what changed,
-// and nothing is reverted. Like a reply without a verdict, it is asked again a bounded number
-// of times; then the leader decides.
+// round is not counted and the task is blocked for an explicit recovery decision.
+// Missing source is an interruption, never proof that the reviewer edited it.
 #include "teams/TeamCoordinator.h"
 
 #include "agents/ReviewIntegrity.h"
 
 #include <QJsonArray>
 #include <QJsonObject>
+#include <algorithm>
 
 namespace ketplus::daemon::teams {
 
@@ -49,43 +49,47 @@ void TeamCoordinator::reviewTampered(const QString& reviewerSession, const QStri
     if (task && task->state == state::inReview) {
         const int round = task->round;
         const QString what = review_integrity::describe(changes);
-        // Not counted, as a reply without a verdict: asked again, then the leader decides.
-        --task->round;
-        ++task->missingVerdicts;
-        const bool askAgain = task->missingVerdicts <= verdictRetries;
+        // Availability cannot establish tampering. Neither case is a content verdict,
+        // and neither is automatically retried: fix the source or arbitrate first.
+        task->round = std::max(0, task->round - 1);
+        const bool interrupted = review_integrity::sourceUnavailable(changes);
+        const QString outcome =
+            interrupted ? QStringLiteral("review_interrupted") : QStringLiteral("review_tampered");
         const QJsonObject data{{QStringLiteral("round"), round},
                                {QStringLiteral("reviewer"), reviewerName},
-                               {QStringLiteral("changes"), changes}};
+                               {QStringLiteral("changes"), changes},
+                               {QStringLiteral("content_round_counted"), false}};
         const QString line =
-            say(team->language,
-                QT_TRANSLATE_NOOP("Team", "Round %1 does not count: %2 changed the branch "
-                                          "during the review (%3). Nothing was reverted."))
-                .arg(round)
-                .arg(reviewerName, what);
-        addHistory(*task, reviewerSession, QStringLiteral("review_tampered"), line, data);
-        updates.append({.kind = QStringLiteral("review_tampered"),
+            interrupted
+                ? say(team->language,
+                      QT_TRANSLATE_NOOP("Team", "Round %1 interrupted: reviewed source is "
+                                                "unavailable (%2). No reviewer edit is inferred."))
+                      .arg(round)
+                      .arg(what)
+                : say(team->language,
+                      QT_TRANSLATE_NOOP("Team", "Round %1 invalidated: readable source snapshots "
+                                                "differ (%2). Nothing was reverted."))
+                      .arg(round)
+                      .arg(what);
+        addHistory(*task, QStringLiteral("daemon"), outcome, line, data);
+        updates.append({.kind = outcome,
                         .text = QStringLiteral("%1: %2").arg(taskId, line),
                         .taskId = taskId,
                         .actionable = true,
                         .data = data});
-        if (askAgain) {
-            slot->queue.removeAll(taskId);
-            slot->queue.prepend(taskId);
-        } else {
-            // Back to In review once the leader has looked at the branch.
-            task->resumeState = state::inReview;
-            task->reviewBlock = QStringLiteral("review_tampered");
-            task->question =
-                say(team->language,
-                    QT_TRANSLATE_NOOP("Team", "The review of round %1 changed the branch again, "
-                                              "so it does not count. Check the branch, then "
-                                              "hand the task to review again or hand it over."))
-                    .arg(round);
-            applyMove(*team, *task, state::blocked, QStringLiteral("daemon"), task->question,
-                      updates);
-        }
+        task->resumeState = state::inReview;
+        task->reviewBlock = outcome;
+        task->question =
+            interrupted
+                ? say(team->language,
+                      QT_TRANSLATE_NOOP("Team", "Restore and verify the reviewed source before "
+                                                "explicitly retrying the review."))
+                : say(team->language,
+                      QT_TRANSLATE_NOOP("Team", "Inspect the source changes and explicitly request "
+                                                "a new review; no verdict was accepted."));
+        applyMove(*team, *task, state::blocked, QStringLiteral("daemon"), task->question, updates);
     }
-    // commit() sends this reviewer's next review, or the same one asked again.
+    // commit() may send the next task, never an automatic retry of this invalid review.
     (void)commit(*team, before, QStringLiteral("daemon"), updates);
 }
 

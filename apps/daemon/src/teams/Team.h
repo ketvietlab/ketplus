@@ -1,6 +1,7 @@
 #pragma once
 
 #include "TeamLanguage.h"
+#include "teams/TeamReviewPolicy.h"
 #include "teams/TeamRiskPolicy.h"
 
 #include <QJsonArray>
@@ -169,6 +170,8 @@ struct Task final {
     QString headCommit;
     QString pullRequest;
     std::optional<risk::Decision> routingDecision;
+    // Structured findings of the last completed review; never a permission token.
+    std::optional<review_policy::Record> reviewFindings;
     // T-90 (ADR 0123): the repository and integration branch the task works in when they are
     // not the team's: named when the task was created, or kept from before the team's
     // repository changed. Empty: the team's. Read them through taskScope().
@@ -188,6 +191,9 @@ struct Task final {
     // change of the team's settings applies to tasks that enter review afterwards. The place
     // is the board for a task without a pull request. Zero and empty: never reviewed.
     int roundLimit{0};
+    // One explicit leader arbitration may authorize one further content round at this head.
+    int arbitratedRound{0};
+    QString arbitrationHead;
     QString reviewPlace;
     // The link of the comment its last review on the pull request left there.
     QString reviewComment;
