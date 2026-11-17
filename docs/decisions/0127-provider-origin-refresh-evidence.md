@@ -938,3 +938,48 @@ history and same-ID refresh remain unverified for Cursor, and its production
 mutation gate remains denied. The next verification must address the classified
 refusal before another deliberate model request; fresh login, broader approval
 or an automatic model fallback is not implied by this result.
+
+### Read-only refusal controls and assistant-text false-positive regression
+
+An offline probe linked to the actual daemon classifier reproduces a generic
+false-positive: ordinary explanatory prose quoting billing wording matches the
+broad plan substring detector. The synthetic marker and unrelated transport
+failure do not match. This establishes a classifier limitation, not that the
+first additional live run was a false-positive. That run intentionally retained
+only the aggregate classification; neither its QTest log nor a bounded read of
+its scoped worker log supplies the native response associated with its own ID.
+Its exact native P1–P4 match therefore cannot be recovered retrospectively.
+
+Assistant-content refusal handling now requires a recognized refusal lead,
+optionally preceded by `ActionRequiredError:`. Streaming prefixes remain held
+until disambiguated. Ordinary explanatory prose quoting the four plan phrases
+and a usage-limit phrase completes normally; six known plan/usage refusals,
+including split chunks, remain failures without an assistant answer. Explicit
+RPC errors retain the existing broad classification and display behavior. This
+is a text heuristic, not a provider entitlement authority; new refusal wording
+still needs independent validation.
+
+The private native observer additionally records only allowlisted rule IDs
+P1–P6/U1–U2 and a `plan`, `model` or `quota` category from its owned prompt stream.
+Split chunks, duplicate suppression and request completion boundaries are
+covered offline. Raw response text stays unrecorded. Rule observations do not
+establish backend delivery, account entitlement or the cause of an earlier run.
+
+Read-only CLI `models` and `about --format json` controls on version
+`2026.11.11-043ef28` report an account catalog containing Haiku and Composer 2.5,
+and a Team tier label. They expose no usable remaining quota or per-model grant.
+The official [CLI parameter reference](https://cursor.com/docs/cli/reference/parameters)
+documents these controls. The [current model and pricing page](https://cursor.com/docs/models-and-pricing)
+lists non-fast Composer 2.5 at $0.50 input/$2.50 output per million tokens and
+distinguishes the Cursor-model pool from third-party model credit. This makes
+Composer a concrete cheap named candidate, but catalog presence and a tier label
+alone do not prove this CLI session's entitlement or remaining pool. No second
+additional prompt is sent during these controls or offline fixes; the budget
+remains **1/10**, and Cursor mutation remains denied pending review and runtime
+evidence.
+
+Focused validation of this offline change passes: both C++ targets rebuild;
+the Cursor adapter suite and bounded-refresh classifier/default native skip pass
+(2/2 CTest targets, 27.32 seconds). Python attestation/diagnostics passes 11/11,
+proposal fixtures 9/9 and additional-budget units 4/4. AST, C++ formatting and
+diff checks pass. No native model or history request is part of those checks.

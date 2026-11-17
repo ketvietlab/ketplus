@@ -231,11 +231,30 @@ class DiagnosticsTest(unittest.TestCase):
         for text in ["private-token: not included in your ", "plan; usage ", "limit. synthetic-transcript"]:
             self.diagnostics.observe(dict(method="session/update", params=dict(update=dict(
                 sessionUpdate="agent_message_chunk", content=dict(text=text)))))
-        self.assertEqual([row["reason"] for row in self.rows], ["assistant_plan_limit", "assistant_usage_limit"])
+        self.assertEqual([row["reason"] for row in self.rows if row["event"] == "native_diagnostic"],
+                         ["assistant_plan_limit", "assistant_usage_limit"])
         self.assertNotIn("private", json.dumps(self.rows))
         self.assertNotIn("synthetic", json.dumps(self.rows))
         self.diagnostics.observe(dict(id=1, result=dict(stopReason="end_turn")))
         self.assertEqual(self.rows[-1]["reason"], "response")
+
+    def test_exact_native_rule_ids_are_bounded_observations_not_entitlement(self):
+        self.diagnostics.sent(1, "session/prompt")
+        for text in ["private-token: Named models un", "available. Free plans can only use Auto. ",
+                     "Switch to Auto or upgrade plans to continue. synthetic-transcript"]:
+            self.diagnostics.observe(dict(method="session/update", params=dict(update=dict(
+                sessionUpdate="agent_message_chunk", content=dict(text=text)))))
+        rules = [row for row in self.rows if row["event"] == "assistant_refusal_rule"]
+        self.assertEqual(rules, [dict(event="assistant_refusal_rule", rule_id="P2", category="model"),
+                                dict(event="assistant_refusal_rule", rule_id="P3", category="model"),
+                                dict(event="assistant_refusal_rule", rule_id="P4", category="plan")])
+        self.assertNotIn("private", json.dumps(self.rows))
+        self.assertNotIn("synthetic", json.dumps(self.rows))
+        self.diagnostics.observe(dict(id=1, result=dict(stopReason="end_turn")))
+        count = len(self.rows)
+        self.diagnostics.observe(dict(method="session/update", params=dict(update=dict(
+            sessionUpdate="agent_message_chunk", content=dict(text="upgrade your plan")))))
+        self.assertEqual(len(self.rows), count)
 
 
 class WrapperDiagnosticsTest(unittest.TestCase):

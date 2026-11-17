@@ -935,6 +935,13 @@ cannot authorize a live provider run by themselves.
 
 These probes keep official inherited provider authentication, create a new
 synthetic session and empty temporary cwd, and never scan existing history.
+The native observer can record `assistant_refusal_rule` with only an allowlisted
+P1–P6/U1–U2 rule ID and `plan`, `model` or `quota` category. These are stream
+observations, not entitlement assertions; raw assistant text is never logged.
+The Cursor adapter fixtures also cover ordinary answers quoting plan/usage
+wording and split-chunk provider refusals. Run `ketplus_daemon_cursor_adapter_tests`
+alongside the focused bounded-refresh classifier and Python attestation tests
+when changing that refusal boundary, without enabling any native opt-in.
 They pin cheap named models and check control/MCP before delivery. Cursor's
 `control` opt-in intercepts the first prompt before the provider, without
 reserving quota. Its live run passes only the initial authorized prompt;

@@ -10,6 +10,7 @@
 #include <QRegularExpression>
 #include <QStandardPaths>
 #include <QTimer>
+#include <algorithm>
 #include <utility>
 
 namespace ketplus::daemon {
@@ -23,13 +24,49 @@ QString pinnedSpawnModel(const QString& model) {
     return trimmed;
 }
 
+QString assistantRefusalText(const QString& text) {
+    QString trimmed = text.trimmed();
+    const QString prefix = QStringLiteral("ActionRequiredError:");
+    if (trimmed.startsWith(prefix, Qt::CaseInsensitive))
+        trimmed = trimmed.mid(prefix.size()).trimmed();
+    return trimmed;
+}
+
+bool isAssistantRefusal(const QString& text) {
+    // Assistant prose can quote billing messages. Broad substring matching is
+    // appropriate for an explicit error, but must not fail a normal answer.
+    static const QRegularExpression lead(
+        QStringLiteral("^(?:upgrade your plan\\b|named models unavailable\\b|"
+                       "free plans can only use auto\\b|switch to auto or upgrade\\b|"
+                       "(?:your (?:team|organization|account) has|you have) reached "
+                       "(?:its|your) usage limit\\b|usage limit (?:reached|exceeded)\\b)"),
+        QRegularExpression::CaseInsensitiveOption);
+    return lead.match(assistantRefusalText(text)).hasMatch();
+}
+
 bool isPlanLimitPrefix(const QString& text) {
-    const QString trimmed = text.trimmed();
+    const QString raw = text.trimmed();
+    if (!raw.isEmpty() &&
+        QStringLiteral("ActionRequiredError:").startsWith(raw, Qt::CaseInsensitive))
+        return true;
+    const QString trimmed = assistantRefusalText(text);
     if (trimmed.isEmpty())
         return false;
-    if (CursorAdapter::looksLikePlanLimit(trimmed))
+    if (isAssistantRefusal(trimmed))
         return true;
-    return QStringLiteral("upgrade your plan to continue").startsWith(trimmed, Qt::CaseInsensitive);
+    static const QStringList leads{QStringLiteral("upgrade your plan"),
+                                   QStringLiteral("named models unavailable"),
+                                   QStringLiteral("free plans can only use auto"),
+                                   QStringLiteral("switch to auto or upgrade"),
+                                   QStringLiteral("your team has reached its usage limit"),
+                                   QStringLiteral("your organization has reached its usage limit"),
+                                   QStringLiteral("your account has reached its usage limit"),
+                                   QStringLiteral("you have reached your usage limit"),
+                                   QStringLiteral("usage limit reached"),
+                                   QStringLiteral("usage limit exceeded")};
+    return std::any_of(leads.cbegin(), leads.cend(), [&trimmed](const QString& lead) {
+        return lead.startsWith(trimmed, Qt::CaseInsensitive);
+    });
 }
 
 CursorAdapter::ProcessInvocation wrapExecutable(const QString& executable,
@@ -426,9 +463,7 @@ QString CursorAdapter::turnFailureMessage(const QString& error) const {
     return failureMessage(error);
 }
 
-bool CursorAdapter::isFailureText(const QString& text) const {
-    return looksLikePlanLimit(text) || looksLikeUsageLimit(text);
-}
+bool CursorAdapter::isFailureText(const QString& text) const { return isAssistantRefusal(text); }
 
 bool CursorAdapter::holdAssistantText(const QString& text) const { return isPlanLimitPrefix(text); }
 qint64 CursorAdapter::failureResetsAt(const QString& error) const {

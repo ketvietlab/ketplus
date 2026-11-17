@@ -453,7 +453,20 @@ class CursorAdapterTest final : public QObject {
         adapter.stop();
     }
 
+    void reportsCursorPlanLimitWithoutPretendingToAnswer_data() {
+        QTest::addColumn<QString>("prompt");
+        QTest::addColumn<bool>("plan");
+        QTest::newRow("upgrade") << QStringLiteral("always-upgrade") << true;
+        QTest::newRow("named") << QStringLiteral("assistant-named-limit") << true;
+        QTest::newRow("free") << QStringLiteral("assistant-free-limit") << true;
+        QTest::newRow("switch") << QStringLiteral("assistant-switch-limit") << true;
+        QTest::newRow("action") << QStringLiteral("assistant-action-limit") << true;
+        QTest::newRow("usage") << QStringLiteral("assistant-usage-limit") << false;
+    }
+
     void reportsCursorPlanLimitWithoutPretendingToAnswer() {
+        QFETCH(QString, prompt);
+        QFETCH(bool, plan);
         // FakeCursor's always-upgrade branch sends assistant plan text followed
         // by a successful end_turn RPC response. Transport success must not
         // turn that provider refusal into a completed assistant answer.
@@ -471,7 +484,7 @@ class CursorAdapterTest final : public QObject {
             request(
                 QStringLiteral("session.start_turn"), QStringLiteral("start-cursor-limit"),
                 {{QStringLiteral("worktree_path"), directory.path()},
-                 {QStringLiteral("prompt"), QStringLiteral("always-upgrade")},
+                 {QStringLiteral("prompt"), prompt},
                  {QStringLiteral("options"),
                   QJsonObject{{QStringLiteral("provider"), QStringLiteral("cursor")},
                               {QStringLiteral("model"), QStringLiteral("composer-2.5")},
@@ -483,16 +496,39 @@ class CursorAdapterTest final : public QObject {
         const auto events = eventsOf(journal, sessionId);
         QTRY_VERIFY_WITH_TIMEOUT(!events(QStringLiteral("runtime.error")).isEmpty(), 3000);
         QCOMPARE(events(QStringLiteral("assistant.delta")).size(), 0);
-        QVERIFY(events(QStringLiteral("runtime.error"))
-                    .first()["payload"]["message"]
-                    .toString()
-                    .contains(CursorAdapter::loginCommand()));
+        QCOMPARE(events(QStringLiteral("runtime.error"))
+                     .first()["payload"]["message"]
+                     .toString()
+                     .contains(CursorAdapter::loginCommand()),
+                 plan);
         QTRY_VERIFY_WITH_TIMEOUT(!events(QStringLiteral("turn.completed")).isEmpty(), 3000);
         QCOMPARE(events(QStringLiteral("turn.completed"))
                      .last()[QStringLiteral("payload")][QStringLiteral("status")]
                      .toString(),
                  QStringLiteral("failed"));
         QCOMPARE(events(QStringLiteral("item.completed")).size(), 0);
+        adapter.stop();
+    }
+
+    void assistantExplanationQuotingPlanWordingStillCompletes() {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString cursor = directory.filePath(QStringLiteral("fake-cursor"));
+        QVERIFY(writeFakeCursor(cursor, directory.filePath(QStringLiteral("cursor.log"))));
+        LocalJournal journal(directory.filePath(QStringLiteral("journal.sqlite3")));
+        QVERIFY(journal.isOpen());
+        CodexAdapter codex(QStringLiteral("/missing-codex-for-cursor-test"));
+        CursorAdapter adapter(cursor);
+        SessionHost host(&journal, &codex, nullptr, &adapter);
+        const auto id = startCursor(host, directory.path(), QStringLiteral("explain-plan-quote"));
+        QVERIFY(!id.isEmpty());
+        const auto events = eventsOf(journal, id);
+        QTRY_VERIFY_WITH_TIMEOUT(!events(QStringLiteral("turn.completed")).isEmpty(), 3000);
+        QCOMPARE(events(QStringLiteral("turn.completed")).last()["payload"]["status"].toString(),
+                 QStringLiteral("completed"));
+        QVERIFY(events(QStringLiteral("runtime.error")).isEmpty());
+        QVERIFY(!events(QStringLiteral("assistant.delta")).isEmpty());
+        QVERIFY(!events(QStringLiteral("item.completed")).isEmpty());
         adapter.stop();
     }
 

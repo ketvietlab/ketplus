@@ -11,6 +11,16 @@ PHASES = {"initialize": "initialize", "session/new": "new", "session/load": "loa
           "session/set_config_option": "model", "session/prompt": "prompt"}
 REASONS = {"response", "rpc_error", "process_exit", "stdout_eof", "read_error", "timeout",
            "assistant_plan_limit", "assistant_usage_limit"}
+REFUSAL_RULES = {
+    "P1": ("plan", "upgrade your plan"),
+    "P2": ("model", "named models unavailable"),
+    "P3": ("model", "free plans can only use auto"),
+    "P4": ("plan", "switch to auto or upgrade"),
+    "P5": ("plan", "not included in your plan"),
+    "P6": ("plan", "not available on your plan"),
+    "U1": ("quota", "usage limit"),
+    "U2": ("quota", "quota exceeded"),
+}
 
 
 def numeric(value):
@@ -34,7 +44,7 @@ class Diagnostics:
     def sent(self, serial, method, auto_control=False):
         with self.lock:
             self.pending[str(serial)] = dict(phase="auto_control" if auto_control else PHASES.get(method, "other"),
-                                             deadline=self.clock() + self.timeout, tail="", limits=set())
+                                             deadline=self.clock() + self.timeout, tail="", limits=set(), rules=set())
 
     def observe(self, value):
         with self.lock:
@@ -58,6 +68,10 @@ class Diagnostics:
                 # Bounded rolling buffer handles split chunks. Only enum
                 # matches escape this lock; raw text is never sent to record().
                 lower = (request["tail"] + text).lower()
+                for rule_id, (category, pattern) in REFUSAL_RULES.items():
+                    if rule_id not in request["rules"] and pattern in lower:
+                        request["rules"].add(rule_id)
+                        self.record("assistant_refusal_rule", rule_id=rule_id, category=category)
                 for reason, patterns in {
                     "assistant_plan_limit": ("not included in your plan", "not available on your plan"),
                     "assistant_usage_limit": ("usage limit", "quota exceeded"),

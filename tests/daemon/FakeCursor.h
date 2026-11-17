@@ -260,13 +260,29 @@ for line in sys.stdin:
                 'ActionRequiredError: Your team has reached its usage limit Please reach out to '
                 'an admin to enable on-demand usage, or return on 11/15/2026 when your limit '
                 'resets.'}})
-        elif prompt == 'always-upgrade' or (
-                prompt == 'upgrade-plan' and current_model in ('auto', 'default', 'auto-smart', '')):
+        elif prompt == 'explain-plan-quote':
             emit({'jsonrpc': '2.0', 'method': 'session/update', 'params': {
                 'sessionId': session_id,
                 'update': {'sessionUpdate': 'agent_message_chunk',
-                           'content': {'type': 'text',
-                                       'text': 'Upgrade your plan to continue'}}}})
+                           'content': {'type': 'text', 'text':
+                               "The documentation quotes 'upgrade your plan', 'named models unavailable', "
+                               "'free plans can only use auto', 'switch to auto or upgrade', and "
+                               "'your team has reached its usage limit' as billing examples."}}}})
+            emit({'jsonrpc': '2.0', 'id': message_id, 'result': {'stopReason': 'end_turn'}})
+        elif prompt in ('always-upgrade', 'assistant-named-limit', 'assistant-free-limit',
+                        'assistant-switch-limit', 'assistant-action-limit', 'assistant-usage-limit') or (
+                prompt == 'upgrade-plan' and current_model in ('auto', 'default', 'auto-smart', '')):
+            refusal = {'assistant-named-limit': 'Named models unavailable',
+                       'assistant-free-limit': 'Free plans can only use Auto.',
+                       'assistant-switch-limit': 'Switch to Auto or upgrade plans to continue.',
+                       'assistant-action-limit': 'ActionRequiredError: Upgrade your plan to continue',
+                       'assistant-usage-limit': 'Your team has reached its usage limit.'}.get(
+                           prompt, 'Upgrade your plan to continue')
+            for chunk in (refusal[:8], refusal[8:]):
+                emit({'jsonrpc': '2.0', 'method': 'session/update', 'params': {
+                    'sessionId': session_id,
+                    'update': {'sessionUpdate': 'agent_message_chunk',
+                               'content': {'type': 'text', 'text': chunk}}}})
             emit({'jsonrpc': '2.0', 'id': message_id, 'result': {'stopReason': 'end_turn'}})
         else:
             finish(message_id, session_id)
