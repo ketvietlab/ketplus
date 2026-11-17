@@ -17,6 +17,8 @@ import sys
 import threading
 import time
 
+from bounded_diagnostics import Diagnostics, numeric
+
 sys.dont_write_bytecode = True
 MODEL = "claude-haiku-5-5-low"
 MARKER = "T3_BOUNDED_CURSOR_ALPHA"
@@ -38,6 +40,19 @@ def approved_discovery(observed):
     spawned = {row["pid"] for row in observed if row.get("method") == "spawn"}
     listed = {row["pid"] for row in observed if row.get("method") == "tools/list"}
     return spawned, listed, bool(spawned) and spawned <= listed
+
+
+def make_attestation(config, epoch):
+    from private_attestation import Attestation
+    session = config["approved_session"]
+    assert session["cwd"] == config["work"] and len(session["mcpServers"]) == 1
+    # Installed 2026.11.11-043ef28's request-supplied ACP resources loop.
+    # A different module/version must fail closed, not credit project discovery.
+    module = pathlib.Path(config["executable"]).resolve().parent / "8512.index.js"
+    digest = "d70d62e5f06260a477583ae6a174c537c6e8d08ea9be24c96c9a0e7ec4702725"
+    assert hashlib.sha256(module.read_bytes()).hexdigest() == digest
+    site = dict(file=str(module), line=1, column=70274, sha256=digest)
+    return Attestation(session["mcpServers"][0], session["cwd"], config["observer_epochs"][epoch], site)
 
 
 def main():
@@ -84,18 +99,7 @@ def main():
     attestation = None
     native_env = None
     if attested_probe:
-        from private_attestation import Attestation
-        session = config["approved_session"]
-        assert session["cwd"] == config["work"] and len(session["mcpServers"]) == 1
-        # Installed 2026.11.11-043ef28's ACP resources loop, specifically the
-        # direct constructor for request-supplied servers, not workspace loading.
-        # Exact module hash pins this observation; another version fails closed.
-        module = pathlib.Path(config["executable"]).resolve().parent / "8512.index.js"
-        digest = "d70d62e5f06260a477583ae6a174c537c6e8d08ea9be24c96c9a0e7ec4702725"
-        assert hashlib.sha256(module.read_bytes()).hexdigest() == digest
-        site = dict(file=str(module), line=1, column=70274, sha256=digest)
-        attestation = Attestation(session["mcpServers"][0], session["cwd"],
-                                  config["observer_epochs"][epoch], site)
+        attestation = make_attestation(config, epoch)
         native_env = attestation.environment()
     try:
         process = subprocess.Popen([config["executable"], *args], cwd=config["work"],
@@ -118,6 +122,8 @@ def main():
     auto_text = ""
     auto_success = False
     auto_config_update = False
+    diagnostics = Diagnostics(record)
+    monitoring_stopped = threading.Event()
 
     def read():
         nonlocal selected, replaying, replay_text, auto_text, auto_success, auto_config_update
@@ -126,21 +132,14 @@ def main():
                 value = json.loads(line)
             except ValueError:
                 continue
+            diagnostics.observe(value)
             if auto_pending:
                 if value.get("method") == "session/update":
                     update = value.get("params", {}).get("update", {})
                     auto_text += update.get("content", {}).get("text", "")
                     auto_config_update |= update.get("sessionUpdate") == "config_option_update"
-                    record("auto_control_update", kind=update.get("sessionUpdate"),
-                           keys=list(update), text_length=len(update.get("content", {}).get("text", "")))
                     continue
                 if value.get("id") == "t3-auto-control":
-                    error = value.get("error", {})
-                    message = re.sub(r"[A-Za-z0-9_/+=-]{32,}", "[redacted]", str(error.get("message", "")))
-                    if any(word in message.lower() for word in ["token", "authorization", "credential", "login"]):
-                        message = "[authentication diagnostic omitted]"
-                    record("auto_control_response", error_code=error.get("code"),
-                           error_message=message[:500], result_keys=list(value.get("result", {})))
                     auto_success = "error" not in value and (auto_config_update or "auto" in auto_text.lower()) and not any(
                         word in auto_text.lower() for word in ["can't", "unavailable", "error", "unknown"])
                     auto_control.set()
@@ -162,7 +161,7 @@ def main():
                     # (they may contain tokens, endpoints or prompt text).
                     code = value.get("error", {}).get("code")
                     reason = value.get("result", {}).get("stopReason")
-                    record("native_prompt_response", error_code=code if isinstance(code, int) else None,
+                    record("native_prompt_response", error_code=numeric(code),
                            stop_reason=reason if reason in ["end_turn", "max_tokens", "refusal", "cancelled",
                                                             "max_turn_requests"] else None,
                            failed="error" in value)
@@ -175,7 +174,7 @@ def main():
                 if method == "session/load":
                     code = value.get("error", {}).get("code")
                     record("load_ack", success="error" not in value,
-                           error_code=code if isinstance(code, int) else None,
+                           error_code=numeric(code),
                            same_id=value.get("result", {}).get("sessionId") == params.get("sessionId"))
                     replaying = False
             if value.get("method") == "session/update" and replaying:
@@ -186,8 +185,23 @@ def main():
                     record("history_marker", kind=update.get("sessionUpdate"))
             emit(value)
 
-    thread = threading.Thread(target=read, daemon=True)
+    def guarded_read():
+        try:
+            read()
+        except (OSError, ValueError, TypeError, AttributeError):
+            diagnostics.closed(process.poll(), read_error=True)
+        finally:
+            diagnostics.closed(process.poll())
+            auto_control.set()
+
+    def monitor():
+        while not monitoring_stopped.wait(.05):
+            diagnostics.expire()
+
+    thread = threading.Thread(target=guarded_read, daemon=True)
     thread.start()
+    monitor_thread = threading.Thread(target=monitor, daemon=True)
+    monitor_thread.start()
 
     def stop(*_):
         raise SystemExit(0)
@@ -213,7 +227,10 @@ def main():
                 ready = False
                 while time.monotonic() < deadline:
                     if attestation:
-                        ready = attestation.snapshot()["attested"]
+                        state = attestation.snapshot()
+                        ready = state["ready"]
+                        if state["revoked"]:
+                            break
                     elif approval_log:
                         observed = rows(approval_log)[approval_offset:]
                         # Project and request-injected instances may both start.
@@ -227,7 +244,9 @@ def main():
                     time.sleep(.05)
                 if attestation:
                     state = attestation.snapshot()
+                    ready = state["ready"]
                     record("injected_attestation", attested=state["attested"],
+                           ready=state["ready"], revoked=state["revoked"],
                            injected_workers=len(state["workers"]), inventory=state["inventory"],
                            rejected=state["rejected"], forbidden=state["forbidden"])
                     for pid in state["all_workers"]:
@@ -241,18 +260,23 @@ def main():
                     # Swallow its informational output so it cannot masquerade as
                     # the model's answer in the adapter's synthetic turn.
                     auto_pending = True
+                    diagnostics.sent("t3-auto-control", "session/prompt", auto_control=True)
                     process.stdin.write(json.dumps(dict(jsonrpc="2.0", id="t3-auto-control",
                         method="session/prompt", params=dict(sessionId=params["sessionId"],
                             prompt=[dict(type="text", text="/model --session auto")]))) + "\n")
                     process.stdin.flush()
-                    selected = auto_control.wait(10) and auto_success
+                    acknowledged = auto_control.wait(10)
+                    if not acknowledged:
+                        diagnostics.timed_out("t3-auto-control")
+                    selected = acknowledged and auto_success
                     auto_pending = False
-                    diagnostic = re.sub(r"\x1b\[[0-9;]*[A-Za-z]", "", auto_text)
-                    diagnostic = re.sub(r"[A-Za-z0-9_/+=-]{32,}", "[redacted]", diagnostic)
-                    if any(word in diagnostic.lower() for word in ["token", "authorization", "credential", "login"]):
-                        diagnostic = "[authentication diagnostic omitted]"
                     record("auto_mode_ack", accepted=selected, actual_model="not_reported",
-                           control_diagnostic=diagnostic[:700])
+                           reason="accepted" if selected else "control_not_acknowledged")
+                # Recheck after all potentially blocking controls, immediately
+                # before the barrier and before any allowance can be reserved.
+                if attestation:
+                    ready = attestation.snapshot()["ready"]
+                ready = ready and process.poll() is None
                 record("prompt_barrier", mcp_ready=ready, cheap_model_ack=selected, synthetic_marker_valid=valid)
                 if not ready or not selected or not valid:
                     emit(dict(jsonrpc="2.0", id=value["id"],
@@ -284,6 +308,7 @@ def main():
                 record("model_request_forwarded")
             if "id" in value:
                 pending[str(value["id"])] = (method, params)
+                diagnostics.sent(value["id"], method)
             if method == "session/load":
                 replay_text = ""
                 replaying = True
@@ -298,11 +323,21 @@ def main():
                 process.kill()
                 process.wait(3)
         thread.join(1)
+        process.stdin.close()
+        # Never block close() on a reader still holding the buffered stream
+        # lock (for example a descendant retaining the stdout descriptor).
+        if not thread.is_alive():
+            process.stdout.close()
+        monitoring_stopped.set()
+        monitor_thread.join(1)
+        diagnostics.closed(process.poll())
+        diagnostics.report("transport", "process_exit", status=process.poll())
         if attestation:
             # Allow asynchronous observer messages to drain after owned exit.
             time.sleep(.1)
             state = attestation.snapshot()
             record("injected_attestation_final", attested=state["attested"],
+                   ready=state["ready"], revoked=state["revoked"],
                    injected_workers=len(state["workers"]), inventory=state["inventory"],
                    rejected=state["rejected"], forbidden=state["forbidden"])
             for row in attestation.events:

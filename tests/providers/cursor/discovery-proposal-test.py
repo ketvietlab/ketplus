@@ -88,11 +88,16 @@ send({id:1,method:'initialize',params:{protocolVersion:'2024-11-05'}});
                 import time
                 end = time.monotonic() + 1
                 goal = "forbidden" if block_tool else "inventory"
-                while not observer.snapshot()[goal] and time.monotonic() < end:
+                while time.monotonic() < end:
+                    state = observer.snapshot()
+                    if state[goal] and (block_tool or state["revoked"]):
+                        break
                     time.sleep(.01)
                 self.assertTrue(observer.snapshot()[goal])
                 if not block_tool:
                     self.assertTrue(observer.snapshot()["attested"])
+                    self.assertTrue(observer.snapshot()["revoked"])
+                    self.assertFalse(observer.snapshot()["ready"])
                 methods = [json.loads(line)["method"] for line in (root / "events.jsonl").read_text().splitlines()]
                 self.assertNotIn("tools/call", methods)
                 self.assertEqual(observer.snapshot()["rejected"], 0)

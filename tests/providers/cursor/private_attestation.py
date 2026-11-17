@@ -98,8 +98,15 @@ class Attestation:
         required = {"spawn", "initialize_sent", "initialize_result", "initialized_sent"}
         handshakes = set()
         for pid in workers:
-            stages = {row["event"]: row.get("sequence", -1) for row in direct
-                      if row.get("childPid") == pid and row.get("event") in required}
+            stages = {}
+            for row in direct:
+                if row.get("childPid") == pid and row.get("event") in required:
+                    stages.setdefault(row["event"], []).append(row.get("sequence", -1))
+            # Duplicate/malformed observations cannot replace an earlier stage
+            # and repair an invalid handshake. Delivery order is irrelevant.
+            if any(len(values) != 1 or type(values[0]) is not int for values in stages.values()):
+                continue
+            stages = {event: values[0] for event, values in stages.items()}
             order = [stages.get(key, -1) for key in ["spawn", "initialize_sent",
                                                     "initialize_result", "initialized_sent"]]
             if min(order) >= 0 and all(a < b for a, b in zip(order, order[1:])):
@@ -109,7 +116,15 @@ class Attestation:
             row.get("event") in errors for row in observed)
         inventory = {row["childPid"] for row in direct
                      if row.get("event") == "inventory" and row.get("valid") is True}
-        return dict(attested=valid, inventory=bool(valid and workers <= inventory),
+        terminal = {"exit", "close", "child_error", "stdout_eof", "stdout_close",
+                    "stdout_error", "stdin_close", "stdin_error"}
+        # A terminal observation is sticky, including when its delivery races
+        # older handshake records. Project/other-child exits do not revoke this
+        # exact injected worker. Historical evidence remains available to audit.
+        revoked = any(row.get("childPid") in workers and row.get("event") in terminal
+                      for row in direct)
+        return dict(attested=valid, ready=valid and not revoked, revoked=revoked,
+                    inventory=bool(valid and workers <= inventory),
                     workers=workers, all_workers={row["childPid"] for row in observed
                                                  if row.get("event") == "spawn"},
                     rejected=rejected, forbidden=any(row.get("event") in errors for row in observed))

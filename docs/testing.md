@@ -923,6 +923,7 @@ The Cursor discovery-approval proposal is separate from those model probes:
 
 ```sh
 python3 -B tests/providers/cursor/discovery-proposal-test.py
+python3 -B tests/providers/cursor/attestation-regression-test.py
 python3 -B tests/providers/cursor/discovery-proposal.py --prepare --root /path/to/new-private-directory
 ```
 
@@ -933,6 +934,25 @@ and refusal to credit one MCP instance's discovery to another instance. Private
 attestation tests reject wrong nonce/epoch/tuple/OS peer PID and project-only or
 incomplete handshakes. A real Node/Python fixture checks the actual preload and
 Unix peer credentials without launching a provider.
+The offline attestation regressions deliver socket events out of order and
+verify immutable observation-time sequence/payload capture. `attested` and
+`inventory` describe historical evidence; only `ready` can authorize a prompt
+barrier. Exact-worker exit, close, EOF or error revokes readiness permanently
+for that worker, including when older handshake records arrive later. Mock
+wrapper tests revoke readiness during the wait, after the wait and at the final
+barrier; the synthetic ledger stays at zero and no prompt reaches the fake
+provider. A different instance's exit cannot revoke the injected instance.
+
+The same suite drives RPC error, exit, timeout and assistant plan/usage-pattern
+paths through a fake provider and wrapper. Diagnostics retain only an allowlisted
+phase/reason and bounded integer RPC code/exit status, alongside event/PID/epoch
+metadata. They do not retain raw error messages, configuration-command output or
+assistant text. Assistant pattern enums are observations, not an attribution of
+native RPC failure. Outstanding requests get a diagnostic after 30 seconds
+(the Auto configuration wait also records its explicit 10-second timeout).
+Timeout observation does not retry, refund a reservation or fabricate a response;
+the adapter continues to own request completion/cancellation. These offline tests
+launch only fixture Python/Node processes, never a provider CLI or model.
 Preparation starts no provider and executes no approval. Review its manifest,
 checksum and `REVIEW.txt` before seeking the user's approval for the exact
 native enable command. See the [proposal scope and revocation](decisions/0127-provider-origin-refresh-evidence.md#reviewable-cursor-discovery-approval-proposal).

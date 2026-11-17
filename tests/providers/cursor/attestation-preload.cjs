@@ -17,12 +17,15 @@ if (site && crypto.createHash('sha256').update(fs.readFileSync(site.file)).diges
   throw new Error('Pinned injected-server callsite changed; no attestation');
 
 function send(fields) {
+  // Capture before asynchronous delivery. Socket scheduling must not rewrite
+  // observation order or let a caller mutate an already observed event.
+  const payload = JSON.stringify({
+    ...fields, nonce: config.nonce, transportEpoch: config.transportEpoch,
+    observerPid: process.pid, role, mainThread: isMainThread, threadId, sequence: ++sequence
+  }) + '\n';
   const socket = net.createConnection(config.socket);
   socket.on('error', () => {}); // Missing observer can never produce an ACK.
-  socket.on('connect', () => socket.end(JSON.stringify({
-    nonce: config.nonce, transportEpoch: config.transportEpoch,
-    observerPid: process.pid, role, mainThread: isMainThread, threadId, sequence: ++sequence, ...fields
-  }) + '\n'));
+  socket.on('connect', () => socket.end(payload));
 }
 
 cp.ChildProcess.prototype.spawn = function(options) {
@@ -99,5 +102,12 @@ cp.ChildProcess.prototype.spawn = function(options) {
     }
   });
   child.on('exit', () => send({...base, event: 'exit'}));
+  child.on('close', () => send({...base, event: 'close'}));
+  child.on('error', () => send({...base, event: 'child_error'}));
+  child.stdout.on('end', () => send({...base, event: 'stdout_eof'}));
+  child.stdout.on('close', () => send({...base, event: 'stdout_close'}));
+  child.stdout.on('error', () => send({...base, event: 'stdout_error'}));
+  child.stdin.on('close', () => send({...base, event: 'stdin_close'}));
+  child.stdin.on('error', () => send({...base, event: 'stdin_error'}));
   return result;
 };

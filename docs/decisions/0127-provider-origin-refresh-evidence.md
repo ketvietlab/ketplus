@@ -734,3 +734,55 @@ launch and pass **3/3 (0.16 s)**. C++ formatting, Python AST, Node syntax and
 diff checks pass. Remaining validation is Cursor's native prompt failure and
 completed-history/same-ID refresh after a successful turn. Further inference
 requires a new explicit allowance; the current ledger cannot be reused.
+
+### Offline review corrections after the exhausted Cursor probe
+
+Independent review at `bd0ad70d25b5a023b0dc44127c24aaa38ba9d26e`
+found two reliability defects in the test-only attestation preflight:
+
+- **F1:** Sequence numbers were allocated in the socket-connect callback.
+  Reordering delivery could make an invalid observed handshake appear ordered.
+  The preload now allocates the sequence and serializes an immutable record
+  synchronously at `send()` entry. Receiver checks use source sequence, reject
+  duplicate stages and never derive order from delivery. A Node networking mock
+  delivers the invalid observation order `spawn, initialize_result,
+  initialize_sent, initialized_sent` as apparently valid stage order; the
+  receiver rejects it. The valid observation order still passes when delivered
+  out of order. A separate assertion mutates caller fields after observation
+  and verifies the serialized event and trusted identity remain unchanged.
+- **F2:** Historical handshake success remained true after the exact injected
+  worker exited, and the wrapper used that fact as current readiness. The
+  snapshot now exposes historical `attested`/`inventory` separately from `ready`
+  and sticky `revoked`. The exact worker's exit, close, child error, stdout
+  EOF/close/error or stdin close/error revokes readiness. Older handshake
+  delivery cannot resurrect it. Unrelated-instance exits do not revoke it.
+  The prompt path checks `ready` during the wait and again immediately before
+  the barrier/reservation. Fake-wrapper regressions revoke it before the wait,
+  after the wait and at that final check, with model selection already ACKed:
+  no reservation, no forwarding and a zero-count mock ledger in every case.
+  The real Node/Python fixture also verifies terminal events from the preload
+  revoke readiness while historical handshake/inventory remain available.
+
+The wrapper now records bounded diagnostics for the request phase, numeric RPC
+error/exit status and allowlisted reason. Offline fake-provider cases distinguish
+RPC rejection, stdout EOF/process exit, timeout, and assistant plan/usage text
+patterns. Raw RPC messages and Auto configuration output are no longer logged;
+synthetic secret/transcript sentinels are checked absent from evidence. A
+30-second pending-request diagnostic and the explicit 10-second Auto control
+timeout never retry or refund a reservation. Assistant pattern matching is only
+an observation, not proof of entitlement failure. No historical native error
+payload can be recovered by these changes.
+
+These fixes do **not** establish the cause of the earlier Cursor prompt failure,
+completed history or same-ID refresh. No provider executable, model request,
+native load retry, auth/config/approval change or live probe is used in this
+correction pass. The allowance remains **3/3 consumed** and Cursor mutation
+remains **DENY**. All-provider acceptance remains blocked on the previously
+documented Cursor runtime gap; offline review of these corrections is separate.
+
+Focused verification for this correction passes: **9/9** attestation/diagnostic
+regression methods (6.381 s), including nested lifecycle/barrier subcases;
+**6/6** existing proposal/allowance methods (2.013 s); and **3/3** default opt-in
+CTest bodies, skipped before provider launch (0.28 s). Python AST, both Node
+syntax checks and `git diff --check` pass. No C++ source changed, so no native
+rebuild or broad runtime matrix is used as evidence for this test-only patch.
