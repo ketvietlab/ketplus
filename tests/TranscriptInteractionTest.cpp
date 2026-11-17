@@ -537,6 +537,75 @@ void AgentWorkspaceViewTest::daemonGroupScreenshotsOpenTheLightbox() {
     QCOMPARE(lightbox->property("imageSource").toUrl().toLocalFile(), imagePath);
 }
 
+// An open daemon group gains a step at a time while a turn runs. The steps already shown keep
+// their rows (only the new one is created and a changed one updates in place), and reading the
+// next page does not flash the loading line under them.
+void AgentWorkspaceViewTest::daemonGroupStepsKeepTheirRowsAsTheGroupGrows() {
+    const auto step = [](const QString& key, const QString& status) {
+        return QVariantMap{{"messageKey", key},      {"subtype", "command"},
+                           {"title", "Ran command"}, {"command", "rg -n " + key + " src"},
+                           {"status", status},       {"running", status == "running"}};
+    };
+    const auto group = [](const QVariantList& steps, bool loading) {
+        return QVariantMap{{"messageKey", "g"},
+                           {"kind", "tool"},
+                           {"subtype", "daemonGroup"},
+                           {"turnId", "t"},
+                           {"groupRole", "leader"},
+                           {"groupKey", "g"},
+                           {"groupSummary", "Ran commands"},
+                           {"groupSize", steps.size()},
+                           {"details", QVariantMap{{"groupItems", steps}, {"loading", loading}}}};
+    };
+    ketplus::AgentWorkspaceView view;
+    view.applyTheme(testPalette());
+    view.resize(1000, 800);
+    view.show();
+    QVariantList steps{step("a", "completed"), step("b", "completed"), step("c", "running")};
+    view.resetMessages({group(steps, false)}, "daemon-group-grows");
+    view.messageModel()->setGroupExpanded("g", true);
+    auto* root = view.quickView()->rootObject();
+    QQuickItem* remote = nullptr;
+    QTRY_VERIFY((remote = findVisibleItem(root, "transcriptRemoteGroup")));
+    const auto rows = [&] {
+        QList<QQuickItem*> found;
+        for (auto* child : remote->childItems())
+            if (child->isVisible() && !child->property("messageKey").toString().isEmpty())
+                found.append(child);
+        return found;
+    };
+    QTRY_COMPARE(rows().size(), 3);
+    QList<QPointer<QQuickItem>> before;
+    for (auto* row : rows())
+        before.append(row);
+    auto* loadingLine = findVisualItem(remote, "transcriptRemoteGroupStatus");
+    QVERIFY(loadingLine);
+
+    // Reading the next page: the shown steps stay, with no loading line under them.
+    view.updateMessage(0, group(steps, true));
+    QTest::qWait(30);
+    QVERIFY(!loadingLine->isVisible());
+
+    steps[2] = step("c", "completed");
+    steps.append(step("d", "running"));
+    view.updateMessage(0, group(steps, false));
+    QTRY_COMPARE(rows().size(), 4);
+    const auto after = rows();
+    for (int index = 0; index < before.size(); ++index) {
+        QVERIFY(before.at(index));
+        QCOMPARE(after.at(index), before.at(index).data());
+    }
+    QCOMPARE(after.at(2)->property("status").toString(), QStringLiteral("completed"));
+    QCOMPARE(after.at(3)->property("messageKey").toString(), QStringLiteral("d"));
+
+    // A step that left the group takes only its own row with it.
+    steps.removeAt(1);
+    view.updateMessage(0, group(steps, false));
+    QTRY_COMPARE(rows().size(), 3);
+    QCOMPARE(rows().at(0), before.at(0).data());
+    QCOMPARE(rows().at(1), before.at(2).data());
+}
+
 void AgentWorkspaceViewTest::browserStepsCollapseAroundEvidence() {
     QFETCH(int, width);
     QTemporaryDir media;
