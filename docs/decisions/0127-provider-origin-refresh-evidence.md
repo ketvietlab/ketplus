@@ -878,3 +878,14 @@ validation before launch (one CTest target, 0.56 s). C++ formatting, Python AST
 and diff checks pass. Final cleanup independently confirms all four recorded
 D-7 PIDs gone and zero observer temporary directories. These offline checks
 do not rerun or upgrade the failed native D-7 result.
+
+The offline correlation then exercises the production adapter with the existing
+fake ACP provider: its `always-upgrade` branch deliberately emits assistant plan
+text followed by a successful `end_turn` RPC result. The strengthened regression
+asserts canonical `turn.completed: failed` and no completed assistant item.
+Together with the Auto plan-refusal and team-usage error cases, **three focused
+adapter fixtures pass** (2.730 s; five Qt passes including setup/cleanup). This
+proves the adapter's conditional refusal path without weakening it. It still
+does not establish which payload occurred in D-7. A bounded read of the existing
+scoped worker log finds no entry associated with that owned synthetic ID, so it
+cannot supply the missing canonical reason. No further native prompt is sent.

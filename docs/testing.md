@@ -973,6 +973,11 @@ check. The bounded Cursor target has an always-offline canonical-diagnostic
 classification test; only allowlisted adapter phase/reason enums escape it,
 never the original message or unknown completion status. It runs with the live
 opt-in unset and never launches a provider.
+The full adapter's fake-ACP plan-refusal regression also verifies that successful
+`end_turn` transport completion can still yield a failed canonical turn and no
+completed assistant item. Its Auto plan-refusal and team-usage cases are likewise
+quota-free. This is conditional adapter behavior, not proof of a live refusal's
+cause when the original message was not retained.
 Preparation starts no provider and executes no approval. Review its manifest,
 checksum and `REVIEW.txt` before seeking the user's approval for the exact
 native enable command. See the [proposal scope and revocation](decisions/0127-provider-origin-refresh-evidence.md#reviewable-cursor-discovery-approval-proposal).

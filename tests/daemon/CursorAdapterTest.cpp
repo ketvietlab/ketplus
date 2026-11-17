@@ -454,6 +454,9 @@ class CursorAdapterTest final : public QObject {
     }
 
     void reportsCursorPlanLimitWithoutPretendingToAnswer() {
+        // FakeCursor's always-upgrade branch sends assistant plan text followed
+        // by a successful end_turn RPC response. Transport success must not
+        // turn that provider refusal into a completed assistant answer.
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
         const QString cursor = directory.filePath(QStringLiteral("fake-cursor"));
@@ -484,6 +487,12 @@ class CursorAdapterTest final : public QObject {
                     .first()["payload"]["message"]
                     .toString()
                     .contains(CursorAdapter::loginCommand()));
+        QTRY_VERIFY_WITH_TIMEOUT(!events(QStringLiteral("turn.completed")).isEmpty(), 3000);
+        QCOMPARE(events(QStringLiteral("turn.completed"))
+                     .last()[QStringLiteral("payload")][QStringLiteral("status")]
+                     .toString(),
+                 QStringLiteral("failed"));
+        QCOMPARE(events(QStringLiteral("item.completed")).size(), 0);
         adapter.stop();
     }
 
