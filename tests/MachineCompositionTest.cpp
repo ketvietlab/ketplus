@@ -166,6 +166,39 @@ class MachineCompositionTest final : public QObject {
         QVERIFY(model->item(1)->isEnabled());
     }
 
+    // A machine with more conversations than one frame holds lists them in live pages
+    // (ADR 0131), every page after the last one read, into one list.
+    void aLongConversationListIsReadInPages() {
+        FakeMachineBackend ssh("fp-ssh", Route::Ssh);
+        const QList<QStringList> pages{{"a", "b"}, {"c", "d"}, {"e"}};
+        QStringList afters;
+        ssh.answer = [&](const FakeMachineBackend::Call& call, QJsonObject* result, QString*) {
+            if (call.operation != "listConversations") {
+                *result = {{"repositories", QJsonArray{}}};
+                return;
+            }
+            QCOMPARE(call.request.value("live_sessions_page_version").toInt(), 1);
+            const QString after = call.request.value("live_sessions_after").toString();
+            afters << after;
+            const int index = after.isEmpty() ? 0 : after == "b" ? 1 : 2;
+            QJsonArray sessions;
+            for (const QString& id : pages.at(index))
+                sessions.append(QJsonObject{{"session_id", id}, {"session_generation", 1}});
+            *result = {{"ok", true},
+                       {"sessions", sessions},
+                       {"live_sessions_page_version", 1},
+                       {"live_sessions_next", index < 2 ? pages.at(index).last() : QString{}}};
+        };
+        MachineCatalog catalog;
+        catalog.setBackend(&ssh);
+        QTRY_COMPARE(catalog.conversations().size(), 5);
+        QStringList ids;
+        for (const auto& conversation : catalog.conversations())
+            ids << conversation.sessionId;
+        QCOMPARE(ids, (QStringList{"a", "b", "c", "d", "e"}));
+        QCOMPARE(afters, (QStringList{"", "b", "d"}));
+    }
+
     void newConversationStartsThroughCreateSession() {
         FakeMachineBackend ssh("fp-ssh", Route::Ssh);
         ssh.answer = sshHost();

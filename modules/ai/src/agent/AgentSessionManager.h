@@ -15,6 +15,8 @@
 #include <functional>
 #include <memory>
 
+class QSettings;
+
 namespace ketplus {
 
 class ActivityGroupLoader;
@@ -395,7 +397,15 @@ class AgentSessionManager final : public QObject {
     void syncArchived(const SessionPtr& session);
     void applyDaemonArchiveState(const SessionPtr& session, bool archivedByDaemon);
     void selectAwayFromArchived(const SessionPtr& session);
+    // Writes the workspace's conversations to the settings. While a daemon catalog is applied,
+    // the writes and the list and activity signals wait for the next event-loop turn, once per
+    // workspace: a catalog of thousands of conversations would otherwise write each workspace and
+    // rebuild each list again for every one of them.
     void persistWorkspace(const QString& path) const;
+    void writeWorkspace(QSettings& settings, const QString& path) const;
+    void notifyConversationsChanged(const QString& path);
+    void notifyActivityChanged();
+    void flushDeferredUpdates();
     void snapshotTurnWorktrees(const SessionPtr& session);
     void captureTurnWorktrees(const SessionPtr& session);
     // Calls `done(ok, paths)` once, asynchronously when git runs.
@@ -426,6 +436,11 @@ class AgentSessionManager final : public QObject {
     QHash<QString, QVector<SessionPtr>> conversationsByPath_;
     QHash<QString, SessionPtr> sessionsByThread_;
     QHash<QString, QSet<QString>> deletedThreadsByPath_;
+    int deferUpdates_{0};
+    bool deferredFlushScheduled_{false};
+    mutable QSet<QString> deferredWorkspaces_;
+    QSet<QString> deferredConversationPaths_;
+    bool deferredActivity_{false};
     QHash<QString, qint64> deletedDaemonGenerations_;
     QVariantList models_;
     bool loadingModels_{false};

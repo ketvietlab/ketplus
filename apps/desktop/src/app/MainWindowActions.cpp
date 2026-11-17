@@ -446,6 +446,7 @@ void MainWindow::createActions() {
     connect(searchPanelAction_, &QAction::toggled, this, &MainWindow::setSearchPanelVisible);
 
     agentWorkspaceAction_ = viewMenu->addAction(QStringLiteral("Agent Workspace"));
+    agentWorkspaceAction_->setObjectName(QStringLiteral("agentWorkspaceAction"));
     agentWorkspaceAction_->setCheckable(true);
     agentWorkspaceAction_->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+A")));
     connect(agentWorkspaceAction_, &QAction::toggled, this, [this](const bool checked) {

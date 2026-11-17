@@ -14,17 +14,32 @@ class Reader final : public QObject {
         : QObject(context), client_(client), current_(std::move(current)), page_(std::move(page)),
           finished_(std::move(finished)) {}
 
+    // Reads the live catalog only, without the deletion walk.
+    void startLiveOnly() {
+        liveOnly_ = true;
+        live_ = true;
+    }
+
     void request() {
         if (!client_ || !current_()) {
             deleteLater();
             return;
         }
-        QJsonObject payload{{"deleted_sessions_page_version", 1},
-                            {"deleted_sessions_only", !live_}};
-        if (!after_.isEmpty())
-            payload.insert("deleted_sessions_after", after_);
-        if (!snapshot_.isEmpty())
-            payload.insert("deleted_sessions_snapshot", snapshot_);
+        QJsonObject payload{{"deleted_sessions_page_version", 1}};
+        if (liveOnly_ || !liveAfter_.isEmpty()) {
+            payload.insert("session_catalog_live_only", true);
+        } else {
+            payload.insert("deleted_sessions_only", !live_);
+            if (!after_.isEmpty())
+                payload.insert("deleted_sessions_after", after_);
+            if (!snapshot_.isEmpty())
+                payload.insert("deleted_sessions_snapshot", snapshot_);
+        }
+        if (live_) {
+            payload.insert("live_sessions_page_version", 1);
+            if (!liveAfter_.isEmpty())
+                payload.insert("live_sessions_after", liveAfter_);
+        }
         const QPointer<Reader> self(this);
         client_->call("session.list", payload, {}, -1,
                       [self](const QJsonObject& result, const QString& error) {
@@ -49,10 +64,20 @@ class Reader final : public QObject {
             if (result.value("error_code") == "session_catalog_changed" && restarts_++ < 3) {
                 after_ = {};
                 snapshot_.clear();
-                live_ = false;
+                live_ = liveOnly_;
+                liveAfter_.clear();
+                liveRows_ = {};
                 QTimer::singleShot(0, this, &Reader::request);
             } else
                 finish({}, error);
+            return;
+        }
+        if (liveOnly_ || !liveAfter_.isEmpty()) {
+            if (!result.value("sessions").isArray()) {
+                finish({}, "Invalid daemon session page.");
+                return;
+            }
+            livePage(result);
             return;
         }
         if (snapshot_.isEmpty() && !result.contains("deleted_sessions_page_version")) {
@@ -96,7 +121,7 @@ class Reader final : public QObject {
                 fail();
                 return;
             }
-            finish(result, {});
+            livePage(result);
             return;
         }
         const QPointer<Reader> self(this);
@@ -109,6 +134,49 @@ class Reader final : public QObject {
         QTimer::singleShot(0, this, &Reader::request);
     }
 
+    // One page of live sessions: keeps its rows and asks for the next page, or returns the
+    // first page's catalog with every row. A daemon without pages returns them all at once.
+    void livePage(const QJsonObject& result) {
+        const auto rows = result.value("sessions").toArray();
+        if (!result.contains("live_sessions_page_version")) {
+            if (liveAfter_.isEmpty()) {
+                finish(result, {});
+                return;
+            }
+            finish({}, "Invalid daemon session page.");
+            return;
+        }
+        QByteArray previous = liveAfter_.toUtf8();
+        for (const auto& value : rows) {
+            const auto id = value.toObject().value("session_id").toString().toUtf8();
+            if (id.isEmpty() || id <= previous) {
+                finish({}, "Invalid daemon session page.");
+                return;
+            }
+            previous = id;
+        }
+        const auto next = result.value("live_sessions_next");
+        if (result.value("live_sessions_page_version").toInteger(-1) != 1 || !next.isString() ||
+            (!next.toString().isEmpty() &&
+             (rows.isEmpty() || next.toString().toUtf8() != previous))) {
+            finish({}, "Invalid daemon session page.");
+            return;
+        }
+        if (liveAfter_.isEmpty())
+            first_ = result;
+        for (const auto& value : rows)
+            liveRows_.append(value);
+        if (next.toString().isEmpty()) {
+            auto complete = first_;
+            complete.insert("sessions", liveRows_);
+            complete.remove("live_sessions_next");
+            finish(complete, {});
+            return;
+        }
+        liveAfter_ = next.toString();
+        QTimer::singleShot(0, this, &Reader::request);
+    }
+
     QPointer<DaemonClient> client_;
     std::function<bool()> current_;
     std::function<void(const QJsonArray&, bool)> page_;
@@ -117,6 +185,10 @@ class Reader final : public QObject {
     QString snapshot_;
     int restarts_{0};
     bool live_{false};
+    bool liveOnly_{false};
+    QString liveAfter_;
+    QJsonArray liveRows_;
+    QJsonObject first_;
 };
 } // namespace
 
@@ -125,6 +197,14 @@ void readSessionCatalog(DaemonClient* client, QObject* context, std::function<bo
                         DaemonClient::ResponseCallback finished) {
     auto* reader =
         new Reader(client, context, std::move(current), std::move(page), std::move(finished));
+    reader->request();
+}
+
+void readLiveSessions(DaemonClient* client, QObject* context, std::function<bool()> current,
+                      DaemonClient::ResponseCallback finished) {
+    auto* reader = new Reader(
+        client, context, std::move(current), [](const QJsonArray&, bool) {}, std::move(finished));
+    reader->startLiveOnly();
     reader->request();
 }
 

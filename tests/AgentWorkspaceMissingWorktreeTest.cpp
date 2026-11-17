@@ -165,7 +165,8 @@ void AgentWorkspaceViewTest::restoresMetadataBeforeDaemonDiscovery() {
              QStringLiteral("Keep my title"));
     QCOMPARE(manager.activeConversationId(path), QStringLiteral("ui-custom"));
     QVERIFY(manager.conversationPaths().contains(path));
-    QVERIFY(!activity.isEmpty());
+    // A catalog's activity and list updates arrive once, at the next event-loop turn.
+    QTRY_VERIFY(!activity.isEmpty());
 
     QSettings().remove(settingsKey);
 }

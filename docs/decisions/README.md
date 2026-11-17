@@ -31,3 +31,4 @@ decision, retain the old record and link both documents.
 - [0127: The daemon owns background tasks and their completion delivery](0127-daemon-background-tasks.md)
   - [Linux daemon-user environment and containment evidence](0127-linux-containment-evidence.md) (primitive probes, not production acceptance)
 - [0128: Authorize each Atlas renderer launch](0128-atlas-renderer-per-launch-consent.md)
+- [0131: Paged live session catalog](0131-paged-live-session-catalog.md)

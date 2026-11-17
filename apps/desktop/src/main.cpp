@@ -8,8 +8,10 @@
 
 #include "KetPlusProductVersion.h"
 
+#include <QAction>
 #include <QApplication>
 #include <QCoreApplication>
+#include <QDir>
 #include <QElapsedTimer>
 #include <QFileInfo>
 #include <QIcon>
@@ -19,6 +21,7 @@
 #include <QProcess>
 #include <QQuickWindow>
 #include <QSGRendererInterface>
+#include <QSettings>
 #include <QTimer>
 #include <QtWebView/QtWebView>
 
@@ -70,6 +73,16 @@ int main(int argc, char* argv[]) {
     // Matches packaging/linux/ketplus-pro.desktop, so Wayland compositors use its name and icon.
     QGuiApplication::setDesktopFileName(QStringLiteral("ketplus-pro"));
     QApplication::setWindowIcon(QIcon(QStringLiteral(":/brand/ketplus-app-icon.png")));
+    // Benchmarks and captures against large fixtures: preferences and per-app data live in this
+    // directory, so a run never reads or overwrites the installed app's windows, repositories or
+    // conversation worktrees. Point KETPLUS_DAEMON_* at a separate daemon as well.
+    if (const QString profile = qEnvironmentVariable("KETPLUS_PROFILE_DIR"); !profile.isEmpty()) {
+        QDir().mkpath(profile);
+        QSettings::setDefaultFormat(QSettings::IniFormat);
+        QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, profile);
+        QCoreApplication::setApplicationName(QStringLiteral("KetPlus-Profile-") +
+                                             QString::number(qHash(QDir(profile).absolutePath())));
+    }
 
     ketplus::ThemeManager theme(app);
     ketplus::InterfaceUiFont::apply(app, theme.interfaceTextPixels());
@@ -166,6 +179,12 @@ int main(int argc, char* argv[]) {
     }
     if (!openedArgument) {
         window->restoreLastWorkspace();
+    }
+    // Benchmarks of a large install open Agent Workspace, which lists every conversation, without
+    // a keystroke that would take the focus from whatever the user is doing.
+    if (qEnvironmentVariableIsSet("KETPLUS_BENCHMARK_AGENT_WORKSPACE")) {
+        if (auto* action = window->findChild<QAction*>(QStringLiteral("agentWorkspaceAction")))
+            action->setChecked(true);
     }
     // Scheduled update checks start once a window is up, so they never delay launch.
     QTimer::singleShot(0, &app, [] { ketplus::AppUpdater::instance().start(); });

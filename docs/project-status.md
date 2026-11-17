@@ -21,6 +21,10 @@ response return an explicit upgrade error. This is backend/transport work;
 live-catalog bounds and the remaining #68 acceptance gates stay open. Incremental discovery now requests only live sessions
 (ADR 0092), avoiding tombstone walks and repeated deletion signals. Full refresh
 and CLI retain complete reconciliation; older daemon replies remain compatible.
+The live catalog is now paged too (ADR 0131): an install with thousands of
+conversations used to exceed the 1 MiB frame and list none. Desktop applies a
+catalog with one settings write and one list update per workspace; Control v2
+clients still read an unpaged catalog.
 
 OS credential storage (ADR 0130) replaces the Control credential file with a
 transactional Keychain/Secret Service record and verified legacy-file migration.
