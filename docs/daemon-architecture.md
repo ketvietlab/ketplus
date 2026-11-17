@@ -329,8 +329,12 @@ introduced were adopted once; a
 closed pairing dialog revokes its outstanding ticket and paired devices can be
 revoked from Connections. Device distribution, sender-key fallback, pairing and peer-admission
 callbacks are fenced by account epoch, enrollment revision and machine/workspace identity.
-Enrollment advances the trust revision before resetting pins, so operations started during
-sign-in cannot survive a same-identity enrollment. Replies received after
+Enrollment advances the trust revision before its storage transaction, so operations started
+before the commit cannot survive a same-identity enrollment. The same fence protects credential
+challenge/redemption replies, heartbeat batches, event receipts and asynchronous command
+completions. Enrollment stops existing Atlas runtimes/tunnels and invalidates scans; old
+credential waiters finish with an error before a fresh request can serve the new enrollment.
+The sign-in epoch remains unchanged so the initiating sign-in callback can finish. Replies received after
 sign-out or another enrollment cannot adopt pins, wrap or upload session keys, or refresh the
 new enrollment's peers. Legacy adoption is an explicit, one-time permission established while
 restoring an existing enrollment without a pin record; an initialized empty set or a pin record
@@ -353,6 +357,15 @@ after a verified OS-store commit, then removed. Recovered legacy backups never
 silently overwrite the OS record or restore removed enrollment. See
 [ADR 0130](decisions/0130-os-credential-storage.md) for migration/recovery, platform
 access, headless prerequisites, prompt behavior and backup limitations.
+
+Enrollment commits relay, machine/workspace identifiers, account labels, key version, an empty
+pin set and workspace content-key migration in a single credential transaction. A failed write
+retains the complete previous enrollment and content keys on restart. Restore validates every
+required read before granting an identity or migrating legacy state; an unreadable control URL
+or pin record is an explicit error, never a default relay or legacy adoption permission. A
+record changed by another process during restore is rejected and retried by recreating the
+client. The remote Control v2 client likewise refuses a partial session/pin restore and preserves
+stored values; after OS access is recovered, recreate the client to reload the complete state.
 
 Deterministic tests use a fake provider and consume
 no model quota. Heartbeat snapshots are split into lossless, sequential batches
@@ -854,7 +867,7 @@ loses it.
 
 ## Atlas live runtime
 
-`AtlasLiveRuntime` owns only the KetAtlas viewer and optional declared renderer it starts. Version 0.5.2 is required, the viewer is read-only, and framework startup uses the local renderer contract without a shell. Discovery returns opaque project IDs. `atlas.start` fences the selected execution context; reconnect by an existing attachment channel instead retains that runtime's source even after a conversation switches. Back releases the connection with a five-minute idle lease; `atlas.detach` explicitly stops the owned runtime. A runtime and its tunnel also stop when the device that opened it is revoked (here or reported by the relay), when its conversation generation is deleted, when the relay revokes this machine, and on sign-out. A device revocation is handled even when WebRTC peer transport is not negotiated. An `atlas.start` still scanning when its device or the machine is revoked creates no runtime, because it captures an access fence before the scan and checks it before creating the runtime. Existing desktop viewers are not adopted or stopped.
+`AtlasLiveRuntime` owns only the KetAtlas viewer and optional declared renderer it starts. Version 0.5.2 is required, the viewer is read-only, and framework startup uses the local renderer contract without a shell. Discovery returns opaque project IDs. `atlas.start` fences the selected execution context; reconnect by an existing attachment channel instead retains that runtime's source even after a conversation switches. Back releases the connection with a five-minute idle lease; `atlas.detach` explicitly stops the owned runtime. A runtime and its tunnel also stop when the device that opened it is revoked (here or reported by the relay), when its conversation generation is deleted, when the relay revokes this machine, on sign-out, and when enrollment changes (including the same machine/workspace). A device revocation is handled even when WebRTC peer transport is not negotiated. An `atlas.start` still scanning when its device or the machine is revoked creates no runtime, because it captures an access fence before the scan and checks it before creating the runtime. Existing desktop viewers are not adopted or stopped.
 
 `AtlasLiveTunnel` multiplexes bounded byte streams to registered loopback viewer/renderer ports over a persistent authenticated WebSocket. Each attachment gets a new random key/channel; AES-GCM frames bind channel, direction and exact sequence. The phone uses matching loopback origins and an ephemeral HttpOnly cookie for its native bridge. HTTP, streaming bodies, renderer WebSockets and SSE remain ordinary protocols inside the encrypted byte streams. The relay forwards ciphertext and rechecks grants periodically; it cannot see resource bodies. There is no automatic write replay. Stream EOF is sent when a disconnected origin
 has been fully drained, including drains triggered by WebSocket writes; the

@@ -88,6 +88,13 @@ void CloudControlClient::withSenderKeys(const QString& senderId, const int versi
             }
             const QJsonObject keys = object(value).value(QStringLiteral("keys")).toObject();
             // The relay names the keys; only a device pinned on this Mac may use them (#87).
+            QString pinError;
+            const bool initialized = pins_.initialized(&pinError);
+            if (!pinError.isEmpty()) {
+                lastError_ = pinError;
+                callback({}, pinError);
+                return;
+            }
             auto accept = [this, fence, current, senderId, version, cacheKey, keys,
                            callback = std::move(callback)]() {
                 if (!current()) {
@@ -108,7 +115,7 @@ void CloudControlClient::withSenderKeys(const QString& senderId, const int versi
                      fence});
                 callback(keys, {});
             };
-            if (pins_.initialized() || !legacyPinAdoptionPending_) {
+            if (initialized || !legacyPinAdoptionPending_) {
                 accept();
                 return;
             }

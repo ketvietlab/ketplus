@@ -68,3 +68,24 @@ add_executable(r03_sender_key_cache_tests SenderKeyCacheTest.cpp)
 target_link_libraries(r03_sender_key_cache_tests PRIVATE r03_privacy_core Qt6::Test)
 ketplus_enable_warnings(r03_sender_key_cache_tests)
 add_test(NAME r03_sender_key_cache_tests COMMAND r03_sender_key_cache_tests)
+
+# Match the routing sources added to the production daemon composition.
+target_sources(r03_privacy_core PRIVATE
+  "${DAEMON}/teams/TeamRiskPolicy.cpp"
+  "${DAEMON}/teams/TeamCoordinatorRiskPolicy.cpp"
+  "${DAEMON}/teams/TeamRoutingEvidence.cpp"
+  "${DAEMON}/runtime/SessionHostTeamRouting.cpp")
+
+# Remote host-pin regressions share the synthetic credential store, never the OS store.
+add_executable(r03_remote_control_client_tests "${REPO}/tests/daemon/RemoteControlClientTest.cpp"
+  "${REPO}/modules/remote/src/LargeEventReassembler.cpp"
+  "${REPO}/modules/remote/src/control/ControlV2Client.cpp"
+  "${REPO}/modules/remote/src/control/ControlV2Authentication.cpp"
+  "${REPO}/modules/remote/src/control/ControlV2Sessions.cpp"
+  "${REPO}/modules/remote/src/control/ControlV2Projection.cpp"
+  "${REPO}/modules/remote/src/control/ControlV2Restore.cpp"
+  "${REPO}/modules/remote/src/control/ControlV2Transcript.cpp"
+  "${REPO}/modules/remote/src/control/ControlV2Worktrees.cpp")
+target_link_libraries(r03_remote_control_client_tests PRIVATE r03_privacy_core Qt6::Test)
+ketplus_enable_warnings(r03_remote_control_client_tests)
+add_test(NAME r03_remote_control_client_tests COMMAND r03_remote_control_client_tests)

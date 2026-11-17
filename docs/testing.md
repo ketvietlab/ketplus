@@ -1456,3 +1456,19 @@ provider, account or worktree is used. Run it with the team store/task/review an
 protocol targets after policy changes; shared-header/CMake changes retain the full
 Pro build/suite requirement above. The synthetic v1 JSON fixture is checked by the
 policy target; no live receipt adapter is enabled by these fixtures.
+
+### Enrollment storage and callback regression matrix
+
+Changes to enrollment storage or callback fences run the native trust-lifecycle,
+sender-key-cache, cloud-privacy, remote-control-client/projection, credential-store and Atlas
+access/runtime/tunnel suites. Shared daemon/remote headers also require a full Pro build and
+unfiltered Pro CTest run. Do not enable live/provider opt-ins for this matrix.
+
+The trust-lifecycle fixture injects read failures after earlier enrollment fields succeed,
+write failures at each enrollment field and delayed challenge/credential POST responses across
+same-identity and different-identity enrollment. It checks complete old-record retention and
+restart, cancellation of old credential waiters, Atlas retirement, stale heartbeat batches and
+sign-in completion semantics. The remote fixture restores a valid session then fails the host-pin
+read, requiring an explicit error and byte-for-byte retention of both previous host pins.
+These are native C++ tests with synthetic credentials and HTTP replies; they do not certify OS
+ACLs, backup recovery, signed upgrades or deployment.

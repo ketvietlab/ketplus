@@ -102,44 +102,7 @@ CloudControlClient::CloudControlClient(LocalJournal* journal, SessionHost* host,
                   answer(ready ? daemonToken_ : QString());
               });
       }) {
-    machineId_ = storedString(QStringLiteral("machine-id"));
-    workspaceId_ = storedString(QStringLiteral("workspace-id"));
-    accountName_ = storedString(QStringLiteral("account-name"));
-    accountUsername_ = storedString(QStringLiteral("account-username"));
-    machineKeyVersion_ = storedString(QStringLiteral("machine-key-version")).toInt();
-    if (machineKeyVersion_ < 1)
-        machineKeyVersion_ = 1;
-    // An enrollment belongs to the relay that issued it. A build compiled for another relay
-    // presented it there, got errors it could not explain, and uploaded nothing. The identity
-    // stays stored for a build that talks to its relay again; this one reports it signed out.
-    const QString enrolledRelay = storedString(QStringLiteral("control-url"));
-    if (!machineId_.isEmpty() && enrolledRelay.isEmpty()) {
-        // Enrolled before the relay was recorded: the relay this build reaches is the only
-        // one it can have been used with.
-        storeString(QStringLiteral("control-url"), baseUrl_.toString());
-    } else if (!machineId_.isEmpty() && enrolledRelay != baseUrl_.toString()) {
-        otherRelay_ = enrolledRelay;
-        machineId_.clear();
-        workspaceId_.clear();
-        lastError_ = QStringLiteral("This Mac is enrolled with %1, not %2.")
-                         .arg(enrolledRelay, baseUrl_.toString());
-    }
-    // An enrollment stored by a sign-in that did not finish storing it is completed here, and one
-    // from before #84 records its workspace.
-    QString keysError;
-    if (!machineId_.isEmpty() && !sessionCredentials_.adoptWorkspace(workspaceId_, &keysError)) {
-        machineId_.clear();
-        workspaceId_.clear();
-        lastError_ = keysError;
-    }
-    // Migration permission is established only while restoring an existing enrollment.
-    // A missing pin set later (including after sign-out) cannot recreate this permission.
-    QString pinError;
-    const auto storedPins = credentials_.read(QStringLiteral("device-pins"), &pinError);
-    legacyPinAdoptionPending_ = !machineId_.isEmpty() && !workspaceId_.isEmpty() &&
-                                pinError.isEmpty() && storedPins.isEmpty();
-    if (!machineId_.isEmpty())
-        registerCloudCursors();
+    restoreEnrollment();
     initializePeerTransport();
     syncTimer_.setInterval(15'000);
     commandTimer_.setInterval(2'000);
@@ -358,12 +321,17 @@ void CloudControlClient::revokeAtlasAccess(const QString& device) {
 
 CloudControlClient::AtlasAccessFence
 CloudControlClient::atlasAccessFence(const QString& device) const {
-    return {atlasMachineEpoch_, atlasDeviceEpochs_.value(device)};
+    return {atlasMachineEpoch_, atlasDeviceEpochs_.value(device), accountFence()};
 }
 
 bool CloudControlClient::atlasAccessCurrent(const QString& device,
                                             const AtlasAccessFence& fence) const {
-    return fence.machine == atlasMachineEpoch_ && fence.device == atlasDeviceEpochs_.value(device);
+    const auto account = accountFence();
+    return fence.machine == atlasMachineEpoch_ &&
+           fence.device == atlasDeviceEpochs_.value(device) &&
+           fence.account.epoch == account.epoch &&
+           fence.account.enrollmentRevision == account.enrollmentRevision &&
+           fence.account.machine == account.machine && fence.account.workspace == account.workspace;
 }
 
 void CloudControlClient::signOut(LocalCallback callback) {

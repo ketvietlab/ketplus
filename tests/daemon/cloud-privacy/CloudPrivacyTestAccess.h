@@ -80,8 +80,7 @@ class CloudPrivacyTestAccess {
     static void heartbeat(CloudControlClient& client, const QList<QJsonArray>& batches) {
         client.heartbeatInFlight_ = true;
         client.refusalsThisHeartbeat_.clear();
-        client.sendHeartbeatBatches(batches, 0, client.accountEpoch_, client.machineId_,
-                                    client.workspaceId_);
+        client.sendHeartbeatBatches(batches, 0, client.accountFence());
     }
     static bool heartbeatIdle(const CloudControlClient& client) {
         return !client.heartbeatInFlight_;
@@ -208,6 +207,7 @@ class CloudPrivacyTestAccess {
         client.daemonToken_.clear();
         client.ensureDaemonCredential(std::move(done));
     }
+    static QString token(const CloudControlClient& client) { return client.daemonToken_; }
     static void pollCommands(CloudControlClient& client) { client.pollCommands(); }
     static void wakeCommandPoll(CloudControlClient& client) { client.wakeCommandPoll(); }
     static bool commandPollInFlight(const CloudControlClient& client) {

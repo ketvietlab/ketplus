@@ -1,6 +1,7 @@
 #include "CloudPrivacyTestAccess.h"
 #include "FakeTransport.h"
 #include "MemoryCredentials.h"
+#include "atlas/AtlasLiveRuntime.h"
 #include "providers/CodexAdapter.h"
 #include "runtime/SessionHost.h"
 
@@ -102,6 +103,198 @@ class CloudTrustLifecycleTest final : public QObject {
     void initTestCase() { QStandardPaths::setTestModeEnabled(true); }
     void init() { r03::resetCredentials(); }
 
+    void restoreReadFailure_data() {
+        QTest::addColumn<QString>("account");
+        for (const auto* field : {"control-url", "device-pins", "workspace-id", "account-name"})
+            QTest::newRow(field) << QString::fromLatin1(field);
+    }
+    void restoreReadFailure() {
+        QFETCH(QString, account);
+        Fixture f;
+        QVERIFY(Access::pins(*f.client).pin(f.device));
+        const auto before = r03::credentials;
+        f.client.reset();
+        r03::failReadsOf = account;
+        f.client = std::make_unique<CloudControlClient>(&f.journal, &f.host);
+        QVERIFY(Access::machineId(*f.client).isEmpty());
+        QVERIFY(Access::error(*f.client).contains("synthetic credential read failure"));
+        QVERIFY(r03::credentials == before);
+        // A transient recovery must not grant an enrollment or pin-adoption permission.
+        r03::failReadsOf.clear();
+        Access::deviceTransport(*f.client, f.transport);
+        Access::distributeKeys(*f.client);
+        QVERIFY(r03::credentials == before);
+        f.client.reset();
+        f.client = std::make_unique<CloudControlClient>(&f.journal, &f.host);
+        QCOMPARE(Access::machineId(*f.client), "machine-synthetic");
+        QVERIFY(Access::pins(*f.client).trusts(f.device));
+    }
+
+    void enrollmentWriteFailure_data() {
+        QTest::addColumn<QString>("account");
+        for (const auto* field :
+             {"device-pins", "control-url", "machine-id", "workspace-id", "machine-key-version",
+              "account-name", "account-username", "session-keys-workspace"})
+            QTest::newRow(field) << QString::fromLatin1(field);
+    }
+    void enrollmentWriteFailure() {
+        QFETCH(QString, account);
+        Fixture f;
+        QVERIFY(Access::pins(*f.client).pin(f.device));
+        QVERIFY(!Access::crypto(*f.client).publicKeys().isEmpty());
+        CredentialStore store;
+        QVERIFY(store.write("session-key-synthetic", "old-content-key"));
+        QVERIFY(store.write("uploaded-cursor-session-synthetic-1", "7"));
+        const auto before = r03::credentials;
+        f.reply(
+            "/v2/machines:enroll",
+            QJsonObject{{"id", "machine-new"}, {"workspaceId", "workspace-new"}, {"keyVersion", 2}},
+            201);
+        r03::failWritesTo = account;
+        int answers = 0;
+        QString failure;
+        Access::enroll(*f.client,
+                       [&](const QJsonObject&, const QString& error) {
+                           ++answers;
+                           failure = error;
+                       },
+                       {{"displayName", "Synthetic user"}, {"username", "synthetic"}});
+        QTRY_COMPARE(answers, 1);
+        QVERIFY(failure.contains("synthetic credential write failure"));
+        QVERIFY(r03::credentials == before);
+        QCOMPARE(Access::machineId(*f.client), "machine-synthetic");
+        r03::failWritesTo.clear();
+        f.client.reset();
+        f.client = std::make_unique<CloudControlClient>(&f.journal, &f.host);
+        QCOMPARE(Access::machineId(*f.client), "machine-synthetic");
+        QVERIFY(Access::pins(*f.client).trusts(f.device));
+        QCOMPARE(store.read("workspace-id"), QByteArray("workspace-synthetic"));
+        QCOMPARE(store.read("session-key-synthetic"), QByteArray("old-content-key"));
+    }
+
+    void enrollmentEndsAtlasAndCredentials_data() {
+        QTest::addColumn<bool>("sameIdentity");
+        QTest::addColumn<bool>("holdCredentialPost");
+        for (const bool same : {false, true})
+            for (const bool post : {false, true})
+                QTest::newRow(qPrintable(QString("same-%1-post-%2").arg(same).arg(post)))
+                    << same << post;
+    }
+    void enrollmentEndsAtlasAndCredentials() {
+        QFETCH(bool, sameIdentity);
+        QFETCH(bool, holdCredentialPost);
+        Fixture f;
+        const QString challengePath = "/v2/daemon/challenges";
+        const QString credentialPath = "/v2/daemon/credentials";
+        const auto challenge = [](const QString& machine) {
+            return QJsonObject{
+                {"id", "challenge-synthetic"},
+                {"machineId", machine},
+                {"keyVersion", 1},
+                {"signatureVersion", 2},
+                {"signatureAlgorithm", "Ed25519"},
+                {"challenge", QString::fromLatin1(CloudCrypto::base64Url(QByteArray(32, 'a')))}};
+        };
+        const auto credential = [](const QString& token) {
+            return QJsonObject{
+                {"accessToken", token},
+                {"expiresAt", QDateTime::currentDateTimeUtc().addSecs(3600).toString(Qt::ISODate)}};
+        };
+        f.reply(challengePath, challenge("machine-synthetic"), 201);
+        f.reply(credentialPath, credential("old-enrollment-token"), 201);
+        f.transport.heldPaths.insert(holdCredentialPost ? credentialPath : challengePath);
+        int oldAnswers = 0;
+        bool oldReady = true;
+        Access::credential(*f.client, [&](bool ready, const QString&) {
+            ++oldAnswers;
+            oldReady = ready;
+        });
+        QTRY_COMPARE(f.transport.heldReplies.size(), 1);
+        const auto oldReply = f.transport.heldReplies.first();
+        f.transport.heldReplies.clear();
+        f.transport.heldPaths.clear();
+        auto runtime = QPointer<AtlasLiveRuntime>(new AtlasLiveRuntime(f.client.get()));
+        runtime->setProperty("device", "device-old");
+        const auto fence = Access::atlasFence(*f.client, "device-old");
+        const QString machine = sameIdentity ? "machine-synthetic" : "machine-new";
+        f.reply(challengePath, challenge(machine), 201);
+        f.reply(credentialPath, credential("new-enrollment-token"), 201);
+        f.reply("/v2/machines:enroll",
+                QJsonObject{{"id", machine},
+                            {"workspaceId", sameIdentity ? "workspace-synthetic" : "workspace-new"},
+                            {"keyVersion", 1}},
+                201);
+        int newAnswers = 0;
+        QString failure;
+        Access::enroll(*f.client, [&](const QJsonObject&, const QString& error) {
+            ++newAnswers;
+            failure = error;
+        });
+        QTRY_COMPARE(newAnswers, 1);
+        QVERIFY2(failure.isEmpty(), qPrintable(failure));
+        QCOMPARE(oldAnswers, 1);
+        QVERIFY(!oldReady);
+        QTRY_VERIFY(!runtime);
+        QVERIFY(!Access::atlasAccessCurrent(*f.client, "device-old", fence));
+        QCOMPARE(Access::token(*f.client), "new-enrollment-token");
+        const auto requests = f.transport.requests.size();
+        oldReply->finish();
+        QCOMPARE(Access::token(*f.client), "new-enrollment-token");
+        QCOMPARE(f.transport.requests.size(), requests);
+        QCOMPARE(oldAnswers, 1);
+        QCOMPARE(newAnswers, 1);
+    }
+
+    void enrollmentStopsAtlasWithoutCredentialRefresh() {
+        Fixture f;
+        auto runtime = QPointer<AtlasLiveRuntime>(new AtlasLiveRuntime(f.client.get()));
+        runtime->setProperty("device", "device-old");
+        const auto fence = Access::atlasFence(*f.client, "device-old");
+        reEnroll(f, true);
+        QTRY_VERIFY(!runtime);
+        QVERIFY(!Access::atlasAccessCurrent(*f.client, "device-old", fence));
+    }
+    void sameIdentityEnrollmentDropsOldHeartbeatBatch() {
+        Fixture f;
+        const QString path = "/v2/daemon/heartbeat";
+        f.reply(path, QJsonObject{}, 202);
+        f.transport.heldPaths.insert(path);
+        Access::heartbeat(*f.client, {QJsonArray{}, QJsonArray{}});
+        QCOMPARE(f.transport.heldReplies.size(), 1);
+        reEnroll(f, true);
+        const auto requests = f.transport.requests.size();
+        const auto error = Access::error(*f.client);
+        f.transport.release(path);
+        QCOMPARE(f.transport.requests.size(), requests);
+        QCOMPARE(Access::error(*f.client), error);
+    }
+    void senderPinReadFailureIsReportedWithoutAdoption() {
+        Fixture f;
+        const auto before = r03::credentials;
+        r03::failReadsOf = "device-pins";
+        int answers = 0;
+        Access::senderKeys(*f.client, "device-old", 1,
+                           [&](const QJsonObject& keys, const QString& error) {
+                               ++answers;
+                               QVERIFY(keys.isEmpty());
+                               QVERIFY(error.contains("synthetic credential read failure"));
+                           });
+        QTRY_COMPARE(answers, 1);
+        QVERIFY(r03::credentials == before);
+        QVERIFY(Access::error(*f.client).contains("synthetic credential read failure"));
+    }
+    void corruptPinsAreNotLegacyEnrollment() {
+        Fixture f;
+        CredentialStore store;
+        QVERIFY(store.write("device-pins", "not-json"));
+        f.client.reset();
+        const auto before = r03::credentials;
+        f.client = std::make_unique<CloudControlClient>(&f.journal, &f.host);
+        QVERIFY(Access::machineId(*f.client).isEmpty());
+        QVERIFY(Access::error(*f.client).contains("pin record is invalid"));
+        QVERIFY(r03::credentials == before);
+    }
+
     void delayedDistribution_data() {
         QTest::addColumn<QString>("transition");
         for (const auto* name :
@@ -164,7 +357,7 @@ class CloudTrustLifecycleTest final : public QObject {
         QTRY_VERIFY(!Access::status(*f.client).value("sign_in_pending").toBool());
         r03::failWritesTo.clear();
         QCOMPARE(Access::machineId(*f.client), "machine-synthetic");
-        QVERIFY(Access::pins(*f.client).initialized());
+        QCOMPARE(Access::pins(*f.client).initialized(), !storageFailure);
         QVERIFY(!Access::pins(*f.client).trusts(f.device));
         const auto credentials = r03::credentials;
         const auto requests = f.transport.requests.size();
