@@ -293,6 +293,11 @@ Bounded review policy changes additionally cover `ketplus_team_review_policy_tes
 Fake-host receipt tests establish consumer gates; the finding routing suite checks
 actual three-revision Git proofs, authenticated host receipt closure and attacks
 using ignored gitlinks/replacement trees. Required full Pro checks still apply.
+Routing lifetime coverage in `ketplus_team_routing_tools_tests` uses an active
+team, the real producer/store and authenticated decisions: unrelated notes remain
+valid, task/settings races fail closed, concurrent replies are independent, and
+an injected monotonic clock tests expiry before deterministic team-local eviction
+and duplicate-ID nonrenewal (ADR 0133).
 
 A team reviewer's verify turn writes only in its scratch directory (ADR 0067). Build there:
 `cmake -B <scratch>/build`, `xcodebuild -derivedDataPath <scratch>/DerivedData
