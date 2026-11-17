@@ -607,6 +607,19 @@ current-window value.
   order. Repositories the user pinned (**Pin to top** in the repository header's
   context menu; **Unpin** to undo)
   come first, in the order they were pinned, with a small pin after the name.
+  The native sidebar field filters repository names/paths and conversation titles, ignoring case;
+  it does not search transcript text. A matching repository shows all its conversations; a
+  matching conversation keeps its repository and team ancestors. While filtering, matching
+  branches temporarily expand and preview limits yield to results. Clearing the field restores
+  saved folds and the normal preview; a nonmatching query shows an explicit empty result.
+  Filtering never selects a conversation, changes pins or reorders repositories, and its temporary
+  query survives local and selected-machine updates without being saved to preferences.
+  Cmd+Option+K (Ctrl+Alt+K elsewhere) focuses the field; Escape clears it and Enter stays in place.
+  Cmd+P remains global Spotlight; Cmd+K remains available as the editor's chord prefix.
+  `ketplus_sidebar_filter_tests` exercises this with synthetic models and isolated settings,
+  including local/selected-machine refresh, keyboard routing and live theme/zoom. Run it
+  with `QT_QPA_PLATFORM=cocoa` for native macOS verification; setting
+  `KETPLUS_SIDEBAR_FILTER_CAPTURE` to a private output directory saves synthetic sidebar captures.
   Pins are this Mac's: kept in `QSettings` (`sidebar/pinnedRepositories`) by
   canonical path, a pin whose folder is gone is dropped silently, another
   machine's repositories cannot be pinned, and phones do not receive them.

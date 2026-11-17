@@ -291,7 +291,13 @@ Linux store policy, signed upgrade prompts and platform release acceptance remai
   (the state's mark, title and #number; role, state, origin and worktree in the hint),
   guide lines run under each chevron, and folds of repositories and teams survive a
   restart (a folded repository shows a dot while something inside waits). Also the mock's
-  field-styled Quick search, a machine header with its chevron, and update pills. Rows draw no user tags and the sidebar has no tag filter (ADR 0117); the
+  editable repo/conversation filter, a machine header with its chevron, and update pills.
+  The filter matches names/paths or titles in place, keeps matching ancestors, temporarily
+  reveals folded/previewed results, and restores the normal tree when cleared. It retains its
+  temporary query through local/selected-machine updates without changing selection or order.
+  Cmd+Option+K focuses it on macOS (Ctrl+Alt+K elsewhere); Cmd+P remains global Spotlight.
+  Escape clears; Enter does not navigate. New filter text follows the UI locale (vi/en).
+ Rows draw no user tags and the sidebar has no tag filter (ADR 0117); the
   daemon still stores tags and their catalog (ADR 0107, 0113) for other clients.
   Repository groups keep pin order, then name/path order across conversation and
   team updates; conversations inside each group still follow their newest turn.

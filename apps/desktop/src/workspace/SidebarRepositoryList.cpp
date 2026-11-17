@@ -7,7 +7,9 @@
 #include "workspace/SidebarPinMark.h"
 #include "workspace/SidebarRepositoryListDetail.h"
 
+#include "workspace/SidebarFilterText.h"
 #include <QEvent>
+#include <QLabel>
 #include <QMenu>
 #include <QPushButton>
 #include <QSet>
@@ -143,6 +145,11 @@ SidebarRepositoryList::SidebarRepositoryList(QWidget* parent)
     const QStringList collapsed = QSettings().value(kCollapsedSetting).toStringList();
     collapsedPaths_ = QSet<QString>(collapsed.cbegin(), collapsed.cend());
     pins_.load();
+    filterEmpty_ = new QLabel(sidebar_filter::text(sidebar_filter::empty), this);
+    filterEmpty_->setObjectName(QStringLiteral("sidebarFilterEmpty"));
+    filterEmpty_->setWordWrap(true);
+    layout_->addWidget(filterEmpty_);
+    filterEmpty_->hide();
     // The parts follow the kit's zoom; the list's own height follows them.
     connect(&ket::Appearance::instance(), &ket::Appearance::zoomChanged, this,
             [this] { applyPresentation(); });
@@ -200,7 +207,8 @@ void SidebarRepositoryList::setRepositories(const QVector<SidebarRepository>& pr
     folders_.clear();
     setUpdatesEnabled(false);
     while (auto* item = layout_->takeAt(0)) {
-        delete item->widget();
+        if (item->widget() != filterEmpty_)
+            delete item->widget();
         delete item;
     }
     for (qsizetype groupIndex = 0; groupIndex < repositories.size(); ++groupIndex) {
@@ -286,6 +294,7 @@ void SidebarRepositoryList::setRepositories(const QVector<SidebarRepository>& pr
         // flickered. Show it now, before updates are enabled again.
         group->show();
     }
+    layout_->addWidget(filterEmpty_);
     updateRows(repositories);
     applyPresentation();
     setUpdatesEnabled(true);
@@ -353,6 +362,7 @@ void SidebarRepositoryList::applyPresentation() {
     };
     for (qsizetype index = 0; index < groups_.size() && index < repositories_.size(); ++index) {
         QWidget* group = groups_.at(index);
+        group->show();
         const SidebarRepository& repository = repositories_.at(index);
         const bool collapsed =
             (!repository.conversations.isEmpty() || !repository.teams.isEmpty()) &&
@@ -385,11 +395,13 @@ void SidebarRepositoryList::applyPresentation() {
         }
         presentTeamFolders(held);
     }
+    applyFilter();
     for (QWidget* group : std::as_const(groups_))
         if (group->layout() != nullptr)
             group->layout()->activate();
     layout_->activate();
-    setFixedHeight(layout_->sizeHint().height());
+    setFixedHeight(layout_->hasHeightForWidth() ? layout_->totalHeightForWidth(width())
+                                                : layout_->sizeHint().height());
 }
 
 void SidebarRepositoryList::onRepositoryHeaderClicked(const QString& path) {

@@ -18,6 +18,7 @@ class SidebarTeamBranch;
 class SidebarTreeGuide;
 } // namespace ket
 class QMenu;
+class QLabel;
 class QVBoxLayout;
 
 namespace ketplus {
@@ -77,6 +78,8 @@ class SidebarRepositoryList final : public QWidget {
     explicit SidebarRepositoryList(QWidget* parent = nullptr);
 
     void applyZoom(int zoomPercent);
+    void setFilterText(const QString& text);
+    [[nodiscard]] QString filterText() const { return filterText_; }
     void setRepositories(const QVector<SidebarRepository>& repositories);
     // With teams/1 the repository's + offers New team… beside New conversation.
     void setTeamsAvailable(bool available) { teamsAvailable_ = available; }
@@ -119,6 +122,7 @@ class SidebarRepositoryList final : public QWidget {
 
   protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
+    void resizeEvent(QResizeEvent* event) override;
 
   private:
     ket::SidebarRow* createRow(QWidget* parent, const QVariantMap& conversation, int level);
@@ -140,12 +144,15 @@ class SidebarRepositoryList final : public QWidget {
     void markConversationSeen(const QString& conversationId);
     void updateRows(const QVector<SidebarRepository>& repositories);
     void applyPresentation();
+    void applyFilter();
     void onRepositoryHeaderClicked(const QString& path);
     void persistCollapsedRepositories() const;
     // T-92: a small pin drawn at the end of a pinned repository's name row.
     void presentPinMark(ket::SidebarRepositoryHeader* header, bool pinned) const;
 
     QVBoxLayout* layout_{nullptr};
+    QLabel* filterEmpty_{nullptr};
+    QString filterText_;
     QVector<SidebarRepository> repositories_;
     QStringList structure_;
     QVector<ket::SidebarRow*> rows_;

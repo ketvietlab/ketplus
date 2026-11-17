@@ -160,12 +160,11 @@ ActivityBar::ActivityBar(QWidget* parent) : QWidget(parent), group_(new QButtonG
     brandLayout->addStretch();
     layout->addWidget(brand);
 
-    // The mock's field-styled Quick search; it opens the command palette.
-    quickSearchButton_ = new SidebarSearchButton(tr("Quick search"), QStringLiteral("⌘ K"), this);
-    quickSearchButton_->setObjectName(QStringLiteral("quickSearchButton"));
-    connect(quickSearchButton_, &QAbstractButton::clicked, this,
-            &ActivityBar::quickSearchRequested);
-    layout->addWidget(quickSearchButton_);
+    repositoryFilter_ = new SidebarFilterField(this);
+    repositoryFilter_->setObjectName(QStringLiteral("sidebarFilterField"));
+    connect(repositoryFilter_, &SidebarFilterField::filterTextChanged, this,
+            [this](const QString& text) { repositoryList_->setFilterText(text); });
+    layout->addWidget(repositoryFilter_);
     chrome_geometry::addSpacing(layout, 8);
 
     agentButton_ =
@@ -558,6 +557,8 @@ void ActivityBar::setSourceControlAvailable(const bool available) {
 void ActivityBar::setSourceControlCount(const int count) {
     sourceControlButton_->setCount(count > 0 ? std::optional<int>(count) : std::nullopt);
 }
+
+void ActivityBar::focusRepositoryFilter() { repositoryFilter_->focusFilter(); }
 
 void ActivityBar::setRepositories(const QVector<SidebarRepository>& repositories) {
     repositoryList_->setRepositories(repositories);

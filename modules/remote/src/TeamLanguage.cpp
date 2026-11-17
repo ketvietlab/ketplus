@@ -52,11 +52,13 @@ const QTranslator* catalog(const QString& language) {
 // The team's texts share one context in the catalog (update_team_translations.py). The
 // desktop asks under its class names, "ketplus::TeamPage", "TeamMenus", "ketplus::team_page::
 // ChoiceRow", and only those are the team's; the rest of the application keeps its texts.
+// SidebarFilter explicitly reuses this catalog for the desktop UI locale.
 bool teamContext(const char* context) {
     QLatin1StringView name(context ? context : "");
     if (name.startsWith(QLatin1StringView("ketplus::")))
         name = name.sliced(9);
-    return name.startsWith(QLatin1StringView("Team")) ||
+    return name == QLatin1StringView("SidebarFilter") ||
+           name.startsWith(QLatin1StringView("Team")) ||
            name.startsWith(QLatin1StringView("team_page::")) ||
            name == QLatin1StringView("NewTeamForm") || name == QLatin1StringView("AddMemberForm");
 }

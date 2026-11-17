@@ -151,7 +151,6 @@ MainWindow::MainWindow(ThemeManager& theme, QWidget* parent)
     git_ = new GitService(this);
     createActions();
     activityBar_->applyPalette(theme_.palette(), theme_.interfaceZoomPercent());
-    connect(activityBar_, &ActivityBar::quickSearchRequested, this, &MainWindow::showSpotlight);
     connect(activityBar_, &ActivityBar::repositoryRequested, this, &MainWindow::chooseFolder);
     connect(activityBar_, &ActivityBar::machineRequested, this, &MainWindow::selectMachine);
     connect(activityBar_, &ActivityBar::repositoryActivationRequested, this,

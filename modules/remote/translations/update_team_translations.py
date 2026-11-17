@@ -26,6 +26,7 @@ def sources(root: Path) -> list[str]:
     found = []
     for folder in SOURCES:
         found += sorted(str(p) for p in (root / folder).iterdir() if p.suffix in (".cpp", ".h"))
+    found.append(str(root / "apps/desktop/src/workspace/SidebarFilterText.h"))
     return found
 
 
