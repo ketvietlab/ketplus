@@ -2,8 +2,10 @@
 """Quota-free proposal and allowance tests; only Python fixture processes run."""
 import json
 import importlib.util
+import hashlib
 import pathlib
 import select
+import shutil
 import stat
 import subprocess
 import sys
@@ -15,6 +17,104 @@ PROPOSAL = HERE / "discovery-proposal.py"
 
 
 class DiscoveryProposalTest(unittest.TestCase):
+    def test_real_node_preload_attests_owned_stdio_without_changing_fixture(self):
+        for block_tool in [False, True]:
+            with self.subTest(block_tool=block_tool):
+                self.real_node_preload(block_tool)
+
+    def real_node_preload(self, block_tool):
+        node = shutil.which("node")
+        if not node:
+            self.skipTest("Node needed for the observer fixture only")
+        spec = importlib.util.spec_from_file_location("attestation", HERE / "private_attestation.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        with tempfile.TemporaryDirectory() as temporary:
+            root = pathlib.Path(temporary).resolve() / "proposal"
+            subprocess.run([sys.executable, "-B", str(PROPOSAL), "--prepare", "--root", str(root)],
+                           capture_output=True, check=True)
+            session = json.loads((root / "session-new.json").read_text())
+            server = session["mcpServers"][0]
+            script = root / "index.js"
+            script.write_text('''const {spawn}=require('node:child_process');
+const server=JSON.parse(process.argv[2]);
+const child=spawn(server.command,server.args,{cwd:process.cwd(),stdio:['pipe','pipe','inherit']});
+const send=message=>child.stdin.write(JSON.stringify({jsonrpc:'2.0',...message})+'\\n');
+let pending='';
+child.stdout.on('data',chunk=>{pending+=chunk;let i;while((i=pending.indexOf('\\n'))>=0){
+ const message=JSON.parse(pending.slice(0,i));pending=pending.slice(i+1);
+ if(message.id===1){send({method:'notifications/initialized'});send({id:2,method:'tools/list'});}
+ if(message.id===2){if(process.argv[3]==='deny')send({id:3,method:'tools/call',params:{name:'t3_probe_status',arguments:{}}});else child.stdin.end();}
+}});
+send({id:1,method:'initialize',params:{protocolVersion:'2024-11-05'}});
+''')
+            site = dict(file=str(script), line=3, column=13,
+                        sha256=hashlib.sha256(script.read_bytes()).hexdigest())
+            observer = module.Attestation(server, session["cwd"], "host-private-epoch", site)
+            process = subprocess.Popen([node, str(script), json.dumps(server), "deny" if block_tool else "read"],
+                                       cwd=session["cwd"], env=observer.environment(),
+                                       stdout=subprocess.DEVNULL, stderr=subprocess.PIPE, text=True)
+            observer.native_pid = process.pid
+            try:
+                process.communicate(timeout=5)
+                self.assertEqual(process.returncode, 0)
+                # Drain asynchronous private socket events without launching another process.
+                import time
+                end = time.monotonic() + 1
+                goal = "forbidden" if block_tool else "inventory"
+                while not observer.snapshot()[goal] and time.monotonic() < end:
+                    time.sleep(.01)
+                self.assertTrue(observer.snapshot()[goal])
+                if not block_tool:
+                    self.assertTrue(observer.snapshot()["attested"])
+                methods = [json.loads(line)["method"] for line in (root / "events.jsonl").read_text().splitlines()]
+                self.assertNotIn("tools/call", methods)
+                self.assertEqual(observer.snapshot()["rejected"], 0)
+            finally:
+                if process.poll() is None:
+                    process.terminate()
+                    process.communicate(timeout=3)
+                observer.close()
+
+    def test_private_attestation_rejects_spoofs_and_project_only_handshakes(self):
+        spec = importlib.util.spec_from_file_location("attestation", HERE / "private_attestation.py")
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        server = dict(command=sys.executable, args=["synthetic"], env=[])
+        observer = module.Attestation(server, str(HERE), "private-host-epoch")
+        observer.native_pid = 123
+        def message(event, **overrides):
+            return dict(dict(nonce=observer.nonce, transportEpoch=observer.epoch,
+                             launchDigest=observer.digest, observerPid=123, childPid=456,
+                             sequence=["spawn", "initialize_sent", "initialize_result",
+                                       "initialized_sent", "inventory"].index(event),
+                             mainThread=True, injected=True, role="index.js", event=event), **overrides)
+        try:
+            # A project pool process or worker thread cannot attest injection.
+            for event in ["spawn", "initialize_sent", "initialize_result", "initialized_sent"]:
+                observer.accept(message(event, observerPid=777, role="connect-pool-worker.js"), 777)
+                observer.accept(message(event, mainThread=False), 123)
+                observer.accept(message(event, injected=False, childPid=789), 123)
+            self.assertFalse(observer.snapshot()["attested"])
+            for event in ["spawn", "initialize_sent", "initialize_result"]:
+                observer.accept(message(event), 123)
+            self.assertFalse(observer.snapshot()["attested"])
+            observer.accept(message("initialized_sent"), 123)
+            self.assertTrue(observer.snapshot()["attested"])
+            self.assertFalse(observer.snapshot()["inventory"])
+            observer.accept(message("inventory", valid=True), 123)
+            self.assertTrue(observer.snapshot()["inventory"])
+            # Wrong nonce, epoch, tuple or OS peer PID poisons readiness.
+            for override, peer in [({"nonce": "old"}, 123),
+                                   ({"transportEpoch": "old"}, 123),
+                                   ({"launchDigest": "other"}, 123), ({}, 999)]:
+                observer.accept(message("spawn", **override), peer)
+            self.assertEqual(observer.snapshot()["rejected"], 4)
+            self.assertFalse(observer.snapshot()["attested"])
+            self.assertNotIn(observer.nonce, json.dumps(observer.events))
+        finally:
+            observer.close()
+
     def test_project_discovery_cannot_attest_another_injected_instance(self):
         spec = importlib.util.spec_from_file_location("bounded", HERE / "adapter-bounded-fixture.py")
         bounded = importlib.util.module_from_spec(spec)

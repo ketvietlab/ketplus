@@ -6,6 +6,7 @@ history or ACK is fabricated. Only this newly created session's marker presence
 is recorded, never message contents or authentication material.
 """
 import fcntl
+import hashlib
 import json
 import os
 import pathlib
@@ -54,8 +55,9 @@ def main():
                  "--disable-client-telemetry", "--available-tools=t3_no_model_tools_bounded_probe"]
     log = pathlib.Path(config["log"])
     approval_log = pathlib.Path(config["approval_log"]) if config.get("approval_log") else None
+    attested_probe = config.get("attestation", False)
     if approval_log:
-        assert not copilot and config["mode"] == "control"
+        assert not copilot and (config["mode"] == "control" or attested_probe)
     approval_offset = len(rows(approval_log)) if approval_log else 0
     prior = rows(log)
     epoch = "two" if any(row["event"] == "provider" for row in prior) else "one"
@@ -76,9 +78,35 @@ def main():
         # Observe and fail; never wait here and hide an adapter closure race.
         record("closure_barrier_failed", prior_native_alive=native_alive)
         raise RuntimeError("Previous owned native provider has not exited")
-    process = subprocess.Popen([config["executable"], *args], cwd=config["work"],
-                               stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                               stderr=subprocess.DEVNULL, text=True)
+    if any(alive(pid) for pid in prior_workers):
+        record("closure_barrier_failed", prior_mcp_alive=sum(alive(pid) for pid in prior_workers))
+        raise RuntimeError("Previous owned MCP worker has not exited")
+    attestation = None
+    native_env = None
+    if attested_probe:
+        from private_attestation import Attestation
+        session = config["approved_session"]
+        assert session["cwd"] == config["work"] and len(session["mcpServers"]) == 1
+        # Installed 2026.11.11-043ef28's ACP resources loop, specifically the
+        # direct constructor for request-supplied servers, not workspace loading.
+        # Exact module hash pins this observation; another version fails closed.
+        module = pathlib.Path(config["executable"]).resolve().parent / "8512.index.js"
+        digest = "d70d62e5f06260a477583ae6a174c537c6e8d08ea9be24c96c9a0e7ec4702725"
+        assert hashlib.sha256(module.read_bytes()).hexdigest() == digest
+        site = dict(file=str(module), line=1, column=70274, sha256=digest)
+        attestation = Attestation(session["mcpServers"][0], session["cwd"],
+                                  config["observer_epochs"][epoch], site)
+        native_env = attestation.environment()
+    try:
+        process = subprocess.Popen([config["executable"], *args], cwd=config["work"],
+                                   stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                                   stderr=subprocess.DEVNULL, text=True, env=native_env)
+    except BaseException:
+        if attestation:
+            attestation.close()
+        raise
+    if attestation:
+        attestation.native_pid = process.pid
     record("provider", child_pid=process.pid,
            prior_mcp_alive=sum(alive(pid) for pid in prior_workers), prior_native_alive=native_alive)
     pending = {}
@@ -120,7 +148,7 @@ def main():
             request = pending.pop(str(value.get("id")), None) if "method" not in value else None
             if value.get("method") and "id" in value:
                 record("native_request", method=value["method"])
-            if copilot and value.get("method") == "session/update":
+            if value.get("method") == "session/update":
                 update = value.get("params", {}).get("update", {})
                 if update.get("sessionUpdate", "").startswith("tool_call"):
                     record("provider_tool_call")
@@ -160,6 +188,12 @@ def main():
             if method:
                 record("client_method", method=method)
             params = value.get("params", {})
+            if attestation and method in ["session/new", "session/load"]:
+                expected = config["approved_session"]
+                if params.get("cwd") != expected["cwd"] or params.get("mcpServers") != expected["mcpServers"]:
+                    emit(dict(jsonrpc="2.0", id=value["id"], error=dict(
+                        code=-32000, message="Approved injected launch tuple changed; no prompt sent.")))
+                    continue
             if method == "session/prompt":
                 # The adapter adds host context, so inspect only for our exact
                 # synthetic marker. The second prompt is never sent to a model.
@@ -167,7 +201,9 @@ def main():
                 deadline = time.monotonic() + 8
                 ready = False
                 while time.monotonic() < deadline:
-                    if approval_log:
+                    if attestation:
+                        ready = attestation.snapshot()["attested"]
+                    elif approval_log:
                         observed = rows(approval_log)[approval_offset:]
                         # Project and request-injected instances may both start.
                         # Discovery in one must not attest the other instance.
@@ -178,7 +214,14 @@ def main():
                     if ready:
                         break
                     time.sleep(.05)
-                if approval_log:
+                if attestation:
+                    state = attestation.snapshot()
+                    record("injected_attestation", attested=state["attested"],
+                           injected_workers=len(state["workers"]), inventory=state["inventory"],
+                           rejected=state["rejected"], forbidden=state["forbidden"])
+                    for pid in state["all_workers"]:
+                        record("mcp", child_pid=pid)
+                elif approval_log:
                     record("approved_mcp_discovery", spawned=len(spawned), listed=len(listed))
                     for pid in spawned:
                         record("mcp", child_pid=pid)
@@ -219,10 +262,8 @@ def main():
                     if copilot:
                         assert budget.get("copilot_auto_decision") == "D-6"
                     budget[provider].update(sent_or_uncertain=1, model=model, head=config["head"],
-                                             auth_route="inherited-provider-bootstrap", status="reserved_before_delivery")
-                    if copilot:
-                        budget[provider]["session_id"] = params["sessionId"]
-                        budget[provider]["synthetic_cwd"] = config["work"]
+                                             auth_route="inherited-provider-bootstrap", status="reserved_before_delivery",
+                                             session_id=params["sessionId"], synthetic_cwd=config["work"])
                     temporary = ledger.with_suffix(".pending")
                     with open(temporary, "w", opener=lambda path, flags: os.open(path, flags, 0o600)) as output:
                         json.dump(budget, output, indent=2)
@@ -246,6 +287,22 @@ def main():
                 process.kill()
                 process.wait(3)
         thread.join(1)
+        if attestation:
+            # Allow asynchronous observer messages to drain after owned exit.
+            time.sleep(.1)
+            state = attestation.snapshot()
+            record("injected_attestation_final", attested=state["attested"],
+                   injected_workers=len(state["workers"]), inventory=state["inventory"],
+                   rejected=state["rejected"], forbidden=state["forbidden"])
+            for row in attestation.events:
+                record("observer_metadata", kind=row.get("event"), role=row.get("role"),
+                       observer_pid=row.get("observerPid"), child_pid=row.get("childPid"),
+                       main_thread=row.get("mainThread"), thread_id=row.get("threadId"),
+                       injected=row.get("injected"),
+                       callsites=[dict(file=pathlib.Path(file).name, line=int(line), column=int(column))
+                                  for file, line, column in re.findall(
+                                      r"(/[^ ()]+\.(?:js|cjs)):(\d+):(\d+)", row.get("callsite", ""))])
+            attestation.close()
         record("provider_exit", child_exited=process.poll() is not None)
 
 

@@ -7,6 +7,7 @@
 #include <QJsonDocument>
 #include <QStandardPaths>
 #include <QTemporaryDir>
+#include <QUuid>
 #include <QtTest>
 #include <memory>
 #ifdef Q_OS_UNIX
@@ -20,9 +21,10 @@ bool writeFile(const QString& path, const QByteArray& contents, bool executable 
     if (!file.open(QIODevice::WriteOnly) || file.write(contents) != contents.size())
         return false;
     file.close();
-    return !executable ||
-           QFile::setPermissions(path, QFileDevice::ReadOwner | QFileDevice::WriteOwner |
-                                           QFileDevice::ExeOwner);
+    auto permissions = QFileDevice::ReadOwner | QFileDevice::WriteOwner;
+    if (executable)
+        permissions |= QFileDevice::ExeOwner;
+    return QFile::setPermissions(path, permissions);
 }
 QString quoted(const QString& text) {
     const auto json = QJsonDocument(QJsonArray{text}).toJson(QJsonDocument::Compact);
@@ -102,9 +104,10 @@ class CursorBoundedRefreshTest final : public QObject {
         QVERIFY(directory.isValid());
         const auto root = QFileInfo(directory.path()).canonicalFilePath();
         const auto proposal = qEnvironmentVariable("KETPLUS_CURSOR_APPROVED_PROPOSAL");
-        // An approved static proposal is a discovery control only. It cannot
-        // substitute for the mutation bootstrap in a quota-bearing test.
-        QVERIFY(proposal.isEmpty() || mode == "control");
+        const bool attested = qEnvironmentVariable("KETPLUS_CURSOR_ATTESTED_PROBE") == "1";
+        // Attested text-only history validation still issues no mutation grant.
+        QVERIFY(proposal.isEmpty() || mode == "control" || attested);
+        QVERIFY(!attested || !proposal.isEmpty());
         QJsonObject approvedSession;
         if (!proposal.isEmpty()) {
             QFile file(proposal + "/session-new.json");
@@ -126,6 +129,10 @@ class CursorBoundedRefreshTest final : public QObject {
                     {"log", log},
                     {"mode", mode},
                     {"approval_log", proposal.isEmpty() ? QString{} : proposal + "/events.jsonl"},
+                    {"attestation", attested},
+                    {"approved_session", approvedSession},
+                    {"observer_epochs", QJsonObject{{"one", QUuid::createUuid().toString()},
+                                                    {"two", QUuid::createUuid().toString()}}},
                     {"ledger", qEnvironmentVariable("KETPLUS_BOUNDED_TEST_LEDGER")},
                     {"head", qEnvironmentVariable("KETPLUS_BOUNDED_TEST_HEAD")},
                     {"owner", qEnvironmentVariableIntValue("KETPLUS_BOUNDED_TEST_OWNER")}})
@@ -139,8 +146,10 @@ class CursorBoundedRefreshTest final : public QObject {
                           true));
         CursorAdapter adapter(wrapper);
         Cleanup cleanup{adapter, log};
+        int nativeRequests = 0;
         connect(&adapter, &ProviderAdapter::requestReceived, &adapter,
                 [&](const QJsonValue& id, const QString&, const QJsonObject&) {
+                    ++nativeRequests;
                     adapter.respond(id, {{"outcome", QJsonObject{{"outcome", "cancelled"}}}});
                 });
         int completed = 0;
@@ -178,6 +187,7 @@ class CursorBoundedRefreshTest final : public QObject {
         QVERIFY(!id.isEmpty());
         QTRY_VERIFY_WITH_TIMEOUT(completed > 0 || failed, 120000);
         QVERIFY2(!failed, "Provider/control failed; no automatic retry is permitted.");
+        QCOMPARE(nativeRequests, 0);
         auto observed = events(log);
         int forwarded = 0;
         bool ready = false;
@@ -191,7 +201,7 @@ class CursorBoundedRefreshTest final : public QObject {
             QCOMPARE(forwarded, 0);
             adapter.stop();
             QTRY_VERIFY(exited(log));
-            qInfo("Cursor actual adapter: MCP discovery and explicit cheap-model ACK; zero model "
+            qInfo("Cursor actual adapter: transport/model readiness control; zero model "
                   "turns.");
             return;
         }
@@ -203,25 +213,33 @@ class CursorBoundedRefreshTest final : public QObject {
         QCOMPARE(second.value("thread").toObject().value("id"), id);
         QTRY_VERIFY_WITH_TIMEOUT(completed > 1 || failed, 20000);
         QVERIFY(!failed);
-        bool history = false, newTools = false, oldGone = false;
+        QCOMPARE(nativeRequests, 0);
+        bool history = false, refreshReady = false, oldGone = false;
         forwarded = 0;
         for (const auto& row : events(log)) {
+            QVERIFY(row.value("event") != "provider_tool_call");
+            if (row.value("event") == "injected_attestation_final")
+                QVERIFY(!row.value("forbidden").toBool());
             forwarded += row.value("event") == "model_request_forwarded";
             history |= row.value("event") == "history_marker" &&
                        row.value("kind") == "agent_message_chunk";
-            newTools |= row.value("event") == "tools_list" && row.value("epoch") == "two";
+            refreshReady |= row.value("event") == "tools_list" && row.value("epoch") == "two";
+            if (attested)
+                refreshReady |= row.value("event") == "injected_attestation" &&
+                                row.value("epoch") == "two" && row.value("attested").toBool();
             oldGone |= row.value("event") == "provider" && row.value("epoch") == "two" &&
                        row.value("prior_mcp_alive").toInt() == 0;
         }
         QCOMPARE(forwarded, 1);
         QVERIFY(history);
-        QVERIFY(newTools);
+        QVERIFY(refreshReady);
         QVERIFY(oldGone);
         QVERIFY(adapter.releaseSessionTransport("t3-bounded-owner"));
         adapter.stop();
         QTRY_VERIFY(exited(log));
         qInfo("D-3 Cursor: one explicit Haiku low turn; same-ID replay before any recall; "
-              "MCP epoch changed and old processes exited. The refresh prompt was intercepted.");
+              "new MCP transport attested and old processes exited. Inspect injected inventory "
+              "evidence separately; no production mutation is enabled by this probe.");
     }
 };
 QTEST_GUILESS_MAIN(CursorBoundedRefreshTest)

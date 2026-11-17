@@ -628,3 +628,63 @@ The Host regression passes **1/1 (3.16 s)** after replacing its obsolete
 Copilot-is-unverified assertion. The concrete Copilot adapter and two-session ACP
 isolation tests also pass (39.16 s and 2.81 s); no provider model is invoked by
 these fixture tests.
+
+### Amended Cursor text-only validation order
+
+The design now separates transport attestation from eager tool discovery.
+Cursor's production mutation gate stays disabled throughout this probe. Before
+its one still-unused synthetic text prompt, a private observer must bind a
+host-generated nonce/transport epoch to the exact injected worker PID and
+unchanged approved launch tuple. It must observe that instance's ordered
+initialize request, successful response, and initialized notification. A spawn
+or session/new ACK alone is insufficient. Cheap-model ACK and confirmed prior
+owned provider/MCP exit remain required. The persistent ledger is reserved before
+the sole native model delivery; there is no recall, retry, or second native
+prompt after same-ID restoration.
+
+The proposed test observer uses a process-local Node preload in only the owned
+Cursor test process and its children. It intercepts child-process launch/stdio
+without changing the approved fixture source, server declaration or project
+approval. A private Unix socket authenticates the observer OS peer PID plus its
+nonce, epoch and launch digest. Private bootstrap files are mode 0600 under a
+0700 directory and are deleted after closure. No nonce, secret epoch, raw
+protocol body or credential is written to evidence logs. Main ACP process/thread
+attribution is checked separately from project connection-pool processes or
+threads; the no-model control must establish that distinction on the installed
+CLI before this mechanism can release a prompt.
+
+Native permission requests are denied. The observer blocks any MCP tools/call
+before bytes reach the fixture; the fixture still exposes only its approved
+static read-only inventory. If tools/list occurs lazily after prompt delivery,
+only a successful inventory response from that exact injected PID/epoch counts.
+The replacement transport must independently attest and restore the original
+history ID. Text/history success alone cannot enable production mutation:
+injected inventory, closure and history evidence still require review. Missing
+attribution or handshake stops before model delivery; missing inventory after
+a successful text turn leaves the gate disabled.
+
+The first no-model attestation control rejects readiness (22.14 s): the native
+CLI creates both project and injected workers in its main process/thread.
+Parent PID alone therefore cannot attribute injection. The observer's captured
+launch callsite distinguishes them: only the injected spawn passes the ACP
+resource loop that constructs clients for request-supplied `mcpServers`.
+The revised test observer pins `8512.index.js` to SHA-256
+`d70d62e5f06260a477583ae6a174c537c6e8d08ea9be24c96c9a0e7ec4702725`
+and the injected constructor at line 1, column 70274 of CLI
+2026.11.11-043ef28. It checks the module checksum before use; unknown code cannot
+inherit this classification. This is version-specific test instrumentation,
+not a new provider API or production capability. Project spawns sharing the
+same command and parent PID are expressly excluded. Neither exploratory
+control forwards a model prompt or changes approval scope.
+
+The revised pinned production-adapter attestation control **passes 1/1
+(12.49 s)**. Exactly one worker is attributed to the injected constructor and
+completes its ordered handshake, authenticated over the private OS-peer-bound
+channel. Its inventory is still absent before the intercepted prompt, while
+project inventory is excluded. Cheap-model ACK succeeds; rejected/forbidden
+events and forwarded model prompts are zero. All owned recorded PIDs exit.
+Five quota-free fixture tests pass (1.917 s), including a real Node/Python
+handshake, nonce/epoch/tuple/peer spoof rejection, same-parent project exclusion,
+and blocking tools/call before it reaches the Python fixture. The ledger remains
+2/3 before the authorized Cursor text-only delivery; production mutation remains
+disabled.
