@@ -59,9 +59,18 @@ QString DevicePins::hostFingerprint(const QJsonObject& keys) {
 QJsonObject DevicePins::read(QString* error) const {
     QString readError;
     const QByteArray bytes = store_->read(account, &readError);
+    QJsonParseError parseError;
+    const auto document = QJsonDocument::fromJson(bytes, &parseError);
+    const auto pins = document.object();
+    if (readError.isEmpty() && !bytes.isEmpty() &&
+        (parseError.error != QJsonParseError::NoError || !document.isObject() ||
+         pins.value(QStringLiteral("version")).toInt() != 1 ||
+         !pins.value(QStringLiteral("devices")).isObject()))
+        readError =
+            QStringLiteral("The device pin record is invalid; existing trust was preserved.");
     if (error != nullptr)
         *error = readError;
-    return QJsonDocument::fromJson(bytes).object();
+    return readError.isEmpty() ? pins : QJsonObject{};
 }
 
 bool DevicePins::write(const QJsonObject& pins, QString* error) const {

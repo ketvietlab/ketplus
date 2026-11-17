@@ -178,6 +178,9 @@ class ControlV2Client final : public QObject {
     // pairing, in its own credential account: nothing the relay returns can add one (#88).
     QJsonObject hostPins_;
     bool hostPinsStored_{false};
+    // A failed restore grants no migration/write authority. Recreate the client after
+    // recovering OS-store access so all session and pin fields are loaded together.
+    QString storageReadError_;
     bool storeHostPins(const QJsonObject& pins, QString* error);
     // A rotated credential that could not be stored yet; written again on the next access.
     bool credentialUnsaved_{false};

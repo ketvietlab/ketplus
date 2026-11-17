@@ -491,22 +491,22 @@ void CloudControlClient::executeCommand(const QJsonObject& command) {
                         return;
                     }
                     const auto source = *found;
-                    const auto accountEpoch = accountEpoch_;
+                    const auto account = accountFence();
                     const auto access = atlasAccessFence(device);
                     const QPointer<CloudControlClient> guard(this);
                     workspaceFilesPool_.start([guard, command, payload, kind, source, device,
-                                               accountEpoch, access]() {
+                                               account, access]() {
                         const auto projects = AtlasIndex::scan(source.worktreePath);
                         if (!guard)
                             return;
                         QMetaObject::invokeMethod(
                             guard,
-                            [guard, command, payload, kind, source, device, projects, accountEpoch,
+                            [guard, command, payload, kind, source, device, projects, account,
                              access] {
                                 if (!guard)
                                     return;
                                 guard->workspaceFilesPending_.fetch_sub(1);
-                                if (guard->accountEpoch_ != accountEpoch)
+                                if (!guard->accountCurrent(account))
                                     return;
                                 // The device or machine was revoked during the scan.
                                 if (!guard->atlasAccessCurrent(device, access))
@@ -607,9 +607,9 @@ void CloudControlClient::executeCommand(const QJsonObject& command) {
                                 query.addQueryItem("generation",
                                                    QString::number(source.generation));
                                 relay.setQuery(query);
-                                auto completed = [guard, runtime,
+                                auto completed = [guard, runtime, device, access,
                                                   command](const QJsonObject& result) {
-                                    if (!guard)
+                                    if (!guard || !guard->atlasAccessCurrent(device, access))
                                         return;
                                     runtime->setProperty("attachment", result);
                                     guard->acknowledgeCommand(command, result);
@@ -707,7 +707,7 @@ void CloudControlClient::executeCommand(const QJsonObject& command) {
                     }
                     // Publish discovered opaque targets before returning the picker page, so
                     // a newly created Git worktree already has a catalog/grant at selection.
-                    const auto epoch = accountEpoch_;
+                    const auto account = accountFence();
                     const QJsonObject heartbeatBody{
                         {"machineId", machineId_},
                         {"controlProtocolVersion", 2},
@@ -717,9 +717,9 @@ void CloudControlClient::executeCommand(const QJsonObject& command) {
                         {"sessions", QJsonArray{}},
                         {"worktrees", worktreeSnapshots()}};
                     request("POST", "/v2/daemon/heartbeat", heartbeatBody, daemonToken_, {},
-                            [this, command, result, epoch](int status, const QJsonValue&,
-                                                           const QString& error) {
-                                if (epoch != accountEpoch_)
+                            [this, command, result, account](int status, const QJsonValue&,
+                                                             const QString& error) {
+                                if (!accountCurrent(account))
                                     return;
                                 acknowledgeCommand(
                                     command, status == 202 && error.isEmpty()

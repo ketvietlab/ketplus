@@ -22,7 +22,7 @@ void CloudControlClient::ensureDaemonCredential(ReadyCallback callback) {
         return;
     }
     credentialRequestInFlight_ = true;
-    const quint64 requestEpoch = accountEpoch_;
+    const auto requestAccount = accountFence();
     const QJsonObject challengeRequest{
         {QStringLiteral("machineId"), machineId_},
         {QStringLiteral("keyVersion"), machineKeyVersion_},
@@ -30,9 +30,9 @@ void CloudControlClient::ensureDaemonCredential(ReadyCallback callback) {
         {QStringLiteral("signatureAlgorithm"), QStringLiteral("Ed25519")}};
     request(
         "POST", QStringLiteral("/v2/daemon/challenges"), challengeRequest, {}, {},
-        [this, requestEpoch](const int status, const QJsonValue& value,
-                             const QString& transportError) {
-            if (requestEpoch != accountEpoch_)
+        [this, requestAccount](const int status, const QJsonValue& value,
+                               const QString& transportError) {
+            if (!accountCurrent(requestAccount))
                 return;
             const QJsonObject challenge = object(value);
             if (status == 404 && transportError.isEmpty() &&
@@ -81,9 +81,10 @@ void CloudControlClient::ensureDaemonCredential(ReadyCallback callback) {
             request(
                 "POST", QStringLiteral("/v2/daemon/credentials"), body, {},
                 {{QByteArray("X-KetPlus-Machine-Signature"), CloudCrypto::base64Url(signature)}},
-                [this, requestEpoch](const int credentialStatus, const QJsonValue& credentialValue,
-                                     const QString& credentialError) {
-                    if (requestEpoch != accountEpoch_)
+                [this, requestAccount](const int credentialStatus,
+                                       const QJsonValue& credentialValue,
+                                       const QString& credentialError) {
+                    if (!accountCurrent(requestAccount))
                         return;
                     const QJsonObject credential = object(credentialValue);
                     if (credentialStatus != 201 || !credentialError.isEmpty()) {

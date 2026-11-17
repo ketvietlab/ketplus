@@ -7,6 +7,7 @@ QHash<QString, QByteArray> credentials;
 bool failWrites = false;
 bool failRemovals = false;
 QString failWritesTo;
+QString failReadsOf;
 QString failRemovalsOf;
 int rewrites = 0;
 void resetCredentials() {
@@ -14,13 +15,21 @@ void resetCredentials() {
     failWrites = false;
     failRemovals = false;
     failWritesTo.clear();
+    failReadsOf.clear();
     failRemovalsOf.clear();
     rewrites = 0;
 }
 } // namespace r03
 namespace ketplus::daemon {
 CredentialStore::CredentialStore(QString service) : service_(std::move(service)) {}
-QByteArray CredentialStore::read(const QString& account, QString*) const {
+QByteArray CredentialStore::read(const QString& account, QString* error) const {
+    if (account == r03::failReadsOf) {
+        if (error)
+            *error = "synthetic credential read failure";
+        return {};
+    }
+    if (error)
+        error->clear();
     return r03::credentials.value(service_ + '/' + account);
 }
 bool CredentialStore::write(const QString& account, const QByteArray& value, QString* error) const {

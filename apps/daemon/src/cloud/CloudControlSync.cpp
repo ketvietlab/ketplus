@@ -92,7 +92,7 @@ void CloudControlClient::heartbeat() {
             host_ ? host_->teamMetadata() : QHash<QString, QJsonObject>{};
         for (auto it = teams.cbegin(); it != teams.cend(); ++it)
             agentMetadata[it.key()].insert(QStringLiteral("team"), it.value());
-        const quint64 requestEpoch = accountEpoch_;
+        const auto requestAccount = accountFence();
         const QString workspaceId = workspaceId_;
         const QString machineId = machineId_;
         const QPointer<CloudControlClient> guard(this);
@@ -100,7 +100,7 @@ void CloudControlClient::heartbeat() {
         // thread and back without sharing.
         WorktreeRevisionCache revisionCache = std::move(revisionCache_);
         revisionCache_ = {};
-        heartbeatPool_.start([guard, stored, repositories, agentMetadata, tagColors, requestEpoch,
+        heartbeatPool_.start([guard, stored, repositories, agentMetadata, tagColors, requestAccount,
                               workspaceId, machineId, salt,
                               revisionCache = std::move(revisionCache)]() mutable {
             QHash<QString, QJsonObject> metadata;
@@ -111,20 +111,19 @@ void CloudControlClient::heartbeat() {
                     tagColors, &revisionCache, QDateTime::currentMSecsSinceEpoch()));
             QMetaObject::invokeMethod(
                 guard,
-                [guard, batches, metadata, requestEpoch, workspaceId, machineId,
+                [guard, batches, metadata, requestAccount,
                  revisionCache = std::move(revisionCache)]() mutable {
                     if (!guard)
                         return;
                     guard->revisionCache_ = std::move(revisionCache);
-                    if (guard->accountEpoch_ != requestEpoch ||
-                        guard->workspaceId_ != workspaceId || guard->machineId_ != machineId) {
+                    if (!guard->accountCurrent(requestAccount)) {
                         guard->heartbeatInFlight_ = false;
                         return;
                     }
                     guard->refusalsThisHeartbeat_.clear();
                     guard->notePublishedRevisions(batches);
                     guard->sendHeartbeatBatches(guard->withSessionMetadata(batches, metadata), 0,
-                                                requestEpoch, machineId, workspaceId);
+                                                requestAccount);
                 },
                 Qt::QueuedConnection);
         });
@@ -132,10 +131,10 @@ void CloudControlClient::heartbeat() {
 }
 
 void CloudControlClient::sendHeartbeatBatches(const QList<QJsonArray>& batches,
-                                              const qsizetype index, const quint64 requestEpoch,
-                                              const QString& machineId,
-                                              const QString& workspaceId) {
-    if (accountEpoch_ != requestEpoch || machineId_ != machineId || workspaceId_ != workspaceId) {
+                                              const qsizetype index,
+                                              const AccountFence& requestAccount) {
+    const auto& machineId = requestAccount.machine;
+    if (!accountCurrent(requestAccount)) {
         heartbeatInFlight_ = false;
         return;
     }
@@ -172,10 +171,9 @@ void CloudControlClient::sendHeartbeatBatches(const QList<QJsonArray>& batches,
         body.insert("deletions", deletions);
     request("POST", QStringLiteral("/v2/daemon/heartbeat"), body, daemonToken_,
             {{QByteArray("X-KetPlus-Daemon-Version"), QByteArray(KETPLUS_PRODUCT_VERSION)}},
-            [this, batches, index, requestEpoch, machineId, workspaceId](
-                const int status, const QJsonValue& value, const QString& transportError) {
-                if (accountEpoch_ != requestEpoch || machineId_ != machineId ||
-                    workspaceId_ != workspaceId) {
+            [this, batches, index, requestAccount](const int status, const QJsonValue& value,
+                                                   const QString& transportError) {
+                if (!accountCurrent(requestAccount)) {
                     heartbeatInFlight_ = false;
                     return;
                 }
@@ -202,7 +200,7 @@ void CloudControlClient::sendHeartbeatBatches(const QList<QJsonArray>& batches,
                         deletion.value("sessionGeneration").toInteger(),
                         deletion.value("operationId").toString());
                 }
-                sendHeartbeatBatches(batches, index + 1, requestEpoch, machineId, workspaceId);
+                sendHeartbeatBatches(batches, index + 1, requestAccount);
             });
 }
 
@@ -349,19 +347,19 @@ void CloudControlClient::uploadSessionEvents(const QString& sessionId, const qin
         lastError_ = journal_->errorString();
         return;
     }
-    const quint64 requestEpoch = accountEpoch_;
+    const auto requestAccount = accountFence();
     eventUploadsInFlight_.insert(uploadKey);
     request(
         "POST", QStringLiteral("/v2/events:append"),
         QJsonObject{{QStringLiteral("machineId"), machineId_}, {QStringLiteral("events"), cloud}},
         daemonToken_, {},
         [this, sessionId, generation, afterCursor, uploadKey, highestSent, cloud, scope,
-         requestEpoch, sent = int(cloud.size())](const int status, const QJsonValue& value,
-                                                 const QString& transportError) {
+         requestAccount, sent = int(cloud.size())](const int status, const QJsonValue& value,
+                                                   const QString& transportError) {
             eventUploadsInFlight_.remove(uploadKey);
             // This request owns the slot until its callback; stale account replies
             // release that slot but must not mutate progress, receipts or backoff.
-            if (requestEpoch != accountEpoch_ || scope != uploadScope())
+            if (!accountCurrent(requestAccount) || scope != uploadScope())
                 return;
             // Deleted while in flight: no retry, receipt or progress for its history.
             if (!isLiveGeneration(sessionId, generation)) {

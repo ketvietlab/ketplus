@@ -83,6 +83,27 @@ not erase historical plaintext backups, guarantee secure deletion on flash stora
 or promise cross-device keychain recovery. Protect and retire legacy backup copies
 according to the user's backup policy. No automatic backup export is added.
 
+## Enrollment transaction and restore errors
+
+The enrollment caller uses one `CredentialStore::update` for the empty device-pin set,
+relay and identity fields, account labels, key version and workspace content-key transition.
+The complete enrollment is one commit unit, including recovery after an interrupted or failed
+write. The workspace transition helper mutates the transaction's account map without nested
+store operations. When crossing relays, removal of upload cursors belongs to this transaction too.
+
+Daemon restore checks read errors before applying legacy migration, then verifies that the
+relevant accounts still match inside the migration transaction. Failure preserves the stored
+record and grants no in-memory enrollment. The Control v2 client also rejects partial session
+and host-pin restoration; it never treats an unreadable pin map as an absent legacy map.
+Malformed pin records are errors. Recovery requires restoring OS-store access and recreating
+the client so the complete state is read again. No fallback credential layout is introduced.
+
+Enrollment invalidates trust/Atlas access even if its storage transaction fails. Persisted old
+credentials are retained on failure, but delayed responses cannot complete as the next
+enrollment. Successful commit cancels earlier credential waiters before starting fresh
+challenge/redemption. Both reply stages check account epoch, enrollment revision and identity;
+the sign-in epoch itself is retained for the initiating callback.
+
 ## Verification and limitations
 
 Native fixtures use an isolated temporary macOS keychain, synthetic credentials,

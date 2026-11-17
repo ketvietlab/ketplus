@@ -3557,7 +3557,7 @@ class CloudPrivacyTest final : public QObject {
 
         // Another workspace's devices never received these keys, and the old one's must not
         // read what is uploaded next. If that cannot be stored, the daemon keeps running the
-        // enrollment it had, with its keys; a restart into the stored enrollment replaces them.
+        // enrollment it had, with its keys; restart must restore that complete old enrollment.
         r03::failWritesTo = "session-keys-workspace";
         QVERIFY(!enrollInto("workspace-b").isEmpty());
         QCOMPARE(Access::machineId(*c.client), QStringLiteral("machine-workspace-a"));
@@ -3569,12 +3569,16 @@ class CloudPrivacyTest final : public QObject {
             r03::credentials.insert("dev.ketplus.daemon.control/control-url",
                                     CloudControlClient::configuredControlUrl().toString().toUtf8());
             CloudControlClient restarted(&c.journal, &c.host);
-            QCOMPARE(Access::machineId(restarted), QStringLiteral("machine-workspace-b"));
-            QVERIFY(!r03::credentials.contains(wrap));
-            // Progress uploaded to workspace-a would resume workspace-b mid-history.
-            QVERIFY(!r03::credentials.contains(cursor));
-            QVERIFY(Access::crypto(restarted).sessionKey("session-synthetic", 1) != first);
+            QCOMPARE(Access::machineId(restarted), QStringLiteral("machine-workspace-a"));
+            QVERIFY(r03::credentials.contains(wrap));
+            QCOMPARE(r03::credentials.value(cursor), QByteArray("42"));
+            QCOMPARE(Access::crypto(restarted).sessionKey("session-synthetic", 1), first);
         }
+        // Retrying successfully switches identity, keys and progress together.
+        enrollInto("workspace-b");
+        QCOMPARE(Access::machineId(*c.client), QStringLiteral("machine-workspace-b"));
+        QVERIFY(!r03::credentials.contains(wrap));
+        QVERIFY(!r03::credentials.contains(cursor));
         const QByteArray second = Access::crypto(*c.client).sessionKey("session-synthetic", 1);
         QCOMPARE(second.size(), 32);
         r03::credentials.insert(wrap, "wrapped for a phone of workspace-b");
