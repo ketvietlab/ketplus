@@ -596,21 +596,37 @@ CloudControlClient::withSessionMetadata(const QList<QJsonArray>& batches,
         return batches;
     QList<QJsonArray> sealed;
     QSet<QString> current;
-    for (const QJsonArray& batch : batches) {
-        QJsonArray snapshots;
-        for (const QJsonValue& value : batch) {
-            QJsonObject snapshot = value.toObject();
-            const QString sessionId = snapshot.value(QStringLiteral("id")).toString();
-            current.insert(sessionId);
-            if (metadata.contains(sessionId)) {
-                const QJsonObject envelope =
-                    sealedSessionMetadata(snapshot, metadata.value(sessionId));
-                if (!envelope.isEmpty())
-                    snapshot.insert(QStringLiteral("encryptedMetadata"), envelope);
+    const auto previous = sealedMetadata_;
+    QString error;
+    const bool ready = credentials_.batch(
+        [&](CredentialStore& view, QString* failure) {
+            CloudCrypto crypto(&view);
+            for (const QJsonArray& batch : batches) {
+                QJsonArray snapshots;
+                for (const QJsonValue& value : batch) {
+                    QJsonObject snapshot = value.toObject();
+                    const QString sessionId = snapshot.value(QStringLiteral("id")).toString();
+                    current.insert(sessionId);
+                    if (metadata.contains(sessionId)) {
+                        const QJsonObject envelope =
+                            sealedSessionMetadata(snapshot, metadata.value(sessionId), crypto);
+                        if (envelope.isEmpty()) {
+                            *failure = lastError_;
+                            return false;
+                        }
+                        snapshot.insert(QStringLiteral("encryptedMetadata"), envelope);
+                    }
+                    snapshots.append(snapshot);
+                }
+                sealed.append(snapshots);
             }
-            snapshots.append(snapshot);
-        }
-        sealed.append(snapshots);
+            return true;
+        },
+        &error);
+    if (!ready) {
+        sealedMetadata_ = previous;
+        lastError_ = error;
+        return {};
     }
     for (auto it = sealedMetadata_.begin(); it != sealedMetadata_.end();) {
         if (current.contains(it.key()))
@@ -622,7 +638,8 @@ CloudControlClient::withSessionMetadata(const QList<QJsonArray>& batches,
 }
 
 QJsonObject CloudControlClient::sealedSessionMetadata(const QJsonObject& snapshot,
-                                                      const QJsonObject& metadata) {
+                                                      const QJsonObject& metadata,
+                                                      CloudCrypto& crypto) {
     const QString sessionId = snapshot.value(QStringLiteral("id")).toString();
     const qint64 generation = snapshot.value(QStringLiteral("generation")).toInteger();
     // The relay only takes metadata sealed at the snapshot's own cursor and turn.
@@ -638,8 +655,8 @@ QJsonObject CloudControlClient::sealedSessionMetadata(const QJsonObject& snapsho
         cached != sealedMetadata_.cend() && cached->first == fingerprint)
         return cached->second;
     QString cryptoError;
-    const QJsonObject content = crypto_.encrypt(plaintext, aad, sessionId, generation, 1,
-                                                machineId_, machineKeyVersion_, &cryptoError);
+    const QJsonObject content = crypto.encrypt(plaintext, aad, sessionId, generation, 1, machineId_,
+                                               machineKeyVersion_, &cryptoError);
     if (content.isEmpty()) {
         lastError_ = cryptoError;
         return {};

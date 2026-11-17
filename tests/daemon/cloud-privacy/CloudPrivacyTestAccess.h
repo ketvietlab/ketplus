@@ -85,6 +85,11 @@ class CloudPrivacyTestAccess {
     static bool heartbeatIdle(const CloudControlClient& client) {
         return !client.heartbeatInFlight_;
     }
+    static QList<QJsonArray> sealMetadata(CloudControlClient& client,
+                                          const QList<QJsonArray>& batches,
+                                          const QHash<QString, QJsonObject>& metadata) {
+        return client.withSessionMetadata(batches, metadata);
+    }
     static bool idle(const CloudControlClient& client) {
         return client.eventUploadsInFlight_.isEmpty();
     }

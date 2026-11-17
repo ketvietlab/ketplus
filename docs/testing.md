@@ -1073,6 +1073,28 @@ is neither installed nor bundled, and production has no environment switch to
 enable this backend. A data-directory override alone does not isolate native
 credential namespaces and must not be used as that isolation boundary.
 
+`ketplus_credential_batch_tests` links the production record codec and lock with a
+counting, synthetic backend. Its standalone equivalent is
+`r03_credential_batch_tests` in `tests/daemon/cloud-privacy`. It checks bounded
+fetches for heartbeat metadata, distribution, pairing and command-key lookup as
+session counts increase; cold keys and wraps commit once. It also covers aborted
+batches, unavailable reads/writes, metadata-cache rollback, current pins, competing
+store instances, and a child process denied by the held lock. Subsequent operations
+must observe committed mutations. Run it with the credential-store, cloud-privacy,
+trust-lifecycle, sender-cache and remote-control suites. Shared headers and CMake
+changes require the full Pro build and unfiltered suite as well.
+
+For an optional synthetic performance run, set `KETPLUS_CREDENTIAL_MEASURE=1` only
+on this target. It emits counts and raw timings for 2,000/8,000/20,000 accounts,
+100 active sessions and a two-millisecond fake backend delay. Retained padding
+values are 420 bytes; seeded wraps exercise the cached path, not cryptographic
+throughput. A queued `session.interrupt` against a loaded idle session must return
+`turn_not_running`; its dispatch time observes event-loop delay, not cancellation
+of an active provider turn or IPC end-to-end latency. These are synthetic backend
+fetches, not measured native OS calls. Record native-store measurements separately,
+including dataset, sample count, environment and cleanup; label any extrapolation
+explicitly. Keep raw security-audit evidence outside the public tree.
+
 The normal test configuration warns if the optional Secret Service fixture tools
 are unavailable on the build host; do not claim that coverage in that case. Fake
 D-Bus tests on macOS do not verify a Linux keyring's ACLs, backup or desktop prompts.

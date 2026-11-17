@@ -74,6 +74,8 @@ target_sources(r03_privacy_core PRIVATE
   "${DAEMON}/teams/TeamRiskPolicy.cpp"
   "${DAEMON}/teams/TeamCoordinatorRiskPolicy.cpp"
   "${DAEMON}/teams/TeamRoutingEvidence.cpp"
+  "${DAEMON}/teams/TeamReviewPolicy.cpp"
+  "${DAEMON}/teams/TeamCoordinatorFindingResolutions.cpp"
   "${DAEMON}/runtime/SessionHostTeamRouting.cpp")
 
 # Remote host-pin regressions share the synthetic credential store, never the OS store.
@@ -89,3 +91,10 @@ add_executable(r03_remote_control_client_tests "${REPO}/tests/daemon/RemoteContr
 target_link_libraries(r03_remote_control_client_tests PRIVATE r03_privacy_core Qt6::Test)
 ketplus_enable_warnings(r03_remote_control_client_tests)
 add_test(NAME r03_remote_control_client_tests COMMAND r03_remote_control_client_tests)
+
+# Use the real store/locking/codec with a counting OS adapter, never a user keychain.
+add_executable(r03_credential_batch_tests CredentialBatchTest.cpp
+  "${REPO}/modules/remote/src/cloud/CredentialStore.cpp")
+target_link_libraries(r03_credential_batch_tests PRIVATE r03_privacy_core Qt6::Test)
+ketplus_enable_warnings(r03_credential_batch_tests)
+add_test(NAME r03_credential_batch_tests COMMAND r03_credential_batch_tests)
