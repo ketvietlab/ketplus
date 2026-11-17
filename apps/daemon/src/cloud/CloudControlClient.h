@@ -132,6 +132,8 @@ class CloudControlClient final : public QObject {
     // A deleted generation's history awaits purge but must never leave the machine (ADR 0093).
     [[nodiscard]] bool isLiveGeneration(const QString& sessionId, qint64 generation) const;
     void distributeKeys();
+    QJsonArray sessionKeyEnvelopes(const QJsonArray& devices, bool requirePins, qsizetype limit,
+                                   QJsonArray* trusted, QString* error);
     void pollCommands();
     // A wake-up that lands while a poll is in flight polls again once it returns: that poll
     // may have read before the command it announces was written.
@@ -187,13 +189,13 @@ class CloudControlClient final : public QObject {
                      WorktreeRevisionCache* revisionCache = nullptr, qint64 nowMs = 0);
     // Seals each snapshot's metadata (branch, machine name, whether its worktree still
     // exists, conversation number, the conversation whose message started its turn) for the
-    // phone; a snapshot whose metadata cannot be sealed is
-    // sent without it.
+    // phone. A failed credential transaction cancels publication of this heartbeat.
     [[nodiscard]] QList<QJsonArray>
     withSessionMetadata(const QList<QJsonArray>& batches,
                         const QHash<QString, QJsonObject>& metadata);
     [[nodiscard]] QJsonObject sealedSessionMetadata(const QJsonObject& snapshot,
-                                                    const QJsonObject& metadata);
+                                                    const QJsonObject& metadata,
+                                                    CloudCrypto& crypto);
     QByteArray ensurePathIdSalt(QString* error = nullptr);
     // Where a conversation can start: every checkout of each repository a conversation
     // ran in, those with conversations first.

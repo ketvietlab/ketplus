@@ -121,9 +121,13 @@ void CloudControlClient::heartbeat() {
                         return;
                     }
                     guard->refusalsThisHeartbeat_.clear();
+                    const auto sealed = guard->withSessionMetadata(batches, metadata);
+                    if (sealed.isEmpty() && !batches.isEmpty()) {
+                        guard->heartbeatInFlight_ = false;
+                        return;
+                    }
                     guard->notePublishedRevisions(batches);
-                    guard->sendHeartbeatBatches(guard->withSessionMetadata(batches, metadata), 0,
-                                                requestAccount);
+                    guard->sendHeartbeatBatches(sealed, 0, requestAccount);
                 },
                 Qt::QueuedConnection);
         });
@@ -457,43 +461,14 @@ void CloudControlClient::distributeKeys() {
                 return;
             }
             // Only devices pinned on this Mac receive session keys (#87).
-            const QJsonArray devices = trustedDevices(value.toArray(), fence);
-            signaling_->refreshDevices(devices);
-            QJsonArray envelopes;
+            QJsonArray devices = trustedDevices(value.toArray(), fence);
             QString cryptoError;
-            for (const QJsonValue& deviceValue : devices) {
-                const QJsonObject device = deviceValue.toObject();
-                for (const StoredSession& session : journal_->sessions()) {
-                    if (refusedSessions_.contains(session.id))
-                        continue;
-                    const QString account =
-                        QStringLiteral("wrapped-%1-%2-%3-%4")
-                            .arg(session.id)
-                            .arg(session.generation)
-                            .arg(device.value(QStringLiteral("id")).toString())
-                            .arg(device.value(QStringLiteral("keyVersion")).toInt());
-                    QJsonObject envelope =
-                        QJsonDocument::fromJson(credentials_.read(account)).object();
-                    // A cached malformed wrap is discarded and re-created, never re-sent.
-                    if (!CloudCrypto::validWrappedSessionKey(envelope)) {
-                        envelope =
-                            crypto_.wrapSessionKey(session.id, session.generation, 1, device,
-                                                   machineId_, machineKeyVersion_, &cryptoError);
-                        if (envelope.isEmpty() ||
-                            !credentials_.write(
-                                account, QJsonDocument(envelope).toJson(QJsonDocument::Compact),
-                                &cryptoError)) {
-                            lastError_ = cryptoError;
-                            return;
-                        }
-                    }
-                    envelopes.append(envelope);
-                    if (envelopes.size() == 500)
-                        break;
-                }
-                if (envelopes.size() == 500)
-                    break;
+            const auto envelopes = sessionKeyEnvelopes(devices, true, 500, &devices, &cryptoError);
+            if (!cryptoError.isEmpty()) {
+                lastError_ = cryptoError;
+                return;
             }
+            signaling_->refreshDevices(devices);
             if (envelopes.isEmpty())
                 return;
             request("POST", QStringLiteral("/v2/session-keys:append"),
