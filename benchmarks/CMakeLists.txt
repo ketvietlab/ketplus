@@ -87,5 +87,17 @@ if(KETPLUS_BUILD_TRANSCRIPT_SCROLL_BENCH)
     )
     target_link_libraries(ketplus_synthetic_transcript_journal PRIVATE ketplus_daemon_core)
     ketplus_enable_warnings(ketplus_synthetic_transcript_journal)
-
 endif()
+
+# Large-install scale: the sidebar offscreen, and a journal for the real app.
+qt_add_executable(ketplus_sidebar_scale_benchmark SidebarScaleBenchmark.cpp)
+target_link_libraries(ketplus_sidebar_scale_benchmark PRIVATE ketplus_desktop_shell)
+ketplus_enable_warnings(ketplus_sidebar_scale_benchmark)
+
+# Thousands of conversations over many repositories, for sidebar and restore scale.
+qt_add_executable(ketplus_large_workspace_journal LargeWorkspaceJournal.cpp)
+target_include_directories(ketplus_large_workspace_journal PRIVATE
+    ${PROJECT_SOURCE_DIR}/apps/daemon/src
+)
+target_link_libraries(ketplus_large_workspace_journal PRIVATE ketplus_daemon_core)
+ketplus_enable_warnings(ketplus_large_workspace_journal)

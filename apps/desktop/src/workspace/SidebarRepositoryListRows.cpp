@@ -103,7 +103,8 @@ ket::SidebarRow* SidebarRepositoryList::createRow(QWidget* parent, const QVarian
     });
     connect(row, &QWidget::customContextMenuRequested, this,
             [this, worktreePath, id] { emit conversationContextMenuRequested(worktreePath, id); });
-    rows_.append(row);
+    if (buildingRows_ != nullptr)
+        buildingRows_->insert(id, row);
     return row;
 }
 

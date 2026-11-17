@@ -1,6 +1,7 @@
 #include "agent/CodexAppServer.h"
 
 #include "DaemonClient.h"
+#include "SessionCatalogReader.h"
 
 #include <QDir>
 #include <QFileInfo>
@@ -38,9 +39,9 @@ void CodexAppServer::discoverDaemonSessions() {
     // A new-session event needs only the live catalog. Full refresh owns
     // deletion reconciliation; older daemons ignore the live-only opt-in and
     // return a legacy catalog or the first bounded tombstone page with sessions.
-    daemon_->call(
-        "session.list", {{"deleted_sessions_page_version", 1}, {"session_catalog_live_only", true}},
-        {}, 0, [this, observed, epoch](const QJsonObject& result, const QString& error) {
+    remote::readLiveSessions(
+        daemon_, this, [this, epoch] { return epoch == daemonDiscoveryEpoch_; },
+        [this, observed, epoch](const QJsonObject& result, const QString& error) {
             if (epoch != daemonDiscoveryEpoch_)
                 return;
             daemonDiscoveryInFlight_ = false;

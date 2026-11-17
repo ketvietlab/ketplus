@@ -9,6 +9,7 @@
 #include "app/RepositoryRouter.h"
 
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
 #include <QFutureWatcher>
@@ -17,6 +18,7 @@
 #include <QtConcurrentRun>
 
 #include <algorithm>
+#include <cstdio>
 
 namespace ketplus {
 namespace {
@@ -122,6 +124,11 @@ QString MainWindow::sidebarRepositoryForPath(const QString& path) {
 }
 
 void MainWindow::refreshSidebarRepositories() {
+    // KETPLUS_SIDEBAR_TRACE=1: one stderr line per refresh, for the large-workspace benchmark.
+    static const bool trace = qEnvironmentVariableIsSet("KETPLUS_SIDEBAR_TRACE");
+    QElapsedTimer timer;
+    if (trace)
+        timer.start();
     if (selectedMachineId_ != QStringLiteral("local")) {
         // ADR 0119: the selected machine's lists, never This Mac's.
         activityBar_->setRepositories(machines_ != nullptr ? machines_->sidebarRepositories()
@@ -167,15 +174,15 @@ void MainWindow::refreshSidebarRepositories() {
         // A stable order: moving the open worktree first would reshuffle rows on every click.
         std::sort(paths.begin(), paths.end());
         for (const QString& path : std::as_const(paths)) {
+            // T-92: grouped by where it was created (`path`, the daemon's conversation_path,
+            // written once), not the worktree it runs in now: switching worktree or repository
+            // changes Source Control, Files and the composer's label, never the row's group.
+            // Resolved once per worktree: it touches the file system.
+            const QString repository = sidebarRepositoryForPath(path);
+            if (repository.isEmpty())
+                continue;
             for (const QVariant& value : agentManager_->conversations(path)) {
                 QVariantMap conversation = value.toMap();
-                // T-92: grouped by where it was created (`path`, the daemon's
-                // conversation_path, written once), not the worktree it runs in now: switching
-                // worktree or repository changes Source Control, Files and the composer's label,
-                // never the row's group.
-                const QString repository = sidebarRepositoryForPath(path);
-                if (repository.isEmpty())
-                    continue;
                 const bool selected = path == currentWorktree &&
                                       conversation.value(QStringLiteral("active")).toBool();
                 // Activating a worktree creates an untitled placeholder. Keep those hidden so
@@ -217,6 +224,15 @@ void MainWindow::refreshSidebarRepositories() {
                              .pinnable = true});
     activityBar_->setRepositories(repositories);
     updateTeamRoles();
+    if (trace) {
+        qsizetype conversations = 0;
+        for (const SidebarRepository& repository : std::as_const(repositories))
+            conversations += repository.conversations.size();
+        std::fprintf(
+            stderr, "KETPLUS_SIDEBAR_REFRESH ms=%.2f repositories=%lld conversations=%lld\n",
+            double(timer.nsecsElapsed()) / 1e6, static_cast<long long>(repositories.size()),
+            static_cast<long long>(conversations));
+    }
 }
 
 void MainWindow::openSidebarConversation(const QString& worktreePath,

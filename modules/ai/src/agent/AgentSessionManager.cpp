@@ -19,6 +19,7 @@
 #include <QUrl>
 #include <QUuid>
 
+#include <QTimer>
 #include <algorithm>
 #include <utility>
 
@@ -127,7 +128,13 @@ AgentSessionManager::AgentSessionManager(CodexAppServer* server, QObject* parent
                 }
             });
     connect(server_, &CodexAppServer::daemonSessionDiscovered, this,
-            &AgentSessionManager::handleDaemonSession);
+            [this](const QJsonObject& stored) {
+                if (!std::exchange(deferredFlushScheduled_, true))
+                    QTimer::singleShot(0, this, &AgentSessionManager::flushDeferredUpdates);
+                ++deferUpdates_;
+                handleDaemonSession(stored);
+                --deferUpdates_;
+            });
     connect(server_, &CodexAppServer::daemonSessionDeleted, this,
             [this](const QString& id, qint64 generation) {
                 deletedDaemonGenerations_[id] =
@@ -256,7 +263,13 @@ AgentSessionManager::AgentSessionManager(CodexAppServer* server, QObject* parent
         loadModels();
 }
 
-AgentSessionManager::~AgentSessionManager() = default;
+AgentSessionManager::~AgentSessionManager() {
+    if (!deferredWorkspaces_.isEmpty()) {
+        QSettings settings;
+        for (const QString& path : std::as_const(deferredWorkspaces_))
+            writeWorkspace(settings, path);
+    }
+}
 
 bool AgentSessionManager::isAvailable() const noexcept { return server_->isAvailable(); }
 
@@ -1350,6 +1363,10 @@ AgentSessionManager::SessionPtr AgentSessionManager::ensureSession(const QString
     if (found != sessions_.end()) {
         return found.value();
     }
+    if (deferredWorkspaces_.remove(path)) {
+        QSettings settings;
+        writeWorkspace(settings, path);
+    }
     const QVariantMap persisted = QSettings().value(persistedKey(path)).toMap();
     const QStringList deletedThreadIds =
         persisted.value(QStringLiteral("deletedThreadIds")).toStringList();
@@ -1655,7 +1672,7 @@ void AgentSessionManager::handleDaemonSession(const QJsonObject& stored) {
         session->historyLoaded = !session->historyLoading;
     }
     persistWorkspace(path);
-    emit conversationsChanged(path, conversations(path));
+    notifyConversationsChanged(path);
     if (isActiveSession(session)) {
         if (path == activePath_) {
             updateRestoreState(session);
@@ -1668,7 +1685,7 @@ void AgentSessionManager::handleDaemonSession(const QJsonObject& stored) {
         }
     }
     if (!wasRelevant || wasRunning != session->running) {
-        emit activityChanged();
+        notifyActivityChanged();
     }
 }
 

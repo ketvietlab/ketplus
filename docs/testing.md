@@ -536,6 +536,11 @@ the corresponding Atlas mock first.
   backlog probe asserts the delete command stays under 500 ms and each purge
   pass under 250 ms. `ketplus_daemon_cloud_privacy_tests` covers 413 retry, late
   202 and a fresh upload of a deleted generation's residual history.
+- Paged live catalog (ADR 0131): run `ketplus_provider_deletion_tests` (bounded,
+  complete, ordered pages over the frame limit; malformed requests) and
+  `ketplus_desktop_daemon_client_tests` (refresh and discovery read every page).
+  `ketplus_sidebar_scale_tests` covers building only the rows the sidebar shows.
+  `benchmarks/run-large-workspace.sh` measures the real app with a large install.
 - Live-only discovery (ADR 0092): run provider deletion, Desktop daemon client,
   Desktop session discovery, lifecycle and headless CLI targets. Real temporary
   daemons with fake providers cover 20k/100k retained tombstones and zero repeated

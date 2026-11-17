@@ -331,12 +331,13 @@ void ExplorerPanelTest::collapsesAndPreviewsRepositoryConversations() {
     ketplus::ActivityBar bar;
     bar.setRepositories({{QStringLiteral("/repo"), QStringLiteral("repo"), true, conversations},
                          {QStringLiteral("/other"), QStringLiteral("other"), false, {}}});
-    const auto rows =
-        bar.findChildren<QAbstractButton*>(QStringLiteral("productConversationButton"));
-    QCOMPARE(rows.size(), 7);
-    const auto visibleIds = [&rows, &bar] {
+    // Only the five previewed rows are built until "Show 2 more" adds the rest.
+    QCOMPARE(bar.findChildren<QAbstractButton*>(QStringLiteral("productConversationButton")).size(),
+             5);
+    const auto visibleIds = [&bar] {
         QSet<QString> ids;
-        for (auto* row : rows) {
+        for (auto* row :
+             bar.findChildren<QAbstractButton*>(QStringLiteral("productConversationButton"))) {
             if (row->isVisibleTo(&bar))
                 ids.insert(row->property("conversationId").toString());
         }

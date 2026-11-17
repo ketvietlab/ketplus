@@ -143,7 +143,7 @@ void AgentSessionManager::setConversationConfiguration(const QString& worktreePa
     rememberLastConversationConfiguration(
         session->model, session->effort, session->permission,
         session->options.value("provider").toString().trimmed().toLower());
-    emit conversationsChanged(session->path, conversations(session->path));
+    notifyConversationsChanged(session->path);
     emitConfiguration(session);
     emitUsageSnapshot(session);
     finish();
