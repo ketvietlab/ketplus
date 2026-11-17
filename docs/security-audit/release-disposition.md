@@ -1,5 +1,11 @@
 # Security audit disposition and publication plan
 
+> Historical snapshot: the findings and status below describe the original
+> report scope, not the latest remediation state. See the
+> [current remediation register](remediation-status.md) for reviewed merge evidence
+> and remaining gates. The [accepted report version](https://github.com/ketvietlab/ketplus/blob/90e5ca47dcd5931c0f8f0bcc42c28f960ce3d41d/docs/security-audit/release-disposition.md)
+> remains available unchanged; this annotation does not revise its conclusions.
+
 Plan date: 2026-11-16. Task: T-3. Status: proposed work and pending decisions;
 publication readiness is **not established** by this document.
 
