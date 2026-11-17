@@ -305,6 +305,12 @@ ketplus_add_daemon_test(ketplus_codex_items_tests CodexItemsTest.cpp)
 ketplus_add_daemon_test(ketplus_daemon_peer_transport_tests PeerTransportTest.cpp)
 target_sources(ketplus_daemon_peer_transport_tests PRIVATE cloud-privacy/MemoryCredentials.cpp)
 set_tests_properties(ketplus_daemon_peer_transport_tests PROPERTIES TIMEOUT 45)
+# ketplus_peer_link alone, without the session host: offerer against answerer over loopback.
+qt_add_executable(ketplus_peer_link_tests PeerLinkTest.cpp)
+ketplus_enable_warnings(ketplus_peer_link_tests)
+target_link_libraries(ketplus_peer_link_tests PRIVATE Qt6::Test ketplus_peer_link)
+add_test(NAME ketplus_peer_link_tests COMMAND ketplus_peer_link_tests)
+set_tests_properties(ketplus_peer_link_tests PROPERTIES TIMEOUT 90)
 
 ketplus_add_daemon_test(ketplus_async_question_lifetime_tests AsyncQuestionLifetimeTest.cpp)
 
