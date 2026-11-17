@@ -212,6 +212,8 @@ def main():
         except (OSError, ValueError, TypeError, AttributeError):
             diagnostics.closed(process.poll(), read_error=True)
         finally:
+            if attestation:
+                attestation.revoke_transport()
             diagnostics.closed(process.poll())
             auto_control.set()
 
@@ -349,11 +351,13 @@ def main():
         diagnostics.closed(process.poll())
         diagnostics.report("transport", "process_exit", status=process.poll())
         if attestation:
+            attestation.revoke_transport()
             # Allow asynchronous observer messages to drain after owned exit.
             time.sleep(.1)
             state = attestation.snapshot()
             record("injected_attestation_final", attested=state["attested"],
                    ready=state["ready"], revoked=state["revoked"],
+                   transport_closed=state["transport_closed"],
                    injected_workers=len(state["workers"]), inventory=state["inventory"],
                    rejected=state["rejected"], forbidden=state["forbidden"])
             for row in attestation.events:

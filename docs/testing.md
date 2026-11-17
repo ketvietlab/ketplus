@@ -966,6 +966,13 @@ native RPC failure. Outstanding requests get a diagnostic after 30 seconds
 Timeout observation does not retry, refund a reservation or fabricate a response;
 the adapter continues to own request completion/cancellation. These offline tests
 launch only fixture Python/Node processes, never a provider CLI or model.
+The observer also revokes readiness when its owned provider transport closes,
+even if Node cannot deliver a child's terminal callback during shutdown. This
+does not invent child lifecycle evidence or replace the independent PID closure
+check. The bounded Cursor target has an always-offline canonical-diagnostic
+classification test; only allowlisted adapter phase/reason enums escape it,
+never the original message or unknown completion status. It runs with the live
+opt-in unset and never launches a provider.
 Preparation starts no provider and executes no approval. Review its manifest,
 checksum and `REVIEW.txt` before seeking the user's approval for the exact
 native enable command. See the [proposal scope and revocation](decisions/0127-provider-origin-refresh-evidence.md#reviewable-cursor-discovery-approval-proposal).

@@ -86,8 +86,23 @@ class AttestationRegressionTest(unittest.TestCase):
         accept(observer, "initialize_sent", 7)
         self.assertFalse(observer.snapshot()["ready"])
 
+    def test_transport_loss_revokes_without_fabricating_child_exit_or_erasing_handshake(self):
+        for before_handshake in [True, False]:
+            with self.subTest(before_handshake=before_handshake):
+                observer = self.observer()
+                if before_handshake:
+                    observer.revoke_transport()
+                for sequence, event in enumerate(STAGES):
+                    accept(observer, event, sequence, valid=True)
+                observer.revoke_transport()
+                state = observer.snapshot()
+                self.assertTrue(state["attested"] and state["inventory"])
+                self.assertTrue(state["revoked"] and state["transport_closed"])
+                self.assertFalse(state["ready"])
+                self.assertFalse(any(row["event"] in TERMINAL for row in observer.events))
+
     def test_dead_injected_worker_blocks_prompt_without_reserving_or_forwarding(self):
-        for terminal in ["exit", "stdout_eof", "child_error"]:
+        for terminal in ["exit", "stdout_eof", "child_error", "provider_transport"]:
             for when in ["before_wait", "after_wait", "final_barrier"]:
                 with self.subTest(terminal=terminal, when=when):
                     self.dead_worker_barrier(terminal, when)
@@ -110,7 +125,10 @@ class AttestationRegressionTest(unittest.TestCase):
                 for sequence, event in enumerate(STAGES):
                     accept(observer, event, sequence, valid=True)
             if snapshots == {"before_wait": 1, "after_wait": 2, "final_barrier": 3}[when]:
-                accept(observer, terminal, 6)
+                if terminal == "provider_transport":
+                    observer.revoke_transport()
+                else:
+                    accept(observer, terminal, 6)
             return original_snapshot()
 
         with tempfile.TemporaryDirectory() as directory:

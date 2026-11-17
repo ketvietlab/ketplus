@@ -22,6 +22,7 @@ class Attestation:
         self.native_pid = None
         self.events = []
         self.rejected = 0
+        self.transport_closed = False
         self.lock = threading.Lock()
         self.socket = socket.socket(socket.AF_UNIX)
         self.socket.bind(str(self.root / "observer.sock"))
@@ -87,10 +88,17 @@ class Attestation:
                     with self.lock:
                         self.rejected += 1
 
+    def revoke_transport(self):
+        # The owned provider channel can close before Node delivers child
+        # lifecycle callbacks. This is transport loss, not an invented child exit.
+        with self.lock:
+            self.transport_closed = True
+
     def snapshot(self):
         with self.lock:
             observed = list(self.events)
             rejected = self.rejected
+            transport_closed = self.transport_closed
         direct = [row for row in observed if row.get("observerPid") == self.native_pid and
                   row.get("role") == "index.js" and row.get("mainThread") is True and
                   row.get("injected") is True]
@@ -121,9 +129,10 @@ class Attestation:
         # A terminal observation is sticky, including when its delivery races
         # older handshake records. Project/other-child exits do not revoke this
         # exact injected worker. Historical evidence remains available to audit.
-        revoked = any(row.get("childPid") in workers and row.get("event") in terminal
-                      for row in direct)
+        revoked = transport_closed or any(row.get("childPid") in workers and row.get("event") in terminal
+                                         for row in direct)
         return dict(attested=valid, ready=valid and not revoked, revoked=revoked,
+                    transport_closed=transport_closed,
                     inventory=bool(valid and workers <= inventory),
                     workers=workers, all_workers={row["childPid"] for row in observed
                                                  if row.get("event") == "spawn"},

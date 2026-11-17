@@ -87,11 +87,49 @@ QJsonObject call(CursorAdapter& adapter, const QJsonObject& params) {
         QTest::qWait(10);
     return *done ? *result : QJsonObject{{"probe_error", "Request timed out; do not retry."}};
 }
+QJsonObject canonicalDiagnostic(const QString& type, const QJsonObject& payload) {
+    if (type == "runtime.error") {
+        const auto message = payload.value("message").toString();
+        const auto reason = CursorAdapter::looksLikeUsageLimit(message)  ? "usage_limit_pattern"
+                            : CursorAdapter::looksLikePlanLimit(message) ? "plan_limit_pattern"
+                                                                         : "unclassified_error";
+        return {{"phase", "adapter_runtime"}, {"reason", reason}};
+    }
+    if (type == "turn.completed") {
+        const auto status = payload.value("status").toString();
+        const auto reason = status == "completed"     ? "completed"
+                            : status == "failed"      ? "failed"
+                            : status == "interrupted" ? "interrupted"
+                                                      : "unknown_status";
+        return {{"phase", "adapter_turn"}, {"reason", reason}};
+    }
+    return {};
+}
 } // namespace
 
 class CursorBoundedRefreshTest final : public QObject {
     Q_OBJECT
   private slots:
+    void canonicalDiagnosticsRetainOnlyAllowlistedMetadata() {
+        const QList<QPair<QString, QString>> cases{
+            {"private-token: upgrade your plan; synthetic-transcript", "plan_limit_pattern"},
+            {"private-token: Your team has reached its usage limit; upgrade your plan",
+             "usage_limit_pattern"},
+            {"private-token synthetic-transcript", "unclassified_error"}};
+        for (const auto& [message, expected] : cases) {
+            const auto diagnostic = canonicalDiagnostic(
+                "runtime.error", {{"message", message}, {"extra", "private-token"}});
+            QCOMPARE(diagnostic, (QJsonObject{{"phase", "adapter_runtime"}, {"reason", expected}}));
+            QVERIFY(!QJsonDocument(diagnostic).toJson().contains("private-token"));
+        }
+        for (const auto* status : {"completed", "failed", "interrupted"})
+            QCOMPARE(canonicalDiagnostic("turn.completed", {{"status", status}}),
+                     (QJsonObject{{"phase", "adapter_turn"}, {"reason", status}}));
+        QCOMPARE(canonicalDiagnostic("turn.completed", {{"status", "private-token"}}),
+                 (QJsonObject{{"phase", "adapter_turn"}, {"reason", "unknown_status"}}));
+        QVERIFY(canonicalDiagnostic("item.completed", {{"text", "private-token"}}).isEmpty());
+    }
+
     void realHistoryAndMcpReplacementWithoutRecall() {
         const auto mode = qEnvironmentVariable("KETPLUS_CURSOR_BOUNDED_REFRESH");
         if (mode != "D-3" && mode != "D-7" && mode != "control")
@@ -177,6 +215,10 @@ class CursorBoundedRefreshTest final : public QObject {
         bool failed = false;
         connect(&adapter, &ProviderAdapter::canonicalEvent, &adapter,
                 [&](const QString&, const QString& type, const QJsonObject& payload) {
+                    const auto diagnostic = canonicalDiagnostic(type, payload);
+                    if (!diagnostic.isEmpty())
+                        qInfo("Adapter diagnostic: %s",
+                              QJsonDocument(diagnostic).toJson(QJsonDocument::Compact).constData());
                     if (type == "turn.completed") {
                         ++completed;
                         failed |= payload.value("status") == "failed";

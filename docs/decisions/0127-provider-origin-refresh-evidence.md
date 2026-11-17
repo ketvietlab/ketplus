@@ -820,3 +820,61 @@ prompt. No automatic model fallback is permitted.
 The focused Cursor test target rebuild succeeds (existing unrelated compiler
 warnings remain); its default opt-in body passes/skips before any provider
 launch (0.86 s). Changed C++ formatting, Python AST and diff checks pass.
+
+The actual-adapter no-model control at
+`cb8d4de09bd4552084f4dd6075cbcb8a0a8ecc2a` **passes in 12.612 s**:
+initialize/new, explicit native Haiku ACK and exact injected-worker readiness
+succeed. No native prompt is forwarded and D-7 remains unused at that barrier.
+All recorded owned processes exit before the separate live invocation.
+
+The sole additional text-only prompt is then reserved and forwarded once at
+that same head. The native ACP response has **no RPC error**, reports
+`stopReason: end_turn`, and the injected instance supplies its approved
+inventory lazily. Nevertheless the adapter test **fails in 14.114 s** because
+its canonical event path sets the failure flag. No native permission request,
+tool-call observation, rejected observer event or second transport occurs.
+The first failure prevents entry into the same-ID load/refresh phase. All
+recorded owned PIDs are confirmed gone. Native response success does not
+establish completed assistant history or successful backend inference.
+
+The native RPC diagnostics now distinguish this from RPC rejection, EOF or
+timeout. They do not retain the original canonical `runtime.error` payload or
+assistant text. The existing adapter can classify assistant plan/usage text as
+failure even after an `end_turn` response; process/protocol failure is another
+failure path. These source paths are **candidates, not proof** of the observed
+cause. No plan, usage, auth, model mapping, LSP or earlier F1/F2 cause is assigned
+from the available data. The isolated data directory contains scoped project
+metadata, approvals and worker logs, not completed-history proof. No personal
+transcript is read to fill that gap.
+
+This run also exposes a postmortem observer limitation: when the owned provider
+is terminated during cleanup, its Node child terminal callbacks may not reach
+the observer. The pre-fix final snapshot retained `ready: true` although the
+owned PIDs had exited. That historical artifact is preserved unchanged. The
+subsequent **offline** correction explicitly revokes readiness on provider
+channel EOF/error and owned exit, without fabricating a child-exit observation.
+Regressions prove the historical handshake/inventory survive, readiness cannot
+resurrect, and provider-transport loss before the prompt barrier neither reserves
+nor forwards. No native rerun validates this correction yet.
+
+The test additionally gains passive canonical diagnostics that log only
+allowlisted adapter phase/reason enums (including plan/usage pattern observations
+and known completion states). A quota-free C++ fixture verifies no raw message,
+unknown status, identifier or transcript field escapes classification. This
+cannot recover the D-7 canonical payload retrospectively and does not identify
+its cause. It requires no further provider call.
+
+**D-3 remains 3/3 consumed and byte-for-byte unchanged; the separate D-7 Cursor
+allowance is 1/1 consumed.** Neither ledger may be reset, retried or refunded.
+No recall, second native prompt, load retry, auth/default-config/approval change,
+fallback model or production mutation enable occurs. Cursor remains **DENY**;
+completed-history/same-ID refresh and the actual failure cause remain blocked.
+
+Post-run offline verification passes **10/10** attestation/diagnostic methods
+(13.688 s), including provider-transport loss at each barrier checkpoint, and
+**8/8** proposal/budget methods (3.416 s). The focused Cursor target rebuilds;
+default CTest passes the always-offline canonical classifier and skips native
+validation before launch (one CTest target, 0.56 s). C++ formatting, Python AST
+and diff checks pass. Final cleanup independently confirms all four recorded
+D-7 PIDs gone and zero observer temporary directories. These offline checks
+do not rerun or upgrade the failed native D-7 result.
