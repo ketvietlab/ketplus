@@ -199,6 +199,15 @@ void ManagedTaskRuntime::start(const BackgroundTaskIntent& intent, const QJsonOb
         done(retry);
         return;
     }
+    // A job that runs on a runner needs no executor or containment on this machine.
+    if (intent.runsOn) {
+        if (!permission_)
+            done(failure("permission_unavailable",
+                         "The background permission broker is unavailable."));
+        else
+            done(accept(intent, execution));
+        return;
+    }
     if (intent.kind == "process") {
 #if !defined(Q_OS_MACOS) && !defined(Q_OS_LINUX)
         done(failure("containment_unavailable", "A verified process executor is required."));
@@ -242,6 +251,8 @@ QJsonObject ManagedTaskRuntime::accept(const BackgroundTaskIntent& intent,
     if (intent.kind == "process")
         acceptedIntent.containmentMode = "cgroup_v2";
 #endif
+    if (intent.runsOn)
+        acceptedIntent.containmentMode = "remote"; // nothing of it runs on this machine
     const auto reply = ledger_.create(acceptedIntent);
     if (!reply.value("ok").toBool() || reply.value("reused").toBool())
         return reply;
