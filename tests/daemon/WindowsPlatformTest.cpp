@@ -3,9 +3,12 @@
 #include "OwnerOnlyAccess.h"
 #include "platform/ProcessTree.h"
 
+#include <QLocalServer>
+#include <QLocalSocket>
 #include <QProcess>
 #include <QScopeGuard>
 #include <QTemporaryDir>
+#include <QUuid>
 #include <QtTest>
 
 #if defined(Q_OS_WIN)
@@ -71,6 +74,25 @@ class WindowsPlatformTest final : public QObject {
         QCOMPARE(int(childAcl->AceCount), 1);
 #else
         QSKIP("Windows access lists only.");
+#endif
+    }
+
+    void aPipeServedByThisUserPassesTheServerCheck() {
+#if defined(Q_OS_WIN)
+        QLocalServer server;
+        const QString name = QStringLiteral("kp-sid-") + QUuid::createUuid().toString(QUuid::Id128);
+        server.setSocketOptions(QLocalServer::UserAccessOption);
+        QVERIFY(server.listen(name));
+        QLocalSocket socket;
+        QString error;
+        // Not connected yet: nothing to inspect, so the check must refuse.
+        QVERIFY(!remote::serverRunsAsCurrentUser(&socket, &error));
+        QVERIFY(!error.isEmpty());
+        socket.connectToServer(name);
+        QVERIFY(socket.waitForConnected(5000));
+        QVERIFY2(remote::serverRunsAsCurrentUser(&socket, &error), qPrintable(error));
+#else
+        QSKIP("Windows named pipes only.");
 #endif
     }
 

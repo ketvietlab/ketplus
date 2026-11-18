@@ -130,7 +130,11 @@ add_subdirectory(modules/computer)
 add_subdirectory(modules/remote)
 add_subdirectory(modules/runner)
 add_subdirectory(apps/daemon)
-add_subdirectory(apps/runner)
+# Runners are Linux nodes (POSIX state directory and process control); nothing of apps/runner is
+# built, installed or tested on Windows.
+if(NOT WIN32)
+    add_subdirectory(apps/runner)
+endif()
 
 if(KETPLUS_BUILD_DESKTOP)
     set(KETQT_BUILD_QUICK ON CACHE BOOL "Build Két QML components for Pro" FORCE)
@@ -192,7 +196,9 @@ if(KETPLUS_BUILD_TESTS)
     else()
         add_subdirectory(tests/daemon)
     endif()
-    add_subdirectory(tests/runner)
+    if(NOT WIN32)
+        add_subdirectory(tests/runner)
+    endif()
 endif()
 
 if(NOT APPLE OR NOT KETPLUS_BUILD_DESKTOP)

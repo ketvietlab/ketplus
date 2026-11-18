@@ -1,9 +1,10 @@
 #include "providers/WindowsScriptLaunch.h"
 
+#include "ToolLocations.h"
+
 #include <QDir>
 #include <QFileInfo>
 #include <QRegularExpression>
-#include <QStandardPaths>
 
 namespace ketplus::daemon {
 namespace {
@@ -18,30 +19,6 @@ bool unsafeForCmd(const QString& text) {
 QString quoted(const QString& text) {
     static const QRegularExpression plain(QStringLiteral("^[A-Za-z0-9_.:=/\\\\,+@-]+$"));
     return plain.match(text).hasMatch() ? text : QStringLiteral("\"%1\"").arg(text);
-}
-
-// npm's `codex.cmd` only starts node on `node_modules/@openai/codex/bin/codex.js` next to it.
-// Starting node on that script ourselves keeps every argument out of cmd.exe's parser.
-// Empty when this is not that shim or node cannot be found; the caller then uses cmd.exe.
-QString nodeForNpmShim(const QString& executable, QString* script) {
-    const QFileInfo shim(executable);
-    if (shim.completeBaseName().compare(QStringLiteral("codex"), Qt::CaseInsensitive) != 0)
-        return {};
-    const QString entry =
-        shim.absoluteDir().filePath(QStringLiteral("node_modules/@openai/codex/bin/codex.js"));
-    if (!QFileInfo(entry).isFile())
-        return {};
-    QStringList candidates{shim.absoluteDir().filePath(QStringLiteral("node.exe")),
-                           QStandardPaths::findExecutable(QStringLiteral("node"))};
-    const QString programFiles = qEnvironmentVariable("ProgramFiles");
-    if (!programFiles.isEmpty())
-        candidates.append(QDir(programFiles).filePath(QStringLiteral("nodejs/node.exe")));
-    for (const QString& candidate : candidates)
-        if (!candidate.isEmpty() && QFileInfo(candidate).isFile()) {
-            *script = entry;
-            return candidate;
-        }
-    return {};
 }
 
 QString windowsPath(QString path) {
@@ -80,11 +57,20 @@ ScriptLaunch scriptLaunch(const QString& executable, const QStringList& argument
                     arguments,
                 {},
                 {}};
-    if (command) {
-        QString entry;
-        const QString node = nodeForNpmShim(executable, &entry);
-        if (!node.isEmpty())
-            return {node, QStringList{windowsPath(entry)} + arguments, {}, {}};
+    if (command && QFileInfo(executable)
+                           .completeBaseName()
+                           .compare(QStringLiteral("codex"), Qt::CaseInsensitive) == 0) {
+        // npm's shim only starts node on the package's script: start that directly, so no
+        // argument reaches cmd.exe's parser (the shared rule in modules/tools). There is no
+        // fallback to the shim; it is refused when node.exe or the script cannot be found.
+        const auto npm = tool_locations::npmCliCommand(executable, QStringLiteral("@openai/codex"),
+                                                       QStringLiteral("codex"));
+        if (!npm)
+            return refused(QStringLiteral(
+                "Codex's npm command wrapper cannot be started safely because node.exe or the "
+                "package's script was not found next to it. Point the provider at codex.exe or "
+                "reinstall @openai/codex."));
+        return {npm->program, npm->leadingArguments + arguments, {}, {}};
     }
     if (unsafeForCmd(nativePath))
         return refused(QStringLiteral("A Windows command-wrapper path cannot contain percent or "

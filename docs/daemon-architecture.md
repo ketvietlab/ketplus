@@ -785,6 +785,12 @@ differs from macOS/Linux:
   makes Qt create the pipe with a security descriptor that admits only the current user. The
   bearer credential in `local.token` is still required in `daemon.hello`; the pipe ACL is
   an additional boundary, not a replacement. `--socket` may still name another pipe.
+  The pipe namespace is machine-wide and the name is predictable, so another account could create
+  the pipe first and wait for a client to send it the credential. The ACL only protects the
+  server's side. Before sending any credential, a client (`DaemonClient`, and the agent MCP
+  server's connection) therefore calls `remote::serverRunsAsCurrentUser`: it asks the pipe for its
+  server process (`GetNamedPipeServerProcessId`), opens that process's token and compares its user
+  SID with its own; a different or unreadable user closes the connection unsent.
 - **State and credential files.** Data lives under `%LOCALAPPDATA%\Ketsuite\KetPlus`
   (`QStandardPaths::GenericDataLocation`). Mode bits and `umask` do not exist, so
   `DaemonService::start()` replaces the DACL of the state and token directories with one
@@ -806,12 +812,13 @@ differs from macOS/Linux:
   orphaned. A grandchild spawned between `CreateProcess` and the job assignment escapes the
   private job, but not the daemon-wide one.
 - **Provider launch.** `.cmd`/`.bat` wrappers must apply `nativeArguments` (see
-  [development](development.md)); the Copilot and Cursor adapters do. Codex goes through
-  `providers/WindowsScriptLaunch`: npm's `codex.cmd` is replaced by `node` on its
-  `node_modules/@openai/codex/bin/codex.js` (node found beside the shim, on `PATH`, then under
-  `%ProgramFiles%\\nodejs`), which keeps every argument out of cmd.exe's parser; otherwise
-  `cmd.exe /d /v:off /s /c` with `nativeArguments`, and arguments containing quotes, percent
-  signs or newlines are refused rather than mis-parsed.
+  [development](development.md)); the Copilot and Cursor adapters do. Codex and Cursor go through
+  `providers/WindowsScriptLaunch`: npm's `codex.cmd` is never run by cmd.exe; it is replaced by
+  `node.exe` on the package script (`tool_locations::npmCliCommand`, `modules/tools`), and is
+  refused when either is missing. Any other `.cmd`/`.bat` runs as `cmd.exe /d /v:off /s /c` with
+  `nativeArguments`, and a path or argument containing quotes, percent signs or newlines is
+  refused, not run. Cursor model ids, which reach that command line, must also match
+  `[A-Za-z0-9][A-Za-z0-9._:/@+-]*`; the launch check reports a refusal as the provider error.
 - **Not available.** Managed background process jobs (`ketplus_job_executor`, cgroup/process
   group supervision) are POSIX-only. On Windows `ManagedTaskRuntime` refuses a `process` task with
   `containment_unavailable`; `NativeJobUnsupported.cpp` only lets the daemon link.

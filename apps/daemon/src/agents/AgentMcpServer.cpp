@@ -1,4 +1,5 @@
 #include "agents/AgentMcpServer.h"
+#include "OwnerOnlyAccess.h"
 #include "agents/AgentMutationOrigin.h"
 
 #include "agents/AgentBackgroundTools.h"
@@ -269,6 +270,11 @@ class DaemonConnection final {
         socket_.connectToServer(socketName_);
         if (!socket_.waitForConnected(daemonTimeoutMs)) {
             lastError_ = socket_.errorString();
+            return false;
+        }
+        // The agent token is a credential: do not hand it to a pipe another user created.
+        if (!remote::serverRunsAsCurrentUser(&socket_, &lastError_)) {
+            socket_.abort();
             return false;
         }
         QJsonObject hello;

@@ -29,25 +29,32 @@ class WindowsScriptLaunchTest final : public QObject {
 
     void cmdShimGoesThroughCmdWithNativeArguments() {
         const auto launch =
-            scriptLaunch(QStringLiteral("C:/Program Files/nodejs/codex.cmd"),
+            scriptLaunch(QStringLiteral("C:/Program Files/nodejs/agent.cmd"),
                          {QStringLiteral("app-server"), QStringLiteral("a b")}, true, root);
         QVERIFY2(launch.error.isEmpty(), qPrintable(launch.error));
         QCOMPARE(launch.program, QStringLiteral("C:/Windows/System32/cmd.exe"));
         QCOMPARE(launch.arguments, (QStringList{QStringLiteral("/d"), QStringLiteral("/v:off"),
                                                 QStringLiteral("/s"), QStringLiteral("/c")}));
         QCOMPARE(launch.nativeArguments,
-                 QStringLiteral("\"\"C:\\Program Files\\nodejs\\codex.cmd\" app-server \"a b\"\""));
+                 QStringLiteral("\"\"C:\\Program Files\\nodejs\\agent.cmd\" app-server \"a b\"\""));
+    }
+
+    static void writeFile(const QString& path, const QByteArray& bytes = {}) {
+        QVERIFY(QDir().mkpath(QFileInfo(path).absolutePath()));
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        file.write(bytes);
     }
 
     void npmCodexShimRunsNodeOnItsEntryPointWithoutCmd() {
         QTemporaryDir dir;
         QVERIFY(dir.isValid());
-        QVERIFY(QDir(dir.path()).mkpath(QStringLiteral("node_modules/@openai/codex/bin")));
-        for (const QString& name : {QStringLiteral("codex.cmd"), QStringLiteral("node.exe"),
-                                    QStringLiteral("node_modules/@openai/codex/bin/codex.js")}) {
-            QFile file(dir.filePath(name));
-            QVERIFY(file.open(QIODevice::WriteOnly));
-        }
+        const QString package = dir.filePath(QStringLiteral("node_modules/@openai/codex"));
+        writeFile(dir.filePath(QStringLiteral("codex.cmd")));
+        writeFile(dir.filePath(QStringLiteral("node.exe")));
+        writeFile(package + QStringLiteral("/package.json"),
+                  R"({"name":"@openai/codex","bin":{"codex":"bin/codex.js"}})");
+        writeFile(package + QStringLiteral("/bin/codex.js"));
         const auto launch =
             scriptLaunch(dir.filePath(QStringLiteral("codex.cmd")),
                          {QStringLiteral("-c"), QStringLiteral("a=\"b\"")}, true, root);
@@ -60,6 +67,17 @@ class WindowsScriptLaunchTest final : public QObject {
                  (QStringList{QStringLiteral("-c"), QStringLiteral("a=\"b\"")}));
     }
 
+    void npmCodexShimWithoutNodeOrScriptIsRefusedNotRunThroughCmd() {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        writeFile(dir.filePath(QStringLiteral("codex.cmd")));
+        const auto launch = scriptLaunch(dir.filePath(QStringLiteral("codex.cmd")),
+                                         {QStringLiteral("x")}, true, root);
+        QVERIFY(!launch.error.isEmpty());
+        QVERIFY(launch.program.isEmpty());
+        QVERIFY(launch.nativeArguments.isEmpty());
+    }
+
     void cmdShimRefusesArgumentsItCannotQuote_data() {
         QTest::addColumn<QString>("argument");
         QTest::newRow("quote") << QStringLiteral("x=\"y\"");
@@ -69,19 +87,19 @@ class WindowsScriptLaunchTest final : public QObject {
 
     void cmdShimRefusesArgumentsItCannotQuote() {
         QFETCH(QString, argument);
-        const auto launch = scriptLaunch(QStringLiteral("C:/n/codex.cmd"), {argument}, true, root);
+        const auto launch = scriptLaunch(QStringLiteral("C:/n/agent.cmd"), {argument}, true, root);
         QVERIFY(!launch.error.isEmpty());
         QVERIFY(launch.program.isEmpty());
     }
 
     void cmdShimRefusesAPathItCannotQuote() {
-        const auto launch = scriptLaunch(QStringLiteral("C:/100%/codex.cmd"), {}, true, root);
+        const auto launch = scriptLaunch(QStringLiteral("C:/100%/agent.cmd"), {}, true, root);
         QVERIFY(!launch.error.isEmpty());
     }
 
     void relativeSystemRootIsRefused() {
         const auto launch =
-            scriptLaunch(QStringLiteral("C:/n/codex.cmd"), {}, true, QStringLiteral("rel"));
+            scriptLaunch(QStringLiteral("C:/n/agent.cmd"), {}, true, QStringLiteral("rel"));
         QVERIFY(!launch.error.isEmpty());
     }
 

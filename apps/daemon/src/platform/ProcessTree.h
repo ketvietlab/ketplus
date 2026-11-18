@@ -12,7 +12,7 @@ namespace ketplus::daemon {
 // Tie `process` to a private job. Call once, right after construction; the process is
 // assigned to the job as soon as it starts, and the remaining members are ended when the root
 // exits. The window between CreateProcess and assignment is not covered: a grandchild spawned
-// in those first microseconds escapes (documented in docs/architecture.md).
+// in those first microseconds escapes (documented in docs/daemon-architecture.md).
 void attachProcessTree(QProcess* process);
 
 // Ends `process` and, on Windows, everything started inside its job.

@@ -1,5 +1,6 @@
 #include "providers/CursorAdapter.h"
 #include "platform/ProcessTree.h"
+#include "providers/WindowsScriptLaunch.h"
 #include "providers/compat/ProviderVersionProbe.h"
 #include <QDate>
 #include <QDateTime>
@@ -23,6 +24,14 @@ QString pinnedSpawnModel(const QString& model) {
         trimmed == QStringLiteral("default") || trimmed == QStringLiteral("auto-smart"))
         return {};
     return trimmed;
+}
+
+// Model ids reach a command line (and, for a `.cmd` wrapper, cmd.exe): only the characters
+// Cursor's own ids use are accepted.
+bool safeModelId(const QString& model) {
+    static const QRegularExpression expression(
+        QStringLiteral("^[A-Za-z0-9][A-Za-z0-9._:/@+-]{0,127}$"));
+    return expression.match(model).hasMatch();
 }
 
 QString assistantRefusalText(const QString& text) {
@@ -70,36 +79,12 @@ bool isPlanLimitPrefix(const QString& text) {
     });
 }
 
+// Script wrappers (`.cmd`, `.bat`, `.ps1`) are launched, and their arguments quoted or refused,
+// by scriptLaunch(); an unsafe command surfaces as `error` before anything starts.
 CursorAdapter::ProcessInvocation wrapExecutable(const QString& executable,
                                                 const QStringList& arguments) {
-#if defined(Q_OS_WIN)
-    const QString suffix = QFileInfo(executable).suffix().toLower();
-    if (suffix == QStringLiteral("cmd") || suffix == QStringLiteral("bat")) {
-        // Percent expansion happens even inside quotes, so such a path cannot be quoted safely:
-        // launch it directly and let the launch fail visibly instead of running another path.
-        const QString nativePath = QDir::toNativeSeparators(executable);
-        if (nativePath.contains(QLatin1Char('%')) || nativePath.contains(QLatin1Char('"')))
-            return {executable, arguments, {}};
-        QStringList quoted;
-        for (const QString& argument : arguments)
-            quoted.append(
-                argument.contains(QRegularExpression(QStringLiteral("[^A-Za-z0-9_.:=/-]")))
-                    ? QStringLiteral("\"%1\"").arg(argument)
-                    : argument);
-        return {QStringLiteral("cmd.exe"),
-                {QStringLiteral("/d"), QStringLiteral("/v:off"), QStringLiteral("/s"),
-                 QStringLiteral("/c")},
-                QStringLiteral("\"\"%1\" %2\"").arg(nativePath, quoted.join(QLatin1Char(' ')))};
-    }
-    if (suffix == QStringLiteral("ps1")) {
-        QStringList wrapped{QStringLiteral("-NoProfile"), QStringLiteral("-ExecutionPolicy"),
-                            QStringLiteral("Bypass"), QStringLiteral("-File"),
-                            QDir::toNativeSeparators(executable)};
-        wrapped.append(arguments);
-        return {QStringLiteral("powershell.exe"), wrapped, {}};
-    }
-#endif
-    return {executable, arguments, {}};
+    const ScriptLaunch launch = scriptLaunchForHost(executable, arguments);
+    return {launch.program, launch.arguments, launch.nativeArguments, launch.error};
 }
 
 bool looksRunnable(const QFileInfo& info) {
@@ -270,6 +255,12 @@ CursorAdapter::ProcessInvocation CursorAdapter::processInvocation(const QString&
                                                                   const QString& model) {
     QStringList arguments;
     const QString pinned = pinnedSpawnModel(model);
+    if (!pinned.isEmpty() && !safeModelId(pinned))
+        return {{},
+                {},
+                {},
+                QStringLiteral("The Cursor model id contains characters that cannot be passed to "
+                               "the CLI safely.")};
     if (!pinned.isEmpty())
         arguments << QStringLiteral("--model") << pinned;
     arguments << QStringLiteral("acp");
@@ -446,6 +437,14 @@ QString CursorAdapter::findExecutable() {
 }
 
 void CursorAdapter::checkLaunch(std::function<void(const QString&)> done) {
+    // The command that would start must be one that can be passed safely (an unsafe model id, or
+    // a `.cmd` wrapper whose arguments cmd.exe would reinterpret, is refused here, not run).
+    const ProcessInvocation invocation = processInvocation(executable_.path(), pendingSpawnModel_);
+    if (!invocation.error.isEmpty()) {
+        pendingSpawnModel_.clear();
+        done(invocation.error);
+        return;
+    }
     versionProbe_->check(executable_.path(),
                          [done = std::move(done)](const compat::Runtime& runtime) {
                              done(runtime.blocksLaunch() ? runtime.message : QString{});

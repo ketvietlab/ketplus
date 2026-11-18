@@ -92,6 +92,8 @@ class CursorAdapter final : public AcpAdapter {
         // Windows cmd.exe command line; apply with QProcess::setNativeArguments (Qt's normal
         // quoting does not follow cmd.exe's parsing). Empty for every other launch.
         QString nativeArguments{};
+        // Set when the command cannot be passed safely; the launch is refused, not attempted.
+        QString error{};
     };
     // .cmd/.bat go through cmd.exe; .ps1 through powershell. Unix is the file plus `acp`.
     // A non-empty model becomes `agent --model <id> acp` (Cursor's supported ACP pin).

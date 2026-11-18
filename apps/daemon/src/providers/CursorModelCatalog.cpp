@@ -262,6 +262,12 @@ void CursorAdapter::startCatalogProcess() {
     environment.insert(QStringLiteral("TERM"), QStringLiteral("dumb"));
     process->setProcessEnvironment(environment);
     const ProcessInvocation invocation = listModelsInvocation(executable_.path());
+    if (!invocation.error.isEmpty()) {
+        catalogProcess_ = nullptr;
+        process->deleteLater();
+        finishCatalog(modelCatalog());
+        return;
+    }
     process->setProgram(invocation.program);
     process->setArguments(invocation.arguments);
 #if defined(Q_OS_WIN)

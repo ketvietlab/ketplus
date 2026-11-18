@@ -1900,7 +1900,8 @@ run on Windows (MSVC) with the toolchain from `tools/windows` (see
 [development](development.md)). Windows-specific coverage: `ketplus_windows_platform_tests`
 (owner-only access list on a directory and its children; killing a provider ends its helper
 processes through the Job Object), `ketplus_windows_script_launch_tests` (`cmd.exe` with
-`nativeArguments`, npm shim to `node`), and `HeadlessDaemonTest::windowsPipe...` (daemon and
+`nativeArguments`, npm shim to `node`), `ketplus_cursor_invocation_tests` (Cursor launch and model
+id checks), a pipe-server user check in `ketplus_windows_platform_tests`, and `HeadlessDaemonTest::windowsPipe...` (daemon and
 `ketplusctl` over the named pipe, a wrong credential refused, clean exit on `CTRL_BREAK`).
 
 Disabled on Windows (built, label `windows-script-fixture`), because their provider fixtures are

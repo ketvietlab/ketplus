@@ -421,16 +421,15 @@ std::optional<QJsonObject> exportConversations(const QString& databasePath,
         }
         events.finish();
         file.write("]}\n");
-#if defined(Q_OS_WIN)
-        // The folder's access list, applied above, is inherited; ownerOnly() below confirms it.
-        if (false) {
-#else
+#if !defined(Q_OS_WIN)
+        // Mode bits before the file is moved into place. On Windows the folder's access list
+        // (applied above) is inherited by the new file, and ownerOnly() below confirms it.
         if (!file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner)) {
-#endif
             file.cancelWriting();
             *error = QStringLiteral("Could not make %1 private to you.").arg(path);
             return std::nullopt;
         }
+#endif
         if (!file.commit()) {
             *error = file.errorString();
             return std::nullopt;
