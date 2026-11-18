@@ -87,6 +87,13 @@ class ManagedTaskIpcTest final : public QObject {
         QTRY_COMPARE(unauthenticated.socket.state(), QLocalSocket::ConnectedState);
         const auto denied = unauthenticated.call(request("session.task.list", {}, "owner"));
         QCOMPARE(denied.value("error_code"), "authentication_required");
+        // The server closes a connection after an unauthenticated request.
+        Client unauthenticatedStart;
+        unauthenticatedStart.socket.connectToServer(server.fullServerName());
+        QTRY_COMPARE(unauthenticatedStart.socket.state(), QLocalSocket::ConnectedState);
+        QCOMPARE(unauthenticatedStart.call(request("session.task.start", {}, "owner"))
+                     .value("error_code"),
+                 "authentication_required");
 
         Client agent;
         agent.socket.connectToServer(server.fullServerName());
@@ -95,6 +102,9 @@ class ManagedTaskIpcTest final : public QObject {
                     .value("ok")
                     .toBool());
         auto ledger = journal.backgroundTasks();
+        QCOMPARE(agent.call(request("session.task.start", {}, "other")).value("error_code"),
+                 "stale_origin");
+        QVERIFY(ledger.list({"owner", 1, {}}).value("tasks").toArray().isEmpty());
         QString last;
         for (int index = 0; index < 20; ++index) {
             BackgroundTaskIntent intent{{"owner", 1, "turn"},

@@ -1258,13 +1258,237 @@ cmake --build build/daemon-dev --target ketplus_managed_task_host_tests ketplus_
 ctest --test-dir build/daemon-dev -R 'ketplus_managed_task_(host|ipc)_tests' --output-on-failure
 ```
 
-These tests do not verify the shared UI, SDK native-background blocking or a
+The Pro `ketplus_managed_background_e2e_tests` fixture connects the real local IPC
+server and registry to the Desktop client and `AgentSessionManager`. A test-owned
+native process completes through FakeCodex, and the fixture checks the Desktop
+task state/output, durable owner wake, retry/deduplication, conversation switching
+and offline mutation refusal. It starts no installed daemon or live provider.
+On Linux this fixture requires `KETPLUS_RUN_LINUX_JOB_TESTS=1` in the exclusively
+owned delegated guest. The native QML task-bar states and controls remain covered
+separately by `ketplus_agent_tests`; protocol-peer paging and stale-response tests
+remain in `ketplus_background_task_transport_tests`.
+
+Additional portable background-task builds and tests run over SSH in a task-owned
+Linux workspace. Git and source edits stay on the Mac. Export tracked working-tree
+source on the Mac (stage new source files there first), mirror that export with a
+named one-way Mutagen session, and exclude Git metadata, builds, caches, local
+authentication state and evidence. Keep remote build outputs and evidence outside
+the source mirror. Flush synchronization and compare the complete file/mode/SHA256
+manifest before testing; record the Mac commit and any uncommitted source hashes.
+Do not edit source or perform Git writes on Linux, and do not rerun passed checks
+merely to move them to the new host.
+
+The native macOS identity/audit-token executor checks and macOS renderer-specific
+Mermaid responsiveness classification require the Mac. Model-only Desktop,
+Discovery and Attention checks are portable, as are runtime, storage, IPC and fake
+provider checks. Select a Qt 6.11 toolchain explicitly on Linux; desktop/model
+targets also require its WebView module. Missing toolchain components are a setup
+blocker, not a reason to move portable work back to the Mac. Dependency preparation
+must respect the same source-sync and no-remote-Git-write boundary.
+
+The Host/IPC fixtures alone do not verify the shared UI, SDK native-background blocking or a
 signed deployment bundle. On Linux, process tests require a non-root user with
 a working systemd user manager, delegated cgroup v2/`nsdelegate`, `cgroup.kill`,
 and permission to create isolated user/mount/PID/cgroup namespaces. Missing
 capabilities reject start with `containment_unavailable`; do not lower host
 policy to make the suite pass. A read-only cgroup mount alone, PGID cleanup or
 same-UID delegation is not migration-containment evidence.
+
+The owner-Stop and concurrent-fork timeout cases retain bounded state/timing
+diagnostics on failure. Set `KETPLUS_MANAGED_TASK_DIAGNOSTICS=1` to include those
+diagnostics in a passing control too. They report lifecycle milestones, the
+terminal state and cleanup result without command arguments or credentials.
+The fork case keeps the exact count bytes used by the assertion (at most 64
+bytes as hex), parse status and an independent boundary snapshot before that
+assertion. The owner-Stop case includes bounded executor metadata flags; the
+executor currently records no actual launch, root-exit or timeout timestamps,
+so registry milestone times must not be treated as those execution times.
+Preserve the original failing run and binary identity before a
+control; a passing control alone does not classify an earlier failure. Do not
+relax the assertions or deadlines to obtain a passing result.
+
+The native short-command fixture also reports its iteration and bootstrap phase
+(`directory`, `process_start`, `connect`, `ready`), elapsed time, process/socket
+state and error enums, valid exit information and bounded receipt readability
+before destructor cleanup. The same diagnostic opt-in includes passing iterations.
+It retains the 12 iterations and existing deadlines, and logs no protocol bodies,
+lease values or command arguments.
+
+Integration acceptance at `cc914a05` ([PR #763](https://github.com/ketvietlab/ketplus/pull/763))
+ran the fresh serialized Pro matrix: 242 passed, one skipped and eight failed
+out of 251 suites. Failures were in ChatMermaid, DaemonLifecycle, SessionFork,
+AgentMessaging, DesktopDaemonClient, ConversationAttentionDaemon,
+DesktopSessionDiscovery and NativeJobExecutor; the native failure refused
+`Executor::start()` in an iteration before its short-command identity assertions. TeamReply
+passed 11/11 in this run, which does not resolve its historical failure recorded
+in the provider refresh evidence. The original Linux matrix passed five of seven
+suites; owner-Stop expected `completed` but observed `timed_out`, and concurrent
+forks failed the count predicate before the cleanup assertions. Isolated and
+predecessor-order controls passed. After the Mac matrix ended, one final serial
+run of the two Linux cases with exact-count/boundary diagnostics also passed;
+the fork sample was 71 with successful parsing, a removed boundary and verified
+cleanup. These controls do not classify the original failures. The team leader
+accepted this Linux validation risk for integration after independent evidence
+verification; this does not accept all T-5 checks, release or packaging. The Mac
+failures remain pending classification and explicit disposition. No assertion or deadline
+was relaxed and no full matrix was retried. CMake-installed daemon/helper staging
+passed the runtime and capability checks; the whole-tree Runtime install stopped
+at the unbuilt runner target, so this is not a full packaging pass.
+One subsequent native short-command case control with bootstrap diagnostics passed
+all 12 iterations; each reached `ready` in 45–74 ms with a readable receipt. This
+does not identify or fix the original bootstrap failure, and native controls stop
+at that single run. The team leader accepted the separate native validation risk
+for integration, retaining the original failure as unclassified.
+
+One authorized serial A→B→C control then ran only the 17 originally failed rows
+from the other seven suites (15 methods, seven invocations). Every requested row
+passed, with no skips or unintended rows; binaries matched the original full-run
+hashes, and assertions, deadlines and fixed waits were unchanged. Mermaid measured
+baseline/worst/threshold values of 20/47/150 ms and 26/32/150 ms. Controls stopped
+after that single sequence; they do not replace the original full-run result or
+classify its failures. Cleanup sampling observed one reparented SDK helper after
+Attention, followed by empty inventories after Mermaid and on a later check.
+Its operation and cleanup timing were not captured, so this is not a claim that
+every intermediate inventory was empty. After independent verification of the
+append-only summary correction, the team leader accepted the seven-suite validation
+residual for integration, including these cleanup attribution limits. Original
+failures remain unclassified; this is not all-T-5, release or full-packaging acceptance.
+
+The seven-suite summary has an append-only evidence correction: version 2
+supersedes only the original blanket cleanup sentence. The original summary,
+its hash, the 30-file manifest and raw samples remain unchanged. The corrected
+summary explicitly retains the Attention helper observation and the later empty
+samples; neither establishes closure before that fixture ended or identifies the
+helper's birth, launch, request or managed-job ownership. D1 owns correlation and
+closure follow-up at a future assigned verification; no new run is authorized to
+reconstruct missing historical data.
+
+#### Integration review coverage and remaining gates
+
+The following maps T-5's six criteria to the retained evidence. Coverage is not
+formal acceptance; the original full-matrix failures and their separate residual
+decisions remain part of the review.
+
+| Criterion | Direct coverage | Remaining gate or limit |
+| --- | --- | --- |
+| 1. Fake-provider start, UI state, one owner wake and output | `ManagedBackgroundEndToEndTest::registryEventsReachDesktopAndWakeOnlyTheirOwner`; actual socket RED → GREEN and fresh full-matrix pass; native Agent UI suite and four-provider transport checks | Model/socket and synthetic native UI coverage; no live-provider inference claim |
+| 2. Crash, restart, owner lifetime, races, descendants and held wake | `ManagedTaskRuntimeTest` restart/close/commit-failure cases; `ManagedTaskHostTest` provider exit, busy/permission/Stop and nested-child cases; Linux executor daemon/supervisor death and Stop/complete race | Original Linux owner-Stop and fork-count failures remain unclassified under the leader's integration-only residual decision; formal review pending |
+| 3. Wake/auth fences, complete registry and platform assurance | Ledger atomic-outbox/dedup/generation/quota/pagination cases; IPC owner/grant checks; `ManagedTaskOriginHostTest` review/delayed-origin cases; Linux real-helper boundary tests; native birth/audit-token checks | Native bootstrap original remains unclassified under its separate integration-only residual decision; seven-suite integration-only residual retains the intermediate SDK-helper attribution limits; no absolute macOS containment claim |
+| 4. Build/matrix, honest limits, no quota or app replacement | Fresh Pro build and 251-suite run; offline SDK/contract/public-tree checks; Linux acceptance and CMake-installed daemon/helper staging; source/binary/hash records | Full Mac remains 242 pass / 1 skip / 8 failed suites; whole-tree Runtime install stopped at an unbuilt runner; no full packaging, release or installed-app validation |
+| 5. Reviewed PR into integration and cross-lane resolution | PR #763 contains the minimal deferred IPC routing fix and socket regressions; provider/UI dependencies are merged | Formal PR approval and integration acceptance remain outstanding; evidence-only residual reviews do not substitute for that approval |
+| 6. Native faults, attention, slots, durable owner fences and user-only resolution | Original native detached-descendant, supervisor-death, reconnect and lease-loss cases; ledger/IPC/UI attention, slot and user-only CAS/audit cases; the targeted real-native attention follow-up below carries one incident through file-backed reopen and each distinct owner-close/generation-change path | Reviewer confirmed this criterion has sufficient evidence in the agreed scope at runtime `0eba074c` / review `ce4d31d0`. The unrelated SDK-helper sample remains unattributed; no absolute native containment or full packaging claim |
+
+Portable follow-up work uses the verified SSH/Mutagen workflow above. Mac-only
+identity and renderer checks stay on macOS. This mapping authorizes no additional
+control, provider invocation, toolchain change or production fix.
+
+#### Attention incident lifecycle follow-up (targeted runtime reviewed)
+
+`ketplus_managed_attention_recovery_tests` adds the `owner-close` and
+`generation-change` rows of `attentionSurvivesOwnerLifecycle`. It uses a file-backed
+`LocalJournal`, real `SessionHost`/runtime and scripted FakeCodex. On macOS only,
+the row launches a harmless marker/output/sleep process through the managed API,
+captures its supervisor/root identities, faults the supervisor with the production
+identity-bound signal, and requires `needs_attention`/`unverified` with the known
+executor stopped. On Linux, it injects an executor result without an execution
+identity: that branch checks portable persistence, Host lifecycle and CAS/audit
+plumbing and makes no claim about native faults, birth identity or containment.
+
+Each row closes and reopens both journal and Host/runtime, retains the incident,
+output and root result, checks slot release without terminalizing the incident,
+and tests two distinct invalidation paths. The owner-close row deletes through
+the Host. The generation-change row closes the Host, verifies no tombstone or owner
+fence exists, then replaces the generation directly through the journal and reopens
+the Host without deleting first. A fresh owner-invalid fence must be observed;
+close/recreate must not mask generation mismatch. Local administration must retain
+access to the old owner's incident. Pruning, automatic
+wake/relaunch/reassignment/resolution, agent acknowledgement and stale revision
+acknowledgement are fenced. A current-revision local user acknowledgement must
+create exactly one durable audit row and retain `unverified`/suppressed completion
+after the final reopen. Before the native fault, the output API must already
+return the exact bytes with a captured cursor and size; later reads check
+preservation of this sample. Reconciliation waits for publication of this task and
+generation, with a newer native revision; the portable no-identity path instead
+requires publication of its unchanged incident. Native scope cleanup retains access
+to the live Host/journal and validates the task's own receipt, including failures
+before `running` or local identity capture. Stop/reconcile and birth-bound signals
+must reach bounded closure before fixture deletion. Signal/Stop errors or unproven
+closure fail the test and retain the private directory. Diagnostics whitelist
+bounded fields, never lease values, protocol bodies or command arguments.
+
+The Linux-only `acceptedIntentWithoutCallerIdIsRecoverable` regression persists an
+intent in a file-backed journal, closes it without retaining a caller task ID, and
+recovers the ID through the same read-only tuple lookup used by native fixture
+cleanup. It distinguishes an absent generation from a database lookup error and
+launches no executor. Cleanup never searches the API projection for request keys.
+The macOS target still executes only the two native lifecycle rows.
+
+Before executing this follow-up, submit the exact source/configuration and commands
+for offline review. On the verified Linux source mirror, use a separate build tree
+and a Qt prefix with the headless daemon dependencies; Desktop/WebView is not part
+of this target:
+
+```sh
+cmake -S "$TASK_SOURCE" -B "$TASK_BUILD" -G Ninja \
+  -DKETPLUS_EDITION=pro -DKETPLUS_BUILD_DESKTOP=OFF \
+  -DKETPLUS_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Debug \
+  -DCMAKE_PREFIX_PATH="$QT_ROOT" -DFETCHCONTENT_FULLY_DISCONNECTED=ON \
+  -DFETCHCONTENT_SOURCE_DIR_KETPLUS_LIBDATACHANNEL="$TASK_DATACHANNEL_SOURCE"
+cmake --build "$TASK_BUILD" --target ketplus_managed_attention_recovery_tests -j8
+ctest --test-dir "$TASK_BUILD" -R '^ketplus_managed_attention_recovery_tests$' -j1 -V
+```
+
+`TASK_DATACHANNEL_SOURCE` must be a separately hashed/synced source-only export of
+the libdatachannel commit and its dependency pins recorded in `cmake/WebRtc.cmake`,
+including the patched libjuice pin. Prepare it on the Mac, without Git metadata,
+build output, cache or credentials. The source override and disconnected mode
+prevent CMake's normal Git clone/update/patch path from writing Git state on Linux.
+Do not run configure until this dependency export is verified too.
+
+Only the real macOS fault/recovery chain may use the existing Mac build, after
+source/binary/config identity and test-owned process inventories are recorded:
+
+```sh
+cmake --preset dev
+cmake --build --preset dev --target ketplus_managed_attention_recovery_tests -j1
+ctest --test-dir build/dev -R '^ketplus_managed_attention_recovery_tests$' -j1 -V
+```
+
+The targeted verification ran once on source `0eba074c`: Linux matched exactly
+three cases (the lookup regression and two injected lifecycle rows), all passed
+without skips in 3.625 seconds. Only after Linux finished, the Mac target and its
+required helper were built; exactly two real-native lifecycle rows passed without
+skips in 41.637 seconds. These elapsed times include the run harness; the raw QtTest
+logs separately record row timings. No old controls or full matrix were repeated.
+The Linux build had already completed with `-j1` when the instruction to use `-j8`
+arrived; it was not rebuilt. The command above records the new concurrency for
+future necessary Linux builds; test concurrency remains serial.
+
+Both native rows captured persisted API output (17 bytes and its cursor/size)
+before supervisor fault, retained the recorded identities and root-result field
+through reopen, observed fresh recovery/owner fences and retained attention without
+pruning or slot ownership. User-only current-revision acknowledgement created one
+durable audit, with final `interrupted`/`unverified` and suppressed completion;
+the no-wake assertions passed. The native recorded exit-code field was `-1`, not
+an observed successful root exit, and executor-event timestamps remain unavailable.
+Both native cleanup guards reported closure, no signal/Stop errors and no retained
+fixture; the scoped post-run process inventory was empty. These checks cover known
+identities and preserve the native best-effort limit.
+
+Append-only runtime evidence v11 retains source/binary/helper/config hashes,
+platform/resource snapshots, exact selector listings, raw logs and JUnit outside
+generated cleanup. Read-only review verified 43/43 manifest files, five exact source
+snapshots and all 13 prior v10 artifacts, and found no remaining issue in this
+runtime packet. Criterion 6 has sufficient evidence in the agreed scope; formal
+whole-T-5 review remains outstanding. The original Mac 242/1/8 and Linux
+5/2 failures remain unclassified under their integration-only residual decisions.
+This follow-up does not complete formal T-5 acceptance, packaging or release.
+
+Do not run unrelated suites, repeat passed controls, change deadlines or provision
+shared toolchains. A source-only
+Linux mirror has no Git metadata; retain the independently verified Mac source
+manifest as provenance rather than claiming the generated `unknown` revision is a
+commit identity. This disposition authorizes no additional verification run.
 
 The opt-in `ketplus_linux_job_executor_tests` runs the real packaged helper and
 registry. It covers missing-manager admission, durable retry/output, double-fork/
