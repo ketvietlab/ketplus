@@ -72,7 +72,7 @@ class AsyncQuestionLifetimeTest : public QObject {
     }
     void terminalTurnClosesQuestionAndLateReplayCannotReopenIt() {
         QTemporaryDir dir;
-        const auto executable = dir.filePath("codex");
+        const auto executable = dir.filePath(fixtureName("codex"));
         QVERIFY(writeFakeCodex(executable, dir.filePath("log")));
         LocalJournal journal(dir.filePath("journal.sqlite3"));
         CodexAdapter adapter(executable);

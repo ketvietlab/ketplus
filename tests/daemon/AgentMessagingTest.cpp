@@ -807,7 +807,7 @@ class AgentMessagingTest final : public QObject {
     void agentConnectionsOnlyReachAgentOperations() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const QString codexPath = directory.filePath("fake-codex");
+        const QString codexPath = directory.filePath(fixtureName("fake-codex"));
         QVERIFY(writeFakeCodex(codexPath, directory.filePath("codex.log")));
         DaemonConfiguration configuration;
         configuration.statePath = directory.filePath("journal.sqlite3");

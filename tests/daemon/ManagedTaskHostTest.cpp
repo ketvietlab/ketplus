@@ -70,10 +70,10 @@ class ManagedTaskHostTest final : public QObject {
         QTemporaryDir directory;
         const auto cwd = QFileInfo(directory.path()).canonicalFilePath();
         const auto log = directory.filePath("provider.log");
-        QVERIFY(writeFakeCodex(directory.filePath("fake-codex"), log));
+        QVERIFY(writeFakeCodex(directory.filePath(fixtureName("fake-codex")), log));
         LocalJournal journal(directory.filePath("journal.sqlite"));
         QVERIFY(seed(journal, cwd));
-        CodexAdapter adapter(directory.filePath("fake-codex"));
+        CodexAdapter adapter(directory.filePath(fixtureName("fake-codex")));
         SessionHost host(&journal, &adapter);
         const auto cleanup = qScopeGuard([&] { adapter.stop(); });
         QVERIFY(command(host, "session.start_turn", {{"prompt", "approve"}}).value("ok").toBool());
@@ -106,10 +106,10 @@ class ManagedTaskHostTest final : public QObject {
         QTemporaryDir directory;
         const auto cwd = QFileInfo(directory.path()).canonicalFilePath();
         const auto log = directory.filePath("provider.log");
-        QVERIFY(writeFakeCodex(directory.filePath("fake-codex"), log));
+        QVERIFY(writeFakeCodex(directory.filePath(fixtureName("fake-codex")), log));
         LocalJournal journal(directory.filePath("journal.sqlite"));
         QVERIFY(seed(journal, cwd));
-        CodexAdapter adapter(directory.filePath("fake-codex"));
+        CodexAdapter adapter(directory.filePath(fixtureName("fake-codex")));
         SessionHost host(&journal, &adapter);
         const auto cleanup = qScopeGuard([&] { adapter.stop(); });
         QVERIFY(command(host, "session.start_turn", {{"prompt", "hang"}}).value("ok").toBool());
@@ -138,10 +138,10 @@ class ManagedTaskHostTest final : public QObject {
         QTemporaryDir directory;
         const auto cwd = QFileInfo(directory.path()).canonicalFilePath();
         const auto log = directory.filePath("provider.log");
-        QVERIFY(writeFakeCodex(directory.filePath("fake-codex"), log));
+        QVERIFY(writeFakeCodex(directory.filePath(fixtureName("fake-codex")), log));
         LocalJournal journal(directory.filePath("journal.sqlite"));
         QVERIFY(seed(journal, cwd, "owner", "ask"));
-        CodexAdapter adapter(directory.filePath("fake-codex"));
+        CodexAdapter adapter(directory.filePath(fixtureName("fake-codex")));
         SessionHost host(&journal, &adapter);
         const auto cleanup = qScopeGuard([&] { adapter.stop(); });
         const QJsonObject input{{"client_request_id", "child"},
@@ -199,10 +199,10 @@ class ManagedTaskHostTest final : public QObject {
         QTemporaryDir directory;
         const auto cwd = QFileInfo(directory.path()).canonicalFilePath();
         const auto log = directory.filePath("provider.log");
-        QVERIFY(writeFakeCodex(directory.filePath("fake-codex"), log));
+        QVERIFY(writeFakeCodex(directory.filePath(fixtureName("fake-codex")), log));
         LocalJournal journal(directory.filePath("journal.sqlite"));
         QVERIFY(seed(journal, cwd, "owner", "ask"));
-        CodexAdapter adapter(directory.filePath("fake-codex"));
+        CodexAdapter adapter(directory.filePath(fixtureName("fake-codex")));
         SessionHost host(&journal, &adapter);
         const auto cleanup = qScopeGuard([&] { adapter.stop(); });
         QVERIFY(command(host, "session.start_turn", {{"prompt", "hang"}}).value("ok").toBool());
@@ -243,10 +243,10 @@ class ManagedTaskHostTest final : public QObject {
         QTemporaryDir directory;
         const auto cwd = QFileInfo(directory.path()).canonicalFilePath();
         const auto log = directory.filePath("provider.log");
-        QVERIFY(writeFakeCodex(directory.filePath("fake-codex"), log));
+        QVERIFY(writeFakeCodex(directory.filePath(fixtureName("fake-codex")), log));
         LocalJournal journal(directory.filePath("journal.sqlite"));
         QVERIFY(seed(journal, cwd));
-        CodexAdapter adapter(directory.filePath("fake-codex"));
+        CodexAdapter adapter(directory.filePath(fixtureName("fake-codex")));
         SessionHost host(&journal, &adapter);
         const auto cleanup = qScopeGuard([&] { adapter.stop(); });
         const auto input = process(cwd, {"/usr/bin/printf", "hello"});
@@ -285,10 +285,10 @@ class ManagedTaskHostTest final : public QObject {
         QTemporaryDir directory;
         const auto cwd = QFileInfo(directory.path()).canonicalFilePath();
         const auto log = directory.filePath("provider.log");
-        QVERIFY(writeFakeCodex(directory.filePath("fake-codex"), log));
+        QVERIFY(writeFakeCodex(directory.filePath(fixtureName("fake-codex")), log));
         LocalJournal journal(directory.filePath("journal.sqlite"));
         QVERIFY(seed(journal, cwd));
-        CodexAdapter adapter(directory.filePath("fake-codex"));
+        CodexAdapter adapter(directory.filePath(fixtureName("fake-codex")));
         SessionHost host(&journal, &adapter);
         const auto cleanup = qScopeGuard([&] { adapter.stop(); });
         QVERIFY(command(host, "session.start_turn", {{"prompt", "hang"}}).value("ok").toBool());
@@ -345,10 +345,10 @@ class ManagedTaskHostTest final : public QObject {
         QTemporaryDir directory;
         const auto cwd = QFileInfo(directory.path()).canonicalFilePath();
         const auto log = directory.filePath("provider.log");
-        QVERIFY(writeFakeCodex(directory.filePath("fake-codex"), log));
+        QVERIFY(writeFakeCodex(directory.filePath(fixtureName("fake-codex")), log));
         LocalJournal journal(directory.filePath("journal.sqlite"));
         QVERIFY(seed(journal, cwd));
-        CodexAdapter adapter(directory.filePath("fake-codex"));
+        CodexAdapter adapter(directory.filePath(fixtureName("fake-codex")));
         SessionHost host(&journal, &adapter);
         const auto cleanup = qScopeGuard([&] { adapter.stop(); });
         QVERIFY(command(host, "session.start_turn", {{"prompt", "hang"}}).value("ok").toBool());
@@ -385,10 +385,10 @@ class ManagedTaskHostTest final : public QObject {
         QTemporaryDir directory;
         const auto cwd = QFileInfo(directory.path()).canonicalFilePath();
         const auto log = directory.filePath("provider.log");
-        QVERIFY(writeFakeCodex(directory.filePath("fake-codex"), log));
+        QVERIFY(writeFakeCodex(directory.filePath(fixtureName("fake-codex")), log));
         LocalJournal journal(directory.filePath("journal.sqlite"));
         QVERIFY(seed(journal, cwd));
-        CodexAdapter adapter(directory.filePath("fake-codex"));
+        CodexAdapter adapter(directory.filePath(fixtureName("fake-codex")));
         SessionHost host(&journal, &adapter);
         const auto cleanup = qScopeGuard([&] { adapter.stop(); });
         const auto started = command(host, "session.task.start",
@@ -445,10 +445,10 @@ class ManagedTaskHostTest final : public QObject {
         QTemporaryDir directory;
         const auto cwd = QFileInfo(directory.path()).canonicalFilePath();
         const auto log = directory.filePath("provider.log");
-        QVERIFY(writeFakeCodex(directory.filePath("fake-codex"), log));
+        QVERIFY(writeFakeCodex(directory.filePath(fixtureName("fake-codex")), log));
         LocalJournal journal(directory.filePath("journal.sqlite"));
         QVERIFY(seed(journal, cwd));
-        CodexAdapter adapter(directory.filePath("fake-codex"));
+        CodexAdapter adapter(directory.filePath(fixtureName("fake-codex")));
         SessionHost host(&journal, &adapter);
         const auto cleanup = qScopeGuard([&] { adapter.stop(); });
         const auto started = command(host, "session.task.start",
@@ -505,10 +505,10 @@ class ManagedTaskHostTest final : public QObject {
         QTemporaryDir directory;
         const auto cwd = QFileInfo(directory.path()).canonicalFilePath();
         const auto log = directory.filePath("provider.log");
-        QVERIFY(writeFakeCodex(directory.filePath("fake-codex"), log));
+        QVERIFY(writeFakeCodex(directory.filePath(fixtureName("fake-codex")), log));
         LocalJournal journal(directory.filePath("journal.sqlite"));
         QVERIFY(seed(journal, cwd));
-        CodexAdapter adapter(directory.filePath("fake-codex"));
+        CodexAdapter adapter(directory.filePath(fixtureName("fake-codex")));
         SessionHost host(&journal, &adapter);
         const auto cleanup = qScopeGuard([&] { adapter.stop(); });
         const auto started =

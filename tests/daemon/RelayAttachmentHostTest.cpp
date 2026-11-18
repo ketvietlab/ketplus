@@ -30,7 +30,7 @@ class RelayAttachmentHostTest final : public QObject {
         });
         const QString worktree = dir.filePath("worktree");
         QVERIFY(QDir().mkpath(worktree));
-        const QString executable = dir.filePath("fake-codex");
+        const QString executable = dir.filePath(fixtureName("fake-codex"));
         const QString providerLog = dir.filePath("provider.log");
         QVERIFY(writeFakeCodex(executable, providerLog));
         LocalJournal journal(dir.filePath("journal.sqlite"));

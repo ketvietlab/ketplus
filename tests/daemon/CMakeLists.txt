@@ -2,8 +2,20 @@ include("${CMAKE_CURRENT_LIST_DIR}/credential-store/FixtureDaemon.cmake")
 
 # Tests whose provider fixtures are `#!/usr/bin/env python3` scripts launched by path
 # (FakeCodex.h, FakeClaude.h, FakeCursor.h, FakeCopilot*.h). Windows cannot execute those
-# directly, so they are built but disabled there; they stay covered on macOS/Linux. A launcher
-# that gives each fake an .exe on Windows would lift this.
+# directly, so there each fixture is an .exe copy of ketplus_script_launcher that runs
+# "<fixture>.py" with the Python interpreter (ScriptFixture.h). The label lets ctest select them.
+if(WIN32)
+    find_package(Python3 COMPONENTS Interpreter)
+    if(Python3_Interpreter_FOUND)
+        qt_add_executable(ketplus_script_launcher ScriptLauncher.cpp)
+        target_compile_definitions(ketplus_script_launcher PRIVATE
+            UNICODE _UNICODE KETPLUS_SCRIPT_INTERPRETER="${Python3_EXECUTABLE}")
+        set_target_properties(ketplus_script_launcher PROPERTIES WIN32_EXECUTABLE FALSE)
+        # Every test that writes a fixture needs the path (ScriptFixture.h), also those outside
+        # ketplus_add_daemon_test.
+        add_compile_definitions(KETPLUS_SCRIPT_LAUNCHER="$<TARGET_FILE:ketplus_script_launcher>")
+    endif()
+endif()
 set(KETPLUS_WINDOWS_SCRIPT_FIXTURE_TESTS
     ketplus_context_harness_tests
     ketplus_provider_deletion_tests
@@ -51,8 +63,12 @@ function(ketplus_add_daemon_test target source)
     target_link_libraries(${target} PRIVATE Qt6::Test ketplus_daemon_core)
     add_test(NAME ${target} COMMAND ${target})
     if(WIN32 AND target IN_LIST KETPLUS_WINDOWS_SCRIPT_FIXTURE_TESTS)
-        set_tests_properties(${target} PROPERTIES DISABLED TRUE
-            LABELS "windows-script-fixture")
+        set_tests_properties(${target} PROPERTIES LABELS "windows-script-fixture")
+        if(TARGET ketplus_script_launcher)
+            add_dependencies(${target} ketplus_script_launcher)
+        else()
+            set_tests_properties(${target} PROPERTIES DISABLED TRUE)
+        endif()
     endif()
     set_tests_properties(${target} PROPERTIES ENVIRONMENT
         "KETPLUS_DISABLE_DAEMON_AUTOSTART=1;KETPLUS_BROWSER_TOOLS_CONFIG=${CMAKE_CURRENT_BINARY_DIR}/${target}-browser-tools.json;KETPLUS_COMPUTER_TOOLS_CONFIG=${CMAKE_CURRENT_BINARY_DIR}/${target}-computer-tools.json;KETPLUS_COMPUTER_DIR=${CMAKE_CURRENT_BINARY_DIR}/${target}-computer")
@@ -420,10 +436,7 @@ if(KETPLUS_SIDECAR_TEST_NODE)
     add_test(NAME ketplus_codex_contract_tests COMMAND "${KETPLUS_SIDECAR_TEST_NODE}" --test
         "${CMAKE_CURRENT_SOURCE_DIR}/../providers/codex/contract.test.mjs")
     if(WIN32)
-        # review-guard/review-profile hang or fail on Windows (they assume POSIX paths and
-        # shells); not yet ported. They are covered on macOS/Linux.
-        set_tests_properties(ketplus_claude_sidecar_tests PROPERTIES DISABLED TRUE
-            LABELS "windows-script-fixture")
+        set_tests_properties(ketplus_claude_sidecar_tests PROPERTIES LABELS "windows-script-fixture")
     endif()
 endif()
 if(KETPLUS_BUILD_DESKTOP)

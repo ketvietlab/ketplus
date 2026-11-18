@@ -96,7 +96,7 @@ class CursorAdapterTest final : public QObject {
         CursorAdapter cursor;
         QVERIFY(!cursor.isAvailable());
 
-        const QString agent = QDir(bin).filePath(QStringLiteral("agent"));
+        const QString agent = QDir(bin).filePath(fixtureName(QStringLiteral("agent")));
         QVERIFY(writeFakeCursor(agent, directory.filePath(QStringLiteral("cursor.log"))));
         QTRY_VERIFY_WITH_TIMEOUT(cursor.isAvailable(), 5000);
         QCOMPARE(cursor.executable(), agent);
@@ -118,7 +118,7 @@ class CursorAdapterTest final : public QObject {
     void startsCursorTurnWithoutAcpAuthenticate() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const QString cursor = directory.filePath(QStringLiteral("fake-cursor"));
+        const QString cursor = directory.filePath(fixtureName(QStringLiteral("fake-cursor")));
         const QString logPath = directory.filePath(QStringLiteral("cursor.log"));
         QVERIFY(writeFakeCursor(cursor, logPath));
 
@@ -205,7 +205,7 @@ class CursorAdapterTest final : public QObject {
         const auto restore = qScopeGuard([] { qunsetenv("KETPLUS_FAKE_CURSOR_LOAD_SESSION"); });
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const QString cursor = directory.filePath(QStringLiteral("fake-cursor"));
+        const QString cursor = directory.filePath(fixtureName(QStringLiteral("fake-cursor")));
         const QString logPath = directory.filePath(QStringLiteral("cursor.log"));
         QVERIFY(writeFakeCursor(cursor, logPath));
         LocalJournal journal(directory.filePath(QStringLiteral("journal.sqlite3")));
@@ -322,7 +322,7 @@ class CursorAdapterTest final : public QObject {
     void listsCursorModelsFromCli() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const QString cursor = directory.filePath(QStringLiteral("fake-cursor"));
+        const QString cursor = directory.filePath(fixtureName(QStringLiteral("fake-cursor")));
         const QString logPath = directory.filePath(QStringLiteral("cursor.log"));
         QVERIFY(writeFakeCursor(cursor, logPath));
         LocalJournal journal(directory.filePath(QStringLiteral("journal.sqlite3")));
@@ -357,7 +357,7 @@ class CursorAdapterTest final : public QObject {
     void pinsSelectedCursorModel() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const QString cursor = directory.filePath(QStringLiteral("fake-cursor"));
+        const QString cursor = directory.filePath(fixtureName(QStringLiteral("fake-cursor")));
         const QString logPath = directory.filePath(QStringLiteral("cursor.log"));
         QVERIFY(writeFakeCursor(cursor, logPath));
         LocalJournal journal(directory.filePath(QStringLiteral("journal.sqlite3")));
@@ -420,7 +420,7 @@ class CursorAdapterTest final : public QObject {
     void journalsCursorAutoPlanLimitAsError() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const QString cursor = directory.filePath(QStringLiteral("fake-cursor"));
+        const QString cursor = directory.filePath(fixtureName(QStringLiteral("fake-cursor")));
         const QString logPath = directory.filePath(QStringLiteral("cursor.log"));
         QVERIFY(writeFakeCursor(cursor, logPath));
         LocalJournal journal(directory.filePath(QStringLiteral("journal.sqlite3")));
@@ -472,7 +472,7 @@ class CursorAdapterTest final : public QObject {
         // turn that provider refusal into a completed assistant answer.
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const QString cursor = directory.filePath(QStringLiteral("fake-cursor"));
+        const QString cursor = directory.filePath(fixtureName(QStringLiteral("fake-cursor")));
         const QString logPath = directory.filePath(QStringLiteral("cursor.log"));
         QVERIFY(writeFakeCursor(cursor, logPath));
         LocalJournal journal(directory.filePath(QStringLiteral("journal.sqlite3")));
@@ -567,7 +567,7 @@ class CursorAdapterTest final : public QObject {
     void reportsCursorTeamUsageLimitAsItsOwnError() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const QString cursor = directory.filePath(QStringLiteral("fake-cursor"));
+        const QString cursor = directory.filePath(fixtureName(QStringLiteral("fake-cursor")));
         const QString logPath = directory.filePath(QStringLiteral("cursor.log"));
         QVERIFY(writeFakeCursor(cursor, logPath));
         LocalJournal journal(directory.filePath(QStringLiteral("journal.sqlite3")));
@@ -592,7 +592,7 @@ class CursorAdapterTest final : public QObject {
     void switchingToAutoRestartsAPinnedProcess() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const QString cursor = directory.filePath(QStringLiteral("fake-cursor"));
+        const QString cursor = directory.filePath(fixtureName(QStringLiteral("fake-cursor")));
         const QString logPath = directory.filePath(QStringLiteral("cursor.log"));
         QVERIFY(writeFakeCursor(cursor, logPath));
         LocalJournal journal(directory.filePath(QStringLiteral("journal.sqlite3")));
@@ -638,7 +638,7 @@ class CursorAdapterTest final : public QObject {
     void pinsCursorFamilyEffort() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const QString cursor = directory.filePath(QStringLiteral("fake-cursor"));
+        const QString cursor = directory.filePath(fixtureName(QStringLiteral("fake-cursor")));
         const QString logPath = directory.filePath(QStringLiteral("cursor.log"));
         QVERIFY(writeFakeCursor(cursor, logPath));
         LocalJournal journal(directory.filePath(QStringLiteral("journal.sqlite3")));
@@ -683,7 +683,7 @@ class CursorAdapterTest final : public QObject {
         QFETCH(QByteArray, option);
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const QString cursor = directory.filePath(QStringLiteral("fake-cursor"));
+        const QString cursor = directory.filePath(fixtureName(QStringLiteral("fake-cursor")));
         const QString logPath = directory.filePath(QStringLiteral("cursor.log"));
         QVERIFY(writeFakeCursor(cursor, logPath));
         LocalJournal journal(directory.filePath(QStringLiteral("journal.sqlite3")));
@@ -716,7 +716,7 @@ class CursorAdapterTest final : public QObject {
     // the same id from the next process, which numbers its requests from the start again.
     void requestsOfAnExitedProcessAreForgotten() {
         QTemporaryDir directory;
-        const auto cursor = directory.filePath("fake-cursor");
+        const auto cursor = directory.filePath(fixtureName("fake-cursor"));
         const auto logPath = directory.filePath("cursor.log");
         QVERIFY(writeFakeCursor(cursor, logPath));
         LocalJournal journal(directory.filePath("journal.sqlite3"));
@@ -755,7 +755,7 @@ class CursorAdapterTest final : public QObject {
 
     void stopWhilePermissionIsPending() {
         QTemporaryDir directory;
-        const auto cursor = directory.filePath("fake-cursor");
+        const auto cursor = directory.filePath(fixtureName("fake-cursor"));
         const auto logPath = directory.filePath("cursor.log");
         QVERIFY(writeFakeCursor(cursor, logPath));
         LocalJournal journal(directory.filePath("journal.sqlite3"));
@@ -783,7 +783,7 @@ class CursorAdapterTest final : public QObject {
 
     void planWaitsForConfirmation() {
         QTemporaryDir directory;
-        const auto cursor = directory.filePath("fake-cursor");
+        const auto cursor = directory.filePath(fixtureName("fake-cursor"));
         const auto logPath = directory.filePath("cursor.log");
         QVERIFY(writeFakeCursor(cursor, logPath));
         LocalJournal journal(directory.filePath("journal.sqlite3"));
@@ -811,7 +811,7 @@ class CursorAdapterTest final : public QObject {
     void questionBlocksUntilAnswered() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const QString cursor = directory.filePath(QStringLiteral("fake-cursor"));
+        const QString cursor = directory.filePath(fixtureName(QStringLiteral("fake-cursor")));
         const QString logPath = directory.filePath(QStringLiteral("cursor.log"));
         QVERIFY(writeFakeCursor(cursor, logPath));
         LocalJournal journal(directory.filePath(QStringLiteral("journal.sqlite3")));
@@ -854,7 +854,7 @@ class CursorAdapterTest final : public QObject {
     void interruptBeforePromptEndsTurn() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const QString cursor = directory.filePath(QStringLiteral("fake-cursor"));
+        const QString cursor = directory.filePath(fixtureName(QStringLiteral("fake-cursor")));
         const QString logPath = directory.filePath(QStringLiteral("cursor.log"));
         QVERIFY(writeFakeCursor(cursor, logPath));
         LocalJournal journal(directory.filePath(QStringLiteral("journal.sqlite3")));
@@ -881,7 +881,7 @@ class CursorAdapterTest final : public QObject {
     void interruptDuringSessionStartupEndsTurn() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const QString cursor = directory.filePath(QStringLiteral("fake-cursor"));
+        const QString cursor = directory.filePath(fixtureName(QStringLiteral("fake-cursor")));
         const QString logPath = directory.filePath(QStringLiteral("cursor.log"));
         QVERIFY(writeFakeCursor(cursor, logPath));
         LocalJournal journal(directory.filePath(QStringLiteral("journal.sqlite3")));
@@ -933,7 +933,7 @@ class CursorAdapterTest final : public QObject {
         QVERIFY(directory.isValid());
         const QDir loginDir(directory.filePath(QStringLiteral("needs-login")));
         QVERIFY(loginDir.mkpath(QStringLiteral(".")));
-        const QString cursor = directory.filePath(QStringLiteral("fake-cursor"));
+        const QString cursor = directory.filePath(fixtureName(QStringLiteral("fake-cursor")));
         const QString logPath = directory.filePath(QStringLiteral("cursor.log"));
         QVERIFY(writeFakeCursor(cursor, logPath));
         LocalJournal journal(directory.filePath(QStringLiteral("journal.sqlite3")));

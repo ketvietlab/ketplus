@@ -95,7 +95,7 @@ class CopilotToolsTest final : public QObject {
         QFETCH(bool, allow);
         QFETCH(QString, expected);
         QTemporaryDir root;
-        const QString log = root.filePath("log"), cli = root.filePath("copilot");
+        const QString log = root.filePath("log"), cli = root.filePath(fixtureName("copilot"));
         QVERIFY(writeFakeCopilotTools(cli, log));
         CopilotAdapter adapter(cli);
         QSignalSpy events(&adapter, &ProviderAdapter::canonicalEvent);
@@ -134,7 +134,7 @@ class CopilotToolsTest final : public QObject {
     void cancellationAndStaleAnswer() {
         QFETCH(bool, restart);
         QTemporaryDir root;
-        const auto cli = root.filePath("copilot"), log = root.filePath("log");
+        const auto cli = root.filePath(fixtureName("copilot")), log = root.filePath("log");
         QVERIFY(writeFakeCopilotTools(cli, log));
         CopilotAdapter adapter(cli);
         QSignalSpy requests(&adapter, &ProviderAdapter::requestReceived);
@@ -167,7 +167,7 @@ class CopilotToolsTest final : public QObject {
     }
     void brokerExpiryIsCancelled() {
         QTemporaryDir root;
-        const auto cli = root.filePath("copilot"), log = root.filePath("log");
+        const auto cli = root.filePath(fixtureName("copilot")), log = root.filePath("log");
         QVERIFY(writeFakeCopilotTools(cli, log));
         CopilotAdapter adapter(cli);
         ApprovalBroker broker;
@@ -190,7 +190,7 @@ class CopilotToolsTest final : public QObject {
     void browserConfigurationAndCleanup() {
         QFETCH(QString, ending);
         QTemporaryDir root;
-        const auto cli = root.filePath("copilot"), log = root.filePath("log");
+        const auto cli = root.filePath(fixtureName("copilot")), log = root.filePath("log");
         const auto app = root.filePath("browser"), node = root.filePath("node");
         writeFile(app + "/src/mcp.mjs");
         writeFile(node);
@@ -310,7 +310,7 @@ class CopilotToolsTest final : public QObject {
 
     void hostApprovalCardAndResolution() {
         QTemporaryDir root;
-        const auto cli = root.filePath("copilot"), log = root.filePath("log");
+        const auto cli = root.filePath(fixtureName("copilot")), log = root.filePath("log");
         QVERIFY(writeFakeCopilotTools(cli, log));
         LocalJournal journal(root.filePath("journal.sqlite"));
         QVERIFY(journal.isOpen());

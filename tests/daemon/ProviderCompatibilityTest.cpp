@@ -188,7 +188,7 @@ class ProviderCompatibilityTest final : public QObject {
     void probeCachesUntilTheExecutableChanges() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const QString cli = directory.filePath(QStringLiteral("codex"));
+        const QString cli = directory.filePath(fixtureName(QStringLiteral("codex")));
         const QString logPath = directory.filePath(QStringLiteral("calls.log"));
         QVERIFY(writeVersionScript(cli, logPath, QStringLiteral("codex-cli 0.150.0")));
 
@@ -382,7 +382,7 @@ class ProviderCompatibilityTest final : public QObject {
         const auto restore = qScopeGuard([] { qunsetenv("KETPLUS_FAKE_CODEX_UNSUPPORTED"); });
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const QString executable = directory.filePath(QStringLiteral("fake-codex"));
+        const QString executable = directory.filePath(fixtureName(QStringLiteral("fake-codex")));
         QVERIFY(writeFakeCodex(executable, directory.filePath(QStringLiteral("provider.log"))));
         LocalJournal journal(directory.filePath(QStringLiteral("journal.sqlite3")));
         QVERIFY2(journal.isOpen(), qPrintable(journal.errorString()));
@@ -437,7 +437,7 @@ class ProviderCompatibilityTest final : public QObject {
     void oversizedCodexMessagesBecomeNoticesAndTheTurnEnds() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const QString executable = directory.filePath(QStringLiteral("fake-codex"));
+        const QString executable = directory.filePath(fixtureName(QStringLiteral("fake-codex")));
         QVERIFY(writeFakeCodex(executable, directory.filePath(QStringLiteral("provider.log"))));
         LocalJournal journal(directory.filePath(QStringLiteral("journal.sqlite3")));
         QVERIFY2(journal.isOpen(), qPrintable(journal.errorString()));
@@ -466,7 +466,7 @@ class ProviderCompatibilityTest final : public QObject {
     void unknownCodexInputIsHandledSafely() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const QString executable = directory.filePath(QStringLiteral("fake-codex"));
+        const QString executable = directory.filePath(fixtureName(QStringLiteral("fake-codex")));
         const QString providerLog = directory.filePath(QStringLiteral("provider.log"));
         QVERIFY(writeFakeCodex(executable, providerLog));
         LocalJournal journal(directory.filePath(QStringLiteral("journal.sqlite3")));
@@ -523,7 +523,7 @@ class ProviderCompatibilityTest final : public QObject {
         const auto restore = qScopeGuard([] { qunsetenv("KETPLUS_FAKE_CODEX_VERSION"); });
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const QString executable = directory.filePath(QStringLiteral("fake-codex"));
+        const QString executable = directory.filePath(fixtureName(QStringLiteral("fake-codex")));
         const QString providerLog = directory.filePath(QStringLiteral("provider.log"));
         QVERIFY(writeFakeCodex(executable, providerLog));
         LocalJournal journal(directory.filePath(QStringLiteral("journal.sqlite3")));
@@ -560,7 +560,7 @@ class ProviderCompatibilityTest final : public QObject {
         const auto restore = qScopeGuard([] { qunsetenv("KETPLUS_FAKE_CODEX_VERSION"); });
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const QString executable = directory.filePath(QStringLiteral("fake-codex"));
+        const QString executable = directory.filePath(fixtureName(QStringLiteral("fake-codex")));
         const QString providerLog = directory.filePath(QStringLiteral("provider.log"));
         QVERIFY(writeFakeCodex(executable, providerLog));
         LocalJournal journal(directory.filePath(QStringLiteral("journal.sqlite3")));
@@ -605,7 +605,7 @@ class ProviderCompatibilityTest final : public QObject {
     void reportsEveryProviderRuntime() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const QString executable = directory.filePath(QStringLiteral("fake-codex"));
+        const QString executable = directory.filePath(fixtureName(QStringLiteral("fake-codex")));
         QVERIFY(writeFakeCodex(executable, directory.filePath(QStringLiteral("provider.log"))));
         LocalJournal journal(directory.filePath(QStringLiteral("journal.sqlite3")));
         QVERIFY2(journal.isOpen(), qPrintable(journal.errorString()));
@@ -663,7 +663,7 @@ class ProviderCompatibilityTest final : public QObject {
     void anAccountChangeClearsAReportedFailure() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const QString executable = directory.filePath(QStringLiteral("fake-codex"));
+        const QString executable = directory.filePath(fixtureName(QStringLiteral("fake-codex")));
         QVERIFY(writeFakeCodex(executable, directory.filePath(QStringLiteral("provider.log"))));
         LocalJournal journal(directory.filePath(QStringLiteral("journal.sqlite3")));
         QVERIFY2(journal.isOpen(), qPrintable(journal.errorString()));
@@ -724,7 +724,7 @@ class ProviderCompatibilityTest final : public QObject {
     void aLimitedTurnIsCodedAndKeptUntilItResets() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const QString executable = directory.filePath(QStringLiteral("fake-codex"));
+        const QString executable = directory.filePath(fixtureName(QStringLiteral("fake-codex")));
         QVERIFY(writeFakeCodex(executable, directory.filePath(QStringLiteral("provider.log"))));
         LocalJournal journal(directory.filePath(QStringLiteral("journal.sqlite3")));
         QVERIFY2(journal.isOpen(), qPrintable(journal.errorString()));
@@ -783,7 +783,7 @@ class ProviderCompatibilityTest final : public QObject {
     void aWorkingTurnClearsAReportedFailure() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const QString executable = directory.filePath(QStringLiteral("fake-codex"));
+        const QString executable = directory.filePath(fixtureName(QStringLiteral("fake-codex")));
         QVERIFY(writeFakeCodex(executable, directory.filePath(QStringLiteral("provider.log"))));
         {
             QFile seeded(directory.filePath(QStringLiteral("provider-readiness.json")));
@@ -827,7 +827,7 @@ class ProviderCompatibilityTest final : public QObject {
     void reportsASignedOutCodex() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const QString executable = directory.filePath(QStringLiteral("fake-codex"));
+        const QString executable = directory.filePath(fixtureName(QStringLiteral("fake-codex")));
         QVERIFY(writeFakeCodex(executable, directory.filePath(QStringLiteral("provider.log"))));
         qputenv("KETPLUS_FAKE_CODEX_SIGNED_OUT", "1");
         const auto restore = qScopeGuard([] { qunsetenv("KETPLUS_FAKE_CODEX_SIGNED_OUT"); });

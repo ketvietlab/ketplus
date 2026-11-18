@@ -50,7 +50,7 @@ struct Fixture {
             return false;
         a = QFileInfo(a).canonicalFilePath();
         b = QFileInfo(b).canonicalFilePath();
-        const auto executable = directory.filePath("fake-codex");
+        const auto executable = directory.filePath(fixtureName("fake-codex"));
         if (!writeFakeCodex(executable, log))
             return false;
         journal = std::make_unique<LocalJournal>(directory.filePath("journal.sqlite"));
@@ -284,7 +284,7 @@ class DaemonWorktreeContextTest final : public QObject {
     void responseGuidanceIsProviderOnly() {
         Fixture f;
         QVERIFY(f.initialize());
-        QFile executable(f.directory.filePath("fake-codex"));
+        QFile executable(f.directory.filePath(fixtureName("fake-codex")));
         QVERIFY(executable.open(QIODevice::ReadOnly));
         auto source = executable.readAll();
         executable.close();
@@ -358,7 +358,7 @@ class DaemonWorktreeContextTest final : public QObject {
         Fixture f;
         QVERIFY(f.initialize());
         QVERIFY(f.move(f.b, 1, "move-before-question")["ok"].toBool());
-        QFile executable(f.directory.filePath("fake-codex"));
+        QFile executable(f.directory.filePath(fixtureName("fake-codex")));
         QVERIFY(executable.open(QIODevice::ReadOnly));
         QByteArray source = executable.readAll();
         executable.close();
@@ -427,7 +427,7 @@ class DaemonWorktreeContextTest final : public QObject {
         Fixture f;
         QVERIFY(f.initialize());
         // Keep a fake turn open and capture the exact provider request, without quota.
-        QFile executable(f.directory.filePath("fake-codex"));
+        QFile executable(f.directory.filePath(fixtureName("fake-codex")));
         QVERIFY(executable.open(QIODevice::ReadOnly));
         QByteArray source = executable.readAll();
         executable.close();
@@ -1061,7 +1061,7 @@ class DaemonWorktreeContextTest final : public QObject {
     void providerCatalogIsSharedAndAccountChangesInvalidateIt() {
         Fixture f;
         QVERIFY(f.initialize());
-        QFile executable(f.directory.filePath("fake-codex"));
+        QFile executable(f.directory.filePath(fixtureName("fake-codex")));
         QVERIFY(executable.open(QIODevice::ReadOnly));
         auto script = executable.readAll();
         executable.close();

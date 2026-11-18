@@ -219,7 +219,7 @@ class DesktopDaemonClientTest final : public QObject {
         QVERIFY(directory.isValid());
         const QString worktree = directory.filePath(QStringLiteral("worktree"));
         QVERIFY(QDir().mkpath(worktree));
-        const QString executable = directory.filePath(QStringLiteral("fake-codex"));
+        const QString executable = directory.filePath(fixtureName(QStringLiteral("fake-codex")));
         const QString providerLog = directory.filePath(QStringLiteral("provider.log"));
         QVERIFY(writeFakeCodex(executable, providerLog));
 
@@ -442,7 +442,7 @@ class DesktopDaemonClientTest final : public QObject {
         QVERIFY(directory.isValid());
         const QString worktree = directory.filePath(QStringLiteral("worktree"));
         QVERIFY(QDir().mkpath(worktree));
-        const QString executable = directory.filePath(QStringLiteral("fake-codex"));
+        const QString executable = directory.filePath(fixtureName(QStringLiteral("fake-codex")));
         QVERIFY(writeFakeCodex(executable, directory.filePath(QStringLiteral("provider.log"))));
 
         const QString socket = directory.filePath(QStringLiteral("daemon.sock"));
@@ -541,7 +541,7 @@ class DesktopDaemonClientTest final : public QObject {
         QVERIFY(directory.isValid());
         const QString worktree = directory.filePath(QStringLiteral("worktree"));
         QVERIFY(QDir().mkpath(worktree));
-        const QString executable = directory.filePath(QStringLiteral("fake-codex"));
+        const QString executable = directory.filePath(fixtureName(QStringLiteral("fake-codex")));
         QVERIFY(writeFakeCodex(executable, directory.filePath(QStringLiteral("provider.log"))));
         const QString socket = directory.filePath(QStringLiteral("daemon.sock"));
         const QString state = directory.filePath(QStringLiteral("journal.sqlite3"));
@@ -615,7 +615,7 @@ class DesktopDaemonClientTest final : public QObject {
     void negotiatesFeaturesAndReportsProviderCapabilities() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const QString executable = directory.filePath(QStringLiteral("fake-codex"));
+        const QString executable = directory.filePath(fixtureName(QStringLiteral("fake-codex")));
         QVERIFY(writeFakeCodex(executable, directory.filePath(QStringLiteral("provider.log"))));
         const QString socket = directory.filePath(QStringLiteral("daemon.sock"));
         const QString state = directory.filePath(QStringLiteral("journal.sqlite3"));
@@ -1303,7 +1303,7 @@ class DesktopDaemonClientTest final : public QObject {
 
     void storageNeverStartsDirectProvider() {
         QTemporaryDir directory;
-        const auto executable = directory.filePath("fake-codex");
+        const auto executable = directory.filePath(fixtureName("fake-codex"));
         const auto log = directory.filePath("provider.log");
         QVERIFY(writeFakeCodex(executable, log));
         CodexAppServer server(executable);
@@ -1524,7 +1524,7 @@ class DesktopDaemonClientTest final : public QObject {
         QVERIFY(directory.isValid());
         const QString worktree = directory.filePath(QStringLiteral("worktree"));
         QVERIFY(QDir().mkpath(worktree));
-        const QString executable = directory.filePath(QStringLiteral("fake-codex"));
+        const QString executable = directory.filePath(fixtureName(QStringLiteral("fake-codex")));
         const QString providerLog = directory.filePath(QStringLiteral("provider.log"));
         QVERIFY(writeFakeCodex(executable, providerLog));
         const QString socket = directory.filePath(QStringLiteral("daemon.sock"));
@@ -1655,7 +1655,7 @@ class DesktopDaemonClientTest final : public QObject {
         QVERIFY(directory.isValid());
         const QString worktree = directory.filePath(QStringLiteral("worktree"));
         QVERIFY(QDir().mkpath(worktree));
-        const QString executable = directory.filePath(QStringLiteral("fake-codex"));
+        const QString executable = directory.filePath(fixtureName(QStringLiteral("fake-codex")));
         const QString providerLog = directory.filePath(QStringLiteral("provider.log"));
         QVERIFY(writeFakeCodex(executable, providerLog));
         const QString socket = directory.filePath(QStringLiteral("daemon.sock"));
@@ -1745,8 +1745,8 @@ class DesktopDaemonClientTest final : public QObject {
         QVERIFY(directory.isValid());
         const QString worktree = directory.filePath(QStringLiteral("worktree"));
         QVERIFY(QDir().mkpath(worktree));
-        const QString codex = directory.filePath(QStringLiteral("fake-codex"));
-        const QString cursor = directory.filePath(QStringLiteral("fake-cursor"));
+        const QString codex = directory.filePath(fixtureName(QStringLiteral("fake-codex")));
+        const QString cursor = directory.filePath(fixtureName(QStringLiteral("fake-cursor")));
         const QString cursorLog = directory.filePath(QStringLiteral("cursor.log"));
         QVERIFY(writeFakeCodex(codex, directory.filePath(QStringLiteral("codex.log"))));
         QVERIFY(writeFakeCursor(cursor, cursorLog));
@@ -1802,7 +1802,7 @@ class DesktopDaemonClientTest final : public QObject {
     void browserSettingsReloadThroughDaemonIsSilent() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const QString executable = directory.filePath(QStringLiteral("fake-codex"));
+        const QString executable = directory.filePath(fixtureName(QStringLiteral("fake-codex")));
         const QString providerLog = directory.filePath(QStringLiteral("provider.log"));
         QVERIFY(writeFakeCodex(executable, providerLog));
         // A fake source checkout, so enabled and disabled settings give different arguments.
@@ -1925,7 +1925,7 @@ class DesktopDaemonClientTest final : public QObject {
                                            "initial"}),
                  0);
         QCOMPARE(QProcess::execute("git", {"-C", a, "worktree", "add", "-b", "feature", b}), 0);
-        const auto executable = directory.filePath("fake-codex");
+        const auto executable = directory.filePath(fixtureName("fake-codex"));
         const auto log = directory.filePath("provider.log");
         QVERIFY(writeFakeCodex(executable, log));
         const auto socket = directory.filePath("daemon.sock");
@@ -1981,7 +1981,7 @@ class DesktopDaemonClientTest final : public QObject {
         QVERIFY(directory.isValid());
         const QString worktree = directory.filePath(QStringLiteral("worktree"));
         QVERIFY(QDir().mkpath(worktree));
-        const QString executable = directory.filePath(QStringLiteral("fake-codex"));
+        const QString executable = directory.filePath(fixtureName(QStringLiteral("fake-codex")));
         const QString providerLog = directory.filePath(QStringLiteral("provider.log"));
         QVERIFY(writeFakeCodex(executable, providerLog));
         const auto turnCount = [&providerLog] {

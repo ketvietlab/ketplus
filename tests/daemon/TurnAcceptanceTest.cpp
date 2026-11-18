@@ -65,7 +65,7 @@ class TurnAcceptanceTest final : public QObject {
         QFETCH(QString, fault);
         QTemporaryDir dir;
         const auto path = dir.filePath("journal.sqlite3");
-        const auto executable = dir.filePath("fake-codex");
+        const auto executable = dir.filePath(fixtureName("fake-codex"));
         QVERIFY(writeFakeCodex(executable, dir.filePath("provider.log")));
         LocalJournal journal(path);
         StoredSession seed;
@@ -267,7 +267,7 @@ class TurnAcceptanceTest final : public QObject {
         QFETCH(bool, configuration);
         QTemporaryDir dir;
         const auto path = dir.filePath("journal.sqlite3");
-        const auto executable = dir.filePath("fake-codex");
+        const auto executable = dir.filePath(fixtureName("fake-codex"));
         QVERIFY(writeFakeCodex(executable, dir.filePath("provider.log")));
         LocalJournal journal(path);
         StoredSession seed;
@@ -320,7 +320,7 @@ class TurnAcceptanceTest final : public QObject {
     void stopDuringAFailedStartDoesNotReachTheNextTurn() {
         QTemporaryDir dir;
         const auto path = dir.filePath("journal.sqlite3");
-        const auto executable = dir.filePath("fake-codex");
+        const auto executable = dir.filePath(fixtureName("fake-codex"));
         const auto providerLog = dir.filePath("provider.log");
         QVERIFY(writeFakeCodex(executable, providerLog));
         LocalJournal journal(path);
@@ -359,7 +359,7 @@ class TurnAcceptanceTest final : public QObject {
     void staleCompletionDoesNotEndTheActiveTurn() {
         QTemporaryDir dir;
         const auto path = dir.filePath("journal.sqlite3");
-        const auto executable = dir.filePath("fake-codex");
+        const auto executable = dir.filePath(fixtureName("fake-codex"));
         QVERIFY(writeFakeCodex(executable, dir.filePath("provider.log")));
         LocalJournal journal(path);
         StoredSession seed;
@@ -414,7 +414,7 @@ class TurnAcceptanceTest final : public QObject {
     void deltaAfterItsItemCompletedIsDropped() {
         QTemporaryDir dir;
         const auto path = dir.filePath("journal.sqlite3");
-        const auto executable = dir.filePath("fake-codex");
+        const auto executable = dir.filePath(fixtureName("fake-codex"));
         QVERIFY(writeFakeCodex(executable, dir.filePath("provider.log")));
         LocalJournal journal(path);
         StoredSession seed;
@@ -473,7 +473,7 @@ class TurnAcceptanceTest final : public QObject {
     void completedItemsAreRememberedInBoundedMemory() {
 #ifdef Q_OS_MACOS
         QTemporaryDir dir;
-        const auto executable = dir.filePath("fake-codex");
+        const auto executable = dir.filePath(fixtureName("fake-codex"));
         QVERIFY(writeFakeCodex(executable, dir.filePath("provider.log")));
         LocalJournal journal(dir.filePath("journal.sqlite3"));
         StoredSession seed;
@@ -524,7 +524,7 @@ class TurnAcceptanceTest final : public QObject {
     void twoClientsActingOnOneSessionSettleOnce() {
         QTemporaryDir dir;
         const auto path = dir.filePath("journal.sqlite3");
-        const auto executable = dir.filePath("fake-codex");
+        const auto executable = dir.filePath(fixtureName("fake-codex"));
         const auto providerLog = dir.filePath("provider.log");
         QVERIFY(writeFakeCodex(executable, providerLog));
         LocalJournal journal(path);
@@ -603,8 +603,8 @@ class TurnAcceptanceTest final : public QObject {
     void rejectedTurnAfterAProviderSwitchKeepsTheHandoff() {
         QTemporaryDir dir;
         const auto path = dir.filePath("journal.sqlite3");
-        const auto codexPath = dir.filePath("fake-codex");
-        const auto claudePath = dir.filePath("fake-claude");
+        const auto codexPath = dir.filePath(fixtureName("fake-codex"));
+        const auto claudePath = dir.filePath(fixtureName("fake-claude"));
         const auto claudeLog = dir.filePath("claude.log");
         QVERIFY(writeFakeCodex(codexPath, dir.filePath("codex.log")));
         QVERIFY(writeFakeClaude(claudePath, claudeLog));
@@ -667,8 +667,8 @@ class TurnAcceptanceTest final : public QObject {
     void failedProviderSwitchStaysWithThePreviousProvider() {
         QTemporaryDir dir;
         const auto path = dir.filePath("journal.sqlite3");
-        const auto codexPath = dir.filePath("fake-codex");
-        const auto claudePath = dir.filePath("fake-claude");
+        const auto codexPath = dir.filePath(fixtureName("fake-codex"));
+        const auto claudePath = dir.filePath(fixtureName("fake-claude"));
         QVERIFY(writeFakeCodex(codexPath, dir.filePath("codex.log")));
         QVERIFY(writeFakeClaude(claudePath, dir.filePath("claude.log")));
         LocalJournal journal(path);
@@ -718,8 +718,8 @@ class TurnAcceptanceTest final : public QObject {
     }
     void providerRejectedStartKeepsTheHandoff() {
         QTemporaryDir dir;
-        const auto codexPath = dir.filePath("fake-codex");
-        const auto claudePath = dir.filePath("fake-claude");
+        const auto codexPath = dir.filePath(fixtureName("fake-codex"));
+        const auto claudePath = dir.filePath(fixtureName("fake-claude"));
         const auto claudeLog = dir.filePath("claude.log");
         QVERIFY(writeFakeCodex(codexPath, dir.filePath("codex.log")));
         QVERIFY(writeFakeClaude(claudePath, claudeLog));
@@ -774,7 +774,7 @@ class TurnAcceptanceTest final : public QObject {
     }
     void finalErrorEndsItsApprovals() {
         QTemporaryDir dir;
-        const auto executable = dir.filePath("fake-codex");
+        const auto executable = dir.filePath(fixtureName("fake-codex"));
         const auto providerLog = dir.filePath("provider.log");
         QVERIFY(writeFakeCodex(executable, providerLog));
         LocalJournal journal(dir.filePath("journal.sqlite3"));
@@ -883,7 +883,7 @@ class TurnAcceptanceTest final : public QObject {
 
     void approvalsEndWithTheirTurn() {
         QTemporaryDir dir;
-        const auto executable = dir.filePath("fake-codex");
+        const auto executable = dir.filePath(fixtureName("fake-codex"));
         const auto providerLog = dir.filePath("provider.log");
         QVERIFY(writeFakeCodex(executable, providerLog));
         LocalJournal journal(dir.filePath("journal.sqlite3"));
@@ -974,8 +974,8 @@ class TurnAcceptanceTest final : public QObject {
     }
     void claudeApprovalsEndWithTheirTurn() {
         QTemporaryDir dir;
-        const auto codexPath = dir.filePath("fake-codex");
-        const auto claudePath = dir.filePath("fake-claude");
+        const auto codexPath = dir.filePath(fixtureName("fake-codex"));
+        const auto claudePath = dir.filePath(fixtureName("fake-claude"));
         QVERIFY(writeFakeCodex(codexPath, dir.filePath("codex.log")));
         QVERIFY(writeFakeClaude(claudePath, dir.filePath("claude.log")));
         LocalJournal journal(dir.filePath("journal.sqlite3"));
@@ -1034,8 +1034,8 @@ class TurnAcceptanceTest final : public QObject {
     }
     void claudeBackgroundTaskKeepsItsApprovals() {
         QTemporaryDir dir;
-        const auto codexPath = dir.filePath("fake-codex");
-        const auto claudePath = dir.filePath("fake-claude");
+        const auto codexPath = dir.filePath(fixtureName("fake-codex"));
+        const auto claudePath = dir.filePath(fixtureName("fake-claude"));
         QVERIFY(writeFakeCodex(codexPath, dir.filePath("codex.log")));
         QVERIFY(writeFakeClaude(claudePath, dir.filePath("claude.log")));
         LocalJournal journal(dir.filePath("journal.sqlite3"));

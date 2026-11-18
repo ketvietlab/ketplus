@@ -129,7 +129,7 @@ class SessionForkTest final : public QObject {
     void forkOfAnArchivedConversationIsNotArchived() {
         QTemporaryDir dir;
         QVERIFY(dir.isValid());
-        const auto executable = dir.filePath("fake-codex");
+        const auto executable = dir.filePath(fixtureName("fake-codex"));
         QVERIFY(writeFakeCodex(executable, dir.filePath("codex.log")));
         LocalJournal journal(dir.filePath("journal.sqlite"));
         StoredSession source;
@@ -179,7 +179,7 @@ class SessionForkTest final : public QObject {
         QFETCH(QString, fault);
         QTemporaryDir dir;
         QVERIFY(dir.isValid());
-        const auto executable = dir.filePath("fake-codex");
+        const auto executable = dir.filePath(fixtureName("fake-codex"));
         QVERIFY(writeFakeCodex(executable, dir.filePath("codex.log")));
         const auto path = dir.filePath("journal.sqlite");
         LocalJournal journal(path);
@@ -331,7 +331,7 @@ class SessionForkTest final : public QObject {
 
     void destinationCreatedWhileProviderForkIsPendingIsPreserved() {
         QTemporaryDir dir;
-        const auto executable = dir.filePath("fake-codex");
+        const auto executable = dir.filePath(fixtureName("fake-codex"));
         const auto log = dir.filePath("codex.log");
         const auto gate = dir.filePath("release-fork");
         QVERIFY(writeFakeCodex(executable, log));
@@ -931,12 +931,12 @@ class SessionForkTest final : public QObject {
     void forksClaudeConversationWithItsTranscript() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const QString claudePath = directory.filePath(QStringLiteral("fake-claude"));
+        const QString claudePath = directory.filePath(fixtureName(QStringLiteral("fake-claude")));
         const QString logPath = directory.filePath(QStringLiteral("claude.log"));
         QVERIFY(writeFakeClaude(claudePath, logPath));
         LocalJournal journal(directory.filePath(QStringLiteral("journal.sqlite3")));
         QVERIFY2(journal.isOpen(), qPrintable(journal.errorString()));
-        const QString codexPath = directory.filePath(QStringLiteral("fake-codex"));
+        const QString codexPath = directory.filePath(fixtureName(QStringLiteral("fake-codex")));
         QVERIFY(writeFakeCodex(codexPath, directory.filePath(QStringLiteral("codex.log"))));
         CodexAdapter codex(codexPath);
         ClaudeAdapter claude(claudePath);
@@ -1010,7 +1010,7 @@ class SessionForkTest final : public QObject {
     void forksCodexConversationAndResumesTheCopy() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const QString codexPath = directory.filePath(QStringLiteral("fake-codex"));
+        const QString codexPath = directory.filePath(fixtureName(QStringLiteral("fake-codex")));
         const QString logPath = directory.filePath(QStringLiteral("codex.log"));
         QVERIFY(writeFakeCodex(codexPath, logPath));
         LocalJournal journal(directory.filePath(QStringLiteral("journal.sqlite3")));
@@ -1044,7 +1044,7 @@ class SessionForkTest final : public QObject {
     void hostForkCopiesInBoundedPasses() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const QString codexPath = directory.filePath(QStringLiteral("fake-codex"));
+        const QString codexPath = directory.filePath(fixtureName(QStringLiteral("fake-codex")));
         const QString logPath = directory.filePath(QStringLiteral("codex.log"));
         QVERIFY(writeFakeCodex(codexPath, logPath));
         const QString path = directory.filePath(QStringLiteral("journal.sqlite3"));
@@ -1101,12 +1101,12 @@ class SessionForkTest final : public QObject {
         QFETCH(QString, provider);
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const QString claudePath = directory.filePath(QStringLiteral("fake-claude"));
+        const QString claudePath = directory.filePath(fixtureName(QStringLiteral("fake-claude")));
         const QString logPath = directory.filePath(QStringLiteral("claude.log"));
         QVERIFY(writeFakeClaude(claudePath, logPath));
         LocalJournal journal(directory.filePath(QStringLiteral("journal.sqlite3")));
         QVERIFY2(journal.isOpen(), qPrintable(journal.errorString()));
-        const QString codexPath = directory.filePath(QStringLiteral("fake-codex"));
+        const QString codexPath = directory.filePath(fixtureName(QStringLiteral("fake-codex")));
         QVERIFY(writeFakeCodex(codexPath, directory.filePath(QStringLiteral("codex.log"))));
         CodexAdapter codex(codexPath);
         ClaudeAdapter claude(claudePath);
