@@ -1,3 +1,11 @@
+# The runner's retry delay, shared by its Relay calls and its Relay socket.
+add_library(ketplus_runner_backoff STATIC src/run/Backoff.cpp src/run/Backoff.h)
+target_link_libraries(ketplus_runner_backoff PUBLIC Qt6::Core)
+target_include_directories(ketplus_runner_backoff PUBLIC
+    "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>"
+)
+ketplus_enable_warnings(ketplus_runner_backoff)
+
 # ketplus-runner: the process on a build node. Identity, registration, pairing, access tokens
 # and heartbeat; its keys live in its own state directory, never in an OS credential store.
 add_library(ketplus_runner_app STATIC
@@ -21,8 +29,6 @@ add_library(ketplus_runner_app STATIC
     src/relay/RelayClient.h
     src/run/AccessTokens.cpp
     src/run/AccessTokens.h
-    src/run/Backoff.cpp
-    src/run/Backoff.h
     src/run/RunLoop.cpp
     src/run/RunLoop.h
     src/state/RunnerState.cpp
@@ -31,8 +37,8 @@ add_library(ketplus_runner_app STATIC
     src/state/StateDirectory.h
 )
 target_link_libraries(ketplus_runner_app
-    PUBLIC Qt6::Core Qt6::Network ketplus_runner_pairing ketplus_runner_protocol
-    ketplus_control_crypto_primitives
+    PUBLIC Qt6::Core Qt6::Network ketplus_runner_backoff ketplus_runner_pairing
+    ketplus_runner_protocol ketplus_control_crypto_primitives
     PRIVATE ketplus_product_version OpenSSL::Crypto)
 target_include_directories(ketplus_runner_app PUBLIC
     "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>"
@@ -78,6 +84,38 @@ target_link_libraries(ketplus_runner_snapshot_receiver
     PUBLIC Qt6::Core ketplus_runner_app ketplus_runner_session ketplus_runner_snapshot
     ketplus_runner_protocol)
 ketplus_enable_warnings(ketplus_runner_snapshot_receiver)
+
+# The runner's Relay socket and its peer connection to a desktop: pure logic over the
+# interfaces in PeerPorts.h, plus the Qt and WebRTC adapters.
+add_library(ketplus_runner_peer STATIC
+    src/peer/PeerChannels.cpp
+    src/peer/PeerChannels.h
+    src/peer/PeerConnector.cpp
+    src/peer/PeerConnector.h
+    src/peer/PeerLog.cpp
+    src/peer/PeerLog.h
+    src/peer/PeerPorts.h
+    src/peer/PeerSignals.cpp
+    src/peer/PeerSignals.h
+    src/peer/QtPeerClock.cpp
+    src/peer/QtPeerClock.h
+    src/peer/QtRelaySocket.cpp
+    src/peer/QtRelaySocket.h
+    src/peer/RelayLink.cpp
+    src/peer/RelayLink.h
+    src/peer/RelayWakeups.cpp
+    src/peer/RelayWakeups.h
+    src/peer/WebRtcTransport.cpp
+    src/peer/WebRtcTransport.h
+)
+target_link_libraries(ketplus_runner_peer
+    PUBLIC Qt6::Core Qt6::Network Qt6::WebSockets ketplus_runner_backoff ketplus_runner_pairing
+    ketplus_runner_session ketplus_peer_link
+    PRIVATE ketplus_control_crypto_primitives)
+target_include_directories(ketplus_runner_peer PUBLIC
+    "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>"
+)
+ketplus_enable_warnings(ketplus_runner_peer)
 
 add_executable(ketplus-runner src/main.cpp)
 # The receiver brings ketplus_runner_app and ketplus_runner_session with it.

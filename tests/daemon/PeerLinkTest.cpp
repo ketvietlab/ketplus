@@ -309,6 +309,118 @@ class PeerLinkTest final : public QObject {
         pair.reset();
         QTest::qWait(300);
     }
+
+    void rawTransferOfFourMiBArrivesWhole() {
+        QByteArray bytes(4'194'304, Qt::Uninitialized);
+        for (qsizetype i = 0; i < bytes.size(); ++i)
+            bytes[i] = char(i * 31 % 251);
+        const auto packets = FrameCodec::encodeTransfer(0x0102030405060708ULL, bytes);
+        QVERIFY(packets.size() > 1);
+        FrameCodec codec;
+        QString error;
+        for (qsizetype i = 0; i + 1 < packets.size(); ++i) {
+            QVERIFY(packets.at(i).binary);
+            QCOMPARE(packets.at(i).channel, Channel::Bulk);
+            QVERIFY(packets.at(i).bytes.size() <= FrameCodec::messageLimit);
+            QVERIFY(!codec.receiveTransfer(packets.at(i), 1'000, &error));
+            QVERIFY(error.isEmpty());
+        }
+        const auto done = codec.receiveTransfer(packets.last(), 1'000, &error);
+        QVERIFY(error.isEmpty());
+        QVERIFY(done);
+        QCOMPARE(done->transferId, 0x0102030405060708ULL);
+        QCOMPARE(done->bytes, bytes);
+        // A transfer with a single part is complete at once.
+        const auto one =
+            codec.receiveTransfer(FrameCodec::encodeTransfer(9, "abc").first(), 0, &error);
+        QVERIFY(one && one->transferId == 9 && one->bytes == "abc");
+    }
+
+    void rawTransferEncodingRefusesBadInput() {
+        QVERIFY(FrameCodec::encodeTransfer(0, "x").isEmpty());
+        QVERIFY(FrameCodec::encodeTransfer(1, {}).isEmpty());
+        QVERIFY(FrameCodec::encodeTransfer(1, QByteArray(FrameCodec::transferLimit + 1, 'x'))
+                    .isEmpty());
+        QVERIFY(
+            !FrameCodec::encodeTransfer(1, QByteArray(FrameCodec::transferLimit, 'x')).isEmpty());
+    }
+
+    void fourInterleavedRawTransfersAndAFifth() {
+        const QByteArray body(3 * (FrameCodec::messageLimit - 12), 'b');
+        QList<QList<Packet>> transfers;
+        for (quint64 id = 1; id <= 5; ++id)
+            transfers.append(FrameCodec::encodeTransfer(id, body + QByteArray::number(id)));
+        FrameCodec codec;
+        QString error;
+        QList<quint64> completed;
+        for (qsizetype part = 0; part < transfers.first().size(); ++part)
+            for (qsizetype id = 0; id < 4; ++id) {
+                const auto done = codec.receiveTransfer(transfers.at(id).at(part), 0, &error);
+                QVERIFY2(error.isEmpty(), qPrintable(error));
+                if (done) {
+                    QCOMPARE(done->bytes, body + QByteArray::number(id + 1));
+                    completed.append(done->transferId);
+                }
+                // The fifth may not start while four are open.
+                if (part == 0 && id == 3) {
+                    QVERIFY(!codec.receiveTransfer(transfers.at(4).first(), 0, &error));
+                    QCOMPARE(error, QStringLiteral("transfer_limit"));
+                }
+            }
+        QCOMPARE(completed, (QList<quint64>{1, 2, 3, 4}));
+        // Once the others finished, the fifth fits.
+        std::optional<FrameCodec::CompletedTransfer> fifth;
+        for (const auto& packet : transfers.at(4))
+            fifth = codec.receiveTransfer(packet, 0, &error);
+        QVERIFY(error.isEmpty());
+        QVERIFY(fifth && fifth->transferId == 5);
+    }
+
+    void rawTransfersKeepTheFrameLimits() {
+        FrameCodec codec;
+        QString error;
+        QVERIFY(!codec.receiveTransfer({Channel::Bulk, "{\"type\":\"x\"}", false}, 0, &error));
+        QCOMPARE(error, QStringLiteral("invalid_transfer"));
+        const auto packets =
+            FrameCodec::encodeTransfer(4, QByteArray(2 * FrameCodec::messageLimit, 'z'));
+        QVERIFY(!codec.receiveTransfer({Channel::Control, packets.first().bytes, true}, 0, &error));
+        QCOMPARE(error, QStringLiteral("invalid_transfer"));
+        QVERIFY(!codec.receiveTransfer(packets.at(1), 0, &error));
+        QCOMPARE(error, QStringLiteral("transfer_limit"));
+        QVERIFY(!codec.receiveTransfer(packets.first(), 0, &error));
+        QVERIFY(error.isEmpty());
+        QVERIFY(!codec.receiveTransfer(packets.at(2), 0, &error));
+        QCOMPARE(error, QStringLiteral("invalid_transfer_sequence"));
+        QVERIFY(!codec.receiveTransfer(
+            {Channel::Bulk, QByteArray(FrameCodec::messageLimit + 1, 'x'), true}, 0, &error));
+        QCOMPARE(error, QStringLiteral("frame_limit"));
+    }
+
+    void transfersExpireAfterTheCodecTimeout() {
+        const auto packets =
+            FrameCodec::encodeTransfer(6, QByteArray(2 * FrameCodec::messageLimit, 'e'));
+        QCOMPARE(packets.size(), 3);
+        QString error;
+        const auto check = [&](FrameCodec& codec, qint64 timeout) {
+            QVERIFY(!codec.receiveTransfer(packets.at(0), 0, &error));
+            QVERIFY(!codec.receiveTransfer(packets.at(1), timeout, &error));
+            QVERIFY(error.isEmpty());
+            QVERIFY(!codec.receiveTransfer(packets.at(2), timeout + 1, &error));
+            QCOMPARE(error, QStringLiteral("frame_limit"));
+            codec.clear();
+        };
+        FrameCodec standard;
+        check(standard, FrameCodec::defaultTransferTimeoutMs);
+        FrameCodec longer(300'000);
+        check(longer, 300'000);
+        // The JSON path expires on the same clock.
+        FrameCodec json;
+        const auto frame =
+            FrameCodec::encode(frameOfSize(2 * FrameCodec::messageLimit), Channel::Bulk, 8);
+        QVERIFY(json.receive(frame.at(0), 0, &error).isEmpty() && error.isEmpty());
+        QVERIFY(json.receive(frame.at(1), 30'001, &error).isEmpty());
+        QCOMPARE(error, QStringLiteral("frame_limit"));
+    }
 };
 
 QTEST_GUILESS_MAIN(PeerLinkTest)

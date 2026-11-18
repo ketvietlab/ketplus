@@ -34,6 +34,18 @@ qt_add_executable(ketplus_runner_session_tests
 ketplus_enable_warnings(ketplus_runner_session_tests)
 target_link_libraries(ketplus_runner_session_tests PRIVATE Qt6::Test ketplus_runner_session)
 add_test(NAME ketplus_runner_session_tests COMMAND ketplus_runner_session_tests)
+
+# The runner's Relay socket and peer connection: fakes for every port, then real links on
+# 127.0.0.1 (a desktop answerer through an in-process Relay, local WebSocket and HTTP servers).
+qt_add_executable(ketplus_runner_peer_tests
+    RunnerPeerTest.cpp RunnerPeerTest.h RunnerRelayLinkTest.cpp RunnerPeerConnectorTest.cpp
+    RunnerPeerChannelsTest.cpp RunnerPeerLoopbackTest.cpp)
+ketplus_enable_warnings(ketplus_runner_peer_tests)
+target_link_libraries(ketplus_runner_peer_tests PRIVATE
+    Qt6::Test Qt6::Network Qt6::WebSockets ketplus_runner_peer ketplus_runner_pairing
+    ketplus_control_crypto_primitives)
+add_test(NAME ketplus_runner_peer_tests COMMAND ketplus_runner_peer_tests)
+set_tests_properties(ketplus_runner_peer_tests PROPERTIES TIMEOUT 180)
 ketplus_tests_offscreen()
 
 # The runner's snapshot receiver with real packs from the snapshot library and the system git;
