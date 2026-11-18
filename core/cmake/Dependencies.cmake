@@ -83,6 +83,8 @@ set(scintilla_qt_dir "${scintilla_SOURCE_DIR}/qt/ScintillaEditBase")
 # the lines under the margin. Compile a copy whose client rectangle starts at the origin; the
 # pinned upstream file stays untouched in the shared dependency cache.
 file(READ "${scintilla_qt_dir}/PlatQt.cpp" scintilla_platqt)
+# A Windows clone with core.autocrlf checks the file out with CRLF; the match below is on LF.
+string(REPLACE "\r\n" "\n" scintilla_platqt "${scintilla_platqt}")
 set(scintilla_client_upstream
     "PRectangle Window::GetClientPosition() const\n{\n\t// The client position is the window position\n\treturn GetPosition();\n}")
 set(scintilla_client_origin

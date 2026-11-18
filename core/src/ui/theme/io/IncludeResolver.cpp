@@ -5,10 +5,15 @@
 #include <QJsonObject>
 #include <QSet>
 #include <functional>
+#include <iterator>
 #ifdef Q_OS_UNIX
 #include <fcntl.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#elif defined(Q_OS_WIN)
+#include <fcntl.h>
+#include <io.h>
+#include <qt_windows.h>
 #endif
 
 namespace ket::theme::io {
@@ -55,7 +60,7 @@ bool IncludeResolver::resolve(const QString& declaring, const QString& reference
         for (const auto& part : cleaned.split('/')) {
             current += '/' + part;
             const QFileInfo component(current);
-            if (component.isSymLink() || component.isJunction())
+            if (component.isSymLink() || component.isJunction() || component.isShortcut())
                 return fail(error, QStringLiteral("Include symlinks are forbidden"), reference);
         }
     }
@@ -100,6 +105,48 @@ bool IncludeResolver::read(const QString& path, QByteArray* data, Error* error) 
     }
     if (!file.open(descriptor, QIODevice::ReadOnly, QFileDevice::AutoCloseHandle)) {
         ::close(descriptor);
+        return fail(error, file.errorString(), path);
+    }
+#elif defined(Q_OS_WIN)
+    // No openat here. resolve() refused links on every component. The file itself is opened
+    // without following a reparse point and checked through the handle it returned, and the
+    // path the handle really names must still lie under the root, so a directory swapped for a
+    // junction after resolve() is caught as well.
+    const auto nativePath = QDir::toNativeSeparators(QDir(root).filePath(normalized));
+    const HANDLE handle =
+        CreateFileW(reinterpret_cast<const wchar_t*>(nativePath.utf16()), GENERIC_READ,
+                    FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE, nullptr, OPEN_EXISTING,
+                    FILE_FLAG_OPEN_REPARSE_POINT, nullptr);
+    if (handle == INVALID_HANDLE_VALUE)
+        return fail(error, QStringLiteral("Cannot open include safely"), path);
+    BY_HANDLE_FILE_INFORMATION metadata{};
+    if (GetFileType(handle) != FILE_TYPE_DISK || !GetFileInformationByHandle(handle, &metadata) ||
+        (metadata.dwFileAttributes & (FILE_ATTRIBUTE_DIRECTORY | FILE_ATTRIBUTE_REPARSE_POINT)) ||
+        metadata.nFileSizeHigh || metadata.nFileSizeLow > quint64(MaxFileBytes)) {
+        CloseHandle(handle);
+        return fail(error, QStringLiteral("Include must be a regular file of at most 5 MiB"), path);
+    }
+    wchar_t finalPath[32768];
+    const DWORD finalLength =
+        GetFinalPathNameByHandleW(handle, finalPath, DWORD(std::size(finalPath)), VOLUME_NAME_DOS);
+    QString actual = finalLength > 0 && finalLength < std::size(finalPath)
+                         ? QString::fromWCharArray(finalPath, int(finalLength))
+                         : QString();
+    if (actual.startsWith(QStringLiteral("\\\\?\\")))
+        actual.remove(0, 4);
+    const QString nativeRoot = QDir::toNativeSeparators(root);
+    if (!actual.startsWith(nativeRoot + QLatin1Char('\\'), Qt::CaseInsensitive)) {
+        CloseHandle(handle);
+        return fail(error, QStringLiteral("Include resolves outside the source root"), path);
+    }
+    const int descriptor =
+        _open_osfhandle(reinterpret_cast<qintptr>(handle), _O_RDONLY | _O_BINARY);
+    if (descriptor < 0) {
+        CloseHandle(handle);
+        return fail(error, QStringLiteral("Cannot open include safely"), path);
+    }
+    if (!file.open(descriptor, QIODevice::ReadOnly, QFileDevice::AutoCloseHandle)) {
+        _close(descriptor);
         return fail(error, file.errorString(), path);
     }
 #else

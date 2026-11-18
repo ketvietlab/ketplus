@@ -324,6 +324,21 @@ QString MermaidRenderer::discoverExecutable() {
     }
 
     const QString home = QDir::homePath();
+#if defined(Q_OS_WIN)
+    // Shims of npm (`mmdc.cmd`), Volta and nvm-windows. A variable that is unset or relative must
+    // not turn a candidate into a path relative to the working directory, where a workspace could
+    // plant its own mmdc.
+    QStringList fixedCandidates;
+    const auto addUnder = [&fixedCandidates](const char* variable, const QString& relative) {
+        const QString base = qEnvironmentVariable(variable);
+        if (!base.isEmpty() && QDir::isAbsolutePath(base))
+            fixedCandidates.append(QDir(base).filePath(relative));
+    };
+    addUnder("APPDATA", QStringLiteral("npm/mmdc.cmd"));
+    addUnder("LOCALAPPDATA", QStringLiteral("Volta/bin/mmdc.exe"));
+    addUnder("NVM_SYMLINK", QStringLiteral("mmdc.cmd"));
+    fixedCandidates.append(QDir(home).filePath(QStringLiteral(".volta/bin/mmdc.exe")));
+#else
     const QStringList fixedCandidates{
         QStringLiteral("/opt/homebrew/bin/mmdc"),
         QStringLiteral("/usr/local/bin/mmdc"),
@@ -333,12 +348,14 @@ QString MermaidRenderer::discoverExecutable() {
         home + QStringLiteral("/.local/share/fnm/aliases/default/bin/mmdc"),
         home + QStringLiteral("/.npm-global/bin/mmdc"),
     };
+#endif
     for (const auto& candidate : fixedCandidates) {
         if (isExecutableFile(candidate)) {
             return candidate;
         }
     }
 
+#if !defined(Q_OS_WIN)
     QDir nvmVersions(home + QStringLiteral("/.nvm/versions/node"));
     const QFileInfoList nodeVersions =
         nvmVersions.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Time);
@@ -348,6 +365,7 @@ QString MermaidRenderer::discoverExecutable() {
             return candidate;
         }
     }
+#endif
     return {};
 }
 

@@ -28,6 +28,8 @@ set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+include(cmake/MsvcOptions.cmake)
+
 find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Widgets Core5Compat Svg SvgWidgets Concurrent)
 
 include(cmake/CompilerCache.cmake)
