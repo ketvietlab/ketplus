@@ -333,7 +333,7 @@ class ManagedTaskHostTest final : public QObject {
         forged.insert("owner_session_id", "other");
         host.handleAgentCommandDeferred(token, "session.task.start", forged,
                                         [&](const QJsonObject& value) { result = value; });
-        QCOMPARE(result.value("error_code"), "invalid_request");
+        QCOMPARE(result.value("error_code"), "stale_origin");
         host.handleAgentCommandDeferred(token, "session.task.resolve_cleanup",
                                         {{"task_id", "anything"}, {"revision", 1}},
                                         [&](const QJsonObject& value) { result = value; });

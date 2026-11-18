@@ -183,7 +183,7 @@ describes them.
 | Automatic turns | `team.update` | `team_id`, `turn_budget` (a whole number from 5 to 200, ADR 0114 open point 2), `expected_revision` | settings | `invalid_payload` |
 | Language | `team.update` | `team_id`, `language` (`en` or `vi`, ADR 0125), `expected_revision` | settings | `invalid_payload` |
 | Delete the team (its conversations stay) | `team.delete` | `team_id`, `confirmation: "DELETE"`, `expected_revision` | settings and members | `confirmation_required` |
-| New team | `team.create` | envelope `repositoryId` and `expectedCatalogRevision`; `name`, `goal`, `integration_branch`, `merge_policy`, `leader_writes_requirements`, `execution_policy`, `risk_acknowledged`, `plan {leader, developers {count, members?}, reviewer}`, each agent being `{provider, model?, effort?}`, `turn_budget?`, `language?` (`en` or `vi`, ADR 0125; without it the team is English) (without `turn_budget`, the team takes the global value of Settings → Teams, which the phone reads from `team.list`'s `settings`; an older phone that does not read it shows "The Mac's default (Settings → Teams)" for an empty field) | the worktree catalog | `repository_not_found`, `invalid_repository`, `team_full`, `last_developer`, `provider_unavailable`, `reviewer_unsupported`, `member_unavailable`, `lane_overlap`, `execution_policy_denied` |
+| New team | `team.create` | envelope `repositoryId` and `expectedCatalogRevision`; `name`, `goal`, `integration_branch`, `merge_policy`, `leader_writes_requirements`, `execution_policy`, `risk_acknowledged`, `plan {leader, developers {count, members?}, reviewer}`, each agent being `{provider, model?, effort?}`, `turn_budget?`, `language?` (`auto`, `en` or `vi`, [T30](2026-11-18-english-ui-team-content.md); without it a new team follows the prompt) (without `turn_budget`, the team takes the global value of Settings → Teams, which the phone reads from `team.list`'s `settings`; an older phone that does not read it shows "The Mac's default (Settings → Teams)" for an empty field) | the worktree catalog | `repository_not_found`, `invalid_repository`, `team_full`, `last_developer`, `provider_unavailable`, `reviewer_unsupported`, `member_unavailable`, `lane_overlap`, `execution_policy_denied` |
 | Add a developer (a new conversation) | `team.member.add` | `team_id`, `name`, `lane?`, `paths?`, `provider`, `model?`, `effort?`, `expected_revision` | members | `team_full`, `provider_unavailable`, `member_unavailable`, `lane_overlap` |
 | Remove a member | `team.member.remove` | `team_id`, `session_id`, `expected_revision` | members | `not_member`, `last_developer`, `role_required` |
 | Add an existing conversation to a team | `team.member.join` | `team_id`, `session_id`, `lane?`, `paths?`, `expected_revision` | members | `session_not_found`, `already_member`, `other_repository`, `team_full`, `lane_overlap` |
@@ -258,12 +258,20 @@ objects carries a local path or a tag.
 | Field | Content |
 | --- | --- |
 | `id`, `revision` | the team and its revision |
-| `repository_id` | the opaque catalog id of the team's repository, which Home groups by |
+| `repository_id` | the opaque catalog id of the team's current execution repository |
+| `sidebar_repository_id` | optional opaque origin id for grouping; empty means known no-repository, absent means legacy unknown |
 | `name` | up to 120 bytes |
 | `paused`, `paused_reason` | the reason is `user`, `budget`, `empty_role` or empty |
 | `open_decisions` | drives the warning mark |
 | `tasks_total`, `tasks_done` | |
 | `members` | every member, at most 8 entries `{session_id, number, role}`: the leader, five developers and two reviewers |
+
+`sidebar_repository_id` is additive display metadata in the existing encrypted answer,
+not command authority or task scope. New clients group by it when present; an absent
+field retains the legacy repository fallback. The summary carries the same optional
+field. Moving execution repositories does not rewrite a known origin; older clients
+can ignore the field. No origin path is exposed and the contract stays version 1.
+See [sidebar origin placement](2026-11-17-sidebar-origin-placement.md).
 
 At most 100 entries are returned, followed by `teams_total`.
 
@@ -289,9 +297,9 @@ refusal.
     phone shows the longer goal as text.
   - Settings: `integration_branch`, `merge_policy` (who merges: `leader` or `user`),
     `leader_writes_requirements` (who writes requirements), `execution_policy`,
-    `language` (ADR 0125: `en` or `vi`; the texts the daemon writes for the team, its Updates
-    and its own decisions, are in it, and a phone that shows its own fixed text should follow
-    it; an older phone ignores the field).
+    `language` ([T30](2026-11-18-english-ui-team-content.md): `auto`, `en`, `vi`; a content
+    fallback only. Application chrome and new fixed daemon templates are English. The value
+    never requests translation of stored content; older persisted en/vi values remain valid).
   - State: `paused`, `paused_reason`, `plan_approved`, `held_count`.
   - The automatic-turn budget: `turn_budget`, `automatic_turns` and `turns_left`.
     `turns_left` is computed by the daemon, so the phone infers nothing.

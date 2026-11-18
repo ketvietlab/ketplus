@@ -96,6 +96,8 @@ still takes colours or metrics from that stylesheet or from `ThemePalette`:
   shared UI; the Lite application. Used by both editions.
 - `apps/desktop`: Pro executable shell, windows, menus, tabs, and composition.
 - `apps/daemon`: local and headless Linux daemon and `ketplusctl`.
+- `apps/runner`: `ketplus-runner`, the process on a Linux build node: state directory,
+  registration, pairing, access tokens and heartbeat.
 - `apps/browser`: bundled browser runtime, a separate helper process.
 - `apps/computer`: KetPlus Computer, the separately signed macOS app for agent
   computer use (Swift Package; ADR 0030-0032).
@@ -104,6 +106,12 @@ still takes colours or metrics from that stylesheet or from `ThemePalette`:
 - `modules/remote`: daemon IPC client, relay (Control v2) client, and the
   `ketplus_control_crypto` keys/credentials/sign-in target the daemon also links.
 - `modules/computer`: computer use settings and provider MCP launch.
+- `modules/runner`: runner job support; `src/snapshot` creates, packs and applies worktree
+  snapshots with the system git; `src/pairing` holds the pairing token, fingerprints,
+  confirmation code, signed payloads and pin records shared by the daemon and the runner;
+  `src/protocol` encodes, decodes and checks the peer frames.
+- `modules/tools`: where node, npm and Git live and how npm-installed CLIs start,
+  including Windows npm `.cmd` shims; Qt Core only.
 - `tests`: Pro and cross-boundary integration tests.
 - `modules/accounts` and `modules/router`: reserved; create each only with its
   first real implementation.

@@ -74,6 +74,55 @@ job fails with a named mismatch, instead of running stale or missing binaries,
 when a runner image puts any of them elsewhere. Node is pinned to an exact
 version for the same reason. No job in the matrix uses provider quota.
 
+### Lite on a local Windows machine
+
+`tools/windows/win-run.sh` (see `docs/development.md`, Windows) runs the Lite
+suite on a Windows build machine with MSVC 2022 and Qt 6.11:
+`cmake --preset lite-dev`, `cmake --build --preset lite-dev`, then
+`ctest --preset lite-dev -j4 --timeout 180`. All 28 Lite tests pass on Windows.
+The two tests that start real `cmd.exe` shells (`ketplus_pty_backend_tests`,
+`ketplus_terminal_tests`) are `RUN_SERIAL` there, because a cold shell start can
+exceed their wait windows when it competes with the rest of the suite.
+
+macOS runs 29 tests: `ketplus_terminal_app_tests` is built only on Apple
+platforms. Run it with `QT_QPA_PLATFORM=offscreen ctest --preset lite-dev -j4`.
+
+Two cases inside `ketplus_preview_tests` are skipped on Windows (QTest `SKIP`,
+which CTest does not list): `discoversMmdcInstalledByNvm` (the nvm layout and
+`HOME` are POSIX only) and `rendersMermaidAndOpensThePopup` (its fake `mmdc` is
+a `/bin/sh` script). Windows `mmdc` discovery and rendering are not covered yet;
+a Windows version of the first test must set `USERPROFILE`, which
+`QDir::homePath()` reads on Windows, alongside `HOME`.
+
+Open, edit and save, Git status and the Markdown preview are covered by
+automated offscreen tests that ran on Windows: `ketplus_lite_window_tests` (a
+real Git repository opened in the window), `ketplus_tests` document save,
+`ketplus_editor_file_refresh_tests`, `ketplus_git_tests`,
+`ketplus_git_changes_panel_tests` and `ketplus_preview_tests`. Theme includes
+from a UNC share (`\\localhost\C$`) run in `ketplus_theme_input_tests`. The
+case with a filesystem root as the source (`C:\` or `/`) writes a scratch
+directory there, so it runs only with `KETPLUS_TEST_WRITE_FILESYSTEM_ROOT=1`
+and is skipped otherwise. Rendering Mermaid needs the external `mmdc` tool.
+
+Launching the app for a smoke check needs a desktop. An ssh session has none,
+so the default `windows` Qt platform plugin aborts at startup. Deploy the
+offscreen plugin next to the executable and use the review capture (see
+`docs/design-system.md`):
+
+```bat
+windeployqt --no-translations --compiler-runtime build\lite-dev\core\KetPlusCM.exe
+copy %QT_ROOT%\plugins\platforms\qoffscreend.dll build\lite-dev\core\platforms\
+set QT_QPA_PLATFORM=offscreen
+set KETPLUS_CAPTURE=smoke.png
+build\lite-dev\core\KetPlusCM.exe <repository-folder>
+```
+
+The Debug executable is `core\KetPlusCM.exe` and needs the OpenSSL `bin`
+directory on `PATH`. A capture of a folder holding a Markdown file and a Git
+repository shows the Markdown preview, `Git: <branch>` with the changed-file
+count, the file's CRLF and UTF-8 BOM, and the light and dark themes. The
+Mermaid block falls back to code with a notice until `mmdc` is installed.
+
 ## VS Code importer fixtures
 
 `ketplus_vscode_import_tests` covers original dark/light/include themes, standard
@@ -141,6 +190,13 @@ and local/archive includes with cycles, escapes and the 16-level boundary.
 | Transcript file activation | `ketplus_transcript_file_opening_tests` | Text/source-line editor routing, MIME/content classification, external media/PDF/app handoff, encoded paths, symlinks and missing files; platform opens intercepted without launching apps |
 | Repository navigation cache | `ketplus_repository_metadata_tests` | SQLite persistence, invalidation, unavailable cache |
 | Conversation-owned worktrees | `ketplus_conversation_worktree_tests` | SQLite path map, hide/remove, turn-delta capture |
+| Runner worktree snapshots | `ketplus_runner_snapshot_tests` | Temporary real Git repositories and the system git: snapshot content (edits, staged and unstaged, deletions, renames, executable bit, symlinks, ignores, linked worktrees), the user's repository unchanged byte for byte, delta packs, applying into a workspace, rejected packs leaving it unchanged, hostile hooks, filters and configuration not running, forged trees and symlinks not writing outside it, the user's excludes and attributes files compared with `git ls-files`, submodules, LFS and other filtered paths reported but their worktree content not sent; builds in the `daemon-dev` preset too |
+| Runner pairing | `ketplus_runner_pairing_tests` | Fixed vectors computed with Python's standard library and the OpenSSL command line: pairing token encode and parse (each malformed, missing, mistyped and oversized case refused, the token never in QDebug output or error codes), runner and desktop fingerprints, pairing digest and confirmation code, each digest input changing the code, the desktop key check, canonical bytes and Ed25519 signatures of each signed payload with every field, key, key version and issuedAt window failure, pin records round trip and corrupt records refused; builds in the `daemon-dev` preset too |
+| Runner peer protocol frames | `ketplus_runner_protocol_tests` | `ketplus_runner_protocol` only, no network: round trip of every frame including optional and null fields, exact-limit and limit-plus-one values for every frame size and field limit, malformed JSON, invalid UTF-8, wrong field types, unknown fields and types, channel and direction routing, error code strings |
+| Runner process | `ketplus_runner_app_tests` | `ketplus-runner` against an in-process Relay on 127.0.0.1 with a fake clock: state directory mode, owner, lock, atomic writes and corrupt files; register and pair until the pin is active (token from argument, stdin and file), local refusals with no Relay call, desktop key mismatch, approvals that do not verify, ended pairings and lost answers; access token challenge signature, refresh credential rotation, lost answers and stops between rotation and store; each Relay refusal (exit code or backoff capped at 60 seconds), the 30-second heartbeat, unpair, deregister, status, every exit code in `--help`, and no secret in output, logs or the state directory |
+| Runner job session | `ketplus_runner_session_tests` | `ketplus_runner_session` over fake channel, lease, snapshot receiver, command runner and clock: handshake, broken frames, spec refusals, start/accepted/started order, at-most-once launch, output paging, acknowledgement, resume and the 16 MiB ring, cancel, deadline, lost connection and lease, result delivery and finish. |
+| Desktop runner pairing | `ketplus_runner_relay_tests`, `ketplus_runner_pairing_daemon_tests` | The daemon's Control v2 client against a fake Relay on a loopback port, with time driven by the test and in-memory credentials: only runner routes accepted by the route seam, each desktop runner operation with its route, body and refusal codes, the runner.relay/1 capability gate, schema checks, runner pins (format, corrupt and other-version records, removal on sign-out and re-enrollment), the pairing flow from ticket to pin with claim signature, claim time window, changed claims, wrong codes, polling backoff and expiry, remove and unpair dropping the pin first, and no token, ticket secret or machine credential in logs, events, replies or stored credentials. `ketplus_headless_daemon_tests` runs the `ketplusctl runner` commands against a fixture daemon |
+| Desktop remote job records | `ketplus_remote_job_relay_tests`, `ketplus_remote_job_record_tests`, `ketplus_remote_job_flow_tests` | The daemon's job calls (`job.submit`, `job.get`, `job.cancel`) against a fake Relay on a loopback port: routes, bodies, refusal codes, network and 5xx failures, schema checks and the route seam; the `runs_on` label rule; the remote job record on in-memory ports with time driven by the test: placements, terminal mapping, Stop, peer loss and the 20-minute window, the ways out of `needs_attention`, runner removal, at-most-once dispatch, submit retries, restart recovery, the 64-job limit and store failures |
 | Scheme consumer adapters | `ketplus_scheme_consumer_tests` (Lite) | Lexilla role/font style mapping, editor state parity and buffer/selection/undo preservation, terminal ANSI replacement and screen/selection preservation |
 | Theme selection store | `ketplus_theme_selection_tests` (Lite) | One-time migration, revisioned atomic commits, cross-process directory watcher updates, lock and config failure recovery |
 | Color scheme contract | `ketplus_color_scheme_tests` (Lite) | RGBA parsing, sparse/unknown-data round trips, structured diagnostics, embedded palette parity, deterministic resolution and locked atomic catalog lifecycle/fallback |
@@ -192,6 +248,7 @@ and local/archive includes with cycles, escapes and the 16-level boundary.
 | Schedule protocol (ADR 0126) | `ketplus_schedule_protocol_tests` | schedule documents, requests and events for all four targets and run statuses; unknown fields, empty prompt, missing target and bad enums; server-owned `created_by`; timestamps must carry `Z` or a numeric offset |
 | Schedules window | `ketplus_schedule_client_tests`, `ketplus_schedule_window_tests` | one client applies schedule events without a reload; the manager is edit-only, validates before update, shows daemon errors, and View › Schedules… opens one window. `QT_QPA_PLATFORM=offscreen` and `KETPLUS_SCHEDULE_CAPTURE=<dir>` on the window test save light and dark grabs of the list, empty state, editor, validation, delete confirmation, 900×600 minimum and the View item |
 | Daemon challenge v2 (#85) | `ketplus_daemon_machine_challenge_tests` | relay conformance bytes/signature, strict schema and machine/key binding, no legacy retry or credential request on rejection, and real HTTP serialization/signing with an in-memory credential store |
+| Control v2 primitives | `ketplus_control_crypto_primitives_tests`, `ketplus_control_crypto_parity_tests` | `ketplus_control_crypto_primitives` alone (QtCore and OpenSSL): RFC 8032 Ed25519 signing and verification, refusal of changed messages, signatures and keys and of wrong lengths, generated key pairs, base64url, canonical arrays and key fingerprints; the parity suite compares those with `CloudCrypto`'s static API on Unicode, numbers, null and nested arrays, and `CloudCrypto::sign` with a stored key against the passed-key primitive |
 | Journal usage retention (#128) | `ketplus_daemon_usage_retention_tests` | final usage samples, unchanged content/order, replay/page agreement, revision fencing, latest 20 actual turns including sequence gaps, raw-event acknowledgment, active/open/recent/question/approval/generation guards, bounded scan progress, transactional rollback and nonblocking writer contention with timeout restoration; legacy inline generated-image pixels removed one large payload per pass with prompt and path kept, only after acknowledgement and outside the latest 20 turns (ADR 0098), and with a session host, a 512 px JPEG preview of a real PNG kept as a media reference (ADR 0101); inline tool-result images replaced by `history_retention` placeholders in place, including rows trimmed by an earlier text pass and chunked payloads that contain an image, while text-only oversize payloads stay and probing a backlog of them is charged to the per-pass budget (ADR 0099) |
 | Acknowledged delivery cleanup (ADR 0049) | `ketplus_daemon_ack_retention_tests` | Qt backlog ACK, row/byte budgets and actual prepared plans; slowest/new client and generation fences; queue fairness/reopen; NUL/oversized/binary values; capability deferral; atomic ACK/queue writes and rollback/retry |
 | Cloud cache retention (ADR 0053) | `ketplus_daemon_cloud_cache_retention_tests`, `ketplus_daemon_cloud_privacy_tests` | ACK row/byte/reopen bounds; exact ciphertext receipts, pending resets, stale cursor/account callbacks and legacy migration; isolated invalidation; unsupported rows; actual prepared plans; ignored/aborted/commit rollback and busy restoration; atomic scoped recovery cursor, receipt failure through retry/reopen and credential failure through restart; transport fails closed on failed policy/turn invalidation |
@@ -293,6 +350,29 @@ Bounded review policy changes additionally cover `ketplus_team_review_policy_tes
 Fake-host receipt tests establish consumer gates; the finding routing suite checks
 actual three-revision Git proofs, authenticated host receipt closure and attacks
 using ignored gitlinks/replacement trees. Required full Pro checks still apply.
+Routing lifetime coverage in `ketplus_team_routing_tools_tests` uses an active
+team, the real producer/store and authenticated decisions: unrelated notes remain
+valid, task/settings races fail closed, concurrent replies are independent, and
+an injected monotonic clock tests expiry before deterministic team-local eviction
+and duplicate-ID nonrenewal (ADR 0133).
+
+Team reply/worktree diagnostics use `ketplus_team_reply_tests`. Its existing
+owner-worktree and resume-Git assertions retain their conditions and timeouts;
+on failure they read up to eight `team.task.get` pages (`history_limit=6`) and
+report bounded synthetic task-history/worktree-error metadata,
+owner state/context/turn counters and pending approval kinds. Approval arguments,
+prompts and auth fields are excluded; a failed approval-page read is distinguished
+from an empty page. History totals come from the page API, with separate read
+status/error metadata; a summary or failed read must not appear to be empty
+history. `diagnosticsExcludeInputsAndBoundHistory` checks the projection and
+read status; `collectorReadsRealWorktreeFailureHistory` creates a real fixture
+worktree-switch refusal and verifies its paged history/error through the actual
+collector. For order-sensitive failures, preserve the failed
+log and run a bounded sequence of relevant predecessors (`team_flow`, `team_goal`,
+`team_title`, then `team_reply`) sequentially, recording source/binary identity and
+resource/concurrency metadata. A passing isolated run does not classify an earlier
+failure. Pair a reproduced failure with the integration baseline under the same
+conditions; do not relax assertions/timeouts or loop the full suite blindly.
 
 A team reviewer's verify turn writes only in its scratch directory (ADR 0067). Build there:
 `cmake -B <scratch>/build`, `xcodebuild -derivedDataPath <scratch>/DerivedData
@@ -836,6 +916,309 @@ checks consume no provider quota and do not verify actual executor cleanup.
 
 ### Claude background tasks
 
+The shared MCP/provider surface has a narrow offline Qt target:
+
+```sh
+cmake -S tests/daemon/agent-background-tools -B build/agent-background-tools -G Ninja
+cmake --build build/agent-background-tools
+ctest --test-dir build/agent-background-tools --output-on-failure
+node --test tests/daemon/claude-sidecar/managed-background.test.mjs
+```
+
+It checks owner-free schemas, exact request-key/spec/cursor forwarding,
+permission errors and refusal to expose local cleanup acknowledgement. The
+sidecar fixture checks native Agent/Task/Workflow and explicit background denial
+before permissive approvals, settings composition and review-hook preservation.
+All providers use the existing injected conversation-bound MCP server. Its read
+credential is insufficient for mutation: the host supplies a separate immutable
+origin capability through MCP bootstrap, never through prompt/model arguments.
+The narrow target also tests this capability state machine and credential capture.
+Without a bootstrap mutation credential, MCP discovery omits start/stop while
+retaining list/get/output. Concrete Cursor/Copilot Host fixtures verify that
+capability opt-in still rejects start/stop until the exact epoch ACK, and that
+review revocation removes authority. An unverified adapter remains a negative
+control even after ACK; these tests never launch provider binaries.
+
+For an explicit, no-inference check against an already installed SDK 0.3.322,
+set `KETPLUS_CLAUDE_SDK_DIRECTORY` to that SDK package directory and run:
+
+```sh
+node --test tests/daemon/claude-sidecar/background-sdk-offline.test.mjs
+```
+
+The tests skip unless opted in. They yield no prompt and request only startup,
+MCP refresh and background control, verifying rejection even when project settings try to
+reenable background tasks. An earlier env-only configuration failed this test;
+the host settings overlay is required. A synthetic MCP worker is removed and its
+actual PID exit confirmed before its replacement starts; a removal ACK alone is
+insufficient. This is not a live-model Bash/subagent
+execution or timeout test. The normal sidecar fixture suite uses fake SDKs and
+requires no installed SDK, provider account or quota.
+
+The daemon build adds focused origin and Codex-isolation tests:
+
+```sh
+cmake --build build/daemon-dev --target ketplus_managed_task_origin_host_tests ketplus_codex_session_isolation_tests
+ctest --test-dir build/daemon-dev -R 'ketplus_(managed_task_origin_host|codex_session_isolation)_tests' --output-on-failure
+node --test tests/daemon/claude-sidecar/managed-transport.test.mjs apps/daemon/providers/claude-sidecar/test/process-barrier.test.mjs
+```
+
+These use trusted fake bootstrap acknowledgements, temporary journals and actual
+local fixture processes, never a model. They cover review read/verify fences,
+missing/spoofed/expired origins, idle/drain and queued requests, accepted child
+policy snapshots, two-conversation process isolation, stale response IDs,
+history/MCP setup failure and timeout, and SDK close failure before actual exit.
+Concrete Cursor/Copilot host rows also verify start/stop rejection before ACK,
+authorized dispatch after ACK, review revocation and retained read access; an
+unverified adapter remains a negative capability control. Delayed/missing epoch
+ACK rows run with concrete Codex, Cursor and Copilot adapters.
+Synthetic history proves adapter behavior; it cannot prove installed-provider
+history preservation. Installed-provider controls remain explicit opt-ins.
+
+After the reviewed T-8 recipe, an explicit installed-Codex test uses the production
+adapter and its real process/isolation/MCP lifecycle:
+
+```sh
+cmake --build build/daemon-dev --target ketplus_codex_offline_refresh_tests
+KETPLUS_CODEX_OFFLINE_REFRESH=1 KETPLUS_CODEX_TEST_BINARY=/path/to/installed/codex \
+  ctest --test-dir build/daemon-dev -R '^ketplus_codex_offline_refresh_tests$' --output-on-failure -V
+```
+
+Without the opt-in, its body skips before launching a CLI. It uses a fresh
+child-only profile without credentials and a local model endpoint which always
+rejects requests. An allowlist excludes model-turn methods; the sentinel must
+record zero requests. The real adapter injects synthetic context through the
+public API, restores the same thread ID, confirms prior MCP exit before new
+provider launch, and discovers a new MCP epoch. Only the provider writes the
+owned rollout; the test reads its marker without editing storage. This does not
+test completed-turn history or model recall. See the
+[provider gaps](decisions/0127-provider-origin-refresh-evidence.md).
+
+The separate `ketplus_codex_bounded_refresh_tests` and
+`ketplus_cursor_bounded_refresh_tests` targets default to skipping before any CLI
+launch. They are not part of the quota-free acceptance matrix. A live run needs
+an explicit provider opt-in (`KETPLUS_CODEX_BOUNDED_REFRESH=D-3` or
+`KETPLUS_CURSOR_BOUNDED_REFRESH=D-3`), the installed executable in
+`KETPLUS_CODEX_TEST_BINARY` / `KETPLUS_CURSOR_TEST_BINARY`, and the decision
+owner's existing private ledger in `KETPLUS_BOUNDED_TEST_LEDGER`. Supply the
+verified source head in `KETPLUS_BOUNDED_TEST_HEAD` and ledger owner in
+`KETPLUS_BOUNDED_TEST_OWNER`. Never create a fresh ledger to repeat a consumed
+allowance. The ledger requires `decision`, `maximum_per_provider`,
+`owner_conversation`, `recall_allowed`, `retry_allowed`, and per-provider
+`sent_or_uncertain` fields. Reservation occurs before delivery; errors and
+timeouts do not refund it.
+
+The separately authorized **D-7** additional Cursor turn uses
+`KETPLUS_CURSOR_BOUNDED_REFRESH=D-7` and a distinct private ledger whose
+`decision` is `D-7`. It retains the common owner/no-recall/no-retry/per-provider
+fields above, plus `allowed_providers: ["cursor"]`, `maximum_total: 1`,
+`previous_ledger` and `previous_ledger_sha256`. The previous ledger must still
+be the unchanged D-3 ledger with all three provider allowances consumed and
+the same owner. D-7 reserves its own Cursor count before forwarding and cannot
+authorize Codex/Copilot or reset/refund D-3. Never recreate a consumed D-7
+ledger. The quota-free proposal suite covers rejection of changed parents,
+wrong scope/owner/decision, recall/retry, and reused allowances. The same
+control/attestation, cheap named model, text-only, no-tools and history-refresh
+barriers apply; no production mutation is enabled by this additional probe.
+
+A later direct user instruction authorizes a separate **ten-prompt Cursor**
+budget. Use `KETPLUS_CURSOR_BOUNDED_REFRESH=cursor-extra-10`, the existing private
+ledger/owner/head variables, `KETPLUS_CURSOR_EXTRA_REFERENCE` matching its audit
+reference, and an explicit `KETPLUS_CURSOR_TEST_PURPOSE` (initially
+`canonical_failure_diagnostic`). This is a direct instruction, not a fabricated
+decision answer. The ledger has `scope: "cursor-extra-10"`, Cursor-only scope,
+total/per-provider maxima of ten, `authorization` metadata and two `parent_ledgers`
+entries binding the unchanged consumed D-3 and D-7 files by SHA-256. Parent owners,
+consumed counters and the D-7-to-D-3 hash chain must match. Private authorization
+metadata stays out of source and prompt text.
+
+The `invocations` journal records each reserved ordinal, purpose, source head and
+model. Counter/journal mismatch, altered parents, broadened scope, reused ordinals
+or an eleventh prompt are rejected. Atomic reservation remains before forwarding;
+an error or ambiguous timeout consumes the ordinal. The owner chooses each next
+verification step explicitly and stops once sufficient evidence is obtained;
+there is no automatic retry loop. The current fixture still forwards only its
+first prompt and intercepts the replacement prompt after real same-ID load.
+Any later follow-up/recall that is explicitly added must also consume an ordinal.
+Quota-free tests include `python3 -B tests/providers/cursor/extra-budget-test.py`
+and the integrated ten-fake-prompt/eleventh-refused proposal case. These tests
+cannot authorize a live provider run by themselves.
+
+For the deliberate second additional probe, `KETPLUS_CURSOR_TEST_MODEL=composer-2.5`
+and purpose `completed_history_refresh` select the catalog's non-fast named model.
+Only that model and the original Haiku-low choice are accepted; Composer requires
+the control or additional-budget mode. Its ACK must name the non-fast base ID or
+explicit `[fast=false]` form and must not carry a conflicting fast option. Auto,
+default, fast variants and mismatched ACKs fail the barrier. This opt-in changes
+only the synthetic session, never the provider's default configuration.
+Load diagnostics distinguish an optional response echo from the requested load
+identity: `echo_present=false` has `echo_matches_requested=null`. A successful
+ACP load may return an empty object; an absent echo is not an identity mismatch.
+
+The separate inventory continuation uses purpose `injected_epoch_inventory`,
+`KETPLUS_CURSOR_INVENTORY_ORIGIN=extra-ordinal-2` and
+`KETPLUS_CURSOR_ORIGIN_SUMMARY` pointing to the private ordinal-two summary.
+It accepts only the extra ledger with two consumed invocations, the matching
+owner/cwd and the completed second invocation's original ID. Its summary hash,
+completed-history outcome and confirmed cleanup must match. Composer non-fast,
+attestation and no-tool gates remain required. This is separate from the old
+D-3-only `READ_OWN_HISTORY` control; changing its purpose label is not a shortcut.
+The wrapper rejects `session/new`, wrong IDs, failed loads, mismatched echoes,
+absent/wrong-session history and duplicate prompts before reservation. Control
+mode consumes nothing; live mode can reserve ordinal three exactly once. The
+inventory path stops after that one prompt and requires inventory attributed to
+its fresh injected worker before reporting success. Run the quota-free boundary
+fixture with `python3 -B tests/providers/cursor/inventory-origin-test.py`.
+
+These probes keep official inherited provider authentication, create a new
+synthetic session and empty temporary cwd, and never scan existing history.
+The native observer can record `assistant_refusal_rule` with only an allowlisted
+P1–P6/U1–U2 rule ID and `plan`, `model` or `quota` category. These are stream
+observations, not entitlement assertions; raw assistant text is never logged.
+The Cursor adapter fixtures also cover ordinary answers quoting plan/usage
+wording and split-chunk provider refusals. Run `ketplus_daemon_cursor_adapter_tests`
+alongside the focused bounded-refresh classifier and Python attestation tests
+when changing that refusal boundary, without enabling any native opt-in.
+They pin cheap named models and check control/MCP before delivery. Cursor's
+`control` opt-in intercepts the first prompt before the provider, without
+reserving quota. Its live run passes only the initial authorized prompt;
+the replacement transport's prompt is intercepted after the real load/model
+response. History replay and MCP readiness come from the actual provider,
+not that synthetic cancellation response. Both tests observe owned-process
+cleanup; neither asks a model to recall history.
+
+`ketplus_copilot_bounded_refresh_tests` follows the same opt-in pattern with
+`KETPLUS_COPILOT_BOUNDED_REFRESH`, `KETPLUS_COPILOT_TEST_BINARY` and the existing
+ledger/owner/head variables. Its default body also skips before CLI launch.
+The separately approved D-6 Auto mode requires `copilot_auto_decision: "D-6"`
+in that ledger; this changes the allowed model mode, not the allowance count.
+The observer passes process-local `--model auto`, disables exposed model tools,
+and checks the official session-scoped Auto configuration response and MCP
+discovery before reserving/forwarding the one synthetic model prompt. The
+replacement prompt is intercepted after real same-ID load. Underlying model
+IDs are recorded only when the inspected ACP fields explicitly disclose them.
+No default provider configuration is changed.
+
+The Cursor discovery-approval proposal is separate from those model probes:
+
+```sh
+python3 -B tests/providers/cursor/discovery-proposal-test.py
+python3 -B tests/providers/cursor/attestation-regression-test.py
+python3 -B tests/providers/cursor/discovery-proposal.py --prepare --root /path/to/new-private-directory
+```
+
+The quota-free fixture tests use no provider. They verify the static
+single-tool inventory, rejected mutation, matching project/ACP launch tuples,
+private ledger writes before forwarding, refusal to reuse a mock allowance,
+and refusal to credit one MCP instance's discovery to another instance. Private
+attestation tests reject wrong nonce/epoch/tuple/OS peer PID and project-only or
+incomplete handshakes. A real Node/Python fixture checks the actual preload and
+Unix peer credentials without launching a provider.
+The offline attestation regressions deliver socket events out of order and
+verify immutable observation-time sequence/payload capture. `attested` and
+`inventory` describe historical evidence; only `ready` can authorize a prompt
+barrier. Exact-worker exit, close, EOF or error revokes readiness permanently
+for that worker, including when older handshake records arrive later. Mock
+wrapper tests revoke readiness during the wait, after the wait and at the final
+barrier; the synthetic ledger stays at zero and no prompt reaches the fake
+provider. A different instance's exit cannot revoke the injected instance.
+
+The same suite drives RPC error, exit, timeout and assistant plan/usage-pattern
+paths through a fake provider and wrapper. Diagnostics retain only an allowlisted
+phase/reason and bounded integer RPC code/exit status, alongside event/PID/epoch
+metadata. They do not retain raw error messages, configuration-command output or
+assistant text. Assistant pattern enums are observations, not an attribution of
+native RPC failure. Outstanding requests get a diagnostic after 30 seconds
+(the Auto configuration wait also records its explicit 10-second timeout).
+Timeout observation does not retry, refund a reservation or fabricate a response;
+the adapter continues to own request completion/cancellation. These offline tests
+launch only fixture Python/Node processes, never a provider CLI or model.
+The observer also revokes readiness when its owned provider transport closes,
+even if Node cannot deliver a child's terminal callback during shutdown. This
+does not invent child lifecycle evidence or replace the independent PID closure
+check. The bounded Cursor target has an always-offline canonical-diagnostic
+classification test; only allowlisted adapter phase/reason enums escape it,
+never the original message or unknown completion status. It runs with the live
+opt-in unset and never launches a provider.
+The full adapter's fake-ACP plan-refusal regression also verifies that successful
+`end_turn` transport completion can still yield a failed canonical turn and no
+completed assistant item. Its Auto plan-refusal and team-usage cases are likewise
+quota-free. This is conditional adapter behavior, not proof of a live refusal's
+cause when the original message was not retained.
+Preparation starts no provider and executes no approval. Review its manifest,
+checksum and `REVIEW.txt` before seeking the user's approval for the exact
+native enable command. See the [proposal scope and revocation](decisions/0127-provider-origin-refresh-evidence.md#reviewable-cursor-discovery-approval-proposal).
+
+After that exact approval, the Cursor production-adapter `control` run can set
+`KETPLUS_CURSOR_APPROVED_PROPOSAL` to the existing proposal root, with its same
+`CURSOR_CONFIG_DIR` and `CURSOR_DATA_DIR`. It uses the unchanged cwd and server
+tuple from `session-new.json`, observing each newly spawned fixture instance.
+By default this option is rejected in live mode: a static read-only approval does
+not authorize a different mutation bootstrap. The explicit amended text-only
+probe also requires `KETPLUS_CURSOR_ATTESTED_PROBE=1`, private per-transport
+attestation, and the existing D-3 ledger. Cursor mutation remains disabled. A
+project instance listing tools never establishes discovery for a separate
+request-injected instance. Test-only `NODE_OPTIONS` instrumentation is restricted
+to owned probe processes; no installed files, auth or default settings change.
+
+`KETPLUS_CURSOR_READ_OWN_HISTORY=1` is a separate no-model diagnostic after the
+allowance is consumed. It requires attested `control` mode and the existing
+private ledger/owner. Only that ledger's synthetic Cursor ID and matching cwd
+can be loaded; the target never scans history or delivers a native prompt.
+It reports whether the known synthetic assistant marker replays, without
+turning a failed or partial turn into completed-history evidence.
+
+The earlier empty-session controls are retained for reference, not a loop to
+repeat when their hypotheses and errors have not changed:
+
+```sh
+python3 tests/providers/codex/refresh-offline.py --executable codex
+python3 tests/providers/cursor/refresh-offline.py --executable agent
+```
+
+The D-3 environment checkpoint adds a pinned Copilot control. Prepare an external,
+test-only npm prefix, then invoke the already-installed CLI explicitly:
+
+```sh
+npm install --prefix "$TEST_PREFIX" --no-audit --no-fund @github/copilot@1.0.112
+python3 tests/providers/copilot/refresh-control.py \
+  --executable "$TEST_PREFIX/node_modules/.bin/copilot"
+python3 tests/providers/copilot/refresh-control.py \
+  --executable "$TEST_PREFIX/node_modules/.bin/copilot" --mcp-source launch
+```
+
+It creates and removes its own empty home/profile/cache/workspace, inherits no
+credentials, and enables offline BYOK with a rejecting local endpoint. It sends
+initialize/new and the informational `/mcp list` command, never a model question
+or tool call. Exit 2 means MCP discovery was not proved; it must not trigger a
+model fallback or automatic retry. The corrected 1.0.112 launch control exits 0:
+the peer answers vendor `server/discover` with method-not-found before standard
+MCP initialize/tools-list completes. Request injection still exits 2 without
+worker startup within five seconds. Both record zero endpoint requests and zero
+remaining workers. These are bounded observations, not an unsupported-provider
+conclusion. This control is not in the default
+suite and does not establish production-adapter history preservation. The bounded
+live-turn budget and remaining authentication/discovery gates are recorded in the
+[origin evidence](decisions/0127-provider-origin-refresh-evidence.md).
+
+These controls do not send a model question, read existing user history or fabricate provider
+storage. Empty-session load failure is recorded as a validation gap, not proof
+that non-empty history cannot load.
+
+The dedicated ACP transport has a separate small Qt target:
+
+```sh
+cmake -S tests/daemon/acp-isolation -B build/acp-isolation -G Ninja
+cmake --build build/acp-isolation
+ctest --test-dir build/acp-isolation --output-on-failure
+```
+
+It builds the production ACP engine and concrete Cursor/Copilot adapters, then
+uses fake persisted sessions to check independent conversations, old-process
+exit before replacement, history/epoch preservation, load errors/timeouts without
+new-session fallback, and isolated worker failure. Provider runtime evidence is
+separate; see [the refresh evidence record](decisions/0127-provider-origin-refresh-evidence.md).
+
 The isolated storage/executor targets use temporary SQLite databases and no
 provider accounts. They cover transaction-abort injection, byte paging across
 UTF-8 boundaries, reopen, bounded 10 MiB retention, cursor gaps, short-write
@@ -959,8 +1342,9 @@ They run synthetic workers in an exclusively owned disposable guest, including
 expected escape controls. They are not part of the default suite and do not
 establish production registry/executor acceptance.
 
-`node --test tests/daemon/claude-sidecar/background-tasks.test.mjs` runs a fake
-SDK whose first turn starts a background shell. The turn must complete while the
+`node --test tests/daemon/claude-sidecar/background-tasks.test.mjs` runs a legacy
+fake SDK that deliberately ignores the native-disable options and reports an
+existing background shell, solely to verify drain compatibility. The turn must complete while the
 query stays open, the next user turn must reuse that query, stopping a turn must
 leave the task running, and `task/stop` must end with the agent's own reply turn
 before the query closes. `apps/daemon/providers/claude-sidecar/test/tasks.test.mjs`
@@ -1006,7 +1390,7 @@ running daemon.
 
 ### WebRTC host phase 3
 
-Build `ketplus_daemon_peer_transport_tests`, `ketplus_daemon_relay_wakeups_tests`,
+Build `ketplus_daemon_peer_transport_tests`, `ketplus_peer_link_tests`, `ketplus_daemon_relay_wakeups_tests`,
 `ketplus_daemon_cloud_privacy_tests`, `ketplus_cloud_trust_lifecycle_tests`,
 `ketplus_sender_key_cache_tests` and
 `ketplus_daemon_context_relay_tests` in a
@@ -1016,6 +1400,12 @@ started. It covers transfer caps/order/expiry, strict send priority, grants,
 revocation, supersede/epochs, subscriptions, cloud-safe encryption and the same
 command retried over both paths. No user daemon or provider account is accessed.
 Physical devices/TURN require a separate explicitly configured local test stack.
+`ketplus_peer_link_tests` links only `ketplus_peer_link`: a `WebRtcPeerLink` offerer against an
+answerer over loopback carries frames on all three channels both ways, a transfer of exactly
+8 MiB both ways and a refused 8 MiB + 1 transfer; a wrong expected fingerprint refuses the
+answer, and a rewritten answer fingerprint fails DTLS, with no frame either way; closing or
+destroying a link while negotiating or mid-transfer is safe. On macOS, also run it under
+`MallocStackLogging=1 leaks --atExit --` after changing link lifetimes.
 
 `ketplus_cloud_trust_lifecycle_tests` holds native fake HTTP replies across sign-out and
 re-enrollment (including the same machine/workspace), and independently changes each scope
@@ -1072,6 +1462,28 @@ so restart/fingerprint checks work without accessing a native OS store. The fixt
 is neither installed nor bundled, and production has no environment switch to
 enable this backend. A data-directory override alone does not isolate native
 credential namespaces and must not be used as that isolation boundary.
+
+`ketplus_credential_batch_tests` links the production record codec and lock with a
+counting, synthetic backend. Its standalone equivalent is
+`r03_credential_batch_tests` in `tests/daemon/cloud-privacy`. It checks bounded
+fetches for heartbeat metadata, distribution, pairing and command-key lookup as
+session counts increase; cold keys and wraps commit once. It also covers aborted
+batches, unavailable reads/writes, metadata-cache rollback, current pins, competing
+store instances, and a child process denied by the held lock. Subsequent operations
+must observe committed mutations. Run it with the credential-store, cloud-privacy,
+trust-lifecycle, sender-cache and remote-control suites. Shared headers and CMake
+changes require the full Pro build and unfiltered suite as well.
+
+For an optional synthetic performance run, set `KETPLUS_CREDENTIAL_MEASURE=1` only
+on this target. It emits counts and raw timings for 2,000/8,000/20,000 accounts,
+100 active sessions and a two-millisecond fake backend delay. Retained padding
+values are 420 bytes; seeded wraps exercise the cached path, not cryptographic
+throughput. A queued `session.interrupt` against a loaded idle session must return
+`turn_not_running`; its dispatch time observes event-loop delay, not cancellation
+of an active provider turn or IPC end-to-end latency. These are synthetic backend
+fetches, not measured native OS calls. Record native-store measurements separately,
+including dataset, sample count, environment and cleanup; label any extrapolation
+explicitly. Keep raw security-audit evidence outside the public tree.
 
 The normal test configuration warns if the optional Secret Service fixture tools
 are unavailable on the build host; do not claim that coverage in that case. Fake
@@ -1506,3 +1918,20 @@ the Microsoft Store alias), and producer-flood timing (QProcess drains the pipe 
 `ketplus_daemon_journal_migration_recovery_tests` and `ketplus_daemon_usage_retention_tests` pass
 but take 4-6 minutes on NTFS. Fixtures that write exact byte counts switch stdout to binary mode
 (`BinaryStdio.h`), because the C runtime would otherwise add `\r`.
+
+## English chrome and multilingual team content (T30)
+
+See [the inventory](team-content-language.md). Run `ketplus_team_page_language_tests`,
+`ketplus_team_language_tests`, `ketplus_team_protocol_tests`, `ketplus_team_remote_tests`,
+`ketplus_team_remote_cloud_tests`, `ketplus_team_dialogs_tests`, and
+`ketplus_sidebar_filter_tests` with `QT_QPA_PLATFORM=offscreen`. The page fixture sets a
+Vietnamese default locale; `KETPLUS_T56_CAPTURE` writes actual Qt page/task captures.
+`ketplus_team_translation_catalog_tests` validates preserved catalog completeness, rather
+than requiring Vietnamese translations of newly added English chrome.
+
+Use the existing dialog geometry fixtures for desktop/narrow/short screens and English/
+Vietnamese content. Inspect a native Qt capture of New Team/settings/team/task/decision
+surfaces; retain original logs and render measurements. These tests exercise fake transports
+and generated instructions, not model language compliance or an installed application.
+Shared desktop/header changes still require a full build and full Pro suite. Record first
+failures, bounded failed-only reruns and platform skips without changing thresholds.

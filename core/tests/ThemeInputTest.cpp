@@ -249,6 +249,67 @@ class ThemeInputTest : public QObject {
         QVERIFY(!resolver.loadJsonChain("bad.json", &chain, &error));
         QCOMPARE(error.source, QStringLiteral("bad.json"));
     }
+    void includeRootBoundaries() {
+        using ket::theme::io::detail::dosFinalPathToNative;
+        using ket::theme::io::detail::withTrailingSeparator;
+        // A drive or filesystem root already ends in a separator; an ordinary one does not.
+        QCOMPARE(withTrailingSeparator(QStringLiteral("C:/"), '/'), QStringLiteral("C:/"));
+        QCOMPARE(withTrailingSeparator(QStringLiteral("/"), '/'), QStringLiteral("/"));
+        QCOMPARE(withTrailingSeparator(QStringLiteral("C:/themes"), '/'),
+                 QStringLiteral("C:/themes/"));
+        QCOMPARE(withTrailingSeparator(QStringLiteral("C:\\"), '\\'), QStringLiteral("C:\\"));
+        // GetFinalPathNameByHandleW spellings map back to the root's native spelling.
+        QCOMPARE(dosFinalPathToNative(QStringLiteral("\\\\?\\C:\\themes\\a.json")),
+                 QStringLiteral("C:\\themes\\a.json"));
+        QCOMPARE(dosFinalPathToNative(QStringLiteral("\\\\?\\UNC\\host\\share\\themes\\a.json")),
+                 QStringLiteral("\\\\host\\share\\themes\\a.json"));
+        QCOMPARE(dosFinalPathToNative(QStringLiteral("\\\\?\\unc\\host\\share\\a.json")),
+                 QStringLiteral("\\\\host\\share\\a.json"));
+        QCOMPARE(dosFinalPathToNative(QStringLiteral("/tmp/a.json")),
+                 QStringLiteral("/tmp/a.json"));
+    }
+    void includesFromAFilesystemRoot() {
+        // The whole drive (or "/") as the source root: the include prefix must not become
+        // "C://" and every file below it must still resolve.
+        // Writes a scratch directory into the filesystem root (C:\ or /), so it only runs
+        // when asked for; a crash could leave that directory behind.
+        if (!qEnvironmentVariableIsSet("KETPLUS_TEST_WRITE_FILESYSTEM_ROOT"))
+            QSKIP("Set KETPLUS_TEST_WRITE_FILESYSTEM_ROOT=1 to test a filesystem-root source.");
+        const QString root = QDir::rootPath();
+        QTemporaryDir dir(QDir(root).filePath(QStringLiteral("ketplus-include-root-XXXXXX")));
+        if (!dir.isValid())
+            QSKIP("The filesystem root is not writable here.");
+        QVERIFY(write(dir.filePath("base.json"), "{\"color\":1}"));
+        QVERIFY(write(dir.filePath("theme.json"), "{\"include\":\"base.json\"}"));
+        const QString relative = QFileInfo(dir.path()).fileName();
+        IncludeResolver resolver(root);
+        Error error;
+        QVector<JsonSource> chain;
+        QVERIFY2(resolver.loadJsonChain(relative + "/theme.json", &chain, &error),
+                 qPrintable(error.message));
+        QCOMPARE(chain.size(), 2);
+    }
+#ifdef Q_OS_WIN
+    void includesOnANetworkShare() {
+        // The administrative share of the local drive exercises the \\?\UNC\ final path form.
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QString local = QDir::toNativeSeparators(QFileInfo(dir.path()).canonicalFilePath());
+        if (local.size() < 3 || local.at(1) != ':')
+            QSKIP("The temporary directory is not on a drive letter.");
+        const QString share = QStringLiteral("//localhost/") + local.at(0) + QStringLiteral("$/") +
+                              QDir::fromNativeSeparators(local.mid(3));
+        if (!QFileInfo(share).isDir())
+            QSKIP("The administrative share is not reachable.");
+        QVERIFY(write(dir.filePath("base.json"), "{\"color\":1}"));
+        QVERIFY(write(dir.filePath("theme.json"), "{\"include\":\"base.json\"}"));
+        IncludeResolver resolver(share);
+        Error error;
+        QVector<JsonSource> chain;
+        QVERIFY2(resolver.loadJsonChain("theme.json", &chain, &error), qPrintable(error.message));
+        QCOMPARE(chain.size(), 2);
+    }
+#endif
 };
 QTEST_GUILESS_MAIN(ThemeInputTest)
 #include "ThemeInputTest.moc"

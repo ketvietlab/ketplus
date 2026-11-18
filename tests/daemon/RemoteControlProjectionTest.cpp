@@ -70,8 +70,21 @@ class RemoteControlProjectionTest final : public QObject {
         network.replies.insert(prefix + "/v2/mobile/sessions/fresh-session/keys", QJsonArray{});
         auto verified = indexRow("opaque-session", 3, "linux-host", "wt-a");
         verified.insert("adapter", adapter);
+        auto placementMetadata = metadata;
+        placementMetadata.insert("sidebarPlacementKnown", true);
+        placementMetadata.insert("sidebarRepositoryId", "origin-repository");
+        placementMetadata.insert("sidebarRepositoryLabel", "repository");
+        placementMetadata.insert("sidebarExecutionRepositoryVisible", false);
+        placementMetadata.insert("team", QJsonObject{{"id", "team-one"},
+                                                     {"revision", 5},
+                                                     {"role", "developer"},
+                                                     {"sidebarPlacementKnown", true},
+                                                     {"sidebarRepositoryId", "team-origin"},
+                                                     {"sidebarRepositoryLabel", "Team origin"}});
+        verified.insert("sidebarRepositoryId", "forged-placement");
+        verified.insert("sidebarExecutionRepositoryVisible", true);
         verified.insert("encryptedMetadata",
-                        sealedMetadata(fixture.host, "opaque-session", 3, 9, metadata));
+                        sealedMetadata(fixture.host, "opaque-session", 3, 9, placementMetadata));
         auto tampered = indexRow("tampered-session", 1, "linux-host", "wt-b");
         auto envelope = sealedMetadata(fixture.host, "tampered-session", 1, 9,
                                        QJsonObject{{"branch", "attacker"},
@@ -137,9 +150,16 @@ class RemoteControlProjectionTest final : public QObject {
         QCOMPARE(shown.value("updatedAt").toString(), QStringLiteral("2026-11-12T08:00:00.000Z"));
         QCOMPARE(shown.value("worktreeId").toString(), QStringLiteral("wt-a"));
         QCOMPARE(shown.value("branch").toString(), QStringLiteral("feature/sealed"));
+        QCOMPARE(shown.value("sidebarRepositoryId").toString(),
+                 QStringLiteral("origin-repository"));
+        QCOMPARE(shown.value("repositoryId").toString(), QStringLiteral("repo-1"));
+        QVERIFY(!shown.value("sidebarExecutionRepositoryVisible").toBool(true));
+        QCOMPARE(shown.value("team").toObject().value("sidebarRepositoryId").toString(),
+                 QStringLiteral("team-origin"));
         // Nothing the relay alone supplies reaches the projection.
         const auto serialized = QJsonDocument(result).toJson();
-        for (const auto* forged : {"Relay title", "Injected title", "attacker", "ketplus-fix"})
+        for (const auto* forged :
+             {"Relay title", "Injected title", "attacker", "ketplus-fix", "forged-placement"})
             QVERIFY2(!serialized.contains(forged), forged);
         QStringList rejected;
         for (const auto& value : result.value("rejected").toArray())

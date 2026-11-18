@@ -27,9 +27,15 @@
 
 #include <atomic>
 #include <functional>
+#include <memory>
 #include <optional>
 
 namespace ketplus::daemon {
+
+namespace runner {
+class CloudRunnerRelay;
+class RunnerService;
+} // namespace runner
 
 class BrowserSignIn;
 class LocalJournal;
@@ -68,9 +74,13 @@ class CloudControlClient final : public QObject {
     // ADR 0119 "Machine identity": the fingerprint of this host's key set, the same one a pairing
     // QR code carries. The keys are created on first use, so a host has one without signing in.
     [[nodiscard]] QString hostKeyFingerprint(QString* error = nullptr);
+    // Runner pairing and management (runner/RunnerService.h), created on first use.
+    [[nodiscard]] runner::RunnerService& runners();
 
   private:
     friend class CloudPrivacyTestAccess;
+    // Calls the runner routes only, with this client's machine credential.
+    friend class runner::CloudRunnerRelay;
     using ReplyCallback = std::function<void(int, const QJsonValue&, const QString&)>;
     using ReadyCallback = std::function<void(bool, const QString&)>;
 
@@ -132,6 +142,8 @@ class CloudControlClient final : public QObject {
     // A deleted generation's history awaits purge but must never leave the machine (ADR 0093).
     [[nodiscard]] bool isLiveGeneration(const QString& sessionId, qint64 generation) const;
     void distributeKeys();
+    QJsonArray sessionKeyEnvelopes(const QJsonArray& devices, bool requirePins, qsizetype limit,
+                                   QJsonArray* trusted, QString* error);
     void pollCommands();
     // A wake-up that lands while a poll is in flight polls again once it returns: that poll
     // may have read before the command it announces was written.
@@ -187,17 +199,18 @@ class CloudControlClient final : public QObject {
                      WorktreeRevisionCache* revisionCache = nullptr, qint64 nowMs = 0);
     // Seals each snapshot's metadata (branch, machine name, whether its worktree still
     // exists, conversation number, the conversation whose message started its turn) for the
-    // phone; a snapshot whose metadata cannot be sealed is
-    // sent without it.
+    // phone. A failed credential transaction cancels publication of this heartbeat.
     [[nodiscard]] QList<QJsonArray>
     withSessionMetadata(const QList<QJsonArray>& batches,
                         const QHash<QString, QJsonObject>& metadata);
     [[nodiscard]] QJsonObject sealedSessionMetadata(const QJsonObject& snapshot,
-                                                    const QJsonObject& metadata);
+                                                    const QJsonObject& metadata,
+                                                    CloudCrypto& crypto);
     QByteArray ensurePathIdSalt(QString* error = nullptr);
     // Where a conversation can start: every checkout of each repository a conversation
     // ran in, those with conversations first.
     [[nodiscard]] QStringList catalogWorktreePaths() const;
+    [[nodiscard]] static std::optional<bool> sidebarRepositoryVisible(const QString& path);
     [[nodiscard]] QJsonArray worktreeSnapshots() const;
     // session.create and worktree.branches.read: checked against the catalog worktree they
     // name, answered sealed to the phone that asked.
@@ -319,6 +332,10 @@ class CloudControlClient final : public QObject {
     std::atomic_int workspaceFilesPending_{0};
     // session -> (workspace revision, ms since epoch) this daemon recently published for it.
     QHash<QString, QList<std::pair<QString, qint64>>> publishedRevisions_;
+    // The Relay listed runner.relay/1 in its last heartbeat answer.
+    bool runnerRelayAvailable_{false};
+    // Last, so it goes first: it calls back into this client.
+    std::unique_ptr<runner::RunnerService> runners_;
 };
 
 } // namespace ketplus::daemon

@@ -197,12 +197,19 @@ DiscoveryResult findExecutable(const QString& explicitPath, const DiscoveryConte
 }
 
 ProcessInvocation processInvocation(const QString& executable, Platform platform,
-                                    const QProcessEnvironment& environment) {
+                                    const QProcessEnvironment& environment,
+                                    const QString& mcpConfigFile) {
     const QString path = normalizedPath(executable, platform);
     if (executable.isEmpty() || !isAbsolute(path, platform) || path.contains(QChar::Null) ||
         path.contains(QLatin1Char('\r')) || path.contains(QLatin1Char('\n')))
         return {{}, {}, {}, QStringLiteral("Copilot CLI requires an absolute executable path.")};
-    const QStringList arguments{QStringLiteral("--acp"), QStringLiteral("--stdio")};
+    if (!mcpConfigFile.isEmpty() &&
+        (!isAbsolute(mcpConfigFile, platform) || mcpConfigFile.contains(QChar::Null) ||
+         mcpConfigFile.contains(QLatin1Char('\r')) || mcpConfigFile.contains(QLatin1Char('\n'))))
+        return {{}, {}, {}, QStringLiteral("Copilot MCP configuration requires an absolute path.")};
+    QStringList arguments{QStringLiteral("--acp"), QStringLiteral("--stdio")};
+    if (!mcpConfigFile.isEmpty())
+        arguments << QStringLiteral("--additional-mcp-config") << "@" + mcpConfigFile;
     if (platform == Platform::Windows) {
         const QString suffix = QFileInfo(path).suffix().toLower();
         QString systemDirectory;
@@ -223,24 +230,32 @@ ProcessInvocation processInvocation(const QString& executable, Platform platform
         if (suffix == QStringLiteral("cmd") || suffix == QStringLiteral("bat")) {
             // Percent expansion happens even inside quotes; refuse rather than execute a
             // different path. Delayed expansion is disabled so literal '!' remains safe.
-            if (nativePath.contains(QLatin1Char('%')) || nativePath.contains(QLatin1Char('"')))
-                return {{},
-                        {},
-                        {},
-                        QStringLiteral("Copilot's Windows command-wrapper path "
-                                       "cannot contain percent or quote characters. "
-                                       "Set --copilot to another install path.")};
+            if (nativePath.contains(QLatin1Char('%')) || nativePath.contains(QLatin1Char('"')) ||
+                mcpConfigFile.contains(QLatin1Char('%')) ||
+                mcpConfigFile.contains(QLatin1Char('"')))
+                return {
+                    {},
+                    {},
+                    {},
+                    QStringLiteral("Copilot's Windows command-wrapper or MCP configuration path "
+                                   "cannot contain percent or quote characters. "
+                                   "Use another install or temporary directory.")};
+            QString command = QStringLiteral("\"\"%1\" --acp --stdio").arg(nativePath);
+            if (!mcpConfigFile.isEmpty())
+                command += QStringLiteral(" --additional-mcp-config \"@%1\"").arg(mcpConfigFile);
+            command += QLatin1Char('"');
             return {systemDirectory + QStringLiteral("/cmd.exe"),
                     {QStringLiteral("/d"), QStringLiteral("/v:off"), QStringLiteral("/s"),
                      QStringLiteral("/c")},
-                    QStringLiteral("\"\"%1\" --acp --stdio\"").arg(nativePath),
+                    command,
                     {}};
         }
         if (suffix == QStringLiteral("ps1"))
             return {systemDirectory + QStringLiteral("/WindowsPowerShell/v1.0/powershell.exe"),
-                    {QStringLiteral("-NoProfile"), QStringLiteral("-NonInteractive"),
-                     QStringLiteral("-ExecutionPolicy"), QStringLiteral("Bypass"),
-                     QStringLiteral("-File"), nativePath, arguments.at(0), arguments.at(1)},
+                    QStringList{QStringLiteral("-NoProfile"), QStringLiteral("-NonInteractive"),
+                                QStringLiteral("-ExecutionPolicy"), QStringLiteral("Bypass"),
+                                QStringLiteral("-File"), nativePath} +
+                        arguments,
                     {},
                     {}};
     }

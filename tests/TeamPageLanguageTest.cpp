@@ -1,13 +1,13 @@
-// T-56: the team page in its team's language. A Vietnamese team shows no English fixed text on
-// the page or in the task dialog, the team menu changes the language, and New Team starts
-// from the goal's language. An English team reads as before. Run with QT_QPA_PLATFORM=offscreen.
-// KETPLUS_T56_CAPTURE=<dir> saves the page in each language.
+// T30: English chrome coexists with multilingual stored content under a Vietnamese OS locale.
+// Run offscreen; KETPLUS_T56_CAPTURE saves real Qt page/dialog captures for inspection.
 #include "KetDialog.h"
 #include "KetExpandableText.h"
 #include "KetSelect.h"
 #include "KetStyle.h"
 #include "KetTextArea.h"
+#include "KetTextField.h"
 #include "TeamLanguage.h"
+#include "app/SettingsTeamsPage.h"
 #include "teams/TeamDialogs.h"
 #include "teams/TeamDirectory.h"
 #include "teams/TeamPage.h"
@@ -19,8 +19,11 @@
 #include <QJsonArray>
 #include <QLabel>
 #include <QLineEdit>
+#include <QLocale>
 #include <QMenu>
 #include <QRegularExpression>
+#include <QScrollArea>
+#include <QScrollBar>
 #include <QSettings>
 #include <QStandardPaths>
 #include <QTableWidget>
@@ -57,11 +60,12 @@ QJsonObject task(const QString& id, const QString& state, const QString& owner) 
                                                {"text", "Được tạo bởi Lead."}}}}};
 }
 
-// What a team writes is content: in Vietnamese here, so only fixed text can be English.
+// Authored content is Vietnamese here; fixed application text stays English.
 QJsonObject fixture(const QString& language) {
     return {{"id", "7"},
             {"name", "Shop"},
-            {"goal", "Thanh toán trong một trang"},
+            {"goal", QStringLiteral("Thanh toán trong một trang; giữ nguyên nội dung tiếng Việt. ")
+                         .repeated(8)},
             {"language", language},
             {"repository", "/work/shop"},
             {"integration_branch", "team/shop"},
@@ -140,7 +144,7 @@ struct Text {
     QString translation;
 };
 
-// The team texts with a Vietnamese translation that differs from the English.
+// All preserved catalog entries, including English/Vietnamese homographs.
 QList<Text> catalog() {
     QFile file(QStringLiteral(KETPLUS_TEAM_TS));
     if (!file.open(QIODevice::ReadOnly))
@@ -155,8 +159,7 @@ QList<Text> catalog() {
             current.source = xml.readElementText();
         } else if (xml.name() == QLatin1String("translation")) {
             current.translation = xml.readElementText();
-            if (current.translation != current.source)
-                texts.append(current);
+            texts.append(current);
         }
     }
     return texts;
@@ -170,17 +173,22 @@ QRegularExpression pattern(const QString& text) {
                               QRegularExpression::DotMatchesEverythingOption);
 }
 
-// The English fixed texts among `texts`: shown as English, not as their translation.
-QStringList english(const QStringList& texts) {
+// Detect catalog translations leaking into fixed chrome; fixture content remains untouched.
+QStringList translatedChrome(const QStringList& texts) {
     QStringList found;
+    QSet<QString> englishLiterals;
+    for (const Text& entry : catalog())
+        if (!entry.source.contains(QLatin1Char('%')))
+            englishLiterals.insert(entry.source);
     for (const Text& entry : catalog()) {
         const QRegularExpression source = pattern(entry.source);
         const QRegularExpression translated = pattern(entry.translation);
         for (const QString& text : texts) {
             // A fixed text is a line of what is shown (a label joins a few with " · ").
             for (const QString& part : text.split(QRegularExpression(QStringLiteral(" · |\\n"))))
-                if (source.match(part.trimmed()).hasMatch() &&
-                    !translated.match(part.trimmed()).hasMatch())
+                if (translated.match(part.trimmed()).hasMatch() &&
+                    !source.match(part.trimmed()).hasMatch() &&
+                    !englishLiterals.contains(part.trimmed()))
                     found << QStringLiteral("%1 (\"%2\")").arg(part.trimmed(), entry.source);
         }
     }
@@ -226,6 +234,7 @@ class TeamPageLanguageTest final : public QObject {
         QVERIFY(settings_.isValid());
         QSettings::setDefaultFormat(QSettings::IniFormat);
         QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settings_.path());
+        QLocale::setDefault(QLocale("vi_VN"));
         ket::Style::install(*qApp);
         QVERIFY2(catalog().size() > 300, "the Vietnamese team catalog is read");
     }
@@ -237,38 +246,59 @@ class TeamPageLanguageTest final : public QObject {
         TeamPage second(teams_.get(), "7", "/work/shop");
         first.show();
         second.show();
-        QTRY_COMPARE(language::current(), QStringLiteral("vi"));
+        QTRY_COMPARE(language::current(), QStringLiteral("en"));
         second.hide();
-        QCOMPARE(language::current(), QStringLiteral("vi"));
-        QCOMPARE(QCoreApplication::translate("Team", "Members"), QStringLiteral("Thành viên"));
+        QCOMPARE(language::current(), QStringLiteral("en"));
+        QCOMPARE(QCoreApplication::translate("Team", "Members"), QStringLiteral("Members"));
         first.hide();
         QCOMPARE(language::current(), QStringLiteral("en"));
     }
 
-    void aVietnameseTeamShowsNoEnglishFixedText() {
+    void aVietnameseTeamKeepsEnglishChromeAndStoredContent_data() {
+        QTest::addColumn<QSize>("viewport");
+        QTest::newRow("desktop") << QSize(1024, 900);
+        QTest::newRow("narrow") << QSize(480, 640);
+    }
+
+    void aVietnameseTeamKeepsEnglishChromeAndStoredContent() {
+        QFETCH(QSize, viewport);
         start(fixture("vi"), "Đã giao T-1 cho Dev 1.");
         TeamPage page(teams_.get(), "7", "/work/shop");
-        page.resize(1024, 1500);
+        page.resize(viewport);
         page.show();
         QTRY_COMPARE(page.updates().size(), 1);
+        auto* scroll = page.findChild<QScrollArea*>("teamPageScroll");
+        QVERIFY(scroll);
+        QTRY_VERIFY(scroll->widget()->width() <= scroll->viewport()->width());
+        QCOMPARE(scroll->horizontalScrollBar()->maximum(), 0);
         const QStringList texts = shown(&page);
-        const QStringList left = english(texts);
+        QStringList chrome = texts;
+        chrome.removeAll(QStringLiteral("Đã giao T-1 cho Dev 1."));
+        chrome.removeAll(QStringLiteral("Được tạo bởi Lead."));
+        const QStringList left = translatedChrome(chrome);
         QVERIFY2(left.isEmpty(), qPrintable(left.join(QStringLiteral("\n"))));
-        // What the page says, in Vietnamese.
+        // Chrome is English; the historical update is still byte-for-byte Vietnamese.
         const QString all = texts.join(QLatin1Char('\n'));
         for (const char* expected :
-             {"Đang chờ bạn", "Xong 1 trên 4 task", "Đã dùng 23 trên 60 lượt tự động",
-              "Leader merge task", "Lượt tự động đang tạm dừng", "Cập nhật", "Thành viên"})
+             {"Waiting for you", "1 of 4 tasks done", "23 of 60 automatic turns used",
+              "The leader merges tasks", "Updates", "Members", "Đã giao T-1 cho Dev 1."})
             QVERIFY2(all.contains(QString::fromUtf8(expected)), expected);
-        capture(&page, QStringLiteral("team-page-vi"));
+        QVERIFY(all.contains(QStringLiteral("Thanh toán trong một trang")));
+        QVERIFY(all.contains(QStringLiteral("Dùng Stripe?")));
+        capture(&page, QStringLiteral("team-page-vi-") + QLatin1String(QTest::currentDataTag()));
 
-        // The task dialog speaks it too.
+        // The task dialog also keeps English chrome.
         auto* dialog = page.openTask("T-1");
         QVERIFY(dialog);
-        const QStringList inDialog = english(shown(dialog));
+        QStringList dialogChrome = shown(dialog);
+        dialogChrome.removeAll(QStringLiteral("Được tạo bởi Lead."));
+        dialogChrome.removeAll(QStringLiteral("Chạy được"));
+        dialogChrome.removeAll(QStringLiteral("Có test"));
+        const QStringList inDialog = translatedChrome(dialogChrome);
         QVERIFY2(inDialog.isEmpty(), qPrintable(inDialog.join(QStringLiteral("\n"))));
-        QVERIFY(shown(dialog).join(QLatin1Char('\n')).contains(QStringLiteral("Lịch sử")));
-        capture(dialog, QStringLiteral("team-task-vi"));
+        QVERIFY(shown(dialog).join(QLatin1Char('\n')).contains(QStringLiteral("History")));
+        QVERIFY(shown(dialog).join(QLatin1Char('\n')).contains(QStringLiteral("Chạy được")));
+        capture(dialog, QStringLiteral("team-task-vi-") + QLatin1String(QTest::currentDataTag()));
         dialog->close();
     }
 
@@ -289,6 +319,25 @@ class TeamPageLanguageTest final : public QObject {
         QCOMPARE(remote::team_language::current(), QStringLiteral("en"));
     }
 
+    void teamSettingsStayEnglishUnderVietnameseLocaleAndTeamContext() {
+        remote::team_language::Scope scope("vi");
+        SettingsTeamsPage settings(
+            [](const QString&, const QJsonObject&, SettingsTeamsPage::Reply reply) {
+                reply({{"ok", true}, {"settings", QJsonObject{{"turn_budget", 40}}}}, {});
+            });
+        settings.resize(480, 640);
+        settings.show();
+        const QString all = shown(&settings).join(QLatin1Char('\n'));
+        QVERIFY(all.contains(QStringLiteral("Teams")));
+        QVERIFY(all.contains(QStringLiteral("Automatic turns per team")));
+        QVERIFY(translatedChrome(shown(&settings)).isEmpty());
+        capture(&settings, QStringLiteral("team-settings-vi-os"));
+        // Match normal settings dismissal: deliver focus loss while the derived widget lives.
+        settings.budgetField()->clearFocus();
+        QApplication::processEvents();
+        settings.close();
+    }
+
     // The team menu offers the languages and sends the one chosen.
     void theTeamMenuChangesTheLanguage() {
         start(fixture("en"), "T-1 assigned to Dev 1.");
@@ -307,7 +356,7 @@ class TeamPageLanguageTest final : public QObject {
             QVERIFY(vietnamese);
             QVERIFY(!vietnamese->isChecked());
             QVERIFY(languages->findChild<QAction*>("teamPageLanguage_en")->isChecked());
-            QCOMPARE(vietnamese->text(), QStringLiteral("Tiếng Việt"));
+            QCOMPARE(vietnamese->text(), QStringLiteral("Vietnamese"));
             menu->setActiveAction(languages->menuAction());
             languages->popup(menu->geometry().topRight());
             languages->setActiveAction(vietnamese);
@@ -319,16 +368,17 @@ class TeamPageLanguageTest final : public QObject {
         QCOMPARE(daemon_.last("team.update").value("team_id").toString(), QStringLiteral("7"));
     }
 
-    // New Team takes the goal's language until the user picks one, and sends it.
-    void newTeamFollowsTheGoalUntilALanguageIsPicked() {
+    // New Team never infers content preferences from OS locale or edits to Goal.
+    void newTeamFollowsPromptWithoutChangingItsContentOrChrome() {
         start(fixture("en"), "T-1 assigned to Dev 1.");
         NewTeamForm form(teams_.get(), "/work/shop", {});
         auto* language = form.languageField();
         QVERIFY(language);
-        QCOMPARE(language->count(), 2);
+        QCOMPARE(language->count(), 3);
         form.goalField()->setText(QStringLiteral("Thanh toán trong một trang"));
-        QCOMPARE(language->currentData().toString(), QStringLiteral("vi"));
-        QCOMPARE(form.payload().value("language").toString(), QStringLiteral("vi"));
+        QCOMPARE(language->currentData().toString(), QStringLiteral("auto"));
+        QCOMPARE(form.payload().value("language").toString(), QStringLiteral("auto"));
+        QCOMPARE(form.goalField()->text(), QStringLiteral("Thanh toán trong một trang"));
         // A language the user picks stays, whatever the goal says next.
         language->setCurrentIndex(language->findData(QStringLiteral("en")));
         emit language->activated(language->currentIndex());

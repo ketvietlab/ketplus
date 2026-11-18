@@ -1,5 +1,6 @@
 #include "providers/CopilotAdapter.h"
 #include "FakeCopilot.h"
+#include "agents/AgentToolLaunch.h"
 #include "protocol/DaemonProtocol.h"
 #include "providers/CodexAdapter.h"
 #include "runtime/ProviderErrorCode.h"
@@ -84,6 +85,70 @@ class CopilotAdapterTest final : public QObject {
         QVERIFY(invalid.missingMessage().contains("install-copilot-cli"));
         CopilotAdapter explicitCli(file);
         QCOMPARE(explicitCli.executable(), file);
+    }
+    void managedMcpUsesPrivateImmutableLaunchFiles() {
+        QTemporaryDir dir;
+        const auto path = dir.filePath("copilot"), log = dir.filePath("log");
+        QVERIFY(writeFakeCopilot(path, log));
+        CopilotAdapter adapter(path);
+        QSignalSpy events(&adapter, &ProviderAdapter::canonicalEvent);
+        QString previousFile;
+        for (const auto& epoch : {QString("first"), QString("second")}) {
+            events.clear();
+            const QString secret = "synthetic-private-" + epoch;
+            auto input = params();
+            input.insert("managedTransportEpoch", epoch);
+            input.insert("agentMcpServer",
+                         agent_tools::acpServer({"synthetic-helper", "synthetic-socket",
+                                                 "synthetic-read", secret, epoch}));
+            bool accepted = false;
+            QString failure;
+            adapter.call("turn/start", input, [&](const QJsonObject& result, const QString& error) {
+                accepted = result.value("managedTransportEpoch") == epoch;
+                failure = error;
+            });
+            QTRY_VERIFY(accepted || !failure.isEmpty());
+            QVERIFY2(failure.isEmpty(), qPrintable(failure));
+            QTRY_VERIFY(completed(events));
+            QJsonArray arguments;
+            for (const auto& value : logEntries(log))
+                if (value.toObject().contains("argv"))
+                    arguments = value.toObject().value("argv").toArray();
+            qsizetype option = -1;
+            for (qsizetype index = 0; index < arguments.size(); ++index)
+                if (arguments.at(index) == "--additional-mcp-config")
+                    option = index;
+            QVERIFY(option >= 0 && option + 1 < arguments.size());
+            const auto argument = arguments.at(option + 1).toString();
+            QVERIFY(argument.startsWith('@'));
+            QVERIFY(!QJsonDocument(arguments).toJson().contains(secret.toUtf8()));
+            const auto fileName = argument.mid(1);
+            QVERIFY(previousFile.isEmpty() || fileName != previousFile);
+            QVERIFY(previousFile.isEmpty() || !QFile::exists(previousFile));
+            QFile file(fileName);
+            QVERIFY(file.open(QIODevice::ReadOnly));
+            const auto launch = QJsonDocument::fromJson(file.readAll())
+                                    .object()
+                                    .value("mcpServers")
+                                    .toObject()
+                                    .value("ketplus_agents")
+                                    .toObject();
+            QVERIFY(launch.value("env").toObject().value("KETPLUS_AGENT_MUTATION_TOKEN") == secret);
+            QVERIFY((file.permissions() & (QFileDevice::ReadGroup | QFileDevice::WriteGroup |
+                                           QFileDevice::ExeGroup | QFileDevice::ReadOther |
+                                           QFileDevice::WriteOther | QFileDevice::ExeOther)) == 0);
+            QFile recorded(log);
+            QVERIFY(recorded.open(QIODevice::ReadOnly));
+            QVERIFY(!recorded.readAll().contains(secret.toUtf8()));
+            for (const auto& row : logEntries(log))
+                for (const auto& server :
+                     row.toObject().value("params").toObject().value("mcpServers").toArray())
+                    QVERIFY(server.toObject().value("name") != "ketplus_agents");
+            previousFile = fileName;
+        }
+        QVERIFY(adapter.releaseSessionTransport("test-session"));
+        QVERIFY(!QFile::exists(previousFile));
+        QVERIFY(adapter.supportsManagedMutations());
     }
     void streamsAndCancels() {
         QTemporaryDir dir;

@@ -40,7 +40,12 @@ void ManagedTaskBridge::createChild(const QJsonObject& task, const QJsonObject& 
         runtime_->cancelOwner(owner, "owner_invalid");
         return;
     }
-    const auto policy = parent->stored.executionPolicy;
+    const auto policy =
+        task.value("execution").toObject().value("origin_execution_policy").toString();
+    if (policy != "ask" && policy != "full" && policy != "read-only") {
+        (void)runtime_->stop(id, owner);
+        return;
+    }
     const auto reserved = runtime_->reserveChild(id);
     if (!reserved.value("ok").toBool())
         return;

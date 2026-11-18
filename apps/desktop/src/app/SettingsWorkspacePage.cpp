@@ -1,5 +1,6 @@
 #include "app/SettingsWorkspacePage.h"
 
+#include "ComputerToolLaunch.h"
 #include "KetSelect.h"
 #include "agent/AgentWorkspaceView.h"
 #include "app/AgentConversationWidth.h"
@@ -70,8 +71,10 @@ SettingsWorkspacePage::SettingsWorkspacePage(SettingsDialog* dialog,
                new SettingsTeamsPage(std::move(teamsRequester), this), false);
     addSection(tr("Browser"), QStringLiteral("browser"),
                new SettingsBrowserPage({}, {}, browser_tools::systemProbes(), this));
-    addSection(tr("Computer use"), QStringLiteral("computer"),
-               new SettingsComputerPage({}, {}, this));
+    if (computer_tools::isSupportedOnThisPlatform()) {
+        addSection(tr("Computer use"), QStringLiteral("computer"),
+                   new SettingsComputerPage({}, {}, this));
+    }
     auto* providersPage =
         new SettingsProvidersPage(std::move(providers), this, std::move(credentials));
     connect(providersPage, &SettingsProvidersPage::typeInTerminalRequested, this,

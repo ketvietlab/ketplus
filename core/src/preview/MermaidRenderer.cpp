@@ -1,5 +1,6 @@
 #include "preview/MermaidRenderer.h"
 #include "KetAppearance.h"
+#include "preview/MermaidLaunch.h"
 
 #include "ui/Theme.h"
 
@@ -324,6 +325,21 @@ QString MermaidRenderer::discoverExecutable() {
     }
 
     const QString home = QDir::homePath();
+#if defined(Q_OS_WIN)
+    // Shims of npm (`mmdc.cmd`), Volta and nvm-windows. A variable that is unset or relative must
+    // not turn a candidate into a path relative to the working directory, where a workspace could
+    // plant its own mmdc.
+    QStringList fixedCandidates;
+    const auto addUnder = [&fixedCandidates](const char* variable, const QString& relative) {
+        const QString base = qEnvironmentVariable(variable);
+        if (!base.isEmpty() && QDir::isAbsolutePath(base))
+            fixedCandidates.append(QDir(base).filePath(relative));
+    };
+    addUnder("APPDATA", QStringLiteral("npm/mmdc.cmd"));
+    addUnder("LOCALAPPDATA", QStringLiteral("Volta/bin/mmdc.exe"));
+    addUnder("NVM_SYMLINK", QStringLiteral("mmdc.cmd"));
+    fixedCandidates.append(QDir(home).filePath(QStringLiteral(".volta/bin/mmdc.exe")));
+#else
     const QStringList fixedCandidates{
         QStringLiteral("/opt/homebrew/bin/mmdc"),
         QStringLiteral("/usr/local/bin/mmdc"),
@@ -333,12 +349,14 @@ QString MermaidRenderer::discoverExecutable() {
         home + QStringLiteral("/.local/share/fnm/aliases/default/bin/mmdc"),
         home + QStringLiteral("/.npm-global/bin/mmdc"),
     };
+#endif
     for (const auto& candidate : fixedCandidates) {
         if (isExecutableFile(candidate)) {
             return candidate;
         }
     }
 
+#if !defined(Q_OS_WIN)
     QDir nvmVersions(home + QStringLiteral("/.nvm/versions/node"));
     const QFileInfoList nodeVersions =
         nvmVersions.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Time);
@@ -348,6 +366,7 @@ QString MermaidRenderer::discoverExecutable() {
             return candidate;
         }
     }
+#endif
     return {};
 }
 
@@ -420,9 +439,20 @@ void MermaidRenderer::startNext() {
 #ifdef Q_OS_WIN
     if (executablePath_.endsWith(QStringLiteral(".cmd"), Qt::CaseInsensitive) ||
         executablePath_.endsWith(QStringLiteral(".bat"), Qt::CaseInsensitive)) {
-        arguments.prepend(executablePath_);
-        arguments.prepend(QStringLiteral("/C"));
-        process_->start(qEnvironmentVariable("COMSPEC", QStringLiteral("cmd.exe")), arguments);
+        QStringList nodeCandidates{QDir(executableDirectory).filePath(QStringLiteral("node.exe"))};
+        const QString nodeOnPath = QStandardPaths::findExecutable(QStringLiteral("node.exe"));
+        if (!nodeOnPath.isEmpty())
+            nodeCandidates.append(nodeOnPath);
+        const MermaidLaunch launch =
+            mermaidWindowsLaunch(qEnvironmentVariable("COMSPEC", QStringLiteral("cmd.exe")),
+                                 executablePath_, arguments, nodeCandidates);
+        if (!launch.error.isEmpty()) {
+            finishCurrent(false, launch.error);
+            return;
+        }
+        if (!launch.nativeArguments.isEmpty())
+            process_->setNativeArguments(launch.nativeArguments);
+        process_->start(launch.program, launch.arguments);
         return;
     }
 #endif

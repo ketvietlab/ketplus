@@ -16,7 +16,7 @@ QString key(const QString& session, const QJsonObject& payload) {
                    .toHex());
 }
 QJsonObject verifyRequest(const teams::Team* team, const QString& session,
-                          const QJsonObject& payload) {
+                          const QJsonObject& payload, const bool checkRevision = true) {
     if (!team)
         return refused("not_on_team", "This conversation is on no team.");
     const auto* member = team->member(session);
@@ -32,8 +32,9 @@ QJsonObject verifyRequest(const teams::Team* team, const QString& session,
     if (!payload.value("task_id").isString() || !payload.value("head_commit").isString())
         return refused("invalid_payload", "Task and exact head identifiers are required.");
     const auto expected = payload.value("expected_team_revision");
-    if (!expected.isDouble() || expected.toInteger(-1) != team->revision ||
-        expected.toDouble() != static_cast<double>(team->revision))
+    if (!expected.isDouble() || expected.toInteger(-1) < 0 ||
+        expected.toDouble() != static_cast<double>(expected.toInteger(-1)) ||
+        (checkRevision && expected.toInteger(-1) != team->revision))
         return refused("stale_team", "Read the current team revision before verifying.");
     if (!task)
         return refused("task_not_found", "The task no longer exists.");
@@ -52,7 +53,10 @@ void SessionHost::prepareTeamRouting(const QString& session, const QJsonObject& 
         routingReplies_.insert(
             key(session, payload),
             refused("verification_busy", "Wait for an existing verification to finish."));
+        const QPointer<SessionHost> guard(this);
         then();
+        if (guard)
+            guard->routingReplies_.remove(key(session, payload));
         return;
     }
     ++routingVerifications_;
@@ -71,18 +75,24 @@ void SessionHost::prepareTeamRouting(const QString& session, const QJsonObject& 
                     return;
                 --guard->routingVerifications_;
                 const auto* current = guard->teams_->teamOf(session);
-                QJsonObject reply = verifyRequest(current, session, payload);
+                QJsonObject reply = verifyRequest(current, session, payload, false);
                 const auto* live = current ? current->task(task.id) : nullptr;
-                if (reply.isEmpty() && (current->id != snapshot.id || !live ||
-                                        live->changedRevision != task.changedRevision))
+                if (reply.isEmpty() &&
+                    (current->id != snapshot.id || !live ||
+                     teams::RoutingEvidence::semanticRevision(
+                         *current, *live, payload.value("head_commit").toString()) !=
+                         teams::RoutingEvidence::semanticRevision(
+                             snapshot, task, payload.value("head_commit").toString())))
                     reply = refused("stale_evidence", "The task changed while verification ran.");
                 if (reply.isEmpty() && !result.evidence)
                     reply = refused(result.reason == "stale_revision" ? "stale_revision"
                                                                       : "review_required",
                                     result.reason);
+                if (reply.isEmpty() &&
+                    !guard->routingEvidence_.retain(snapshot, task, *result.evidence))
+                    reply = refused("verification_busy", "The receipt store has no team capacity.");
                 if (reply.isEmpty()) {
                     const auto& evidence = *result.evidence;
-                    guard->routingEvidence_.retain(*current, *live, evidence);
                     QJsonArray checks;
                     for (const auto& check : evidence.checks)
                         checks.append(QJsonObject{{"name", check.name},
@@ -93,14 +103,19 @@ void SessionHost::prepareTeamRouting(const QString& session, const QJsonObject& 
                              {"evidence_id", evidence.id},
                              {"recipe", result.recipe},
                              {"revision", evidence.revision},
-                             {"task_revision", evidence.taskRevision},
+                             {"task_revision", live->changedRevision},
+                             {"proof_task_revision", evidence.taskRevision},
+                             {"semantic_revision", teams::RoutingEvidence::semanticRevision(
+                                                       snapshot, task, evidence.revision)},
                              {"checks", checks},
                              {"authorization_granted", false}};
                 }
-                if (guard->routingReplies_.size() >= 128)
-                    guard->routingReplies_.erase(guard->routingReplies_.begin());
                 guard->routingReplies_.insert(key(session, payload), reply);
                 then();
+                // The broker consumes synchronously inside this exact continuation.
+                // An expired actor must not leave a reply available to a later call.
+                if (guard)
+                    guard->routingReplies_.remove(key(session, payload));
             },
             Qt::QueuedConnection);
     });
@@ -116,7 +131,8 @@ QJsonObject SessionHost::teamRoutingOperation(const QString& session, const QStr
                                               const QJsonObject& payload) {
     const auto* team = teams_ ? teams_->teamOf(session) : nullptr;
     if (operation == QStringLiteral("team_task_route_verify")) {
-        const QJsonObject error = verifyRequest(team, session, payload);
+        const QJsonObject error =
+            verifyRequest(team, session, payload, !routingReplies_.contains(key(session, payload)));
         if (!error.isEmpty())
             return error;
         const auto reply = routingReplies_.take(key(session, payload));

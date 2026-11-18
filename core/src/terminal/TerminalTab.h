@@ -43,15 +43,19 @@ class TerminalTab final : public QWidget {
 
   private:
     void setTitle(const QString& title);
-    [[nodiscard]] QByteArray commandForPath(const QString& path) const;
+    [[nodiscard]] QByteArray commandForPath(const QString& path);
     void typePendingTextWhenReady();
+    [[nodiscard]] bool powerShellPromptVisible() const;
 
     TerminalSession session_;
     TerminalView* terminal_{nullptr};
     QString workingDirectory_;
     QString pendingCommandPath_;
+    QByteArray pendingRun_; // A run command waiting for the shell's first prompt.
     QString pendingTypedText_;
     QTimer promptSettled_;
+    QTimer runQuiet_;
+    QTimer runDeadline_;
     QElapsedTimer sinceStart_;
     bool shellReady_{false};
     QString title_;

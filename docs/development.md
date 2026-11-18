@@ -24,6 +24,67 @@ export QT_ROOT="$(brew --prefix qt)"
 Use `CMakeUserPresets.json` for machine-specific settings. It is ignored and
 must not be committed.
 
+## Windows
+
+The Windows build uses MSVC (Visual Studio 2022 Build Tools, x64), Ninja and
+the same presets as other platforms. Source is edited on a Mac and mirrored
+with [mutagen](https://mutagen.io) to a Windows machine that builds over ssh;
+nothing here names a host, so pass it through the environment.
+
+### Toolchain
+
+On the Windows machine, in an administrator PowerShell or over ssh as an
+administrator, run `tools/windows/install-toolchain.ps1` (copy it with
+`install_qt.py`; both sit side by side). `-Root` selects the install folder
+(default `C:\ketplus-tools`). It installs Python 3, CMake, Ninja, MSVC Build
+Tools 2022 with the Windows SDK, Qt 6.11 `msvc2022_64` with the add-ons the
+project needs (WebSockets, WebView, Core5Compat, ShaderTools, ImageFormats) and
+the prebuilt OpenSSL 3 that Qt publishes. Qt is fetched by `install_qt.py`
+directly from `download.qt.io`, because aqtinstall does not read the Qt 6.11
+repository layout; no Qt account is needed. Re-running skips what is present.
+The Visual Studio installer must be recent enough for the Qt build (MSVC 14.4x);
+an old Build Tools install is brought up to date with
+`vs_BuildTools.exe update --quiet --wait --installPath <path>`.
+
+`tools/windows/vsenv.cmd <command>` runs a command with `vcvars64`, CMake,
+Ninja, `QT_ROOT` and `OPENSSL_ROOT_DIR` set from `KETPLUS_TOOLS_ROOT` (default
+`C:\ketplus-tools`); run it without arguments to print the resolved tools. A
+`QT_ROOT` already set wins; otherwise `KETPLUS_QT_VERSION` (for example
+`6.11.3`) selects a version, and without it the highest installed version is
+used (compared as version numbers). The
+presets already read `$env{QT_ROOT}`, so no Windows-specific preset is needed.
+
+### Sync and build from a Mac
+
+Install mutagen (`brew install mutagen-io/mutagen/mutagen`, or unpack a release
+into `~/.local/bin`), make sure `ssh` to the Windows machine works without a
+password prompt, then from a worktree. Three conditions on the Windows machine:
+the OpenSSH default shell must stay `cmd.exe` (the scripts use `cd /d` and
+`if not exist`); `git config --global core.autocrlf false` must be set, because
+the build clones dependencies and patches them with LF-only patterns, which a
+CRLF checkout breaks; and `qtwebview` is installed without a WebEngine, so
+check that a WebView backend plugin is present before relying on it:
+
+```sh
+export KETPLUS_WIN_HOST=user@host            # required
+export KETPLUS_WIN_ROOT=C:/ketplus-work      # optional parent folder on Windows
+tools/windows/win-sync.sh start              # also: stop | status | flush
+tools/windows/win-run.sh cmake --preset lite-dev
+tools/windows/win-run.sh cmake --build --preset lite-dev
+tools/windows/win-run.sh ctest --preset lite-dev
+```
+
+Each worktree gets its own session and Windows folder, named after the
+worktree directory (`KETPLUS_WIN_NAME` overrides it), so parallel worktrees do
+not collide. The sync is one-way (Mac to Windows) and skips `build/`,
+`build-*`, `.cache/` and `.git`; the Windows build tree stays on the Windows
+machine. `win-run.sh` flushes the sync before it runs, so edits made on the Mac
+are always built. The remote shell is `cmd.exe` and `win-run.sh` passes its
+arguments through unchanged, so an argument with spaces or `cmd` metacharacters
+needs `cmd` quoting inside the shell quoting, for example
+`win-run.sh 'ctest -R "two words"'`. Stop a session with `win-sync.sh stop` when the worktree is
+removed.
+
 ## Build presets
 
 For the independent Linux server target, see
@@ -284,29 +345,21 @@ git diff --check
 Do not mechanically format vendored files or unrelated source. Check the final
 diff for generated data, absolute paths, and credentials.
 
-## Team translations
+## UI and team content language
 
-A team works in English or Vietnamese (ADR 0125). English is the source text; the
-Vietnamese text is `modules/remote/translations/ketplus_teams_vi.ts`, which `lrelease`
-compiles into the build (Qt `LinguistTools`). After adding or changing a team text, in
-`apps/desktop/src/teams` (`tr()`) or `apps/daemon/src/teams`
-(`say(team.language, QT_TRANSLATE_NOOP("Team", "..."))`), refresh the catalog:
+The application UI is English. Team content follows the user's prompt and explicit content
+instructions; `team.language` is only an optional fallback (`auto`, `en`, `vi`). See the
+[contract](decisions/2026-11-18-english-ui-team-content.md) and
+[source inventory](team-content-language.md). Never install a translator based on team or
+OS language, infer content language from UI language, or rewrite stored content.
 
-```sh
-cmake --build <build-dir> --target ketplus_team_language_lupdate
-```
-
-It keeps every translation already written, drops texts no source uses, and prints how many
-texts have none. Write those in the `.ts` file (Qt Linguist or an editor), then run
-`ketplus_team_page_language_tests` and `ketplus_team_language_tests` offscreen.
-The source-freshness check extracts the texts again without rewriting the catalog:
-
-```sh
-QT_QPA_PLATFORM=offscreen ctest --test-dir <build-dir> -R ketplus_team_translation_catalog_tests --output-on-failure
-```
-
-It fails for a newly added source text without a finished translation, even if the
-checked-in catalog has not been refreshed, or for a stale catalog entry.
+The historical Vietnamese catalog remains in `modules/remote/translations`. New English
+UI text needs no translation. `ketplus_team_translation_catalog_tests` checks its preserved
+entries with `--check-preserved`; the refresh utility remains available for explicit
+historical maintenance, not as a required UI-development step. Run
+`ketplus_team_page_language_tests`, `ketplus_team_language_tests`, protocol/paired language
+fixtures and relevant dialog/sidebar tests. Shared desktop changes require the full matrix
+in `testing.md` in addition to focused checks.
 
 ## External tools
 

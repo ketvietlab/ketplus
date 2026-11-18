@@ -151,7 +151,7 @@ CredentialStore::CredentialStore(QString service, std::shared_ptr<CredentialBack
     : service_(std::move(service)), backend_(std::move(backend)),
       legacyPath_(std::move(legacyPath)) {}
 
-bool CredentialStore::transaction(const std::function<void(QHash<QString, QByteArray>&)>& change,
+bool CredentialStore::transaction(const std::function<bool(QHash<QString, QByteArray>&)>& change,
                                   QHash<QString, QByteArray>* result, QString* error) const {
     if (error)
         error->clear();
@@ -220,8 +220,8 @@ bool CredentialStore::transaction(const std::function<void(QHash<QString, QByteA
                                               "cleanup failed; retry before continuing."));
     }
     const auto before = accounts;
-    if (change)
-        change(accounts);
+    if (change && !change(accounts))
+        return false;
     if (accounts != before) {
         record.insert("version", 1);
         record.insert("accounts", encode(accounts));
@@ -236,6 +236,11 @@ bool CredentialStore::transaction(const std::function<void(QHash<QString, QByteA
     return true;
 }
 QByteArray CredentialStore::read(const QString& account, QString* error) const {
+    if (stagedAccounts_) {
+        if (error)
+            error->clear();
+        return stagedAccounts_->value(account);
+    }
     QHash<QString, QByteArray> accounts;
     if (!transaction({}, &accounts, error))
         return {};
@@ -257,6 +262,42 @@ bool CredentialStore::removeIf(const std::function<bool(const QString&)>& match,
 }
 bool CredentialStore::update(const std::function<void(QHash<QString, QByteArray>&)>& change,
                              QString* error) const {
-    return transaction(change, nullptr, error);
+    if (stagedAccounts_) {
+        if (error)
+            error->clear();
+        change(*stagedAccounts_);
+        return true;
+    }
+    return transaction(
+        [&](auto& accounts) {
+            change(accounts);
+            return true;
+        },
+        nullptr, error);
+}
+
+bool CredentialStore::batch(const std::function<bool(CredentialStore&, QString*)>& operation,
+                            QString* error) const {
+    QString localError;
+    if (!error)
+        error = &localError;
+    error->clear();
+    const auto apply = [&](auto& accounts) {
+        CredentialStore view(service_, nullptr, {});
+        view.stagedAccounts_ = &accounts;
+        if (operation(view, error))
+            return true;
+        if (error && error->isEmpty())
+            *error = QStringLiteral("Credential operation did not complete; retry.");
+        return false;
+    };
+    if (stagedAccounts_) {
+        auto nested = *stagedAccounts_;
+        if (!apply(nested))
+            return false;
+        *stagedAccounts_ = std::move(nested);
+        return true;
+    }
+    return transaction(apply, nullptr, error);
 }
 } // namespace ketplus::daemon

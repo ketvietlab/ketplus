@@ -66,6 +66,10 @@ struct StoredSession final {
     // #125: the last turn ended asking the user to approve or decide. Written only by
     // setSessionAwaitingReply; upsertSession leaves it as it is.
     bool awaitingReply{false};
+    // Navigation placement is independent of execution. nullopt is legacy/unknown; an
+    // engaged empty value means the conversation was explicitly created without a repository.
+    std::optional<QString> sidebarRepository{std::nullopt};
+    QString conversationPath;
 };
 
 // One command a paired device sent this Mac through the relay that could change something
@@ -303,6 +307,7 @@ class LocalJournal final {
     bool rememberWorktree(const QString& path);
     bool forgetWorktree(const QString& path);
     QString conversationPath(const StoredSession& session) const;
+    std::optional<QString> conversationSidebarRepository(const StoredSession& session) const;
     bool recordConversationPath(const StoredSession& session);
     bool recordSessionContext(const StoredSession& session);
     [[nodiscard]] QJsonArray sessionContexts(const QString& sessionId, qint64 generation) const;

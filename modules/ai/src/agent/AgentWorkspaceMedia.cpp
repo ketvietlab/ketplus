@@ -3,6 +3,7 @@
 #include "KetProfile.h"
 #include "KetRichRecipes.h"
 #include "KetTokens.h"
+#include "ToolLocations.h"
 #include "agent/AgentMessageFormatter.h"
 #include "agent/AgentWorkspaceView.h"
 #include "agent/ChatMarkdown.h"
@@ -288,10 +289,12 @@ void AgentWorkspaceView::installMermaid() {
     if (!mermaidInstallOffered_ ||
         (mermaidInstaller_ && mermaidInstaller_->state() != QProcess::NotRunning))
         return;
-    QString npm = QStandardPaths::findExecutable(QStringLiteral("npm"));
+    // On Windows npm is `npm.cmd`, found through PATHEXT; the arguments below are fixed, so
+    // running it through cmd.exe cannot reinterpret anything.
+    QString npm = tool_locations::findTool(QStringLiteral("npm"));
+#if !defined(Q_OS_WIN)
     if (npm.isEmpty()) {
-        QStringList candidates{QStringLiteral("/opt/homebrew/bin/npm"),
-                               QStringLiteral("/usr/local/bin/npm")};
+        QStringList candidates;
         const QDir versions(QDir::homePath() + QStringLiteral("/.nvm/versions/node"));
         for (const auto& version :
              versions.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Time))
@@ -303,6 +306,7 @@ void AgentWorkspaceView::installMermaid() {
             }
         }
     }
+#endif
     mermaidInstallError_.clear();
     mermaidInstallOutput_.clear();
     if (npm.isEmpty()) {

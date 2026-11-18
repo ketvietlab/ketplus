@@ -99,6 +99,7 @@ AcpAdapter::~AcpAdapter() {
 }
 
 void AcpAdapter::stop() {
+    stopSessionWorkers();
     stopping_ = true;
     restartTimer_->stop();
     failPending(QStringLiteral("The %1 ACP process was stopped.").arg(label_));
@@ -233,6 +234,14 @@ void AcpAdapter::failPending(const QString& reason) {
 }
 
 void AcpAdapter::setReady(const bool ready) { ready_ = ready; }
+bool AcpAdapter::isReady() const {
+    if (ready_)
+        return true;
+    for (auto worker : sessionWorkers_)
+        if (worker && worker->isReady())
+            return true;
+    return false;
+}
 void AcpAdapter::noteUnexpectedStop() {
     restartDelayMs_ = restartDelayMs_ <= 0 ? 1000 : std::min(restartDelayMs_ * 2, 60 * 1000);
     restartNotBefore_.setRemainingTime(restartDelayMs_);

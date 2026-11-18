@@ -9,7 +9,7 @@ import { createInterface } from "node:readline";
 import test from "node:test";
 
 const sidecarFiles = ["authentication.mjs", "index.mjs", "transcript.mjs", "input.mjs", "tasks.mjs",
-  "resume.mjs", "session-delete.mjs", "session-usage.mjs", "review-guard.mjs"];
+  "resume.mjs", "session-delete.mjs", "session-usage.mjs", "review-guard.mjs", "background-policy.mjs", "process-barrier.mjs"];
 
 // Asks the hook and canUseTool about every attempt in KETPLUS_FAKE_ATTEMPTS and, like Claude
 // Code, runs what both allow, so a wrong "allow" really changes the files under test. A
@@ -30,11 +30,15 @@ const fakeSdk = `
       const attempts = JSON.parse(fs.readFileSync(process.env.KETPLUS_FAKE_ATTEMPTS, "utf8"));
       const decisions = [];
       for (const { tool, input: toolInput } of attempts) {
-        const hook = options.hooks?.PreToolUse?.[0];
-        const hooked = hook ? (await hook.hooks[0]({ hook_event_name: "PreToolUse", tool_name: tool, tool_input: toolInput }))
-          .hookSpecificOutput : null;
+        let hooked = null;
+        for (const matcher of options.hooks?.PreToolUse || []) {
+          for (const hook of matcher.hooks) {
+            const output = (await hook({ hook_event_name: "PreToolUse", tool_name: tool, tool_input: toolInput })).hookSpecificOutput;
+            if (output?.permissionDecision === "deny" || !hooked) hooked = output || hooked;
+          }
+        }
         const asked = await options.canUseTool(tool, toolInput);
-        const allowed = (!hooked || hooked.permissionDecision === "allow") && asked.behavior === "allow";
+        const allowed = (!hooked || hooked.permissionDecision !== "deny") && asked.behavior === "allow";
         if (allowed && tool === "Bash")
           spawnSync("/bin/sh", ["-c", toolInput.command], { cwd: options.cwd, stdio: "ignore" });
         if (allowed && (tool === "Write" || tool === "Edit" || tool === "NotebookEdit"))
@@ -228,7 +232,7 @@ test("a team's review round cannot change, commit or publish the work", { timeou
   for (const decision of result.decisions) {
     assert.equal(decision.behavior, "deny", `${decision.tool} ${JSON.stringify(decision.input)}`);
     assert.equal(decision.hook, "deny", decision.tool);
-    assert.match(decision.message, /^A review cannot /, decision.tool);
+    assert.match(decision.message, decision.tool === "Agent" ? /^Native Claude background/ : /^A review cannot /, decision.tool);
   }
   assert.deepEqual(state(repo), before);
   assert.equal(await fs.readFile(path.join(repo, "tracked.txt"), "utf8"), "original\n");

@@ -71,7 +71,7 @@ MainWindow::takeSidebarTeams(const QString& repository,
     QVector<SidebarTeam> folders;
     if (teams_ == nullptr || !teams_->hasTeams())
         return folders;
-    for (const QJsonObject& team : teams_->teams(repository)) {
+    for (const QJsonObject& team : teams_->sidebarTeams(repository)) {
         SidebarTeam folder{
             .id = team.value(QStringLiteral("id")).toString(),
             .name = team.value(QStringLiteral("name")).toString(),

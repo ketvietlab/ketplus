@@ -170,10 +170,21 @@ bool DevicePins::trusts(const QJsonObject& device) const {
                                         device.value(QStringLiteral("keys")).toObject());
 }
 
-QJsonArray DevicePins::trusted(const QJsonArray& devices) const {
+QJsonArray DevicePins::trusted(const QJsonArray& devices, QString* error) const {
+    QString readError;
+    const auto pinned = read(&readError).value(QStringLiteral("devices")).toObject();
+    if (error)
+        *error = readError;
+    if (!readError.isEmpty())
+        return {};
     QJsonArray result;
     for (const QJsonValue& value : devices) {
-        if (trusts(value.toObject()))
+        const auto device = value.toObject();
+        const auto id = device.value(QStringLiteral("id")).toString();
+        const auto print = fingerprint(device.value(QStringLiteral("keys")).toObject());
+        if (active(device) && !id.isEmpty() && !print.isEmpty() &&
+            pinned.value(pinKey(id, device.value(QStringLiteral("keyVersion")).toInt()))
+                    .toString() == print)
             result.append(value);
     }
     return result;

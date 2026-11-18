@@ -39,7 +39,8 @@ QString limitText(qint64 bytes) {
     return SettingsStoragePage::tr("%1 GB").arg(bytes / 1'000'000'000LL);
 }
 QString day(const QDateTime& time) {
-    return QLocale().toString(time.toLocalTime().date(), QStringLiteral("d MMM yyyy"));
+    return QLocale(QLocale::English)
+        .toString(time.toLocalTime().date(), QStringLiteral("d MMM yyyy"));
 }
 qint64 bytesOf(const QJsonObject& object, const char* key) {
     const auto value = object.value(QLatin1String(key));
@@ -305,11 +306,12 @@ void SettingsStoragePage::showCompaction(const QJsonObject& compaction) {
     const auto last = compaction.value("last").toObject();
     const auto at = QDateTime::fromString(last.value("completed_at").toString(), Qt::ISODateWithMs);
     lastCompaction_->setText(
-        at.isValid() ? tr("%1 · %2 → %3")
-                           .arg(QLocale().toString(at.toLocalTime(), QLocale::ShortFormat),
-                                bytesText(bytesOf(last, "before_bytes")),
-                                bytesText(bytesOf(last, "after_bytes")))
-                     : tr("Never"));
+        at.isValid()
+            ? tr("%1 · %2 → %3")
+                  .arg(QLocale(QLocale::English).toString(at.toLocalTime(), QLocale::ShortFormat),
+                       bytesText(bytesOf(last, "before_bytes")),
+                       bytesText(bytesOf(last, "after_bytes")))
+            : tr("Never"));
     compacting_->setVisible(running);
     compact_->setText(running ? tr("Compacting…") : tr("Compact now"));
     if (running) {

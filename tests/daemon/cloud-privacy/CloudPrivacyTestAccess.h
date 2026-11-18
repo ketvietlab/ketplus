@@ -85,6 +85,11 @@ class CloudPrivacyTestAccess {
     static bool heartbeatIdle(const CloudControlClient& client) {
         return !client.heartbeatInFlight_;
     }
+    static QList<QJsonArray> sealMetadata(CloudControlClient& client,
+                                          const QList<QJsonArray>& batches,
+                                          const QHash<QString, QJsonObject>& metadata) {
+        return client.withSessionMetadata(batches, metadata);
+    }
     static bool idle(const CloudControlClient& client) {
         return client.eventUploadsInFlight_.isEmpty();
     }
@@ -164,6 +169,10 @@ class CloudPrivacyTestAccess {
         client.machineKeyVersion_ = version;
     }
     static QJsonObject status(const CloudControlClient& client) { return client.status(); }
+    // Reads the capabilities of a heartbeat answer, as an accepted heartbeat does.
+    static void heartbeatAnswer(CloudControlClient& client, const QJsonObject& answer) {
+        client.negotiatePeerTransport(answer);
+    }
     static void senderKeys(CloudControlClient& client, const QString& sender, int version,
                            std::function<void(const QJsonObject&, const QString&)> callback) {
         client.withSenderKeys(sender, version, std::move(callback));

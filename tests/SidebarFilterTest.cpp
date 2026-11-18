@@ -13,8 +13,11 @@
 #include <QAction>
 #include <QDir>
 #include <QLabel>
+#include <QLayout>
 #include <QLineEdit>
 #include <QPointer>
+#include <QPushButton>
+#include <QScopeGuard>
 #include <QSettings>
 #include <QSignalSpy>
 #include <QStandardPaths>
@@ -60,6 +63,43 @@ QStringList shownRows(const SidebarRepositoryList& list) {
         if (row->isVisible())
             ids << row->property("conversationId").toString();
     return ids;
+}
+QStringList verticalLayoutProblems(const SidebarRepositoryList& list) {
+    QList<const QWidget*> containers{&list};
+    for (auto* group : list.findChildren<QWidget*>("productRepositoryGroup"))
+        containers.append(group);
+    for (auto* folder : list.findChildren<QWidget*>("productTeamFolder"))
+        containers.append(folder);
+    for (auto* guide : list.findChildren<ket::SidebarTreeGuide*>())
+        containers.append(guide);
+    QStringList problems;
+    for (const auto* container : containers) {
+        if (!container->isVisible() || !container->layout())
+            continue;
+        const auto* layout = container->layout();
+        const auto margins = layout->contentsMargins();
+        int bottom = margins.top();
+        bool first = true;
+        for (int index = 0; index < layout->count(); ++index) {
+            const auto* part = layout->itemAt(index)->widget();
+            if (!part || !part->isVisible())
+                continue;
+            const int expected = bottom + (first ? 0 : layout->spacing());
+            if (part->y() != expected)
+                problems.append(QStringLiteral("%1/%2 y=%3 expected=%4")
+                                    .arg(container->objectName(), part->objectName())
+                                    .arg(part->y())
+                                    .arg(expected));
+            bottom = part->y() + part->height();
+            first = false;
+        }
+        if (container->height() != bottom + margins.bottom())
+            problems.append(QStringLiteral("%1 height=%2 visible-content=%3")
+                                .arg(container->objectName())
+                                .arg(container->height())
+                                .arg(bottom + margins.bottom()));
+    }
+    return problems;
 }
 } // namespace
 class SidebarFilterTest final : public QObject {
@@ -190,6 +230,181 @@ class SidebarFilterTest final : public QObject {
         QCOMPARE(list.findChildren<ket::SidebarRow*>("productConversationButton").size(), 6);
         QCOMPARE(shownGroups(list).size(), 3);
     }
+    void filteredGroupsUseOnlyVisibleRowHeight_data() {
+        QTest::addColumn<bool>("remote");
+        QTest::addColumn<int>("width");
+        QTest::addColumn<int>("height");
+        QTest::newRow("local-tall-narrow") << false << 240 << 1400;
+        QTest::newRow("paired-tall-narrow") << true << 240 << 1400;
+        QTest::newRow("local-normal") << false << 340 << 800;
+        QTest::newRow("paired-normal") << true << 340 << 800;
+    }
+    void filteredGroupsUseOnlyVisibleRowHeight() {
+        QFETCH(bool, remote);
+        QFETCH(int, width);
+        QFETCH(int, height);
+        QVector<SidebarRepository> data;
+        for (int group = 0; group < 4; ++group) {
+            SidebarRepository repo{.path = QStringLiteral("/synthetic/project-%1").arg(group),
+                                   .name = QStringLiteral("Project %1").arg(group)};
+            for (int row = 0; row < 8; ++row)
+                repo.conversations.append(
+                    conversation(QStringLiteral("%1-%2").arg(group).arg(row),
+                                 row == 7 ? QStringLiteral("Needle — kiểm tra %1").arg(group)
+                                          : QStringLiteral("Discussion %1").arg(row)));
+            data.append(repo);
+        }
+        ActivityBar sidebar;
+        sidebar.setRemoteMachineSelected(remote);
+        sidebar.resize(width, height);
+        sidebar.setRepositories(data);
+        sidebar.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&sidebar));
+        auto* input = sidebar.findChild<QLineEdit*>("sidebarRepositoryFilter");
+        auto* list = sidebar.repositoryList();
+        QVERIFY(input && list);
+        for (const auto& query : {QStringLiteral("Needle"), QStringLiteral("kiểm tra 3"),
+                                  QStringLiteral("absent-result"), QString{}}) {
+            input->setText(query);
+            QTest::qWait(50);
+            QStringList geometry;
+            bool compact = true;
+            int previousBottom = -1;
+            for (auto* group : list->findChildren<QWidget*>("productRepositoryGroup")) {
+                if (!group->isVisible())
+                    continue;
+                auto* header =
+                    group->findChild<ket::SidebarRepositoryHeader*>("productRepositoryGroupButton");
+                auto* held = group->findChild<ket::SidebarTreeGuide*>("productRepositoryHeld");
+                QVERIFY(header && held);
+                const auto rows = held->findChildren<ket::SidebarRow*>("productConversationButton");
+                int bottom = header->mapTo(list, QPoint(0, header->height())).y();
+                for (auto* row : rows) {
+                    if (!row->isVisible())
+                        continue;
+                    const int top = row->mapTo(list, QPoint{}).y();
+                    geometry.append(QStringLiteral("%1 row=%2 top=%3 priorBottom=%4 gap=%5")
+                                        .arg(group->property("repositoryPath").toString(),
+                                             row->property("conversationId").toString())
+                                        .arg(top)
+                                        .arg(bottom)
+                                        .arg(top - bottom));
+                    compact = compact && top - bottom >= 0 && top - bottom <= 1;
+                    bottom = top + row->height();
+                }
+                // Unfiltered previews also contain the existing Show N more footer.
+                if (auto* more = held->findChild<QPushButton*>("productShowMoreConversations");
+                    more && more->isVisible()) {
+                    const int top = more->mapTo(list, QPoint{}).y();
+                    compact = compact && top - bottom >= 0 && top - bottom <= 1;
+                    bottom = top + more->height();
+                }
+                const int top = group->mapTo(list, QPoint{}).y();
+                const int groupBottom = top + group->height();
+                geometry.append(
+                    QStringLiteral("group top=%1 bottom=%2 contentBottom=%3 listHeight=%4 hint=%5")
+                        .arg(top)
+                        .arg(groupBottom)
+                        .arg(bottom)
+                        .arg(list->height())
+                        .arg(list->sizeHint().height()));
+                compact = compact && groupBottom - bottom <= 1;
+                if (previousBottom >= 0)
+                    compact = compact && top - previousBottom >= 0 && top - previousBottom <= 1;
+                previousBottom = groupBottom;
+            }
+            qInfo().noquote() << "query=" << query << geometry.join('\n');
+            const QString capture = qEnvironmentVariable("KETPLUS_SIDEBAR_LAYOUT_CAPTURE");
+            if (!capture.isEmpty() && query == "Needle") {
+                QVERIFY(QDir().mkpath(capture));
+                QVERIFY(sidebar.grab().save(capture + QStringLiteral("/filtered-%1-%2-%3.png")
+                                                          .arg(remote ? "paired" : "local")
+                                                          .arg(width)
+                                                          .arg(height)));
+            }
+            QVERIFY2(compact, qPrintable(geometry.join('\n')));
+            if (query == "Needle")
+                QCOMPARE(shownRows(*list).size(), 4);
+            else if (query == "kiểm tra 3")
+                QCOMPARE(shownRows(*list).size(), 1);
+            else if (query == "absent-result")
+                QVERIFY(shownGroups(*list).isEmpty());
+            else
+                QCOMPARE(shownGroups(*list).size(), 4);
+        }
+    }
+    void teamGuidesStayPackedThroughUpdatesFoldsResizeAndLiveAppearance() {
+        const auto previousMode = ket::Appearance::instance().mode();
+        const auto previousZoom = ket::Appearance::instance().zoom();
+        const auto restore = qScopeGuard([&] {
+            ket::Appearance::instance().setMode(previousMode);
+            ket::Appearance::instance().setZoom(previousZoom);
+        });
+        ThemeManager theme(*qApp);
+        for (const bool remote : {false, true}) {
+            ActivityBar sidebar;
+            sidebar.setRemoteMachineSelected(remote);
+            sidebar.setRepositories(fixture());
+            sidebar.resize(240, 1400);
+            sidebar.show();
+            QVERIFY(QTest::qWaitForWindowExposed(&sidebar));
+            auto* input = sidebar.findChild<QLineEdit*>("sidebarRepositoryFilter");
+            auto* list = sidebar.repositoryList();
+            QSignalSpy activated(&sidebar, &ActivityBar::conversationRequested);
+            QSignalSpy navigated(&sidebar, &ActivityBar::repositoryActivationRequested);
+            for (const auto mode : {ket::Appearance::Mode::Light, ket::Appearance::Mode::Dark,
+                                    ket::Appearance::Mode::System}) {
+                ket::Appearance::instance().setMode(mode);
+                for (const int zoom : InterfaceZoomMetrics::steps()) {
+                    ket::Appearance::instance().setZoom(InterfaceZoomMetrics::factor(zoom));
+                    sidebar.applyPalette(theme.palette(), zoom);
+                    for (const auto& query :
+                         {QStringLiteral("Needle"), QStringLiteral("Other work"),
+                          QStringLiteral("missing"), QStringLiteral("TOOLS/BETA"), QString{}}) {
+                        input->setText(query);
+                        for (const int width : {240, 340}) {
+                            sidebar.resize(width, width == 240 ? 1400 : 800);
+                            QTest::qWait(10);
+                            const auto problems = verticalLayoutProblems(*list);
+                            QVERIFY2(problems.isEmpty(), qPrintable(problems.join(';')));
+                            // Wrapped empty-state text has a width-dependent height; the
+                            // actual child bounds above are the invariant, not sizeHint().
+                            const QString capture =
+                                qEnvironmentVariable("KETPLUS_SIDEBAR_LAYOUT_CAPTURE");
+                            if (!capture.isEmpty() && !remote &&
+                                mode == ket::Appearance::Mode::Dark && zoom == 125 &&
+                                query == "Needle" && width == 240) {
+                                QVERIFY(QDir().mkpath(capture));
+                                QVERIFY(sidebar.grab().save(capture + "/team-dark-125.png"));
+                            }
+                        }
+                    }
+                    // Both folds must remeasure their ancestors, then recover the same rows.
+                    auto* group = list->findChild<QWidget*>("productTeamFolder")
+                                      ->parentWidget()
+                                      ->parentWidget();
+                    auto* header = group->findChild<ket::SidebarRepositoryHeader*>(
+                        "productRepositoryGroupButton");
+                    for (int toggle = 0; toggle < 2; ++toggle) {
+                        header->click();
+                        QTest::qWait(10);
+                        const auto problems = verticalLayoutProblems(*list);
+                        QVERIFY2(problems.isEmpty(), qPrintable(problems.join(';')));
+                    }
+                    auto* branch =
+                        group->findChild<ket::SidebarTeamBranch*>("productTeamFolderHeader");
+                    for (int toggle = 0; toggle < 2; ++toggle) {
+                        branch->foldButton()->click();
+                        QTest::qWait(10);
+                        const auto problems = verticalLayoutProblems(*list);
+                        QVERIFY2(problems.isEmpty(), qPrintable(problems.join(';')));
+                    }
+                }
+            }
+            QCOMPARE(activated.count(), 0);
+            QCOMPARE(navigated.count(), 0);
+        }
+    }
     void filteringDoesNotRewritePinsOrOrder() {
         QTemporaryDir dirs;
         QVERIFY(dirs.isValid());
@@ -316,8 +531,7 @@ class SidebarFilterTest final : public QObject {
         auto* field = sidebar.findChild<QLineEdit*>("sidebarRepositoryFilter");
         QVERIFY(field);
         QCOMPARE(field->accessibleName(), sidebar_filter::text(sidebar_filter::name));
-        if (locale.startsWith("vi"))
-            QVERIFY(field->accessibleName().startsWith(QString::fromUtf8("Lọc")));
+        QCOMPARE(field->accessibleName(), QStringLiteral("Filter repositories and conversations"));
         QVERIFY(field->toolTip().contains(
             SidebarFilterField::shortcut().toString(QKeySequence::NativeText)));
         QTest::mouseClick(field, Qt::LeftButton);

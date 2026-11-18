@@ -131,10 +131,11 @@ void SettingsUpdatesPage::refresh() {
         const QDateTime checked = updater_.lastUpdateCheck();
         badge_->setText(checked.isValid() ? tr("Up to date") : tr("Installed"));
         badge_->setTone(ket::BadgeTone::Neutral);
-        card_->setDetail(checked.isValid() ? tr("Checked %1.")
-                                                 .arg(QLocale().toString(checked.toLocalTime(),
-                                                                         QLocale::ShortFormat))
-                                           : tr("ketPlus has not checked for updates yet."));
+        card_->setDetail(checked.isValid()
+                             ? tr("Checked %1.")
+                                   .arg(QLocale(QLocale::English)
+                                            .toString(checked.toLocalTime(), QLocale::ShortFormat))
+                             : tr("ketPlus has not checked for updates yet."));
     }
     // UpdateCard shows its action row once it has an action; hide the row with its buttons.
     restart_->parentWidget()->setVisible(downloaded && laterVersion_ != pending);

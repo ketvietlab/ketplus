@@ -15,6 +15,23 @@ transactions do not write. A per-service process lock serializes migration and
 read/modify/write operations by cooperating clients. The empty owner-only lock file
 is not a credential store; its kernel lock is released on close or process exit,
 including when migration cleanup fails. Do not unlink it while writers are running.
+`CredentialStore::batch` provides an operation-scoped view under that same lock.
+After any required migration, it decodes one fresh record and commits staged
+changes at most once. Read-only batches do not write. The view must not escape its
+synchronous callback, dispatch events, call external callbacks or perform network
+requests. Aborting a callback discards its staged changes. Failed commits do not
+publish envelopes or retain metadata encrypted with uncommitted keys. There is no
+process-wide snapshot or TTL: each subsequent operation reads the store again.
+A cooperating writer that encounters the held lock receives a retryable error;
+a successful later operation sees its committed changes.
+
+Heartbeat metadata sealing, distribution and pairing preparation use these views.
+Distribution rechecks pins in the same view used to prepare envelopes, and device
+list filtering parses the pin map once per list. Existing account/enrollment
+fences and sender-cache pin checks still apply. This does not change the record
+format, native store permissions or key lifecycle. Storage and local cryptography
+remain synchronous: batching bounds native fetches, not event-loop latency.
+
 Records are bounded to 16 MiB;
 exceeding the bound is an explicit error, never truncation or a file fallback.
 

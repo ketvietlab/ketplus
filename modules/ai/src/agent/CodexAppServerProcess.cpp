@@ -1,6 +1,7 @@
-#include "agent/CodexAppServer.h"
 #include "BrowserAgentInstructions.h"
+#include "agent/CodexAppServer.h"
 
+#include "ToolLocations.h"
 #include "agent/DaemonTranscriptProjection.h"
 #include <algorithm>
 
@@ -136,11 +137,28 @@ void CodexAppServer::ensureStarted() {
     starting_ = true;
     stdoutBuffer_.clear();
     stderrBuffer_.clear();
-    process_->setProgram(executable_);
+    const auto command = tool_locations::npmCliCommand(executable_, QStringLiteral("@openai/codex"),
+                                                       QStringLiteral("codex"));
+    if (!command) {
+        // Windows installs Codex as an npm `.cmd` shim, which is never started with arguments
+        // (cmd.exe would reinterpret them), and its package script was not found.
+        starting_ = false;
+        setReady(false);
+        const QString reason =
+            QStringLiteral("Unable to start Codex app-server: %1 is an npm shim and the Codex "
+                           "package it belongs to was not found next to it. Reinstall Codex with "
+                           "npm install -g @openai/codex.")
+                .arg(executable_);
+        failPending(reason);
+        emit serverStopped(reason);
+        return;
+    }
+    process_->setProgram(command->program);
     // Browser tools (ADR 0008): read at each start; changes restart an idle process (reloader_).
     launchedBrowserArguments_ = browserArguments();
     const QStringList& browserArguments = launchedBrowserArguments_;
     process_->setArguments(
+        command->leadingArguments +
         QStringList{QStringLiteral("app-server"), QStringLiteral("--stdio"), QStringLiteral("-c"),
                     QStringLiteral("features.default_mode_request_user_input=true")} +
         browserArguments);
@@ -324,11 +342,19 @@ QString CodexAppServer::findCodexExecutable() {
     if (!fromPath.isEmpty()) {
         return fromPath;
     }
+#if defined(Q_OS_WIN)
+    // npm's global bin directory is on PATH only after a new login; `codex.cmd` is its shim.
+    QStringList candidates{QDir::home().filePath(QStringLiteral(".local/bin/codex.exe"))};
+    if (const QString appData = qEnvironmentVariable("APPDATA");
+        !appData.isEmpty() && QDir::isAbsolutePath(appData))
+        candidates.prepend(QDir(appData).filePath(QStringLiteral("npm/codex.cmd")));
+#else
     const QStringList candidates{
         QDir::home().filePath(QStringLiteral(".local/bin/codex")),
         QStringLiteral("/opt/homebrew/bin/codex"),
         QStringLiteral("/usr/local/bin/codex"),
     };
+#endif
     for (const QString& candidate : candidates) {
         const QFileInfo info(candidate);
         if (info.isFile() && info.isExecutable()) {

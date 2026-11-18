@@ -125,6 +125,9 @@ export function reviewDecision(profile, tool, toolInput, { scratch = "", cwd = p
   const input = toolInput && typeof toolInput === "object" ? toolInput : {};
   const allow = { behavior: "allow", updatedInput: input };
   const deny = (message) => ({ behavior: "deny", message });
+  if (tool === "mcp__ketplus_agents__background_task_start" ||
+      tool === "mcp__ketplus_agents__background_task_stop")
+    return deny(refusal("change background work outside the review's guarded tools"));
   if (agentsInjected && tool.startsWith("mcp__ketplus_agents__")) return allow;
   if (profile !== "verify") return readReviewTools.has(tool) ? allow : deny(readRefusal);
   if (browserInjected && tool.startsWith("mcp__ketplus_browser__")) return allow;

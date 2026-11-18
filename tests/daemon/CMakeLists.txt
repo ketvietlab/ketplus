@@ -146,6 +146,14 @@ ketplus_add_daemon_test(ketplus_sender_key_cache_tests cloud-privacy/SenderKeyCa
 target_sources(ketplus_sender_key_cache_tests PRIVATE cloud-privacy/MemoryCredentials.cpp)
 ketplus_add_daemon_test(ketplus_daemon_cloud_privacy_tests cloud-privacy/CloudPrivacyTest.cpp)
 target_sources(ketplus_daemon_cloud_privacy_tests PRIVATE cloud-privacy/MemoryCredentials.cpp)
+ketplus_add_daemon_test(ketplus_runner_relay_tests RunnerRelayTest.cpp)
+target_sources(ketplus_runner_relay_tests PRIVATE cloud-privacy/MemoryCredentials.cpp)
+ketplus_add_daemon_test(ketplus_runner_pairing_daemon_tests RunnerPairingDaemonTest.cpp)
+target_sources(ketplus_runner_pairing_daemon_tests PRIVATE cloud-privacy/MemoryCredentials.cpp)
+ketplus_add_daemon_test(ketplus_remote_job_relay_tests RemoteJobRelayTest.cpp)
+target_sources(ketplus_remote_job_relay_tests PRIVATE cloud-privacy/MemoryCredentials.cpp)
+ketplus_add_daemon_test(ketplus_remote_job_record_tests RemoteJobRecordTest.cpp)
+ketplus_add_daemon_test(ketplus_remote_job_flow_tests RemoteJobFlowTest.cpp)
 # Signed builds may run PCRE2 without JIT; cloud projection must stay linear there too.
 set_tests_properties(ketplus_daemon_cloud_privacy_tests PROPERTIES ENVIRONMENT
     "KETPLUS_DISABLE_DAEMON_AUTOSTART=1;KETPLUS_BROWSER_TOOLS_CONFIG=${CMAKE_CURRENT_BINARY_DIR}/ketplus_daemon_cloud_privacy_tests-browser-tools.json;KETPLUS_COMPUTER_TOOLS_CONFIG=${CMAKE_CURRENT_BINARY_DIR}/ketplus_daemon_cloud_privacy_tests-computer-tools.json;KETPLUS_COMPUTER_DIR=${CMAKE_CURRENT_BINARY_DIR}/ketplus_daemon_cloud_privacy_tests-computer;QT_ENABLE_REGEXP_JIT=0")
@@ -157,8 +165,10 @@ ketplus_add_daemon_test(ketplus_turn_acceptance_tests TurnAcceptanceTest.cpp)
 if(APPLE OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
     ketplus_add_daemon_test(ketplus_managed_task_host_tests ManagedTaskHostTest.cpp)
     ketplus_add_daemon_test(ketplus_managed_task_ipc_tests ManagedTaskIpcTest.cpp)
+    ketplus_add_daemon_test(ketplus_managed_task_origin_host_tests ManagedTaskOriginHostTest.cpp)
     add_dependencies(ketplus_managed_task_host_tests ketplus_job_executor)
     add_dependencies(ketplus_managed_task_ipc_tests ketplus_job_executor)
+    add_dependencies(ketplus_managed_task_origin_host_tests ketplus_job_executor)
 endif()
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     ketplus_add_daemon_test(ketplus_linux_job_executor_tests LinuxJobExecutorTest.cpp)
@@ -175,16 +185,37 @@ target_link_libraries(ketplus_desktop_start_retention_tests PRIVATE ketplus_ai)
 endif()
 ketplus_add_daemon_test(ketplus_daemon_claude_adapter_tests ClaudeAdapterTest.cpp)
 ketplus_add_daemon_test(ketplus_computer_tool_launch_tests ComputerToolLaunchTest.cpp)
+qt_add_executable(ketplus_tool_locations_tests ToolLocationsTest.cpp)
+ketplus_enable_warnings(ketplus_tool_locations_tests)
+target_link_libraries(ketplus_tool_locations_tests PRIVATE Qt6::Test ketplus_tool_locations)
+add_test(NAME ketplus_tool_locations_tests COMMAND ketplus_tool_locations_tests)
 ketplus_add_daemon_test(ketplus_computer_provider_integration_tests ComputerProviderIntegrationTest.cpp)
 ketplus_add_daemon_test(ketplus_provider_handoff_tests ProviderHandoffTest.cpp)
 ketplus_add_daemon_test(ketplus_daemon_copilot_adapter_tests CopilotAdapterTest.cpp)
 ketplus_add_daemon_test(ketplus_daemon_copilot_tools_tests CopilotToolsTest.cpp)
 ketplus_add_daemon_test(ketplus_copilot_catalog_tests CopilotCatalogTest.cpp)
 ketplus_add_daemon_test(ketplus_daemon_acp_adapter_tests AcpAdapterTest.cpp)
+ketplus_add_daemon_test(ketplus_codex_session_isolation_tests CodexSessionIsolationTest.cpp)
+ketplus_add_daemon_test(ketplus_codex_offline_refresh_tests CodexOfflineRefreshTest.cpp)
+target_compile_definitions(ketplus_codex_offline_refresh_tests PRIVATE
+    KETPLUS_CODEX_OFFLINE_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/../providers/codex/adapter-offline-fixture.py")
+ketplus_add_daemon_test(ketplus_codex_bounded_refresh_tests CodexBoundedRefreshTest.cpp)
+target_compile_definitions(ketplus_codex_bounded_refresh_tests PRIVATE
+    KETPLUS_CODEX_LIVE_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/../providers/codex/adapter-live-fixture.py")
+ketplus_add_daemon_test(ketplus_cursor_bounded_refresh_tests CursorBoundedRefreshTest.cpp)
+target_compile_definitions(ketplus_cursor_bounded_refresh_tests PRIVATE
+    KETPLUS_CODEX_LIVE_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/../providers/codex/adapter-live-fixture.py"
+    KETPLUS_CURSOR_LIVE_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/../providers/cursor/adapter-bounded-fixture.py")
+ketplus_add_daemon_test(ketplus_copilot_bounded_refresh_tests CopilotBoundedRefreshTest.cpp)
+target_compile_definitions(ketplus_copilot_bounded_refresh_tests PRIVATE
+    KETPLUS_CODEX_LIVE_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/../providers/codex/adapter-live-fixture.py"
+    KETPLUS_ACP_LIVE_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/../providers/cursor/adapter-bounded-fixture.py")
 ketplus_add_daemon_test(ketplus_daemon_cursor_adapter_tests CursorAdapterTest.cpp)
 ketplus_add_daemon_test(ketplus_cursor_catalog_bounds_tests CursorCatalogBoundsTest.cpp)
 ketplus_add_daemon_test(ketplus_daemon_session_fork_tests SessionForkTest.cpp)
 ketplus_add_daemon_test(ketplus_agent_messaging_tests AgentMessagingTest.cpp)
+add_subdirectory(agent-background-tools)
+add_subdirectory(acp-isolation)
 ketplus_add_daemon_test(ketplus_agent_urgent_delivery_tests AgentUrgentDeliveryTest.cpp)
 ketplus_add_daemon_test(ketplus_team_store_tests TeamStoreTest.cpp)
 ketplus_add_daemon_test(ketplus_team_risk_policy_tests TeamRiskPolicyTest.cpp)
@@ -247,8 +278,20 @@ ketplus_add_daemon_test(ketplus_provider_framing_tests ProviderFramingTest.cpp)
 ketplus_add_daemon_test(ketplus_provider_malformed_frame_tests ProviderMalformedFrameTest.cpp)
 ketplus_add_daemon_test(ketplus_provider_stderr_flood_tests ProviderStderrFloodTest.cpp)
 ketplus_add_daemon_test(ketplus_provider_line_reader_tests ProviderLineReaderTest.cpp)
+ketplus_add_daemon_test(ketplus_credential_batch_tests cloud-privacy/CredentialBatchTest.cpp)
 ketplus_add_daemon_test(ketplus_daemon_credential_store_tests CredentialStoreTest.cpp)
 set(CREDENTIAL_STORAGE_LIBRARY ketplus_control_crypto)
+# ketplus_control_crypto_primitives alone, then against CloudCrypto's existing API.
+qt_add_executable(ketplus_control_crypto_primitives_tests ControlCryptoPrimitivesTest.cpp)
+ketplus_enable_warnings(ketplus_control_crypto_primitives_tests)
+target_link_libraries(ketplus_control_crypto_primitives_tests PRIVATE
+    Qt6::Test ketplus_control_crypto_primitives)
+add_test(NAME ketplus_control_crypto_primitives_tests COMMAND ketplus_control_crypto_primitives_tests)
+qt_add_executable(ketplus_control_crypto_parity_tests ControlCryptoParityTest.cpp
+    cloud-privacy/MemoryCredentials.cpp)
+ketplus_enable_warnings(ketplus_control_crypto_parity_tests)
+target_link_libraries(ketplus_control_crypto_parity_tests PRIVATE Qt6::Test ketplus_control_crypto)
+add_test(NAME ketplus_control_crypto_parity_tests COMMAND ketplus_control_crypto_parity_tests)
 include(credential-store/NativeTests.cmake)
 ketplus_add_daemon_test(ketplus_daemon_worktree_revision_cache_tests WorktreeRevisionCacheTest.cpp)
 ketplus_add_daemon_test(ketplus_daemon_journal_space_tests JournalSpaceTest.cpp)
@@ -326,6 +369,8 @@ find_program(KETPLUS_SIDECAR_TEST_NODE node)
 if(KETPLUS_SIDECAR_TEST_NODE)
     add_test(NAME ketplus_claude_sidecar_tests COMMAND "${KETPLUS_SIDECAR_TEST_NODE}" --test
         "${PROJECT_SOURCE_DIR}/apps/daemon/providers/claude-sidecar/test/authentication.test.mjs"
+        "${PROJECT_SOURCE_DIR}/apps/daemon/providers/claude-sidecar/test/input.test.mjs"
+        "${PROJECT_SOURCE_DIR}/apps/daemon/providers/claude-sidecar/test/process-barrier.test.mjs"
         "${CMAKE_CURRENT_SOURCE_DIR}/claude-sidecar/transcript.test.mjs"
         "${CMAKE_CURRENT_SOURCE_DIR}/claude-sidecar/permissions.test.mjs"
         "${CMAKE_CURRENT_SOURCE_DIR}/claude-sidecar/agent-tools.test.mjs"
@@ -335,6 +380,9 @@ if(KETPLUS_SIDECAR_TEST_NODE)
         "${CMAKE_CURRENT_SOURCE_DIR}/claude-sidecar/steer.test.mjs"
         "${CMAKE_CURRENT_SOURCE_DIR}/claude-sidecar/fork.test.mjs"
         "${CMAKE_CURRENT_SOURCE_DIR}/claude-sidecar/background-tasks.test.mjs"
+        "${CMAKE_CURRENT_SOURCE_DIR}/claude-sidecar/managed-background.test.mjs"
+        "${CMAKE_CURRENT_SOURCE_DIR}/claude-sidecar/managed-transport.test.mjs"
+        "${CMAKE_CURRENT_SOURCE_DIR}/claude-sidecar/background-sdk-offline.test.mjs"
         "${CMAKE_CURRENT_SOURCE_DIR}/claude-sidecar/model-catalog.test.mjs"
         "${PROJECT_SOURCE_DIR}/apps/daemon/providers/claude-sidecar/test/session-delete.test.mjs"
         "${PROJECT_SOURCE_DIR}/apps/daemon/providers/claude-sidecar/test/review-guard.test.mjs"
@@ -363,6 +411,12 @@ ketplus_add_daemon_test(ketplus_codex_items_tests CodexItemsTest.cpp)
 ketplus_add_daemon_test(ketplus_daemon_peer_transport_tests PeerTransportTest.cpp)
 target_sources(ketplus_daemon_peer_transport_tests PRIVATE cloud-privacy/MemoryCredentials.cpp)
 set_tests_properties(ketplus_daemon_peer_transport_tests PROPERTIES TIMEOUT 45)
+# ketplus_peer_link alone, without the session host: offerer against answerer over loopback.
+qt_add_executable(ketplus_peer_link_tests PeerLinkTest.cpp)
+ketplus_enable_warnings(ketplus_peer_link_tests)
+target_link_libraries(ketplus_peer_link_tests PRIVATE Qt6::Test ketplus_peer_link)
+add_test(NAME ketplus_peer_link_tests COMMAND ketplus_peer_link_tests)
+set_tests_properties(ketplus_peer_link_tests PROPERTIES TIMEOUT 90)
 
 ketplus_add_daemon_test(ketplus_async_question_lifetime_tests AsyncQuestionLifetimeTest.cpp)
 

@@ -645,6 +645,34 @@ class SidebarTeamsTest final : public QObject {
 
     // The directory reads the teams once, then follows the daemon's events; without
     // teams/1 it asks nothing and has nothing.
+    void teamSidebarPlacementDoesNotChangeItsExecutionScope() {
+        FakeDaemon daemon;
+        auto origin = team("7", 1);
+        origin.insert("sidebar_repository", "/origin/repository");
+        daemon.answers.insert("team.list", {{"ok", true}, {"teams", QJsonArray{origin}}});
+        TeamDirectory teams;
+        teams.setTransport(daemon.transport());
+        teams.setAvailable(true);
+        QCOMPARE(teams.sidebarTeams("/origin/repository").size(), 1);
+        QCOMPARE(teams.teams("/repo").size(), 1);
+        auto moved = origin;
+        moved.insert("revision", 2);
+        moved.insert("repository", "/execution/other");
+        teams.applyEvent("team.changed", {{"team", moved}});
+        QCOMPARE(teams.sidebarTeams("/origin/repository").size(), 1);
+        QVERIFY(teams.sidebarTeams("/execution/other").isEmpty());
+        QCOMPARE(teams.teams("/execution/other").size(), 1);
+        QVERIFY(teams.teamOf("s-lead"));
+        moved.insert("id", "8");
+        moved.insert("sidebar_repository", "");
+        teams.applyEvent("team.changed", {{"team", moved}});
+        QCOMPARE(teams.sidebarTeams({}).size(), 1);
+        // An older host's team falls back to its persisted repository, not the active window.
+        auto legacy = team("9", 1);
+        teams.applyEvent("team.changed", {{"team", legacy}});
+        QCOMPARE(teams.sidebarTeams("/repo").size(), 1);
+    }
+
     void theDirectoryFollowsTheDaemon() {
         FakeDaemon daemon;
         daemon.answers.insert("team.list", {{"ok", true}, {"teams", QJsonArray{team("7", 1)}}});

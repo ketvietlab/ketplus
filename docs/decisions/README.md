@@ -32,3 +32,5 @@ decision, retain the old record and link both documents.
   - [Linux daemon-user environment and containment evidence](0127-linux-containment-evidence.md) (primitive probes, not production acceptance)
 - [0128: Authorize each Atlas renderer launch](0128-atlas-renderer-per-launch-consent.md)
 - [0131: Paged live session catalog](0131-paged-live-session-catalog.md)
+
+- [English UI and prompt-driven team content](2026-11-18-english-ui-team-content.md)

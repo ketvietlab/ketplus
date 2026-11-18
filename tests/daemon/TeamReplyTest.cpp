@@ -2,6 +2,7 @@
 // before the reply; pointing members at their worktrees and sending their messages follow
 // it, in order, once, also across a restart. Git here is a wrapper that takes 2 s a call.
 #include "AgentTestFixture.h"
+#include "TeamReplyDiagnostics.h"
 #include "storage/LocalJournal.h"
 
 #include <QDir>
@@ -129,6 +130,46 @@ class TeamReplyTest final : public QObject {
 
     QJsonObject team() {
         return command("team.get", {{"team_id", teamId_}}).value("team").toObject();
+    }
+
+    QByteArray failureMetadata(const QString& phase) {
+        auto current = team();
+        QJsonArray tasks;
+        for (const auto& value : current.value("tasks").toArray()) {
+            if (tasks.size() == 8)
+                break;
+            const auto summary = value.toObject();
+            const auto page = command(
+                "team.task.get",
+                {{"team_id", teamId_}, {"task_id", summary.value("id")}, {"history_limit", 6}});
+            auto task = page.value("ok").toBool() ? page.value("task").toObject() : summary;
+            task.insert("history_read_ok", page.value("ok").toBool());
+            task.insert("history_read_error_code", page.value("error_code"));
+            tasks.append(task);
+        }
+        current.insert("tasks", tasks);
+        QJsonArray owners;
+        if (const auto stored = fixture_->journal->readSessions())
+            for (const auto& session : *stored) {
+                if (!developers_.contains(session.id))
+                    continue;
+                auto row = fixture_->host->handleCommand(
+                    agent_test::request("session.pending_approvals", {}, session.id,
+                                        session.generation),
+                    "desktop-test");
+                row.insert("id", session.id);
+                row.insert("state", session.state);
+                row.insert("adapter", session.adapter);
+                row.insert("worktree", session.worktreePath);
+                row.insert("generation", session.generation);
+                row.insert("context_revision", session.contextRevision);
+                row.insert("turn_sequence", session.currentTurnSequence);
+                row.insert("completed_turns", fixture_->count(session.id, "turn.completed"));
+                owners.append(row);
+            }
+        return QJsonDocument(team_reply_test::failureMetadata(phase, current, owners,
+                                                              fixture_->directory.path()))
+            .toJson(QJsonDocument::Compact);
     }
 
     // T-32: Start, then the first developer's conversation stands in T-1's worktree with its
@@ -424,7 +465,7 @@ class TeamReplyTest final : public QObject {
                         QFileInfo(task.value("worktree").toString()).canonicalFilePath())
                     ++pointed;
         }
-        QVERIFY2(pointed == 2, QJsonDocument(team.value("tasks").toArray()).toJson().constData());
+        QVERIFY2(pointed == 2, failureMetadata("outbox-owner-worktrees").constData());
         QTest::qWait(500);
         QCOMPARE(count("assignment"), 2);
     }
@@ -539,8 +580,126 @@ class TeamReplyTest final : public QObject {
         QCOMPARE(assignmentsAtReply, 2);
         QVERIFY2(!gitStartedAtReply, "Deferred Git ran before the resume reply.");
         QVERIFY(!resumed.value("team").toObject().value("paused").toBool());
-        QTRY_VERIFY_WITH_TIMEOUT(QFileInfo::exists(gitStarted), 30000);
+        QTRY_VERIFY2_WITH_TIMEOUT(QFileInfo::exists(gitStarted),
+                                  failureMetadata("resume-git-start").constData(), 30000);
         QTRY_COMPARE_WITH_TIMEOUT(count("assignment"), 3, 30000);
+    }
+
+    void diagnosticsExcludeInputsAndBoundHistory() {
+        const QString sentinel = "synthetic-sensitive-input";
+        QJsonArray history;
+        for (int index = 0; index < 20; ++index)
+            history.append(QJsonObject{
+                {"kind", "worktree"}, {"text", "synthetic switch refused"}, {"token", sentinel}});
+        const QJsonObject task{
+            {"id", "T-1"},         {"owner", "fixture-owner"}, {"history", history},
+            {"history_total", 20}, {"history_read_ok", true},  {"description", sentinel}};
+        const QJsonObject approval{{"kind", "permission"},
+                                   {"method", "fixture-method"},
+                                   {"arguments", sentinel},
+                                   {"token", sentinel}};
+        const QJsonObject owner{{"id", "fixture-owner"},
+                                {"state", "starting"},
+                                {"pending_approvals", QJsonArray{approval}},
+                                {"auth", sentinel}};
+        const auto metadata =
+            team_reply_test::failureMetadata("fixture-control", {{"tasks", QJsonArray{task}}},
+                                             QJsonArray{owner}, fixture_->directory.path());
+        const auto encoded = QJsonDocument(metadata).toJson(QJsonDocument::Compact);
+        QVERIFY(!encoded.contains(sentinel.toUtf8()));
+        const auto projected = metadata.value("tasks").toArray().first().toObject();
+        QCOMPARE(projected.value("history_total"), 20);
+        QCOMPARE(projected.value("history").toArray().size(), 6);
+        QVERIFY(encoded.contains("synthetic switch refused"));
+        QCOMPARE(metadata.value("owners").toArray().first().toObject().value("state"), "starting");
+        QVERIFY(encoded.size() < 4096);
+        const auto unread =
+            team_reply_test::failureMetadata(
+                "read-failed",
+                {{"tasks",
+                  QJsonArray{QJsonObject{{"id", "T-1"},
+                                         {"history_read_ok", false},
+                                         {"history_read_error_code", "synthetic_read_denied"}}}}},
+                {}, fixture_->directory.path())
+                .value("tasks")
+                .toArray()
+                .first()
+                .toObject();
+        QCOMPARE(unread.value("history_total").toInteger(), -1);
+        QVERIFY(!unread.value("history_read_ok").toBool());
+        QCOMPARE(unread.value("history_read_error_code"), "synthetic_read_denied");
+        // Exercise the actual read-only collector too: an unread approval page must
+        // not masquerade as an empty one in a failure diagnostic.
+        const auto live = QJsonDocument::fromJson(failureMetadata("collector-control")).object();
+        QCOMPARE(live.value("owners").toArray().size(), developers_.size());
+        for (const auto& value : live.value("owners").toArray()) {
+            const auto row = value.toObject();
+            QVERIFY(!row.value("state").toString().isEmpty());
+            QVERIFY(row.value("pending_approvals_read_ok").toBool());
+        }
+    }
+
+    void collectorReadsRealWorktreeFailureHistory() {
+        // Force a page whose total differs from its length. team.get intentionally
+        // returns summaries without history; the collector must use team.task.get.
+        for (int index = 0; index < 8; ++index)
+            QVERIFY(command("team.task.update",
+                            {{"team_id", teamId_},
+                             {"task_id", "T-1"},
+                             {"note", QStringLiteral("Synthetic note %1").arg(index)}})
+                        .value("ok")
+                        .toBool());
+        const auto owner = developers_.first();
+        QCOMPARE(fixture_->start("claude", "needs-approval", owner,
+                                 fixture_->directory.filePath("shop")),
+                 owner);
+        const auto pending = [&] {
+            return fixture_->host
+                ->handleCommand(agent_test::request("session.pending_approvals", {}, owner, 1),
+                                "desktop-test")
+                .value("pending_approvals")
+                .toArray();
+        };
+        QTRY_VERIFY_WITH_TIMEOUT(!pending().isEmpty(), 10000);
+        qint64 elapsed = -1;
+        QVERIFY(timed("team.decision.answer",
+                      {{"team_id", teamId_},
+                       {"decision_id", openDecision("first_plan")},
+                       {"choice", "Start"}},
+                      &elapsed)
+                    .value("ok")
+                    .toBool());
+        QTRY_COMPARE_WITH_TIMEOUT(count("assignment"), 2, 30000);
+        const auto page = command("team.task.get",
+                                  {{"team_id", teamId_}, {"task_id", "T-1"}, {"history_limit", 6}})
+                              .value("task")
+                              .toObject();
+        QVERIFY(page.value("history_total").toInteger() > 6);
+        QString expected;
+        for (const auto& entry : page.value("history").toArray())
+            if (entry.toObject().value("kind") == "worktree")
+                expected = entry.toObject().value("text").toString();
+        QVERIFY(expected.contains("pending request"));
+        expected.replace(fixture_->directory.path(), "<fixture>");
+        const auto captured =
+            QJsonDocument::fromJson(failureMetadata("worktree-error-control")).object();
+        QJsonObject projected;
+        for (const auto& task : captured.value("tasks").toArray())
+            if (task.toObject().value("id") == "T-1")
+                projected = task.toObject();
+        QVERIFY(projected.value("history_read_ok").toBool());
+        QCOMPARE(projected.value("history_total"), page.value("history_total"));
+        QCOMPARE(projected.value("history").toArray().size(), 6);
+        QString actual;
+        for (const auto& entry : projected.value("history").toArray())
+            if (entry.toObject().value("kind") == "worktree")
+                actual = entry.toObject().value("worktree_error").toString();
+        QCOMPARE(actual, expected.left(384));
+        for (const auto& value : captured.value("owners").toArray())
+            if (value.toObject().value("id") == owner) {
+                QVERIFY(value.toObject().value("pending_approvals_read_ok").toBool());
+                QCOMPARE(value.toObject().value("pending_approvals").toArray().size(), 1);
+            }
     }
 };
 

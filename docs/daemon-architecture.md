@@ -349,6 +349,14 @@ transitions (even if the same device is paired again). A same-workspace enrollme
 content keys but requires fresh pairing before an old sender can execute a command. Cache
 invalidation on relay revocation does not itself change the persisted pin policy.
 
+Heartbeat metadata and device-key preparation use one operation-scoped credential
+view, with staged writes committed before publishing envelopes or refreshing
+trusted devices. Each operation obtains a fresh record under the existing process
+lock; distribution checks current pins within that view. No credential snapshot
+survives the callback. This reduces repeated OS fetch/parse work while preserving
+enrollment fences, retryable storage errors and the OS-store record format. It is
+still synchronous work on the daemon thread, not an asynchronous storage API.
+
 Cloud identity keys, session keys, wrapped device keys and account identifiers are
 stored as one transactional record per service in the OS credential store: macOS
 Keychain or Linux Secret Service. Locked, denied or unavailable storage is an error;

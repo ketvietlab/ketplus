@@ -328,6 +328,7 @@ class MachineBackendTest final : public QObject {
                         {QStringLiteral("label"), QStringLiteral("app")},
                         {QStringLiteral("path"), QStringLiteral("/Users/me/dev/app")},
                         {QStringLiteral("available"), true},
+                        {QStringLiteral("sidebarVisible"), true},
                         {QStringLiteral("worktrees"),
                          QJsonArray{checkout(QStringLiteral("/Users/me/dev/app"),
                                              QStringLiteral("app"), true),
@@ -337,6 +338,7 @@ class MachineBackendTest final : public QObject {
                         {QStringLiteral("label"), QStringLiteral("site")},
                         {QStringLiteral("path"), QStringLiteral("/Volumes/old/site")},
                         {QStringLiteral("available"), false},
+                        {QStringLiteral("sidebarVisible"), true},
                         {QStringLiteral("worktrees"),
                          QJsonArray{checkout(QStringLiteral("/Volumes/old/site"),
                                              QStringLiteral("site"), false)}}}};

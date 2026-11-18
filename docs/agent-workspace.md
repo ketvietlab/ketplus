@@ -624,7 +624,7 @@ current-window value.
   canonical path, a pin whose folder is gone is dropped silently, another
   machine's repositories cannot be pinned, and phones do not receive them.
   A conversation's group is fixed: it stays under the repository it was created
-  in (the daemon's `conversation_path`, written once), and a team member stays
+  in (the daemon's write-once navigation repository, separate from execution), and a team member stays
   under its team, whatever worktree or repository the conversation later runs
   in. Switching worktree or repository, from the worktree picker or a team task
   assignment, changes only the execution context (Source Control, Files and the

@@ -770,6 +770,12 @@ class AgentWorkspaceShellTest final : public QObject {
         QTemporaryDir workspace;
         QVERIFY(settings.isValid());
         QVERIFY(workspace.isValid());
+        // This geometry fixture needs a real repository heading, not a no-repository folder.
+        QProcess git;
+        git.setWorkingDirectory(workspace.path());
+        git.start("git", {"init", "--quiet", "-b", "main"});
+        QVERIFY(git.waitForFinished(15000));
+        QCOMPARE(git.exitCode(), 0);
         QSettings::setDefaultFormat(QSettings::IniFormat);
         QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settings.path());
 

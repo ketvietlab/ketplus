@@ -8,6 +8,7 @@
 #include <QRegularExpression>
 #include <QUuid>
 #include <algorithm>
+#include <chrono>
 
 namespace ketplus::daemon::teams {
 namespace {
@@ -332,25 +333,106 @@ RoutingEvidence::Result RoutingEvidence::produce(const Team& team, const Task& t
             recipe};
 }
 
-void RoutingEvidence::retain(const Team& team, const Task& task,
-                             const risk::VerifiedEvidence& evidence) {
-    if (receipts_.size() >= 128)
-        receipts_.erase(receipts_.begin());
+RoutingEvidence::RoutingEvidence(Clock clock) : clock_(std::move(clock)) {
+    if (!clock_)
+        clock_ = [] {
+            return std::chrono::duration_cast<std::chrono::milliseconds>(
+                       std::chrono::steady_clock::now().time_since_epoch())
+                .count();
+        };
+}
+
+QString RoutingEvidence::semanticRevision(const Team& team, const Task& task,
+                                          const QString& revision) {
+    auto work = toJson(task, false);
+    work.remove(QStringLiteral("changed_revision"));
+    // Reporting the already-proven head does not change the proof. A different
+    // reported head, and the reviewed baseline used by finding recipes, do.
+    if (!task.reviewFindings && (task.headCommit.isEmpty() || task.headCommit == revision))
+        work.insert(QStringLiteral("head_commit"), revision);
+    QJsonArray history;
+    for (const auto& entry : task.history)
+        if (entry.kind != QStringLiteral("note"))
+            history.append(toJson(entry));
+    work.insert(QStringLiteral("proof_history"), history);
+    QJsonArray members, decisions, dependencies;
+    for (const auto& member : team.members)
+        members.append(toJson(member));
+    for (const auto& decision : team.decisions)
+        if (decision.taskId.isEmpty() || decision.taskId == task.id)
+            decisions.append(toJson(decision));
+    for (const auto& id : task.dependsOn) {
+        auto dependency = team.task(id) ? toJson(*team.task(id), false) : QJsonObject{};
+        dependency.remove(QStringLiteral("changed_revision"));
+        dependencies.append(QJsonObject{{"id", id}, {"task", dependency}});
+    }
     const auto scope = taskScope(team, task);
-    receipts_.insert(evidence.id, {evidence, task.worktree, task.branch, task.baseCommit,
-                                   scope.repository, scope.integrationBranch, team.revision,
-                                   QDateTime::currentDateTimeUtc().addSecs(600)});
+    const QJsonObject binding{{"version", 1},
+                              {"team", team.id},
+                              {"task", work},
+                              {"head", revision},
+                              {"repository", scope.repository},
+                              {"integration", scope.integrationBranch},
+                              {"settings_revision", team.settingsRevision},
+                              {"members_revision", team.membersRevision},
+                              {"members", members},
+                              {"decisions", decisions},
+                              {"dependencies", dependencies},
+                              {"plan_approved", team.planApproved},
+                              {"paused", team.paused},
+                              {"paused_reason", team.pausedReason},
+                              {"turn_budget", team.turnBudget},
+                              {"merge_policy", team.mergePolicy},
+                              {"execution_policy", team.executionPolicy},
+                              {"shared_paths", QJsonArray::fromStringList(team.sharedPaths)},
+                              {"max_rounds", team.maxRounds},
+                              {"review_place", team.reviewPlace},
+                              {"leader_requirements", team.leaderWritesRequirements}};
+    return digest(QJsonDocument(binding).toJson(QJsonDocument::Compact));
+}
+
+void RoutingEvidence::pruneExpired(const qint64 now) const {
+    for (auto it = receipts_.begin(); it != receipts_.end();)
+        if (it->expires <= now)
+            it = receipts_.erase(it);
+        else
+            ++it;
+}
+
+bool RoutingEvidence::retain(const Team& team, const Task& task,
+                             const risk::VerifiedEvidence& evidence) {
+    const auto now = clock_();
+    pruneExpired(now);
+    if (evidence.teamId != team.id || evidence.taskId != task.id ||
+        evidence.taskRevision != task.changedRevision || receipts_.contains(evidence.id))
+        return false;
+    auto oldest = receipts_.end();
+    int owned = 0;
+    for (auto it = receipts_.begin(); it != receipts_.end(); ++it)
+        if (it->evidence.teamId == team.id) {
+            ++owned;
+            if (oldest == receipts_.end() || it->order < oldest->order)
+                oldest = it;
+        }
+    // A caller may replace only its own oldest receipt, never another team's.
+    if (owned >= 32 || receipts_.size() >= 128) {
+        if (oldest == receipts_.end())
+            return false;
+        receipts_.erase(oldest);
+    }
+    receipts_.insert(evidence.id,
+                     {evidence, task.worktree, task.branch,
+                      semanticRevision(team, task, evidence.revision), now + 600000, ++order_});
+    return true;
 }
 
 std::optional<risk::VerifiedEvidence> RoutingEvidence::lookup(const Team& team, const Task& task,
                                                               const QString& id) const {
+    pruneExpired(clock_());
     const auto it = receipts_.constFind(id);
-    const auto scope = taskScope(team, task);
-    if (it == receipts_.cend() || it->expires <= QDateTime::currentDateTimeUtc() ||
-        it->teamRevision != team.revision || it->evidence.teamId != team.id ||
-        it->evidence.taskId != task.id || it->evidence.taskRevision != task.changedRevision ||
-        it->worktree != task.worktree || it->branch != task.branch || it->base != task.baseCommit ||
-        it->repository != scope.repository || it->integration != scope.integrationBranch ||
+    if (it == receipts_.cend() || it->evidence.teamId != team.id ||
+        it->evidence.taskId != task.id ||
+        it->semanticRevision != semanticRevision(team, task, it->evidence.revision) ||
         !team.planApproved || task.assignmentHeld || decisionsOpen(team, task))
         return std::nullopt;
     // taskCommit() can name a branch tip even after a checkout switches elsewhere.
@@ -365,6 +447,10 @@ std::optional<risk::VerifiedEvidence> RoutingEvidence::lookup(const Team& team, 
     if (!head || head->trimmed() != it->evidence.revision.toLatin1() || !branch ||
         branch->trimmed() != it->branch.toUtf8() || !clean || !clean->isEmpty())
         return std::nullopt;
-    return it->evidence;
+    auto evidence = it->evidence;
+    // The proof is immutable. This projection supplies the current transport
+    // fence only after the semantic binding and live checkout were revalidated.
+    evidence.taskRevision = task.changedRevision;
+    return evidence;
 }
 } // namespace ketplus::daemon::teams

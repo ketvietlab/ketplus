@@ -28,6 +28,8 @@ set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+include(cmake/MsvcOptions.cmake)
+
 find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Widgets Core5Compat Svg SvgWidgets Concurrent)
 
 include(cmake/CompilerCache.cmake)
@@ -168,11 +170,19 @@ ketplus_enable_warnings(ketplus_workspace)
 add_library(KetPlusCM::workspace ALIAS ketplus_workspace)
 
 add_library(ketplus_terminal_core STATIC
+    src/terminal/PtyBackend.h
+    src/terminal/RunCommand.cpp
+    src/terminal/RunCommand.h
     src/terminal/PtyProcess.cpp
     src/terminal/PtyProcess.h
     src/terminal/TerminalSession.cpp
     src/terminal/TerminalSession.h
 )
+if(WIN32)
+    target_sources(ketplus_terminal_core PRIVATE src/terminal/PtyBackendWindows.cpp)
+else()
+    target_sources(ketplus_terminal_core PRIVATE src/terminal/PtyBackendPosix.cpp)
+endif()
 target_link_libraries(ketplus_terminal_core PUBLIC Qt6::Core ketplus_vterm)
 if(UNIX AND NOT APPLE)
     target_link_libraries(ketplus_terminal_core PRIVATE util)
@@ -214,6 +224,8 @@ add_library(ketplus_preview STATIC
     src/preview/MarkdownModeController.h
     src/preview/MermaidDiagramDialog.cpp
     src/preview/MermaidDiagramDialog.h
+    src/preview/MermaidLaunch.cpp
+    src/preview/MermaidLaunch.h
     src/preview/MermaidRenderer.cpp
     src/preview/MermaidRenderer.h
 )
@@ -743,6 +755,21 @@ if(KETPLUS_CM_BUILD_TESTS)
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
     )
 
+    add_executable(ketplus_run_command_tests tests/RunCommandTest.cpp)
+    target_link_libraries(ketplus_run_command_tests PRIVATE Qt6::Test KetPlusCM::terminal_ui)
+    ketplus_enable_warnings(ketplus_run_command_tests)
+    ketplus_cm_add_test(ketplus_run_command_tests ketplus_run_command_tests)
+    set_tests_properties(ketplus_run_command_tests PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    )
+
+    add_executable(ketplus_pty_backend_tests tests/PtyBackendTest.cpp)
+    target_link_libraries(ketplus_pty_backend_tests
+        PRIVATE Qt6::Test KetPlusCM::terminal_core
+    )
+    ketplus_enable_warnings(ketplus_pty_backend_tests)
+    ketplus_cm_add_test(ketplus_pty_backend_tests ketplus_pty_backend_tests)
+
     add_executable(ketplus_terminal_tests tests/PtyProcessTest.cpp)
     target_link_libraries(ketplus_terminal_tests
         PRIVATE Qt6::Test KetPlusCM::terminal_ui
@@ -753,6 +780,13 @@ if(KETPLUS_CM_BUILD_TESTS)
     set_tests_properties(ketplus_terminal_tests PROPERTIES
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
     )
+    if(WIN32)
+        # Each test starts real cmd.exe shells whose cold start can take seconds; run in
+        # parallel with the rest of the suite they miss their wait windows.
+        set_tests_properties(ketplus_pty_backend_tests ketplus_terminal_tests PROPERTIES
+            RUN_SERIAL TRUE
+        )
+    endif()
 
     if(APPLE AND TARGET ketplus_terminal_app_ui)
         add_executable(ketplus_terminal_app_tests tests/TerminalAppTest.cpp)
@@ -804,6 +838,11 @@ if(KETPLUS_CM_BUILD_TESTS)
     ketplus_enable_warnings(ketplus_markdown_modes_tests)
     ketplus_cm_add_test(ketplus_markdown_modes_tests ketplus_markdown_modes_tests)
     set_tests_properties(ketplus_markdown_modes_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+    add_executable(ketplus_mermaid_launch_tests tests/MermaidLaunchTest.cpp)
+    target_link_libraries(ketplus_mermaid_launch_tests PRIVATE Qt6::Test ketplus_preview)
+    ketplus_enable_warnings(ketplus_mermaid_launch_tests)
+    ketplus_cm_add_test(ketplus_mermaid_launch_tests ketplus_mermaid_launch_tests)
 
     add_executable(ketplus_preview_tests tests/MarkdownPreviewPaneTest.cpp)
     target_link_libraries(ketplus_preview_tests PRIVATE Qt6::Test ketplus_preview)

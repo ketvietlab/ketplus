@@ -85,7 +85,17 @@ class ComputerToolLaunchTest final : public QObject {
                  QFileDevice::Permissions{});
     }
 
+    void computerUseIsMacOnly() {
+#if defined(Q_OS_WIN)
+        QVERIFY(!computer::isSupportedOnThisPlatform());
+#else
+        QVERIFY(computer::isSupportedOnThisPlatform());
+#endif
+    }
+
     void launchNeedsEnabledSettingsAndTheApp() {
+        if (!computer::isSupportedOnThisPlatform())
+            QSKIP("Computer use is macOS-only.");
         QTemporaryDir root;
         const QString directory = root.filePath(QStringLiteral("computer"));
         computer::Settings settings;

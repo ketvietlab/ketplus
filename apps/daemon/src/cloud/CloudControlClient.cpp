@@ -7,6 +7,7 @@
 #include "cloud/RemoteAudit.h"
 #include "cloud/WorktreeBranches.h"
 #include "cloud/WorktreeRepositories.h"
+#include "runner/RunnerService.h"
 #include <QUrlQuery>
 
 #include "KetPlusProductVersion.h"
@@ -186,11 +187,16 @@ bool CloudControlClient::handles(const QString& type) const {
            type == QStringLiteral("remote.pairing.status") ||
            type == QStringLiteral("remote.pairing.approve") ||
            type == QStringLiteral("remote.pairing.revoke") ||
-           type == QStringLiteral("remote.device.revoke") || type == QStringLiteral("remote.audit");
+           type == QStringLiteral("remote.device.revoke") ||
+           type == QStringLiteral("remote.audit") || runner::RunnerService::handlesType(type);
 }
 
 void CloudControlClient::handleLocal(const QString& type, const QJsonObject& payload,
                                      LocalCallback callback) {
+    if (runner::RunnerService::handlesType(type)) {
+        runners().handle(type, payload, std::move(callback));
+        return;
+    }
     if (type == QStringLiteral("remote.status")) {
         callback(status(), {});
     } else if (type == QStringLiteral("remote.sign_in")) {
@@ -351,7 +357,7 @@ void CloudControlClient::signOut(LocalCallback callback) {
         QStringLiteral("machine-id"),          QStringLiteral("workspace-id"),
         QStringLiteral("machine-key-version"), QStringLiteral("control-url"),
         QStringLiteral("device-pins"),         QStringLiteral("account-name"),
-        QStringLiteral("account-username")};
+        QStringLiteral("account-username"),    QStringLiteral("runner-pins")};
     if (otherRelay_.isEmpty() && !credentials_.removeIf(
                                      [&enrollment](const QString& account) {
                                          return enrollment.contains(account) ||
@@ -362,6 +368,7 @@ void CloudControlClient::signOut(LocalCallback callback) {
         return;
     }
     wakeups_.stop();
+    runnerRelayAvailable_ = false;
     credentialRequestInFlight_ = false;
     finishCredentialWaiters(false, QStringLiteral("Signed out."));
     machineId_.clear();
@@ -483,6 +490,28 @@ QString CloudControlClient::hostKeyFingerprint(QString* error) {
     return DevicePins::hostFingerprint(crypto_.publicKeys(error));
 }
 
+std::optional<bool> CloudControlClient::sidebarRepositoryVisible(const QString& path) {
+    const QFileInfo origin(path);
+    if (!origin.isDir() || !origin.isReadable())
+        return std::nullopt;
+    const auto canonicalOrigin = origin.canonicalFilePath();
+    if (canonicalOrigin.isEmpty())
+        return std::nullopt;
+    QDir directory(canonicalOrigin);
+    do {
+        const QFileInfo marker(directory.filePath(QStringLiteral(".git")));
+        if (marker.exists() || marker.isSymLink()) {
+            const auto git = worktreeGitDirectory(directory.absolutePath());
+            return !git.isEmpty() && QFileInfo(git).isDir() ? std::optional<bool>{true}
+                                                            : std::nullopt;
+        }
+        if (QFileInfo(directory.filePath(QStringLiteral("HEAD"))).isFile() &&
+            QFileInfo(directory.filePath(QStringLiteral("objects"))).isDir())
+            return true;
+    } while (directory.cdUp());
+    return false;
+}
+
 QJsonArray CloudControlClient::sessionSnapshots(
     const QList<StoredSession>& stored, const QString& workspaceId, const QString& machineId,
     const QByteArray& pathIdSalt, const QHash<QString, QString>& repositories,
@@ -541,6 +570,32 @@ QJsonArray CloudControlClient::sessionSnapshots(
                  {QStringLiteral("worktreeId"), context.value(QStringLiteral("worktreeId"))},
                  {QStringLiteral("worktreeLabel"),
                   context.value(QStringLiteral("worktreeLabel"))}});
+            // Navigation placement is host-sealed metadata only. The relay's routing scope
+            // above continues to name the current execution worktree/repository.
+            if (session.sidebarRepository) {
+                const auto& placement = *session.sidebarRepository;
+                auto& sealed = (*metadata)[session.id];
+                sealed.insert(QStringLiteral("sidebarPlacementKnown"), true);
+                sealed.insert(QStringLiteral("sidebarRepositoryId"),
+                              placement.isEmpty() ? QString{}
+                                                  : cloud_control::opaquePathId(
+                                                        "repository", placement, pathIdSalt));
+                sealed.insert(QStringLiteral("sidebarRepositoryLabel"),
+                              QFileInfo(placement).fileName());
+            } else if (!session.conversationPath.isEmpty()) {
+                // Legacy navigation is a stable fallback, not a claim about historical origin.
+                const auto recorded = repositories.value(session.conversationPath);
+                const auto fallback = recorded.isEmpty() ? session.conversationPath : recorded;
+                auto& sealed = (*metadata)[session.id];
+                sealed.insert(QStringLiteral("sidebarPlacementKnown"), false);
+                sealed.insert(QStringLiteral("sidebarRepositoryId"),
+                              cloud_control::opaquePathId("repository", fallback, pathIdSalt));
+                sealed.insert(QStringLiteral("sidebarRepositoryLabel"),
+                              QFileInfo(fallback).fileName());
+            }
+            if (const auto visible = sidebarRepositoryVisible(session.worktreePath))
+                (*metadata)[session.id].insert(QStringLiteral("sidebarExecutionRepositoryVisible"),
+                                               *visible);
             // ADR 0027: the number agents and users address the conversation by, and the
             // conversation whose message started the running turn. Sealed: only the phone
             // shows them.
@@ -596,21 +651,37 @@ CloudControlClient::withSessionMetadata(const QList<QJsonArray>& batches,
         return batches;
     QList<QJsonArray> sealed;
     QSet<QString> current;
-    for (const QJsonArray& batch : batches) {
-        QJsonArray snapshots;
-        for (const QJsonValue& value : batch) {
-            QJsonObject snapshot = value.toObject();
-            const QString sessionId = snapshot.value(QStringLiteral("id")).toString();
-            current.insert(sessionId);
-            if (metadata.contains(sessionId)) {
-                const QJsonObject envelope =
-                    sealedSessionMetadata(snapshot, metadata.value(sessionId));
-                if (!envelope.isEmpty())
-                    snapshot.insert(QStringLiteral("encryptedMetadata"), envelope);
+    const auto previous = sealedMetadata_;
+    QString error;
+    const bool ready = credentials_.batch(
+        [&](CredentialStore& view, QString* failure) {
+            CloudCrypto crypto(&view);
+            for (const QJsonArray& batch : batches) {
+                QJsonArray snapshots;
+                for (const QJsonValue& value : batch) {
+                    QJsonObject snapshot = value.toObject();
+                    const QString sessionId = snapshot.value(QStringLiteral("id")).toString();
+                    current.insert(sessionId);
+                    if (metadata.contains(sessionId)) {
+                        const QJsonObject envelope =
+                            sealedSessionMetadata(snapshot, metadata.value(sessionId), crypto);
+                        if (envelope.isEmpty()) {
+                            *failure = lastError_;
+                            return false;
+                        }
+                        snapshot.insert(QStringLiteral("encryptedMetadata"), envelope);
+                    }
+                    snapshots.append(snapshot);
+                }
+                sealed.append(snapshots);
             }
-            snapshots.append(snapshot);
-        }
-        sealed.append(snapshots);
+            return true;
+        },
+        &error);
+    if (!ready) {
+        sealedMetadata_ = previous;
+        lastError_ = error;
+        return {};
     }
     for (auto it = sealedMetadata_.begin(); it != sealedMetadata_.end();) {
         if (current.contains(it.key()))
@@ -622,7 +693,8 @@ CloudControlClient::withSessionMetadata(const QList<QJsonArray>& batches,
 }
 
 QJsonObject CloudControlClient::sealedSessionMetadata(const QJsonObject& snapshot,
-                                                      const QJsonObject& metadata) {
+                                                      const QJsonObject& metadata,
+                                                      CloudCrypto& crypto) {
     const QString sessionId = snapshot.value(QStringLiteral("id")).toString();
     const qint64 generation = snapshot.value(QStringLiteral("generation")).toInteger();
     // The relay only takes metadata sealed at the snapshot's own cursor and turn.
@@ -638,8 +710,8 @@ QJsonObject CloudControlClient::sealedSessionMetadata(const QJsonObject& snapsho
         cached != sealedMetadata_.cend() && cached->first == fingerprint)
         return cached->second;
     QString cryptoError;
-    const QJsonObject content = crypto_.encrypt(plaintext, aad, sessionId, generation, 1,
-                                                machineId_, machineKeyVersion_, &cryptoError);
+    const QJsonObject content = crypto.encrypt(plaintext, aad, sessionId, generation, 1, machineId_,
+                                               machineKeyVersion_, &cryptoError);
     if (content.isEmpty()) {
         lastError_ = cryptoError;
         return {};

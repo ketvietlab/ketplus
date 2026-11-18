@@ -45,10 +45,14 @@ QJsonObject SessionHost::workspaceCatalog(const QString& type, const QJsonObject
     };
     if (type == "workspace.list") {
         QJsonArray entries;
-        for (const auto& path : journal_->worktreePaths())
-            entries.append(QJsonObject{{"path", path},
-                                       {"available", QFileInfo(path).isDir()},
-                                       {"repository_path", repositoryPathOf(path)}});
+        for (const auto& path : journal_->worktreePaths()) {
+            QJsonObject entry{{"path", path},
+                              {"available", QFileInfo(path).isDir()},
+                              {"repository_path", repositoryPathOf(path)}};
+            if (const auto placement = sidebarRepositoryAtCreation(path))
+                entry.insert("sidebar_repository_visible", !placement->isEmpty());
+            entries.append(entry);
+        }
         return {{"ok", true}, {"workspaces", entries}};
     }
     if (type != "workspace.register" && type != "workspace.unregister")

@@ -4,9 +4,11 @@ import { deleteSessionCopies } from "./session-delete.mjs";
 import { authenticationOptions, authenticationChangedWhileBusy, redact } from "./authentication.mjs";
 import { ClaudeTranscript } from "./transcript.mjs";
 import { TurnInput, userMessage } from "./input.mjs";
+import { ProcessBarrier, refreshWithin } from "./process-barrier.mjs";
 import { BackgroundTasks } from "./tasks.mjs";
 import { ensureResumable } from "./resume.mjs";
 import { reviewDecision, reviewOptions, reviewProfile } from "./review-guard.mjs";
+import { backgroundDecision, backgroundOptions } from "./background-policy.mjs";
 import { open, readFile } from "node:fs/promises";
 import path from "node:path";
 import { createInterface } from "node:readline";
@@ -425,7 +427,7 @@ function denyPendingPermissions(sessionId, message, interrupt = false) {
 
 // Starts a daemon turn on `run`. A turn the agent starts itself (it answers a
 // finished background task) has no request to reply to.
-function beginTurn(run, messageId) {
+function beginTurn(run, messageId, epoch = "") {
   clearTimeout(run.idleTimer);
   const turnId = `claude-turn-${Date.now()}`;
   run.current = {
@@ -436,7 +438,8 @@ function beginTurn(run, messageId) {
   };
   // Only an id the SDK issued is a thread; an empty one is filled in once it reports it.
   if (messageId !== undefined)
-    emit({ id: messageId, result: { turn: { id: turnId }, thread: { id: run.sdkSessionId } } });
+    emit({ id: messageId, result: { turn: { id: turnId }, thread: { id: run.sdkSessionId },
+      ...(epoch ? { managedTransportEpoch: epoch } : {}) } });
   // Every turn is started and completed exactly once, however early it ends.
   emitEvent(run.sessionId, "turn.started", { turn_id: turnId, thread_id: run.sdkSessionId });
   return run.current;
@@ -496,7 +499,7 @@ async function runTurn(messageId, params) {
     return;
   }
   const existing = activeTurns.get(sessionId);
-  if (existing?.current) {
+  if (existing?.current || existing?.booting) {
     emit({ id: messageId, error: { message: "A Claude turn is already running in this conversation." } });
     return;
   }
@@ -520,6 +523,10 @@ async function runTurn(messageId, params) {
     // A different launch cannot reuse the query; its background tasks end with it.
     existing.release();
     await existing.done;
+    if (existing.transportFailed && !(await existing.barrier.drain())) {
+      emit({ id: messageId, error: { message: "mutation_refresh_unavailable: The previous Claude process did not exit." } });
+      return;
+    }
   }
   await startRun(messageId, params, prompt, images);
 }
@@ -566,6 +573,8 @@ async function startRun(messageId, params, prompt, images) {
   const profile = reviewProfile(params);
   const mode = profile === "read" ? "plan" : profile === "verify" ? "default" : permissionMode(params.permission);
   const abortController = new AbortController();
+  const epoch = typeof params.managedTransportEpoch === "string" ? params.managedTransportEpoch : "";
+  const barrier = new ProcessBarrier();
   const stop = {};
   let release;
   const released = new Promise((resolve) => { release = () => resolve(stop); });
@@ -577,6 +586,8 @@ async function startRun(messageId, params, prompt, images) {
     cwd: params.cwd || process.cwd(),
     permissionMode: mode,
     query: null,
+    barrier,
+    booting: Boolean(epoch),
     input: null,
     abortController,
     sdkSessionId: params.resume || "",
@@ -588,7 +599,8 @@ async function startRun(messageId, params, prompt, images) {
     tasks: new BackgroundTasks((payload) => emitEvent(sessionId, "tasks.changed", payload)),
   };
   activeTurns.set(sessionId, run);
-  const current = beginTurn(run, messageId);
+  let current = epoch ? null : beginTurn(run, messageId);
+  let acknowledged = !epoch;
   let grace = null;
 
   // Only the daemon supplies this map, rebuilt from local settings for every turn.
@@ -613,7 +625,8 @@ async function startRun(messageId, params, prompt, images) {
     run.authentication = { enabled: params.authentication?.enabled === true,
       budget_usd: params.authentication?.budget_usd || 0 };
     emitUsageEvent(sessionId, "usage.session", sessionUsage(run.authentication));
-    run.input = new TurnInput(await promptMessage(prompt, images));
+    const firstPrompt = await promptMessage(prompt, images);
+    run.input = new TurnInput(firstPrompt, Boolean(epoch));
     if (params.resume) await ensureResumable(params.resume, run.cwd).catch(() => false);
     const authentication = authenticationOptions(params.authentication);
     const appended = [typeof params.browserInstructions === "string" ? params.browserInstructions : "",
@@ -622,8 +635,10 @@ async function startRun(messageId, params, prompt, images) {
       prompt: run.input,
       options: {
         ...authentication,
-        // A verify review's caches live in its scratch directory (ADR 0067).
-        ...(review?.env ? { env: { ...(authentication.env || process.env), ...review.env } } : {}),
+        // Keep credentials and review caches while enforcing native background
+        // blocking for every query, including full-access and resumed sessions.
+        ...backgroundOptions({ ...(authentication.env || process.env), ...review?.env }, review?.hooks, authentication.settings),
+        ...(epoch ? { spawnClaudeCodeProcess: barrier.spawn } : {}),
         cwd: run.cwd,
         mcpServers,
         // The daemon derives this from the same launch as mcpServers on every query,
@@ -638,7 +653,6 @@ async function startRun(messageId, params, prompt, images) {
         // A handoff transcript from another provider, readable without a permission prompt.
         ...(readable.length > 0 ? { additionalDirectories: readable } : {}),
         ...(review?.sandbox ? { sandbox: review.sandbox } : {}),
-        ...(review?.hooks ? { hooks: review.hooks } : {}),
         permissionMode: mode,
         allowDangerouslySkipPermissions: !profile && mode === "bypassPermissions",
         includePartialMessages: true,
@@ -646,6 +660,8 @@ async function startRun(messageId, params, prompt, images) {
         resume: params.resume || undefined,
         abortController,
         canUseTool: async (tool, toolInput) => {
+          const background = backgroundDecision(tool, toolInput);
+          if (background) return background;
           const requestId = `perm-${sessionId}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
           const input = toolInput && typeof toolInput === "object" ? toolInput : {};
           // Decided without a prompt, so nobody can grant a reviewer more than its profile.
@@ -680,6 +696,21 @@ async function startRun(messageId, params, prompt, images) {
       },
     });
     run.query = q;
+    if (epoch) {
+      const initialized = await refreshWithin(q.initializationResult());
+      if (!initialized.hook_on_failure_supported)
+        throw new Error("mutation_refresh_unavailable: Claude cannot enforce failing hooks.");
+      const refreshed = await refreshWithin(q.setMcpServers(mcpServers));
+      if (!barrier.spawned || !refreshed || Object.keys(refreshed.errors || {}).length)
+        throw new Error("mutation_refresh_unavailable: Claude MCP setup was not confirmed.");
+      const statuses = await refreshWithin(q.mcpServerStatus());
+      if (!statuses.some(server => server.name === "ketplus_agents" && server.status === "connected"))
+        throw new Error("mutation_refresh_unavailable: Claude agent MCP is not connected.");
+      run.booting = false;
+      current = beginTurn(run, messageId, epoch);
+      acknowledged = true;
+      run.input.send(firstPrompt);
+    }
     if (current.interrupted) await q.interrupt?.();
 
     const messages = q[Symbol.asyncIterator]();
@@ -746,6 +777,8 @@ async function startRun(messageId, params, prompt, images) {
     }
     completeTurn(run);
   } catch (error) {
+    if (!acknowledged)
+      emit({ id: messageId, error: { message: "mutation_refresh_unavailable: Claude context setup failed." } });
     if (!run.current?.interrupted) {
       emitEvent(sessionId, "runtime.error", {
         message: error instanceof Error ? error.message : String(error),
@@ -763,8 +796,12 @@ async function startRun(messageId, params, prompt, images) {
     run.tasks.dispose();
     endedOutputs.set(sessionId, run.tasks);
     // Each query owns its MCP workers; never leave an old browser policy running.
-    try { run.query?.close?.(); } finally {
-      if (activeTurns.get(sessionId) === run) activeTurns.delete(sessionId);
+    try {
+      try { run.query?.close?.(); } catch { /* The actual-exit barrier still applies. */ }
+      if (epoch) run.transportFailed = !(await barrier.drain());
+    } finally {
+      run.booting = false;
+      if (!run.transportFailed && activeTurns.get(sessionId) === run) activeTurns.delete(sessionId);
       finished();
     }
   }

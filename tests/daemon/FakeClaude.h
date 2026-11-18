@@ -18,6 +18,14 @@ log_path = '%1'
 turns = 0
 lock = threading.Lock()
 
+def safe_setup(params):
+    value=json.loads(json.dumps(params))
+    value.pop('managedTransportEpoch',None)
+    for server in value.get('mcpServers',{}).values():
+        for key in ('KETPLUS_AGENT_MUTATION_TOKEN','KETPLUS_AGENT_TRANSPORT_EPOCH'):
+            if key in server.get('env',{}): server['env'][key]='[redacted]'
+    return value
+
 def emit(value):
     with lock:
         print(json.dumps(value), flush=True)
@@ -103,16 +111,18 @@ for line in sys.stdin:
             # The SDK refuses the turn before it starts; nothing is logged for it.
             emit({'id': message_id, 'error': {'message': 'synthetic SDK unavailable'}})
             continue
-        log('setup:' + json.dumps(params))
-        log('browser:' + json.dumps(params.get('mcpServers')))
+        log('setup:' + json.dumps(safe_setup(params)))
+        log('browser:' + json.dumps(safe_setup(params).get('mcpServers')))
         log('policy:' + json.dumps({'instructions': params.get('browserInstructions'), 'prompt': params.get('prompt'), 'images': params.get('images')}))
         turns += 1
         session_id = params.get('sessionId')
         turn_id = 'claude-turn-' + str(turns)
         thread_id = params.get('resume') or ('claude-thread-' + str(turns))
         log('turn:' + session_id + ':' + params.get('prompt', ''))
-        emit({'id': message_id, 'result': {
-            'turn': {'id': turn_id}, 'thread': {'id': thread_id}}})
+        result={'turn': {'id': turn_id}, 'thread': {'id': thread_id}}
+        if params.get('managedTransportEpoch'):
+            result['managedTransportEpoch']=params['managedTransportEpoch']
+        emit({'id': message_id, 'result': result})
         params['prompt'] = params.get('prompt', '').split('\n\n<ketplus_response_preferences>')[0]
         if params.get('prompt') == 'needs-approval':
             waiting['perm-' + str(turns)] = (session_id, turn_id, thread_id)

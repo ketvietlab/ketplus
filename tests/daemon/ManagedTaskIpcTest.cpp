@@ -127,9 +127,9 @@ class ManagedTaskIpcTest final : public QObject {
                      .toObject()
                      .value("owner_session_id"),
                  "owner");
-        QVERIFY(agent.call(request("session.task.stop", {{"task_id", last}}, "other"))
-                    .value("ok")
-                    .toBool());
+        QCOMPARE(agent.call(request("session.task.stop", {{"task_id", last}}, "other"))
+                     .value("error_code"),
+                 "stale_origin");
         QVERIFY(agent.call(request("session.task.output", {{"task_id", last}}, "other"))
                     .value("ok")
                     .toBool());

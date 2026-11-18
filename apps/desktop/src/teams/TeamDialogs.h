@@ -91,7 +91,6 @@ class NewTeamForm final : public QWidget {
     ket::Select* permissions_;
     // T-56: the team's language; a choice the user made is kept over the goal's letters.
     ket::Select* language_{nullptr};
-    bool languageChosen_{false};
     ket::FieldRow* permissionsRow_{nullptr};
     // The team's own automatic turns, filled with Settings → Teams (ADR 0114, open point 2).
     ket::TextField* budget_{nullptr};

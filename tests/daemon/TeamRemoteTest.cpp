@@ -153,7 +153,109 @@ class TeamRemoteTest final : public QObject {
   private slots:
     void initTestCase() { QStandardPaths::setTestModeEnabled(true); }
 
+    void pairedLanguageRejectsWholeMutationAndActorSpoofing() {
+        Fixture fixture;
+        QVERIFY(fixture.open());
+        const Team team = create(fixture); // missing preference: Follow prompt
+        const auto read = [&] {
+            return phone(fixture, "team.get", {{"team_id", team.id}}).value("team").toObject();
+        };
+        const auto before = read();
+        QCOMPARE(before.value("language").toString(), QString("auto"));
+        const auto unchanged = [&] {
+            const auto after = read();
+            for (const QString& key :
+                 {QString("language"), QString("paused"), QString("goal"), QString("revision")})
+                QCOMPARE(after.value(key), before.value(key));
+        };
+        for (const QJsonValue& invalid : {QJsonValue("fr"), QJsonValue(""), QJsonValue(3)}) {
+            const auto refused = phone(fixture, "team.update",
+                                       {{"team_id", team.id},
+                                        {"language", invalid},
+                                        {"paused", true},
+                                        {"expected_revision", revision(fixture, team.id)}});
+            QCOMPARE(refused.value("error_code").toString(), QString("invalid_payload"));
+            unchanged();
+        }
+        const auto spoofed = phone(fixture, "team.update",
+                                   {{"team_id", team.id},
+                                    {"language", "vi"},
+                                    {"actor", "leader"},
+                                    {"paused", true},
+                                    {"expected_revision", revision(fixture, team.id)}});
+        QCOMPARE(spoofed.value("error_code").toString(), QString("invalid_payload"));
+        unchanged();
+        for (const QJsonValue& invalid : {QJsonValue("fr"), QJsonValue(""), QJsonValue(3)}) {
+            auto payload = createPayload(fixture);
+            payload.insert("name", "Refused content preference");
+            payload.insert("language", invalid);
+            const auto refused = phone(fixture, "team.create", payload);
+            QCOMPARE(refused.value("error_code").toString(), QString("invalid_payload"));
+            QCOMPARE(phone(fixture, "team.list", {}).value("teams_total").toInt(), 1);
+            unchanged();
+        }
+        auto payload = createPayload(fixture);
+        payload.insert("name", "Automatic content");
+        payload.insert("language", "auto");
+        const auto created = phone(fixture, "team.create", payload);
+        QVERIFY2(created.value("ok").toBool(), qPrintable(text(created)));
+        QCOMPARE(created.value("team").toObject().value("language").toString(), QString("auto"));
+    }
+
     // §6: each read answers with the fields of the contract's fixture, and no local path.
+    void contentLanguageSurvivesPairedProjectionWithoutTranslatingContent() {
+        Fixture fixture;
+        QVERIFY(fixture.open());
+        QJsonObject payload = createPayload(fixture);
+        payload.insert("language", "vi");
+        payload.insert("goal", "Giữ nguyên mục tiêu tiếng Việt");
+        const QJsonObject made = phone(fixture, "team.create", payload);
+        QVERIFY2(made.value("ok").toBool(), qPrintable(text(made)));
+        const QJsonValue id = made.value("team").toObject().value("id");
+        const qint64 originalRevision = revision(fixture, id.toString());
+        for (const QString& language : {QString("vi"), QString("en"), QString("auto")}) {
+            const QJsonObject changed =
+                phone(fixture, "team.update",
+                      {{"team_id", id},
+                       {"language", language},
+                       {"expected_revision", revision(fixture, id.toString())}});
+            QVERIFY2(changed.value("ok").toBool(), qPrintable(text(changed)));
+            const QJsonObject read = phone(fixture, "team.get", {{"team_id", id}});
+            QCOMPARE(read.value("team").toObject().value("language").toString(), language);
+            QCOMPARE(read.value("team").toObject().value("goal").toString(),
+                     QString("Giữ nguyên mục tiêu tiếng Việt"));
+        }
+        QCOMPARE(
+            phone(fixture, "team.update",
+                  {{"team_id", id}, {"language", "vi"}, {"expected_revision", originalRevision}})
+                .value("error_code")
+                .toString(),
+            QString("stale_team"));
+        for (const QJsonValue& invalid : {QJsonValue("fr"), QJsonValue(""), QJsonValue(3)}) {
+            const auto refused = phone(fixture, "team.update",
+                                       {{"team_id", id},
+                                        {"language", invalid},
+                                        {"expected_revision", revision(fixture, id.toString())}});
+            QCOMPARE(refused.value("error_code").toString(), QString("invalid_payload"));
+        }
+    }
+
+    void sidebarPlacementIsAdditiveAndDoesNotReplaceExecutionIdentity() {
+        QJsonObject team{{"id", "3"}, {"repository", "/synthetic/execution"}};
+        auto row = remote::directoryEntry(team, ids);
+        QCOMPARE(row.value("repository_id").toString(), QStringLiteral("repo:execution"));
+        QVERIFY(!row.contains("sidebar_repository_id")); // legacy unknown
+        team.insert("sidebar_repository", "");
+        row = remote::directoryEntry(team, ids);
+        QVERIFY(row.value("sidebar_repository_id").isString());
+        QVERIFY(row.value("sidebar_repository_id").toString().isEmpty());
+        QCOMPARE(row.value("repository_id").toString(), QStringLiteral("repo:execution"));
+        team.insert("sidebar_repository", "/synthetic/origin");
+        row = remote::directoryEntry(team, ids);
+        QCOMPARE(row.value("sidebar_repository_id").toString(), QStringLiteral("repo:origin"));
+        QCOMPARE(row.value("repository_id").toString(), QStringLiteral("repo:execution"));
+    }
+
     void theReadModelHasTheContractsShape() {
         const QJsonObject fixtureJson = contract();
         QVERIFY(!fixtureJson.isEmpty());
@@ -175,6 +277,8 @@ class TeamRemoteTest final : public QObject {
         const QJsonObject list = phone(fixture, "team.list", {});
         sameShape(list, fixtureJson.value("directory").toObject().value("result"), "directory");
         QCOMPARE(list.value("teams").toArray().first().toObject().value("repository_id"),
+                 QJsonValue("repo:shop"));
+        QCOMPARE(list.value("teams").toArray().first().toObject().value("sidebar_repository_id"),
                  QJsonValue("repo:shop"));
 
         const QJsonObject snapshot = phone(fixture, "team.get", {{"team_id", team.id}});

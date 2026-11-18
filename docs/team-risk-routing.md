@@ -68,10 +68,31 @@ ignore configuration; a changed gitlink is an unsupported mode, never omitted
 from the proof. No repository script, build or provider is executed.
 
 Opaque receipt IDs and per-check/scope/rollback references are minted by the host.
-The host's bounded in-memory store holds at most 128 immutable receipts for ten
-minutes. Lookup binds team ID, task ID/revision, team revision, full commit, base,
-worktree, branch, repository and integration target. Restart, expiry, eviction,
-task/team edits or scope changes make evidence unavailable. The coordinator also
+The host's in-memory store holds at most 128 immutable receipts, at most 32 per
+team, for ten minutes measured by a monotonic clock. Admission prunes all expired
+entries first, then replaces only the requesting team's oldest receipt by insertion
+order. At global capacity a new team with no existing slot receives
+`verification_busy`; it cannot evict another team's evidence. Duplicate IDs are
+refused without overwriting or renewing a live receipt.
+
+Lookup binds a host-computed semantic revision: the task document except note
+history and its transport revision, relevant decision/dependency state, settings
+and membership fences, policy/permissions, full commit, base, worktree, branch,
+repository and integration target. Reporting the proven head in a round-zero
+task is equivalent to its previously empty head field; a different reported head
+or a reviewed baseline is not. Unrelated task activity and result notes do not
+invalidate proof. Requirements, acceptance, assignment, findings, policy, members,
+scope and relevant approval changes do. Restart, expiry and eviction invalidate
+lookup. Receipts keep their original proof task revision; after semantic and live
+checkout validation, host lookup projects the current task transport revision for
+the coordinator's fence. Verify replies distinguish `proof_task_revision`,
+`task_revision` and the opaque `semantic_revision` hash.
+
+`expected_team_revision` remains mandatory at verification admission and every
+route decision. Completion revalidates the authenticated role and semantic inputs
+rather than requiring an idle team. Deferred replies are consumed synchronously
+in their own broker continuation and removed even if that actor has expired;
+duplicate concurrent requests each receive their own result. The coordinator also
 rechecks the current clean head before accepting a decision. A decision itself
 advances revisions, so its receipt cannot authorize a later action. A caller's
 invented or stale ID never becomes evidence. Raw file content/command output is

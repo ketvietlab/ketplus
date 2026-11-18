@@ -134,6 +134,9 @@ bool SessionHost::deferJournalEvent(Session& session, const QString& type,
 
 bool SessionHost::appendEvent(Session& session, const QString& type,
                               const QJsonObject& providerPayload, QString* error) {
+    // Revoke even when terminal delivery is held in a journal retry queue.
+    if (type == "turn.completed" || type == "runtime.stopped" || type == "user.message")
+        session.mutationOrigin.revoke();
     // A turn's end tells readiness how the provider is doing (#170); errors gain a code.
     const QJsonObject payload = noteProviderOutcome(session, type, providerPayload);
     noteAwaitingReply(session, type, payload);

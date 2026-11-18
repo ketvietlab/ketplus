@@ -33,7 +33,12 @@ void AcpAdapter::sendCall(const QString& method, const QJsonObject& params, Call
     const quint64 id = nextRequestId_++;
     pending_.insert(id, std::move(callback));
     pendingMethods_.insert(id, method);
-    if (const int timeout = requestTimeoutMs(method); timeout > 0) {
+    int timeout = requestTimeoutMs(method);
+    if (isolatedWorker_ &&
+        (method == "initialize" || method == "session/load" || method == "session/new") &&
+        timeout <= 0)
+        timeout = 15000;
+    if (timeout > 0) {
         auto* timer = new QTimer(this);
         timer->setSingleShot(true);
         pendingTimers_.insert(id, timer);
@@ -42,8 +47,10 @@ void AcpAdapter::sendCall(const QString& method, const QJsonObject& params, Call
             timer->deleteLater();
             if (!pending_.contains(id))
                 return;
-            const QString reason = processFailure(
+            QString reason = processFailure(
                 QStringLiteral("%1 ACP request %2 timed out.").arg(label_, method), std::nullopt);
+            if (isolatedWorker_)
+                reason.prepend("mutation_refresh_unavailable: ");
             setReady(false);
             failPending(reason);
             if (!stopping_) {
@@ -178,6 +185,8 @@ void AcpAdapter::consumeLine(const QByteArray& line) {
 }
 
 void AcpAdapter::respond(const QJsonValue& requestId, const QJsonObject& result) {
+    if (respondIsolated(requestId, result))
+        return;
     if (strictPermissionRequests()) {
         respondStrictPermission(requestId, result);
         return;
@@ -214,6 +223,8 @@ void AcpAdapter::respond(const QJsonValue& requestId, const QJsonObject& result)
 
 void AcpAdapter::respondError(const QJsonValue& requestId, const QString& code,
                               const QString& message) {
+    if (respondIsolated(requestId, {}, code, message))
+        return;
     if (strictPermissionRequests()) {
         respondStrictPermission(requestId, {{QStringLiteral("cancelled"), true}});
         return;

@@ -28,6 +28,14 @@ names = {}
 previews = {}
 limit_used = False
 
+def safe_setup(params):
+    value=json.loads(json.dumps(params))
+    for env in value.get('config', {}).values():
+        if isinstance(env, dict):
+            for key in ('KETPLUS_AGENT_MUTATION_TOKEN','KETPLUS_AGENT_TRANSPORT_EPOCH'):
+                if key in env: env[key]='[redacted]'
+    return value
+
 def emit(value):
     with lock:
         print(json.dumps(value), flush=True)
@@ -78,9 +86,11 @@ for line in sys.stdin:
         log('delete:' + message['params']['threadId'])
         emit({'id': message_id, 'result': {}})
     elif method == 'thread/start':
-        log('setup:' + json.dumps(message['params']))
+        log('setup:' + json.dumps(safe_setup(message['params'])))
         threads += 1
         thread_id = 'thread-' + str(threads)
+        if message['params'].get('config',{}).get('mcp_servers.ketplus_agents.env',{}).get('KETPLUS_AGENT_TRANSPORT_EPOCH'):
+            thread_id = 'thread-' + str(os.getpid()) + '-' + str(threads)
         emit({'id': message_id, 'result': {'thread': {'id': thread_id}}})
     elif method == 'thread/fork':
         log('fork:' + json.dumps(message['params'], sort_keys=True))
@@ -91,9 +101,12 @@ for line in sys.stdin:
         emit({'id': message_id, 'result': {'thread': {
             'id': thread_id, 'forkedFromId': message['params']['threadId']}}})
     elif method == 'thread/resume':
-        log('setup:' + json.dumps(message['params']))
+        log('setup:' + json.dumps(safe_setup(message['params'])))
         thread_id = message['params']['threadId']
         emit({'id': message_id, 'result': {'thread': {'id': thread_id}}})
+    elif method == 'mcpServerStatus/list':
+        emit({'id':message_id,'result':{'data':[{'name':'ketplus_agents','tools':{
+            name:{'name':name} for name in ('agents_whoami','background_task_list','background_task_get','background_task_output','background_task_start','background_task_stop')}}], 'nextCursor':None}})
     elif method == 'thread/read':
         thread_id = message['params']['threadId']
         emit({'id': message_id, 'result': {'thread': {

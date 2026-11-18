@@ -14,8 +14,7 @@
 
 namespace ketplus::daemon::teams {
 
-// T-56: a fixed text the daemon writes for a team, in the team's language. The source is
-// marked QT_TRANSLATE_NOOP("Team", ...), so lupdate finds it (modules/remote/translations).
+// Fixed English system text. The language argument remains for source compatibility.
 [[nodiscard]] inline QString say(const QString& language, const char* source) {
     return ::ketplus::remote::team_language::text(language, "Team", source);
 }
@@ -50,11 +49,10 @@ inline constexpr const char* pauseTeamSource = QT_TRANSLATE_NOOP("Team", "Pause 
 inline const QString wakeLeaderChoice = QString::fromLatin1(wakeLeaderSource);
 inline const QString pauseTeamChoice = QString::fromLatin1(pauseTeamSource);
 
-// T-56: a task state or a role as a person reads it, in the team's language.
-// English keeps the stored word ("in_progress"), as before T-56.
+// Fixed English status text. auto keeps the same canonical words as legacy English.
 [[nodiscard]] inline QString stateName(const QString& language, const QString& value) {
-    if (::ketplus::remote::team_language::orEnglish(language) ==
-        ::ketplus::remote::team_language::english)
+    if (::ketplus::remote::team_language::orEnglish(language) !=
+        ::ketplus::remote::team_language::vietnamese)
         return value;
     if (value == state::todo)
         return say(language, QT_TRANSLATE_NOOP("Team", "todo"));
@@ -258,6 +256,9 @@ struct ReviewSlot final {
 struct Team final {
     qint64 id{0};
     QString repository;
+    // Sidebar placement is immutable; repository remains the mutable execution scope.
+    // Absent on legacy teams, empty for a team created without a repository.
+    std::optional<QString> sidebarRepository;
     QString name;
     QString goal;
     QString integrationBranch;
@@ -266,9 +267,8 @@ struct Team final {
     // policy ("read-only", "ask" or "full"), given to every such member the team starts.
     // The reviewer is not in it: a review turn is always read-only (ADR 0067).
     QString executionPolicy{QStringLiteral("ask")};
-    // T-56: the language the leader works in, "en" or "vi" (team_language). The team's fixed
-    // texts, its Updates and the daemon's decisions and messages for it follow it.
-    QString language{QStringLiteral("en")};
+    // Content preference only: auto follows the prompt; legacy en/vi are fallback hints.
+    QString language{QStringLiteral("auto")};
     bool leaderWritesRequirements{true};
     bool paused{false};
     QString pausedReason;

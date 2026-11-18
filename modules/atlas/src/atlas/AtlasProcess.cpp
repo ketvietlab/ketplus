@@ -96,10 +96,21 @@ QString AtlasProcess::cliPath() {
     return QStandardPaths::findExecutable("ketatlas", toolSearchPaths());
 }
 
+std::optional<tool_locations::Command> AtlasProcess::launchCommand(const QString& cli) {
+    return tool_locations::npmCliCommand(cli, QStringLiteral("ketatlas"),
+                                         QStringLiteral("ketatlas"));
+}
+
 QStringList AtlasProcess::toolSearchPaths() {
     auto paths = QProcessEnvironment::systemEnvironment().value("PATH").split(QDir::listSeparator(),
                                                                               Qt::SkipEmptyParts);
+#if defined(Q_OS_WIN)
+    // npm's global bin and the Node installer, which are on PATH only after a new login.
+    paths << tool_locations::commonToolDirectories();
+    return paths;
+#else
     paths << "/opt/homebrew/bin" << "/usr/local/bin";
+#endif
     const QDir nvm(QDir::homePath() + "/.nvm/versions/node");
     auto versions = nvm.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
     // By number, so v26.12.1 comes before v26.7.0 and v24 before v9.
@@ -125,6 +136,13 @@ void AtlasProcess::launchAttempt() {
                        "its executable."));
         return;
     }
+    const auto command = launchCommand(cli);
+    if (!command) {
+        emit failed(tr("%1 is an npm shim and the ketatlas package next to it was not found. "
+                       "Reinstall it with npm install -g ketatlas or select its executable.")
+                        .arg(cli));
+        return;
+    }
     QString portError;
     if (!claimPort(portError)) {
         emit failed(portError);
@@ -139,8 +157,10 @@ void AtlasProcess::launchAttempt() {
     ready_ = false;
     stopping_ = false;
     ++startAttempts_;
-    process_.start(
-        cli, {"serve", atlas_.path, "--root", atlas_.directory, "--port", QString::number(port_)});
+    process_.start(command->program,
+                   command->leadingArguments + QStringList{"serve", atlas_.path, "--root",
+                                                           atlas_.directory, "--port",
+                                                           QString::number(port_)});
     timeout_.start();
 }
 

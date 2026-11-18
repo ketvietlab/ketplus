@@ -30,6 +30,8 @@ QByteArray CredentialStore::read(const QString& account, QString* error) const {
     }
     if (error)
         error->clear();
+    if (stagedAccounts_)
+        return stagedAccounts_->value(account);
     return r03::credentials.value(service_ + '/' + account);
 }
 bool CredentialStore::write(const QString& account, const QByteArray& value, QString* error) const {
@@ -37,6 +39,10 @@ bool CredentialStore::write(const QString& account, const QByteArray& value, QSt
         if (error)
             *error = "synthetic credential write failure";
         return false;
+    }
+    if (stagedAccounts_) {
+        stagedAccounts_->insert(account, value);
+        return true;
     }
     r03::credentials.insert(service_ + '/' + account, value);
     ++r03::rewrites;
@@ -63,7 +69,10 @@ bool CredentialStore::update(
     const std::function<void(QHash<QString, QByteArray>& accounts)>& change, QString* error) const {
     const QString prefix = service_ + '/';
     QHash<QString, QByteArray> accounts;
-    for (auto entry = r03::credentials.cbegin(); entry != r03::credentials.cend(); ++entry) {
+    if (stagedAccounts_)
+        accounts = *stagedAccounts_;
+    for (auto entry = r03::credentials.cbegin();
+         !stagedAccounts_ && entry != r03::credentials.cend(); ++entry) {
         if (entry.key().startsWith(prefix))
             accounts.insert(entry.key().mid(prefix.size()), entry.value());
     }
@@ -81,6 +90,10 @@ bool CredentialStore::update(
             return false;
         }
     }
+    if (stagedAccounts_) {
+        *stagedAccounts_ = std::move(accounts);
+        return true;
+    }
     for (auto entry = before.cbegin(); entry != before.cend(); ++entry) {
         if (!accounts.contains(entry.key()))
             r03::credentials.remove(prefix + entry.key());
@@ -89,5 +102,26 @@ bool CredentialStore::update(
         r03::credentials.insert(prefix + entry.key(), entry.value());
     ++r03::rewrites;
     return true;
+}
+bool CredentialStore::batch(const std::function<bool(CredentialStore&, QString*)>& operation,
+                            QString* error) const {
+    QString localError;
+    if (!error)
+        error = &localError;
+    error->clear();
+    bool accepted = false;
+    const bool committed = update(
+        [&](auto& accounts) {
+            auto staged = accounts;
+            CredentialStore view(service_);
+            view.stagedAccounts_ = &staged;
+            accepted = operation(view, error);
+            if (accepted)
+                accounts = std::move(staged);
+        },
+        error);
+    if (!accepted && error && error->isEmpty())
+        *error = "Synthetic credential operation aborted";
+    return accepted && committed;
 }
 } // namespace ketplus::daemon

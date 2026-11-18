@@ -23,10 +23,12 @@ target_link_libraries(ketplus_daemon_core PUBLIC
     ketplus_remote
     ketplus_team_language
     ketplus_control_crypto
+    ketplus_runner_pairing
     ketplus_browser_tools
     ketplus_computer_tools
     ketplus_product_version
     LibDataChannel::LibDataChannelStatic
+    ketplus_peer_link
 )
 target_include_directories(ketplus_daemon_core PUBLIC
     "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>"
@@ -132,6 +134,8 @@ else()
             "${KETPLUS_CLAUDE_SIDECAR_SOURCE}/tasks.mjs"
             "${KETPLUS_CLAUDE_SIDECAR_SOURCE}/resume.mjs"
             "${KETPLUS_CLAUDE_SIDECAR_SOURCE}/review-guard.mjs"
+            "${KETPLUS_CLAUDE_SIDECAR_SOURCE}/background-policy.mjs"
+            "${KETPLUS_CLAUDE_SIDECAR_SOURCE}/process-barrier.mjs"
             "${KETPLUS_CLAUDE_SIDECAR_SOURCE}/session-delete.mjs"
             "${KETPLUS_CLAUDE_SIDECAR_SOURCE}/package.json"
             "${KETPLUS_CLAUDE_SIDECAR_SOURCE}/package-lock.json"

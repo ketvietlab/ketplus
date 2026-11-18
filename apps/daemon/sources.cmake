@@ -1,11 +1,10 @@
 # Also read by tests/daemon/cloud-privacy, which builds these against in-memory credentials.
+# PeerLink, WebRtcPeerLink and the frame codec build as ketplus_peer_link (cmake/WebRtc.cmake).
 set(KETPLUS_DAEMON_CORE_SOURCES
+    src/agents/AgentMutationOrigin.cpp
     src/cloud/CloudControlTransport.cpp
-    src/transport/FrameCodec.cpp
-    src/transport/PeerLink.h
     src/transport/RemotePeers.cpp
     src/transport/Signaling.cpp
-    src/transport/WebRtcPeerLink.cpp
     src/atlas/AtlasLiveRuntime.cpp
     src/atlas/AtlasLiveTunnel.cpp
     src/atlas/AtlasTunnelCodec.cpp
@@ -62,6 +61,7 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/cloud/CloudControlSupport.cpp
     src/cloud/CloudControlSupport.h
     src/cloud/CloudControlSync.cpp
+    src/cloud/CloudControlKeyDistribution.cpp
     src/cloud/CloudControlUploadProgress.cpp
     src/cloud/CloudControlTeamCommands.cpp
     src/cloud/CloudControlWorktreeCommands.cpp
@@ -71,6 +71,32 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/cloud/CloudControlClient.h
     src/cloud/CloudControlDeviceSignIn.cpp
     src/cloud/DevicePins.cpp
+    src/runner/CloudRunnerRelay.cpp
+    src/runner/CloudRunnerRelay.h
+    src/runner/RunnerPairing.cpp
+    src/runner/RunnerPairing.h
+    src/runner/RunnerPairingFlow.cpp
+    src/runner/RunnerPinStore.cpp
+    src/runner/RunnerPinStore.h
+    src/runner/RunnerRelayClient.cpp
+    src/runner/RunnerRelayClient.h
+    src/runner/RunnerRelayPort.h
+    src/runner/RunnerRelaySchema.cpp
+    src/runner/RunnerRelaySchema.h
+    src/runner/RunnerService.cpp
+    src/runner/RunnerService.h
+    src/runner/jobs/RemoteJobCoordinator.cpp
+    src/runner/jobs/RemoteJobCoordinator.h
+    src/runner/jobs/RemoteJobLabels.cpp
+    src/runner/jobs/RemoteJobLabels.h
+    src/runner/jobs/RemoteJobPeerEvents.cpp
+    src/runner/jobs/RemoteJobPorts.h
+    src/runner/jobs/RemoteJobRecord.cpp
+    src/runner/jobs/RemoteJobRecord.h
+    src/runner/jobs/RemoteJobRelay.cpp
+    src/runner/jobs/RemoteJobRelay.h
+    src/runner/jobs/RemoteJobSchema.cpp
+    src/runner/jobs/RemoteJobSchema.h
     src/cloud/SessionCredentials.cpp
     src/cloud/CloudControlSignIn.cpp
     src/cloud/CloudControlBatching.h
@@ -114,9 +140,11 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/providers/acp/AcpTurns.cpp
     src/providers/acp/AcpPermissions.cpp
     src/providers/acp/AcpSession.cpp
+    src/providers/acp/AcpSessionIsolation.cpp
     src/providers/acp/AcpToolItem.h
     src/providers/CursorAdapter.h
     src/providers/CodexAdapter.cpp
+    src/providers/CodexSessionIsolation.cpp
     src/providers/CodexAdapter.h
     src/providers/ProviderLineReader.cpp
     src/providers/ProviderLineReader.h

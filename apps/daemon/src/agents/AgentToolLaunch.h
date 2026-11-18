@@ -11,11 +11,15 @@ inline constexpr auto serverName = "ketplus_agents";
 inline constexpr auto mcpArgument = "--mcp-agents";
 inline constexpr auto socketVariable = "KETPLUS_AGENT_SOCKET";
 inline constexpr auto tokenVariable = "KETPLUS_AGENT_TOKEN";
+inline constexpr auto mutationVariable = "KETPLUS_AGENT_MUTATION_TOKEN";
+inline constexpr auto epochVariable = "KETPLUS_AGENT_TRANSPORT_EPOCH";
 
 struct Launch final {
     QString command;
     QString socket;
     QString token;
+    QString mutationCredential;
+    QString transportEpoch;
 };
 
 // Claude SDK `mcpServers` entry.

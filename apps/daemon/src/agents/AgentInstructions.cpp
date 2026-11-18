@@ -1,4 +1,5 @@
 #include "agents/AgentInstructions.h"
+#include "agents/AgentBackgroundTools.h"
 
 #include <QJsonObject>
 #include <QStringList>
@@ -46,7 +47,8 @@ QString toolInstructions(const QString& ownNumber) {
                "on, call request_user_decision with a one-line summary just before that answer; "
                "KetPlus then shows the conversation as Waiting for you.\n"
                "[/KetPlus agent messaging]")
-        .arg(ownNumber);
+               .arg(ownNumber) +
+           QStringLiteral("\n\n") + agent_mcp::background_tools::instructions();
 }
 
 // ADR 0114. The daemon refuses what a role may not do; this text only explains it.
@@ -151,20 +153,29 @@ QString teamInstructions(const TeamRoleContext& context) {
             "finding give the file, line, severity and a one-line summary. End with exactly "
             "one line: \"Verdict: findings\" or \"Verdict: no findings\".");
     }
-    // T-56: what people read on the team page is in the team's language; code is not.
-    if (context.language == QStringLiteral("vi")) {
-        lines << (context.role == QStringLiteral("leader")
-                      ? QStringLiteral(
-                            "The team works in Vietnamese: the user reads its page in "
-                            "Vietnamese. Write task titles, acceptance criteria, notes, lanes, "
-                            "decisions (question, context and choices) and what you tell the "
-                            "user in Vietnamese. Code, commit messages and public pull request "
-                            "bodies stay English.")
-                      : QStringLiteral(
-                            "The team works in Vietnamese: write your task notes and "
-                            "questions in Vietnamese. Code, commit messages, public pull "
-                            "request bodies and the exact verdict line stay English."));
-    }
+    // Content follows user intent, independently of the fixed English application chrome.
+    lines << QStringLiteral(
+        "The application interface is English. Team content follows the user's current prompt "
+        "and explicit content-language instructions, including task titles, acceptance criteria, "
+        "notes, lanes, decisions (question, context and choices), findings and messages. "
+        "A Vietnamese prompt calls for Vietnamese content; an English prompt calls for English "
+        "content unless the user explicitly requests another content language. Explicit "
+        "content-language "
+        "instructions take priority. For a mixed or ambiguous prompt, retain the established "
+        "content language. Do not infer "
+        "content language from the interface or operating system. Tool schemas, peer-message "
+        "envelopes, code and quoted text are not a new user language choice. Preserve existing "
+        "user-entered "
+        "and historical content verbatim; do not translate it retroactively. Code, commit "
+        "messages, public pull request bodies and the exact verdict line stay English.");
+    if (context.language == QStringLiteral("vi") || context.language == QStringLiteral("en"))
+        lines << QStringLiteral(
+                     "The saved content-language preference is %1. It is only a fallback when "
+                     "the user's prompt, explicit content instructions and established context do "
+                     "not "
+                     "establish a language; it never overrides them or changes application labels.")
+                     .arg(context.language == QStringLiteral("vi") ? QStringLiteral("Vietnamese")
+                                                                   : QStringLiteral("English"));
     lines << QStringLiteral("Address the team's leader or reviewer as \"leader\" or "
                             "\"reviewer\" in agents_send; use team_get and team_tasks to read "
                             "the team. team_tasks lists one short row per task (open=true for "

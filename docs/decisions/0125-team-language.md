@@ -1,5 +1,8 @@
 # ADR 0125: A team works in its leader's language
 
+UI and language-priority rules superseded by [T30](2026-11-18-english-ui-team-content.md).
+Historical rationale and catalogs are retained; this is not the current UI contract.
+
 Status: accepted (2026-11-13). Amends ADR 0114 (team record, Updates, decisions).
 
 ## Context

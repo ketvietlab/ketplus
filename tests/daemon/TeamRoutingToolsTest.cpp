@@ -155,13 +155,144 @@ class TeamRoutingToolsTest final : public QObject {
         QVERIFY(!store.lookup(scope, work, id).has_value());
         QVERIFY(QFile::remove(directory.filePath("untracked")));
         ++work.changedRevision;
-        QVERIFY(!store.lookup(scope, work, id).has_value());
+        QVERIFY(store.lookup(scope, work, id).has_value());
         --work.changedRevision;
         ++scope.revision;
-        QVERIFY(!store.lookup(scope, work, id).has_value());
+        QVERIFY(store.lookup(scope, work, id).has_value());
         --scope.revision;
         work.baseCommit = head;
         QVERIFY(!store.lookup(scope, work, id).has_value());
+    }
+
+    void receiptSurvivesActivityButNotSemanticChanges() {
+        QTemporaryDir directory;
+        const QString base = init(directory.path());
+        QVERIFY(write(directory.path(), "docs/prose.md", reflow));
+        const QString head = commit(directory.path());
+        auto scope = team();
+        auto work = task(directory.path(), base);
+        const auto proof = teams::RoutingEvidence::produce(scope, work, head);
+        QVERIFY2(proof.evidence.has_value(), qPrintable(proof.reason));
+        teams::RoutingEvidence store;
+        store.retain(scope, work, *proof.evidence);
+        const auto id = proof.evidence->id;
+
+        // An unrelated task's note advances the document's optimistic fence only.
+        ++scope.revision;
+        QVERIFY(store.lookup(scope, work, id).has_value());
+        // Reporting results on this task is also not a semantic edit.
+        work.history.append({.kind = "note", .text = "Offline checks passed."});
+        work.changedRevision = ++scope.revision;
+        const auto refreshed = store.lookup(scope, work, id);
+        QVERIFY(refreshed.has_value());
+        QCOMPARE(refreshed->taskRevision, work.changedRevision);
+        work.headCommit = head;
+        QVERIFY(store.lookup(scope, work, id));
+
+        const auto originalTask = work;
+        work.headCommit = QString(40, 'a');
+        QVERIFY(!store.lookup(scope, work, id));
+        work = originalTask;
+        scope.executionPolicy = "full";
+        QVERIFY(!store.lookup(scope, work, id));
+        scope.executionPolicy = "ask";
+        scope.sharedPaths.append("src");
+        QVERIFY(!store.lookup(scope, work, id));
+        scope.sharedPaths.clear();
+        work.title += " changed requirements";
+        QVERIFY(!store.lookup(scope, work, id));
+        work = originalTask;
+        ++scope.settingsRevision;
+        QVERIFY(!store.lookup(scope, work, id));
+        --scope.settingsRevision;
+        ++scope.membersRevision;
+        QVERIFY(!store.lookup(scope, work, id));
+        --scope.membersRevision;
+        work.history.append({.kind = "verdict", .text = "findings"});
+        QVERIFY(!store.lookup(scope, work, id));
+    }
+
+    void aTeamCannotExhaustOrEvictAnotherTeamsReceipts() {
+        QTemporaryDir directory;
+        const QString base = init(directory.path());
+        QVERIFY(write(directory.path(), "docs/prose.md", reflow));
+        const QString head = commit(directory.path());
+        auto scope = team();
+        const auto work = task(directory.path(), base);
+        const auto proof = teams::RoutingEvidence::produce(scope, work, head);
+        QVERIFY2(proof.evidence.has_value(), qPrintable(proof.reason));
+        teams::RoutingEvidence store;
+        QList<QString> ids;
+        // Capacity coverage uses host-side copies of a real proof, never a
+        // caller-supplied attestation. The authenticated boundary is tested below.
+        for (int i = 0; i != 33; ++i) {
+            auto evidence = *proof.evidence;
+            evidence.id = QString::number(i, 16).rightJustified(64, '0');
+            ids.append(evidence.id);
+            store.retain(scope, work, evidence);
+        }
+        int retained = 0;
+        for (const auto& id : ids)
+            retained += store.lookup(scope, work, id).has_value();
+        QCOMPARE(retained, 32);
+        QVERIFY(!store.lookup(scope, work, ids.first()));
+        QVERIFY(store.lookup(scope, work, ids.last()));
+
+        const auto protectedTeam = scope;
+        for (int teamId = 100; teamId != 104; ++teamId) {
+            scope.id = teamId;
+            for (int i = 0; i != 33; ++i) {
+                auto evidence = *proof.evidence;
+                evidence.teamId = teamId;
+                evidence.id = QString::number(teamId * 100 + i, 16).rightJustified(64, '0');
+                store.retain(scope, work, evidence);
+            }
+        }
+        for (const auto& id : ids.sliced(1))
+            QVERIFY(store.lookup(protectedTeam, work, id));
+        QVERIFY(!store.lookup(scope, work, ids.last()));
+    }
+
+    void expiredReceiptsArePrunedBeforeLiveEvictionAndDuplicatesDoNotRenew() {
+        QTemporaryDir directory;
+        const QString base = init(directory.path());
+        QVERIFY(write(directory.path(), "docs/prose.md", reflow));
+        const QString head = commit(directory.path());
+        auto scope = team();
+        const auto work = task(directory.path(), base);
+        const auto proof = teams::RoutingEvidence::produce(scope, work, head);
+        QVERIFY2(proof.evidence.has_value(), qPrintable(proof.reason));
+        qint64 now = 0;
+        teams::RoutingEvidence store([&] { return now; });
+        for (int i = 0; i != 127; ++i) {
+            auto other = scope;
+            other.id = 1000 + i;
+            auto evidence = *proof.evidence;
+            evidence.teamId = other.id;
+            evidence.id = QString::number(1000 + i, 16).rightJustified(64, '0');
+            QVERIFY(store.retain(other, work, evidence));
+        }
+        now = 1;
+        QVERIFY(store.retain(scope, work, *proof.evidence));
+        auto second = *proof.evidence;
+        second.id = QString(64, 'e');
+        auto foreign = scope;
+        foreign.id = 9999;
+        auto foreignProof = second;
+        foreignProof.teamId = foreign.id;
+        // Full store, no own slot: refuse admission without evicting another team.
+        QVERIFY(!store.retain(foreign, work, foreignProof));
+        QVERIFY(store.lookup(scope, work, proof.evidence->id));
+        now = 600000;
+        QVERIFY(!store.retain(scope, work, *proof.evidence));
+        QVERIFY(store.retain(scope, work, second));
+        // The expired foreign entries freed room, preserving this live receipt.
+        QVERIFY(store.lookup(scope, work, proof.evidence->id));
+        now = 600001;
+        QVERIFY(!store.lookup(scope, work, proof.evidence->id));
+        QVERIFY(store.lookup(scope, work, second.id));
+        now = 1200000;
+        QVERIFY(!store.lookup(scope, work, second.id));
     }
 
     void unknownSemanticCoverageFailsClosed_data() {
@@ -228,6 +359,7 @@ class TeamRoutingToolsTest final : public QObject {
     void authenticatedToolsUseRealProducerThenHostLookupThenPolicy_data() {
         QTest::addColumn<QString>("attack");
         QTest::newRow("ordinary-prose") << QString{};
+        QTest::newRow("concurrent-only") << QString("concurrent-only");
         QTest::newRow("ignored-gitlink") << QString("ignored-gitlink");
         QTest::newRow("replaced-base-tree") << QString("replaced-base-tree");
     }
@@ -254,12 +386,9 @@ class TeamRoutingToolsTest final : public QObject {
                                   {"reviewer", QJsonObject{{"provider", "claude"}}}}}}),
             "desktop-test");
         QVERIFY2(made.value("ok").toBool(), qPrintable(text(made)));
-        // Hold automatic delivery/digests in this synthetic fixture. Legitimate
-        // background updates must invalidate a revision, not be exempted.
+        // Exercise the normal active team: delivery, notes and result reports
+        // must not invalidate a proof whose semantic inputs remain unchanged.
         const QString teamId = made.value("team").toObject().value("id").toString();
-        const auto paused = fixture.host->handleCommand(
-            request("team.update", {{"team_id", teamId}, {"paused", true}}), "desktop-test");
-        QVERIFY2(paused.value("ok").toBool(), qPrintable(text(paused)));
         const auto members = made.value("team").toObject().value("members").toArray();
         QCOMPARE(members.size(), 3);
         const QString leader = members[0].toObject().value("session_id").toString();
@@ -344,13 +473,15 @@ class TeamRoutingToolsTest final : public QObject {
                                                      raced = result;
                                                      raceFinished = true;
                                                  });
-        const auto changedDuringCheck = fixture.agents(
-            developer, "agents.team_task_update",
-            {{"task_id", "T-1"}, {"note", "Synthetic state change while the host verifies."}});
-        QVERIFY(changedDuringCheck.value("ok").toBool());
+        if (attack != "concurrent-only") {
+            const auto changedDuringCheck = fixture.agents(
+                developer, "agents.team_task_update",
+                {{"task_id", "T-1"}, {"note", "Synthetic state change while the host verifies."}});
+            QVERIFY(changedDuringCheck.value("ok").toBool());
+        }
         QTRY_VERIFY_WITH_TIMEOUT(raceFinished, 10000);
-        QCOMPARE(raced.value("error_code").toString(), QString("stale_team"));
-        QVERIFY(!raced.contains("evidence_id"));
+        QVERIFY2(raced.value("ok").toBool(), qPrintable(text(raced)));
+        QVERIFY(raced.contains("evidence_id"));
         verify.insert("expected_team_revision", revision());
         auto forged = verify;
         forged.insert("checks", QJsonArray{QJsonObject{{"passed", true}}});
@@ -362,7 +493,47 @@ class TeamRoutingToolsTest final : public QObject {
                      .value("error_code")
                      .toString(),
                  QString("role_forbidden"));
-        if (!attack.isEmpty()) {
+        // A semantic edit and a settings change while work is in flight must
+        // reject even though ordinary team activity above is tolerated.
+        for (const bool settings : {false, true}) {
+            verify.insert("expected_team_revision", revision());
+            bool finished = false;
+            QJsonObject stale;
+            fixture.host->handleAgentCommandDeferred(fixture.host->agentToken(developer),
+                                                     "agents.team_task_route_verify", verify,
+                                                     [&](const QJsonObject& answer) {
+                                                         stale = answer;
+                                                         finished = true;
+                                                     });
+            const auto changed =
+                settings ? fixture.host->handleCommand(
+                               request("team.update", {{"team_id", teamId}, {"paused", true}}),
+                               "desktop-test")
+                         : fixture.agents(
+                               leader, "agents.team_task_criteria",
+                               {{"task_id", "T-1"}, {"criteria", QJsonArray{"Updated words"}}});
+            QVERIFY2(changed.value("ok").toBool(), qPrintable(text(changed)));
+            QTRY_VERIFY_WITH_TIMEOUT(finished, 10000);
+            QCOMPARE(stale.value("error_code").toString(), QString("stale_evidence"));
+            QVERIFY(!stale.contains("evidence_id"));
+            if (settings) {
+                QVERIFY(fixture.host
+                            ->handleCommand(
+                                request("team.update", {{"team_id", teamId}, {"paused", false}}),
+                                "desktop-test")
+                            .value("ok")
+                            .toBool());
+            } else {
+                QVERIFY(fixture
+                            .agents(developer, "agents.team_task_update",
+                                    {{"task_id", "T-1"},
+                                     {"met", QJsonArray{QJsonObject{{"index", 0}, {"met", true}}}}})
+                            .value("ok")
+                            .toBool());
+            }
+        }
+        verify.insert("expected_team_revision", revision());
+        if (attack == "ignored-gitlink" || attack == "replaced-base-tree") {
             QByteArray base;
             QVERIFY(git(worktree, {"rev-parse", head + "^"}, &base));
             const QString baseCommit = QString::fromLatin1(base.trimmed());
@@ -412,11 +583,38 @@ class TeamRoutingToolsTest final : public QObject {
             QVERIFY(git(worktree, {"reset", "--hard", head}));
             verify.insert("head_commit", head);
         }
+        verify.insert("expected_team_revision", revision());
+        QList<QJsonObject> duplicateReplies;
+        for (int i = 0; i != 2; ++i)
+            fixture.host->handleAgentCommandDeferred(
+                fixture.host->agentToken(developer), "agents.team_task_route_verify", verify,
+                [&](const QJsonObject& answer) { duplicateReplies.append(answer); });
+        QTRY_COMPARE_WITH_TIMEOUT(duplicateReplies.size(), 2, 20000);
+        for (const auto& answer : duplicateReplies)
+            QVERIFY2(answer.value("ok").toBool(), qPrintable(text(answer)));
+        QVERIFY(duplicateReplies[0].value("evidence_id") !=
+                duplicateReplies[1].value("evidence_id"));
+        verify.insert("expected_team_revision", revision());
         const auto evidence = deferred(fixture, developer, "agents.team_task_route_verify", verify);
         QVERIFY2(evidence.value("ok").toBool(), qPrintable(text(evidence)));
         const QString id = evidence.value("evidence_id").toString();
         QVERIFY(teams::risk::evidenceId(id));
         QCOMPARE(evidence.value("recipe").toString(), QString("prose_reflow_v1"));
+        if (attack != "concurrent-only") {
+            const auto otherTask = fixture.agents(leader, "agents.team_task_create",
+                                                  {{"title", "Unrelated active work"}});
+            QVERIFY2(otherTask.value("ok").toBool(), qPrintable(text(otherTask)));
+            const auto unrelatedNote = fixture.host->handleCommand(
+                request("team.task.update",
+                        {{"team_id", teamId}, {"task_id", "T-2"}, {"note", "Unrelated progress."}}),
+                "desktop-test");
+            QVERIFY2(unrelatedNote.value("ok").toBool(), qPrintable(text(unrelatedNote)));
+            QVERIFY(fixture
+                        .agents(developer, "agents.team_task_update",
+                                {{"task_id", "T-1"}, {"note", "Verification results recorded."}})
+                        .value("ok")
+                        .toBool());
+        }
         QJsonObject decide{{"task_id", "T-1"},    {"expected_team_revision", revision()},
                            {"kind", "change"},    {"route", "developer_leader"},
                            {"head_commit", head}, {"evidence_id", id},

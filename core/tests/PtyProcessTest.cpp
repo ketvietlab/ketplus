@@ -72,6 +72,48 @@ bool waitUntilPaintsSettle(const PaintCounter& paints) {
     return false;
 }
 
+// Commands typed into the platform's test shell: POSIX sh/bash/zsh, or cmd.exe / PowerShell on
+// Windows (SHELL selects one; main() defaults it to COMSPEC, KETPLUS_TEST_SHELL overrides).
+// How long a freshly started shell may take to show typed text: PowerShell loads slowly.
+constexpr int shellStartMs =
+#if defined(Q_OS_WIN)
+    15000;
+#else
+    5000;
+#endif
+
+// Terminal text with the wrapping of long lines undone: a narrow view wraps a long prompt and
+// the command typed after it.
+QString unwrapped(QString text) {
+    text.remove(QLatin1Char('\n'));
+    return text;
+}
+
+QByteArray enter() {
+#if defined(Q_OS_WIN)
+    return QByteArrayLiteral("\r");
+#else
+    return QByteArrayLiteral("\n");
+#endif
+}
+
+#if defined(Q_OS_WIN)
+bool usesPowerShell() {
+    const QString shell = QFileInfo(qEnvironmentVariable("SHELL")).completeBaseName().toLower();
+    return shell == QLatin1String("powershell") || shell == QLatin1String("pwsh");
+}
+
+// Defines the prefix that marker() prints. A marker is assembled from it at run time, so the
+// typed command line never contains the marker itself and echo cannot satisfy a check for it.
+QByteArray defineMarkerPrefix() {
+    return usesPowerShell() ? QByteArray("$kp='__KP_'") : QByteArray("set KP=__KP_");
+}
+
+QByteArray marker(const char* name) {
+    return (usesPowerShell() ? QByteArray("echo ${kp}") : QByteArray("echo %KP%")) + name + "__";
+}
+#endif
+
 } // namespace
 
 class PtyProcessTest final : public QObject {
@@ -106,7 +148,6 @@ class PtyProcessTest final : public QObject {
 };
 
 void PtyProcessTest::runsInteractiveShellInRequestedDirectory() {
-#if defined(Q_OS_UNIX)
     PtyProcess process;
     QByteArray output;
     connect(&process, &PtyProcess::outputReceived, this,
@@ -115,13 +156,24 @@ void PtyProcessTest::runsInteractiveShellInRequestedDirectory() {
 
     QVERIFY(process.start(QDir::tempPath(), 24, 80));
     QVERIFY(process.isRunning());
+#if defined(Q_OS_WIN)
+    process.send(defineMarkerPrefix() + enter());
+    process.send(marker("PTY") + enter());
+    process.send((usesPowerShell() ? QByteArray("(Get-Location).Path") : QByteArray("cd")) +
+                 enter());
+    process.send(QByteArray("exit") + enter());
+    QTRY_VERIFY_WITH_TIMEOUT(!exitSpy.isEmpty(), 15000);
+    QVERIFY2(output.contains("__KP_PTY__"), output.constData());
+    // The shell reports the directory it started in, with native separators.
+    QVERIFY2(
+        output.toLower().contains(QDir::toNativeSeparators(QDir::tempPath()).toLower().toUtf8()),
+        output.constData());
+#else
     process.send(QByteArray("printf '__KETPLUS_PTY__%s\\n' \"$PWD\"; exit\n"));
 
     QTRY_VERIFY_WITH_TIMEOUT(!exitSpy.isEmpty(), 10000);
     QVERIFY2(output.contains("__KETPLUS_PTY__"), output.constData());
     QVERIFY2(output.contains(QDir::tempPath().toUtf8()), output.constData());
-#else
-    QSKIP("The first PTY backend targets macOS and Linux.");
 #endif
 }
 
@@ -149,7 +201,8 @@ void PtyProcessTest::stoppedShellIsReaped() {
     // A zombie still answers kill(pid, 0); only a reaped child is gone.
     QTRY_VERIFY_WITH_TIMEOUT(::kill(child, 0) != 0 && errno == ESRCH, 5000);
 #else
-    QSKIP("The first PTY backend targets macOS and Linux.");
+    QSKIP("POSIX only: waits for kill(pid, 0) to report a reaped child; Windows ends the shell "
+          "tree through its Job Object (see PtyBackendTest).");
 #endif
 }
 
@@ -171,7 +224,8 @@ void PtyProcessTest::exitingRightAfterStopLeavesNoShell() {
         ::kill(child, SIGKILL);
     QVERIFY(!alive);
 #else
-    QSKIP("The first PTY backend targets macOS and Linux.");
+    QSKIP("POSIX only: probes SIGHUP handling and kill(pid, 0) after the host exits; Windows ends "
+          "the shell tree through its Job Object.");
 #endif
 }
 
@@ -202,12 +256,12 @@ void PtyProcessTest::masterIsNotInherited() {
     QVERIFY(::fcntl(opened.first(), F_GETFD) & FD_CLOEXEC);
     process.stop();
 #else
-    QSKIP("The first PTY backend targets macOS and Linux.");
+    QSKIP("POSIX only: inspects inherited PTY master file descriptors; ConPTY uses private pipe "
+          "handles.");
 #endif
 }
 
 void PtyProcessTest::typedTextWaitsForTheShellAndIsNotRun() {
-#if defined(Q_OS_UNIX)
     // Type in Terminal (#170): the command is typed before the shell starts and left at the
     // prompt for the user to run with Return.
     TerminalPanel panel;
@@ -219,21 +273,17 @@ void PtyProcessTest::typedTextWaitsForTheShellAndIsNotRun() {
     auto* view = panel.findChild<TerminalView*>();
     QVERIFY(view != nullptr);
     // On failure, show what the terminal held, so a runner's shell can be told apart.
-    QTRY_VERIFY2_WITH_TIMEOUT(view->visibleText().contains("echo __KETPLUS_TYPED__"),
-                              qPrintable(view->visibleText()), 5000);
+    QTRY_VERIFY2_WITH_TIMEOUT(unwrapped(view->visibleText()).contains("echo __KETPLUS_TYPED__"),
+                              qPrintable(view->visibleText()), shellStartMs);
     QTest::qWait(500);
-    QCOMPARE(view->visibleText().count(QStringLiteral("__KETPLUS_TYPED__")), 1);
+    QCOMPARE(unwrapped(view->visibleText()).count(QStringLiteral("__KETPLUS_TYPED__")), 1);
     // Another command goes to a new tab, never into the program running in the open one.
     panel.typeTextInNewTab(QStringLiteral("echo __KETPLUS_SECOND__"));
     QCOMPARE(panel.findChildren<TerminalView*>().size(), 2);
     QVERIFY(!view->visibleText().contains(QStringLiteral("__KETPLUS_SECOND__")));
-#else
-    QSKIP("The first PTY backend targets macOS and Linux.");
-#endif
 }
 
 void PtyProcessTest::rendersAnsiOutputThroughVterm() {
-#if defined(Q_OS_UNIX)
     TerminalSession session;
     TerminalView terminal(session);
     terminal.resize(640, 240);
@@ -241,13 +291,21 @@ void PtyProcessTest::rendersAnsiOutputThroughVterm() {
     QSignalSpy exitSpy(&session, &TerminalSession::exited);
 
     terminal.start(QDir::tempPath());
+#if defined(Q_OS_WIN)
+    // The shell, not the typed text, produces the escape sequences (typed ESC would be input).
+    session.sendBytes(
+        (usesPowerShell()
+             ? QByteArray("Write-Host \"$([char]27)[31m__KETPLUS_VTERM__$([char]27)[0m\"; exit")
+             : QByteArray("prompt $E[31m__KETPLUS_VTERM__$E[0m$G")) +
+        enter());
+    if (!usesPowerShell())
+        session.sendBytes(QByteArray("exit") + enter());
+#else
     session.sendBytes(QByteArray("printf '\\033[31m__KETPLUS_VTERM__\\033[0m\\n'; exit\n"));
+#endif
 
     QTRY_VERIFY_WITH_TIMEOUT(terminal.visibleText().contains("__KETPLUS_VTERM__"), 5000);
     QTRY_VERIFY_WITH_TIMEOUT(!exitSpy.isEmpty(), 10000);
-#else
-    QSKIP("The first PTY backend targets macOS and Linux.");
-#endif
 }
 
 void PtyProcessTest::drawsAnsiColoursFromKetTokens() {
@@ -384,7 +442,6 @@ void PtyProcessTest::keepsTerminalFontFamilyUnderTheme() {
 }
 
 void PtyProcessTest::echoesTypedTextBeforeEnter() {
-#if defined(Q_OS_UNIX)
     TerminalSession session;
     TerminalView terminal(session);
     terminal.resize(640, 240);
@@ -400,16 +457,13 @@ void PtyProcessTest::echoesTypedTextBeforeEnter() {
     QTest::keyClicks(&terminal, QStringLiteral("ketplus_live_echo"));
 
     // A slow runner's shell can still be starting after its first output; echo is what is checked.
-    QTRY_VERIFY2_WITH_TIMEOUT(terminal.visibleText().contains("ketplus_live_echo"),
-                              qPrintable(terminal.visibleText()), 5000);
+    QTRY_VERIFY2_WITH_TIMEOUT(unwrapped(terminal.visibleText()).contains("ketplus_live_echo"),
+                              qPrintable(terminal.visibleText()), shellStartMs);
     QTRY_VERIFY_WITH_TIMEOUT(paints.count > 0, 200);
     session.sendBytes(QByteArray(1, '\x03'));
     QTest::qWait(100);
-    session.sendBytes(QByteArray("exit\n"));
+    session.sendBytes(QByteArray("exit") + enter());
     QTRY_VERIFY_WITH_TIMEOUT(!exitSpy.isEmpty(), 10000);
-#else
-    QSKIP("The first PTY backend targets macOS and Linux.");
-#endif
 }
 
 void PtyProcessTest::restoresFocusAfterAnActionMenuCloses() {
@@ -432,7 +486,6 @@ void PtyProcessTest::restoresFocusAfterAnActionMenuCloses() {
 }
 
 void PtyProcessTest::tabStaysInTheTerminal() {
-#if defined(Q_OS_UNIX)
     QWidget window;
     auto* layout = new QVBoxLayout(&window);
     auto* panel = new TerminalPanel(&window);
@@ -470,9 +523,6 @@ void PtyProcessTest::tabStaysInTheTerminal() {
     session.stop();
     QTRY_VERIFY_WITH_TIMEOUT(!session.isRunning(), 10000);
     delete running; // It refers to `session`, which goes before `window`.
-#else
-    QSKIP("The first PTY backend targets macOS and Linux.");
-#endif
 }
 
 void PtyProcessTest::rendersInputMethodPreedit() {
@@ -511,7 +561,6 @@ void PtyProcessTest::coalescesStreamingPaints() {
 }
 
 void PtyProcessTest::controlCInterruptsForegroundCommand() {
-#if defined(Q_OS_UNIX)
     TerminalSession session;
     TerminalView terminal(session);
     terminal.resize(640, 240);
@@ -522,6 +571,20 @@ void PtyProcessTest::controlCInterruptsForegroundCommand() {
     QSignalSpy exitSpy(&session, &TerminalSession::exited);
 
     terminal.start(QDir::tempPath());
+#if defined(Q_OS_WIN)
+    // Markers are built at run time (see marker()), so only the shell's output contains them.
+    session.sendBytes(defineMarkerPrefix() + enter());
+    session.sendBytes(marker("READY") + enter());
+    QTRY_VERIFY_WITH_TIMEOUT(output.contains("__KP_READY__"), 15000);
+    output.clear();
+    session.sendBytes(marker("SLEEP_STARTED") +
+                      // Ctrl+C ends ping with a failure status, which `&&` turns into a skip.
+                      (usesPowerShell() ? QByteArray("; Start-Sleep 30; ")
+                                        : QByteArray("& ping -n 30 127.0.0.1 >nul && ")) +
+                      marker("SLEEP_COMPLETED") + enter());
+    QTRY_VERIFY_WITH_TIMEOUT(output.contains("__KP_SLEEP_STARTED__"), 10000);
+    output.clear();
+#else
     session.sendBytes(QByteArray("stty -echo; printf '__KETPLUS_READY__\\n'\n"));
     QTRY_VERIFY_WITH_TIMEOUT(output.count("__KETPLUS_READY__") >= 2, 5000);
     output.clear();
@@ -529,19 +592,29 @@ void PtyProcessTest::controlCInterruptsForegroundCommand() {
         QByteArray("printf '__SLEEP_STARTED__\\n'; sleep 30 && printf '__SLEEP_COMPLETED__\\n'\n"));
     QTRY_VERIFY_WITH_TIMEOUT(output.contains("__SLEEP_STARTED__"), 5000);
     output.clear();
+#endif
+#if defined(Q_OS_WIN)
+    QTest::qWait(1500); // Let the command take over the console before interrupting it.
+#endif
 #if defined(Q_OS_MACOS)
     QTest::keyClick(&terminal, Qt::Key_C, Qt::MetaModifier);
 #else
     QTest::keyClick(&terminal, Qt::Key_C, Qt::ControlModifier);
 #endif
+#if defined(Q_OS_WIN)
+    QTest::qWait(1000); // PowerShell drops input typed while it is still redrawing its prompt.
+    session.sendBytes(marker("AFTER_INTERRUPT") + enter());
+    QTRY_VERIFY2_WITH_TIMEOUT(output.contains("__KP_AFTER_INTERRUPT__"), output.constData(), 15000);
+    session.sendBytes(QByteArray("exit") + enter());
+    QTRY_VERIFY_WITH_TIMEOUT(!exitSpy.isEmpty(), 15000);
+    QVERIFY2(!output.contains("__KP_SLEEP_COMPLETED__"), output.constData());
+#else
     session.sendBytes(QByteArray("printf '__AFTER_INTERRUPT__\\n'\n"));
     QTRY_VERIFY_WITH_TIMEOUT(output.contains("__AFTER_INTERRUPT__"), 7000);
     session.sendBytes(QByteArray("exit\n"));
 
     QTRY_VERIFY_WITH_TIMEOUT(!exitSpy.isEmpty(), 7000);
     QVERIFY2(!output.contains("__SLEEP_COMPLETED__"), output.constData());
-#else
-    QSKIP("The first PTY backend targets macOS and Linux.");
 #endif
 }
 
@@ -640,9 +713,6 @@ void PtyProcessTest::emitsMouseProtocolFromCore() {
 }
 
 void PtyProcessTest::embeddedTabsKeepIndependentSessions() {
-#if !defined(Q_OS_UNIX)
-    QSKIP("The first PTY backend targets macOS and Linux.");
-#endif
     TerminalPanel panel;
     panel.resize(800, 400);
     panel.show();
@@ -752,6 +822,11 @@ int main(int argc, char** argv) {
     qputenv("BASH_SILENCE_DEPRECATION_WARNING", "1");
     for (const char* variable : {"ZDOTDIR", "BASH_ENV", "ENV"})
         qunsetenv(variable);
+#endif
+#if defined(Q_OS_WIN)
+    // cmd.exe unless KETPLUS_TEST_SHELL names another shell, e.g. powershell.exe.
+    qputenv("SHELL", qEnvironmentVariableIsSet("KETPLUS_TEST_SHELL") ? qgetenv("KETPLUS_TEST_SHELL")
+                                                                     : qgetenv("COMSPEC"));
 #endif
     QApplication application(argc, argv);
     // As QTEST_MAIN sets it, so font metrics match the other GUI tests.

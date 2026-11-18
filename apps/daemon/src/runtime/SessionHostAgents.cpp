@@ -2,6 +2,7 @@
 
 #include "agents/AgentInstructions.h"
 #include "protocol/DaemonProtocol.h"
+#include "providers/ProviderAdapter.h"
 #include "providers/compat/ProviderCapabilities.h"
 
 #include <QJsonArray>
@@ -60,11 +61,37 @@ void SessionHost::handleAgentCommandDeferred(const QString& token, const QString
                   {"error_message", "The agent owner generation expired."}});
             return;
         }
+        auto arguments = payload;
+        const auto credential = arguments.take(QLatin1String(mutationOriginField)).toString();
+        std::optional<AgentMutationGrant> origin;
+        if (type == "session.task.start" || type == "session.task.stop") {
+            const auto current = sessions_.constFind(caller->sessionId);
+            const auto snapshot = current == sessions_.cend()
+                                      ? std::nullopt
+                                      : current->mutationOrigin.authorize(
+                                            credential, caller->sessionId, caller->generation);
+            if (!snapshot) {
+                if (const auto* target = provider(caller->provider);
+                    target && !target->supportsManagedMutations()) {
+                    done({{"ok", false},
+                          {"error_code", "mutation_refresh_unavailable"},
+                          {"error_message", QString("Managed mutations are unavailable for %1: "
+                                                    "history and MCP refresh are not validated.")
+                                                .arg(target->name())}});
+                    return;
+                }
+                done({{"ok", false},
+                      {"error_code", "stale_origin"},
+                      {"error_message", "The invocation has no active mutation origin."}});
+                return;
+            }
+            origin = AgentMutationGrant{*snapshot, credential};
+        }
         managedTaskCommand({{"message_type", type},
                             {"session_id", caller->sessionId},
                             {"session_generation", caller->generation},
-                            {"payload", payload}},
-                           "authenticated-agent", std::move(done), true);
+                            {"payload", arguments}},
+                           "authenticated-agent", std::move(done), true, std::move(origin));
         return;
     }
     auto run = [this, token, type, payload, done = std::move(done)] {
@@ -219,8 +246,13 @@ std::optional<agent_tools::Launch> SessionHost::agentLaunch(const QString& sessi
                                                             const qint64 generation) {
     if (agentSocket_.isEmpty() || agentExecutable_.isEmpty())
         return std::nullopt;
+    const auto current = sessions_.constFind(sessionId);
+    if (current == sessions_.cend() || current->stored.generation != generation)
+        return std::nullopt;
+    const auto bootstrap = current->mutationOrigin.bootstrap();
     return agent_tools::Launch{agentExecutable_, agentSocket_,
-                               agents_->tokenFor(sessionId, generation)};
+                               agents_->tokenFor(sessionId, generation), bootstrap.credential,
+                               bootstrap.transportEpoch};
 }
 
 QString SessionHost::agentInstructions(const Session& session) const {

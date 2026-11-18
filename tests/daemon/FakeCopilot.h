@@ -37,8 +37,12 @@ def update(text):
 
 for line in sys.stdin:
     msg = json.loads(line)
+    logged = json.loads(json.dumps(msg))
+    for server in logged.get('params', {}).get('mcpServers', []):
+        for entry in server.get('env', []):
+            entry['value'] = '[redacted]'
     with open(log_path, 'a') as output:
-        output.write(json.dumps(msg) + '\n')
+        output.write(json.dumps(logged) + '\n')
     method = msg.get('method')
     id = msg.get('id')
     if method == 'initialize':

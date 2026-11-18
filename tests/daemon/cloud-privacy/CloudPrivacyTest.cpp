@@ -2258,6 +2258,49 @@ class CloudPrivacyTest final : public QObject {
         QCOMPARE(reported(QStringLiteral("recovering")), QStringLiteral("unreachable"));
     }
 
+    void sidebarPlacementIsSealedAndIndependentOfExecution() {
+        StoredSession session;
+        session.id = QStringLiteral("placement-fixture");
+        session.worktreePath = QStringLiteral("/synthetic/execution");
+        session.adapter = QStringLiteral("codex");
+        session.state = QStringLiteral("ready");
+        QVERIFY(!Access::metadata(session).contains(QStringLiteral("sidebarPlacementKnown")));
+        session.sidebarRepository = QStringLiteral("/synthetic/repository");
+        const auto original = Access::metadata(session);
+        QVERIFY(original.value(QStringLiteral("sidebarPlacementKnown")).toBool());
+        QVERIFY(!original.value(QStringLiteral("sidebarRepositoryId")).toString().isEmpty());
+        QCOMPARE(original.value(QStringLiteral("sidebarRepositoryLabel")).toString(),
+                 QStringLiteral("repository"));
+        QVERIFY(!QJsonDocument(original).toJson().contains("/synthetic/repository"));
+        session.worktreePath = QStringLiteral("/synthetic/other-execution");
+        const auto moved = Access::metadata(session);
+        QCOMPARE(moved.value(QStringLiteral("sidebarRepositoryId")),
+                 original.value(QStringLiteral("sidebarRepositoryId")));
+        QVERIFY(moved.value(QStringLiteral("repositoryId")) !=
+                original.value(QStringLiteral("repositoryId")));
+        const auto plain = Access::snapshots({session}).first().toObject();
+        QVERIFY(!plain.contains(QStringLiteral("sidebarPlacementKnown")));
+        QVERIFY(!plain.contains(QStringLiteral("sidebarRepositoryId")));
+        QVERIFY(!QJsonDocument(plain).toJson().contains("/synthetic/repository"));
+        session.sidebarRepository = QString{};
+        const auto noRepository = Access::metadata(session);
+        QVERIFY(noRepository.value(QStringLiteral("sidebarPlacementKnown")).toBool());
+        QVERIFY(noRepository.value(QStringLiteral("sidebarRepositoryId")).toString().isEmpty());
+        QVERIFY(noRepository.value(QStringLiteral("sidebarRepositoryLabel")).toString().isEmpty());
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        session.worktreePath = directory.path();
+        const auto plainDirectory = Access::metadata(session);
+        QVERIFY(plainDirectory.value(QStringLiteral("sidebarExecutionRepositoryVisible")).isBool());
+        QVERIFY(!plainDirectory.value(QStringLiteral("sidebarExecutionRepositoryVisible"))
+                     .toBool(true));
+        QVERIFY(!Access::snapshots({session}).first().toObject().contains(
+            QStringLiteral("sidebarExecutionRepositoryVisible")));
+        QVERIFY(QDir().mkpath(directory.filePath(".git")));
+        const auto gitDirectory = Access::metadata(session);
+        QVERIFY(gitDirectory.value(QStringLiteral("sidebarExecutionRepositoryVisible")).toBool());
+    }
+
     // #125 and #429: the phone reads "Waiting for you" and the tags only from sealed metadata;
     // the plaintext snapshot the relay sees carries neither.
     void sealedMetadataCarriesWaitingAndTags() {

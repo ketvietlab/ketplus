@@ -495,8 +495,8 @@ void TeamPage::showMenu(QWidget* anchor, const QJsonObject& team) {
     auto* reviewer = menu.addAction(ket::Icons::icon(u"plus"), tr("Add a second reviewer…"));
     reviewer->setObjectName(QStringLiteral("teamPageAddReviewer"));
     reviewer->setEnabled(TeamDirectory::count(team, QStringLiteral("reviewer")) < 2);
-    // T-56: the team's language, as the leader works in it.
-    QMenu* languages = menu.addMenu(tr("Language"));
+    // Content preference only; the interface always stays English.
+    QMenu* languages = menu.addMenu(tr("Content language"));
     languages->setObjectName(QStringLiteral("teamPageLanguage"));
     const QString language =
         team_language::orEnglish(team.value(QStringLiteral("language")).toString());

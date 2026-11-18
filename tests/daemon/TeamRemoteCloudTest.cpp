@@ -242,8 +242,27 @@ class TeamRemoteCloudTest final : public QObject {
         Relay relay;
         QVERIFY(relay.open());
         QVERIFY(relay.createTeam());
-        const QJsonObject payload{
-            {"team_id", relay.team}, {"paused", true}, {"expected_revision", relay.revision()}};
+        const auto read = [&] {
+            return relay.fixture.host
+                ->handleCommand(request("team.get", {{"team_id", relay.team}}), "desktop-test")
+                .value("team")
+                .toObject();
+        };
+        const QJsonObject before = read();
+        QCOMPARE(before.value("language").toString(), QString("auto"));
+        // The asynchronous pairing check may also finish a fake leader bootstrap.
+        // Fence the settings mutation domain, rather than unrelated team lifecycle events.
+        QVERIFY(before.value("settings_revision").toInteger() > 0);
+        const auto unchanged = [&] {
+            const auto after = read();
+            for (const QString& key : {QString("language"), QString("paused"), QString("goal"),
+                                       QString("settings_revision")})
+                QCOMPARE(after.value(key), before.value(key));
+        };
+        const QJsonObject payload{{"team_id", relay.team},
+                                  {"paused", true},
+                                  {"language", "vi"},
+                                  {"expected_revision", relay.revision()}};
         const auto code = [&](const QString& id, const std::function<void(QJsonObject&)>& change) {
             QJsonObject command = relay.command(id, "team.update", "teams.write");
             change(command);
@@ -262,12 +281,7 @@ class TeamRemoteCloudTest final : public QObject {
                  QStringLiteral("team_scope_forbidden"));
         QCOMPARE(code("scope-4", [](QJsonObject& c) { c.insert("sessionId", "conversation"); }),
                  QStringLiteral("team_scope_forbidden"));
-        QVERIFY(!relay.fixture.host
-                     ->handleCommand(request("team.get", {{"team_id", relay.team}}), "desktop-test")
-                     .value("team")
-                     .toObject()
-                     .value("paused")
-                     .toBool());
+        unchanged();
 
         // A device this Mac never paired, or unpaired since, gets nothing done.
         QVERIFY(Access::pins(*relay.client).reset());
@@ -283,12 +297,7 @@ class TeamRemoteCloudTest final : public QObject {
                    audit->first().resultCode == QStringLiteral("sender_key_unavailable");
         }());
         QVERIFY(relay.acknowledgement("unpaired-1").value("encryptedResult").toObject().isEmpty());
-        QVERIFY(!relay.fixture.host
-                     ->handleCommand(request("team.get", {{"team_id", relay.team}}), "desktop-test")
-                     .value("team")
-                     .toObject()
-                     .value("paused")
-                     .toBool());
+        unchanged();
     }
 
     // §4: a new team names its repository by the catalog's id, at the catalog revision the

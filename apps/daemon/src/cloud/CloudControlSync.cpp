@@ -90,8 +90,27 @@ void CloudControlClient::heartbeat() {
         // on no team has no `team` field.
         const QHash<QString, QJsonObject> teams =
             host_ ? host_->teamMetadata() : QHash<QString, QJsonObject>{};
-        for (auto it = teams.cbegin(); it != teams.cend(); ++it)
-            agentMetadata[it.key()].insert(QStringLiteral("team"), it.value());
+        QHash<QString, QString> teamPlacements;
+        for (const auto& document : journal_->teamDocuments())
+            teamPlacements.insert(
+                document.value(QStringLiteral("id")).toString(),
+                document.value(QStringLiteral("sidebar_repository"))
+                    .toString(document.value(QStringLiteral("repository")).toString()));
+        for (auto it = teams.cbegin(); it != teams.cend(); ++it) {
+            auto team = it.value();
+            const auto placement =
+                teamPlacements.constFind(team.value(QStringLiteral("id")).toString());
+            if (placement != teamPlacements.cend()) {
+                team.insert(QStringLiteral("sidebarPlacementKnown"), true);
+                team.insert(QStringLiteral("sidebarRepositoryId"),
+                            placement->isEmpty()
+                                ? QString{}
+                                : cloud_control::opaquePathId("repository", *placement, salt));
+                team.insert(QStringLiteral("sidebarRepositoryLabel"),
+                            QFileInfo(*placement).fileName());
+            }
+            agentMetadata[it.key()].insert(QStringLiteral("team"), team);
+        }
         const auto requestAccount = accountFence();
         const QString workspaceId = workspaceId_;
         const QString machineId = machineId_;
@@ -121,9 +140,13 @@ void CloudControlClient::heartbeat() {
                         return;
                     }
                     guard->refusalsThisHeartbeat_.clear();
+                    const auto sealed = guard->withSessionMetadata(batches, metadata);
+                    if (sealed.isEmpty() && !batches.isEmpty()) {
+                        guard->heartbeatInFlight_ = false;
+                        return;
+                    }
                     guard->notePublishedRevisions(batches);
-                    guard->sendHeartbeatBatches(guard->withSessionMetadata(batches, metadata), 0,
-                                                requestAccount);
+                    guard->sendHeartbeatBatches(sealed, 0, requestAccount);
                 },
                 Qt::QueuedConnection);
         });
@@ -457,43 +480,14 @@ void CloudControlClient::distributeKeys() {
                 return;
             }
             // Only devices pinned on this Mac receive session keys (#87).
-            const QJsonArray devices = trustedDevices(value.toArray(), fence);
-            signaling_->refreshDevices(devices);
-            QJsonArray envelopes;
+            QJsonArray devices = trustedDevices(value.toArray(), fence);
             QString cryptoError;
-            for (const QJsonValue& deviceValue : devices) {
-                const QJsonObject device = deviceValue.toObject();
-                for (const StoredSession& session : journal_->sessions()) {
-                    if (refusedSessions_.contains(session.id))
-                        continue;
-                    const QString account =
-                        QStringLiteral("wrapped-%1-%2-%3-%4")
-                            .arg(session.id)
-                            .arg(session.generation)
-                            .arg(device.value(QStringLiteral("id")).toString())
-                            .arg(device.value(QStringLiteral("keyVersion")).toInt());
-                    QJsonObject envelope =
-                        QJsonDocument::fromJson(credentials_.read(account)).object();
-                    // A cached malformed wrap is discarded and re-created, never re-sent.
-                    if (!CloudCrypto::validWrappedSessionKey(envelope)) {
-                        envelope =
-                            crypto_.wrapSessionKey(session.id, session.generation, 1, device,
-                                                   machineId_, machineKeyVersion_, &cryptoError);
-                        if (envelope.isEmpty() ||
-                            !credentials_.write(
-                                account, QJsonDocument(envelope).toJson(QJsonDocument::Compact),
-                                &cryptoError)) {
-                            lastError_ = cryptoError;
-                            return;
-                        }
-                    }
-                    envelopes.append(envelope);
-                    if (envelopes.size() == 500)
-                        break;
-                }
-                if (envelopes.size() == 500)
-                    break;
+            const auto envelopes = sessionKeyEnvelopes(devices, true, 500, &devices, &cryptoError);
+            if (!cryptoError.isEmpty()) {
+                lastError_ = cryptoError;
+                return;
             }
+            signaling_->refreshDevices(devices);
             if (envelopes.isEmpty())
                 return;
             request("POST", QStringLiteral("/v2/session-keys:append"),

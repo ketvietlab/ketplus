@@ -1,3 +1,4 @@
+#include "DaemonMachineBackend.h"
 #include "FakeMachineBackend.h"
 #include "MachineHosts.h"
 #include "machine/MachineCatalog.h"
@@ -7,14 +8,18 @@
 #include "machine/MachineWorkspaceView.h"
 
 #include <QComboBox>
+#include <QDir>
 #include <QFrame>
 #include <QJsonArray>
 #include <QLabel>
 #include <QListWidget>
 #include <QPlainTextEdit>
 #include <QPushButton>
+#include <QSettings>
 #include <QSignalSpy>
 #include <QStandardItemModel>
+#include <QStandardPaths>
+#include <QTemporaryDir>
 #include <QtTest>
 
 using namespace ketplus;
@@ -22,8 +27,146 @@ using namespace ketplus::test;
 
 class MachineCompositionTest final : public QObject {
     Q_OBJECT
+    QTemporaryDir settings_;
 
   private slots:
+    void initTestCase() {
+        QVERIFY(settings_.isValid());
+        QStandardPaths::setTestModeEnabled(true);
+        QSettings::setDefaultFormat(QSettings::IniFormat);
+        QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settings_.path());
+    }
+    void workspaceDisplayMarkerKeepsTheExecutionCatalog() {
+        const QJsonArray workspaces{
+            QJsonObject{{"path", "/no-git/repository"},
+                        {"available", true},
+                        {"sidebar_repository_visible", false}},
+            QJsonObject{{"path", "/actual/repository"},
+                        {"available", true},
+                        {"sidebar_repository_visible", true}},
+            QJsonObject{{"path", "/legacy/checkout"}, {"available", false}}};
+        const auto grouped =
+            remote::DaemonMachineBackend::groupWorkspacesByRepository({{"workspaces", workspaces}});
+        const auto rows = remote::repositoriesFromListing(grouped);
+        QCOMPARE(rows.size(), 3);
+        QCOMPARE(rows.at(0).label, QStringLiteral("repository"));
+        QVERIFY(!rows.at(0).sidebarVisible);
+        QCOMPARE(rows.at(0).worktrees.size(), 1);
+        QCOMPARE(rows.at(0).worktrees.first().id, QStringLiteral("/no-git/repository"));
+        QCOMPARE(rows.at(1).label, QStringLiteral("repository"));
+        QVERIFY(rows.at(1).sidebarVisible);
+        QVERIFY(rows.at(2).sidebarVisible); // unknown is compatible, not confirmed no-Git
+    }
+    void sidebarPlacementSurvivesExecutionChangesAndReconnect_data() {
+        QTest::addColumn<bool>("relay");
+        QTest::addColumn<bool>("noRepository");
+        QTest::newRow("local-host-repository") << false << false;
+        QTest::newRow("local-host-no-repository") << false << true;
+        QTest::newRow("paired-repository") << true << false;
+        QTest::newRow("paired-no-repository") << true << true;
+    }
+    void sidebarPlacementSurvivesExecutionChangesAndReconnect() {
+        QFETCH(bool, relay);
+        QFETCH(bool, noRepository);
+        FakeMachineBackend backend("synthetic-machine", relay ? Route::Relay : Route::Ssh);
+        const auto origin = noRepository ? QString{} : QStringLiteral("/synthetic/repository");
+        QJsonObject conversation{
+            {"session_id", "stable-conversation"},         {"session_generation", 1},
+            {"title", "Filter this conversation"},         {"state", "ready"},
+            {"worktree_path", "/synthetic/execution-one"}, {"repository_id", "execution-one"}};
+        if (relay) {
+            conversation.insert("sidebarPlacementKnown", true);
+            conversation.insert("sidebarRepositoryId", origin);
+            conversation.insert("sidebarRepositoryLabel", "repository");
+        } else {
+            conversation.insert("sidebar_repository_path", origin);
+        }
+        backend.answer = [&](const FakeMachineBackend::Call& call, QJsonObject* result, QString*) {
+            if (call.operation == "listRepositories")
+                *result = {
+                    {"repositories",
+                     QJsonArray{QJsonObject{
+                         {"id", "execution-catalog"},
+                         {"label", "repository"},
+                         {"sidebarVisible", false},
+                         {"worktrees", QJsonArray{QJsonObject{{"id", "/synthetic/execution-one"},
+                                                              {"label", "execution-one"}}}}}}}};
+            else if (call.operation == "listConversations")
+                *result = {{"sessions", QJsonArray{conversation}}};
+        };
+        MachineCatalog catalog;
+        catalog.setBackend(&backend);
+        QTRY_COMPARE(catalog.conversations().size(), 1);
+        QCOMPARE(catalog.repositories().size(), 1); // kept for execution/worktree selection
+        QVERIFY(!catalog.repositories().first().sidebarVisible);
+        SidebarRepositoryList sidebar;
+        sidebar.resize(280, 600);
+        sidebar.show();
+        sidebar.setFilterText("Filter this");
+        QSignalSpy activated(&sidebar, &SidebarRepositoryList::conversationRequested);
+        const auto check = [&] {
+            const auto rows = machineSidebarRepositories(catalog, "stable-conversation");
+            QCOMPARE(rows.size(), 1);
+            QCOMPARE(rows.first().path, origin);
+            QCOMPARE(rows.first().name, noRepository ? QObject::tr("Other conversations")
+                                                     : QStringLiteral("repository"));
+            QVERIFY(rows.first().active);
+            QCOMPARE(rows.first().conversations.size(), 1);
+            QCOMPARE(rows.first().conversations.first().toMap().value("path").toString(),
+                     conversation.value("worktree_path").toString());
+            sidebar.setRepositories(rows);
+            QCOMPARE(sidebar.filterText(), QStringLiteral("Filter this"));
+            auto* button = sidebar.findChild<QAbstractButton*>("productConversationButton");
+            QVERIFY(button);
+            QCOMPARE(button->property("repositoryPath").toString(), origin);
+            const auto previousActivations = activated.size();
+            button->click();
+            QCOMPARE(activated.size(), previousActivations + 1);
+            QCOMPARE(activated.last().at(0).toString(),
+                     conversation.value("worktree_path").toString());
+            QCOMPARE(activated.last().at(1).toString(), QStringLiteral("stable-conversation"));
+            QCOMPARE(sidebar.filterText(), QStringLiteral("Filter this"));
+        };
+        check();
+        conversation.insert("worktree_path", "/synthetic/execution-two");
+        conversation.insert("repository_id", "execution-two");
+        catalog.refresh();
+        QTRY_COMPARE(catalog.conversations().first().worktreeId,
+                     QStringLiteral("/synthetic/execution-two"));
+        check();
+        catalog.setBackend(nullptr);
+        catalog.setBackend(&backend);
+        QTRY_COMPARE(catalog.conversations().size(), 1);
+        check();
+        sidebar.setFilterText({});
+        QCOMPARE(sidebar.findChildren<QAbstractButton*>("productConversationButton").size(), 1);
+        QVERIFY(sidebar.layoutProblems().isEmpty());
+        const auto captures = qEnvironmentVariable("KETPLUS_ORIGIN_CAPTURE_DIR");
+        if (!captures.isEmpty()) {
+            QVERIFY(QDir().mkpath(captures));
+            const auto name =
+                QStringLiteral("selected-%1-%2.png")
+                    .arg(relay ? "paired" : "ssh", noRepository ? "no-repository" : "repository");
+            QVERIFY(sidebar.grab().save(QDir(captures).filePath(name)));
+        }
+        // Membership changes placement for display, while execution remains in execution-two.
+        if (relay)
+            conversation.insert("team", QJsonObject{{"id", "team-one"},
+                                                    {"role", "developer"},
+                                                    {"sidebarPlacementKnown", true},
+                                                    {"sidebarRepositoryId", "team-origin"},
+                                                    {"sidebarRepositoryLabel", "Team repository"}});
+        else
+            conversation.insert("sidebar_team_repository_path", "team-origin");
+        catalog.refresh();
+        QTRY_COMPARE(catalog.conversations().first().sidebarRepositoryId,
+                     QStringLiteral("team-origin"));
+        const auto rows = machineSidebarRepositories(catalog, "stable-conversation");
+        QCOMPARE(rows.size(), 1);
+        QCOMPARE(rows.first().path, QStringLiteral("team-origin"));
+        QCOMPARE(rows.first().conversations.first().toMap().value("path").toString(),
+                 QStringLiteral("/synthetic/execution-two"));
+    }
     void selectionKeepsThePickedMachineWithoutABackend() {
         FakeMachineBackend local("local", Route::Local);
         auto linux = std::make_unique<FakeMachineBackend>("fp-linux", Route::Ssh);

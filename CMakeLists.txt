@@ -37,6 +37,9 @@ project(
     DESCRIPTION "The full KetPlus desktop product"
     LANGUAGES C CXX
 )
+
+# MSVC options (/utf-8 and friends) for every target of the Pro tree, core/ included.
+include(core/cmake/MsvcOptions.cmake)
 if(APPLE)
     enable_language(OBJCXX)
 endif()
@@ -121,10 +124,13 @@ target_include_directories(ketplus_product_version INTERFACE
     "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/generated>"
 )
 
+add_subdirectory(modules/tools)
 add_subdirectory(modules/browser)
 add_subdirectory(modules/computer)
 add_subdirectory(modules/remote)
+add_subdirectory(modules/runner)
 add_subdirectory(apps/daemon)
+add_subdirectory(apps/runner)
 
 if(KETPLUS_BUILD_DESKTOP)
     set(KETQT_BUILD_QUICK ON CACHE BOOL "Build Két QML components for Pro" FORCE)
@@ -186,6 +192,7 @@ if(KETPLUS_BUILD_TESTS)
     else()
         add_subdirectory(tests/daemon)
     endif()
+    add_subdirectory(tests/runner)
 endif()
 
 if(NOT APPLE OR NOT KETPLUS_BUILD_DESKTOP)

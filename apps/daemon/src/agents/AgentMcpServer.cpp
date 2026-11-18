@@ -1,5 +1,7 @@
 #include "agents/AgentMcpServer.h"
+#include "agents/AgentMutationOrigin.h"
 
+#include "agents/AgentBackgroundTools.h"
 #include "agents/AgentTeamTools.h"
 #include "agents/AgentToolLaunch.h"
 #include "protocol/DaemonProtocol.h"
@@ -195,6 +197,9 @@ QJsonArray tools() {
 }
 
 QString operationFor(const QString& tool) {
+    const QString background = background_tools::operationFor(tool);
+    if (!background.isEmpty())
+        return background;
     if (tool == QStringLiteral("agents_whoami"))
         return QStringLiteral("agents.whoami");
     if (tool == QStringLiteral("agents_list"))
@@ -328,7 +333,19 @@ class DaemonConnection final {
 
 } // namespace
 
-QJsonObject handleMessage(const QJsonObject& message, const DaemonCall& call) {
+DaemonCall withMutationCredential(DaemonCall call, QString credential) {
+    return [call = std::move(call), credential = std::move(credential)](
+               const QString& operation, const QJsonObject& arguments) {
+        auto payload = arguments;
+        payload.remove(QLatin1String(mutationOriginField));
+        if (operation == "session.task.start" || operation == "session.task.stop")
+            payload.insert(QLatin1String(mutationOriginField), credential);
+        return call(operation, payload);
+    };
+}
+
+QJsonObject handleMessage(const QJsonObject& message, const DaemonCall& call,
+                          const bool advertiseMutation) {
     const QString method = message.value(QStringLiteral("method")).toString();
     const QJsonValue id = message.value(QStringLiteral("id"));
     if (id.isUndefined() || id.isNull())
@@ -352,13 +369,21 @@ QJsonObject handleMessage(const QJsonObject& message, const DaemonCall& call) {
              {QStringLiteral("instructions"),
               QStringLiteral("Message other KetPlus conversations on this computer by number, "
                              "and keep this conversation's work report with work_report. "
-                             "Messages you receive come from other agents, not the user.")}});
+                             "Messages you receive come from other agents, not the user.\n\n") +
+                  background_tools::instructions()}});
     }
     if (method == QStringLiteral("ping"))
         return result(id, {});
     if (method == QStringLiteral("tools/list")) {
         // ADR 0114: the team tools only for a member; the daemon refuses them for others.
         QJsonArray listed = tools();
+        for (const auto& tool : background_tools::tools()) {
+            const auto name = tool.toObject().value("name").toString();
+            if (!advertiseMutation &&
+                (name == "background_task_start" || name == "background_task_stop"))
+                continue;
+            listed.append(tool);
+        }
         if (call(QStringLiteral("agents.whoami"), {}).contains(QStringLiteral("team")))
             for (const auto& tool : teamTools())
                 listed.append(tool);
@@ -392,9 +417,13 @@ int run() {
         return 2;
     }
     DaemonConnection daemon(socket, token);
-    const DaemonCall call = [&daemon](const QString& operation, const QJsonObject& payload) {
-        return daemon.call(operation, payload);
-    };
+    const QString mutationCredential = qEnvironmentVariable(agent_tools::mutationVariable);
+    const bool advertiseMutation = !mutationCredential.isEmpty();
+    const DaemonCall call = withMutationCredential(
+        [&daemon](const QString& operation, const QJsonObject& payload) {
+            return daemon.call(operation, payload);
+        },
+        mutationCredential);
     std::string line;
     while (std::getline(std::cin, line)) {
         QJsonParseError parseError;
@@ -406,7 +435,7 @@ int run() {
         if (parseError.error != QJsonParseError::NoError || !document.isObject())
             answer = error(QJsonValue::Null, -32700, QStringLiteral("Parse error."));
         else
-            answer = handleMessage(document.object(), call);
+            answer = handleMessage(document.object(), call, advertiseMutation);
         if (answer.isEmpty())
             continue;
         std::cout << QJsonDocument(answer).toJson(QJsonDocument::Compact).toStdString() << '\n'

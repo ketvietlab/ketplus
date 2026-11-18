@@ -29,7 +29,7 @@ Qt application shell
         -> libvterm screen and keyboard model
         -> PTY process backend
             -> forkpty (macOS/Linux)
-            -> ConPTY (future Windows backend)
+            -> ConPTY (Windows 10 1809+)
     -> reusable settings shell from KetPlus CM
         -> shared appearance snapshot and built-in theme preview
         -> private pages remain consumer-owned through SettingsPage
@@ -91,8 +91,9 @@ Qt application shell
   processes, including bounded output and a
   timeout; this does not expand the public Git service's mutation surface.
 - `core/src/terminal` owns the embedded terminal surface, VT state, scrollback, and
-  process transport. `PtyProcess` isolates platform process creation from the
-  renderer so a ConPTY backend can be added without changing terminal UI code.
+  process transport. `PtyProcess` keeps one public API and delegates to a
+  `PtyBackend`: `PtyBackendPosix.cpp` (forkpty) or `PtyBackendWindows.cpp` (ConPTY, chosen by
+  CMake per platform). The Windows shell is `SHELL` if set, else pwsh, powershell, then cmd.
 - `core/src/app/SettingsDialog` owns the reusable settings shell and
   public appearance persistence. `core/src/app/SettingsWorkspace` recomposes its
   live theme and typography controls as the non-modal, full-page Két settings
@@ -244,6 +245,35 @@ exemptions default to denied: only a concrete adapter can interpret its own
 trusted tool identity. Provider-specific client capability metadata and session
 mode identifiers are opt-in hooks.
 
+Managed background tools use the daemon registry (ADR 0127). The injected agent
+MCP read credential does not authorize start/stop: those operations require a
+separate, immutable per-turn capability bound to owner, generation, effective
+policy and transport epoch. Reviews receive no mutation grant. Accepted jobs
+retain their policy snapshot after the originating turn ends. The host revokes
+old authority before setup and grants new authority only for the exact refreshed
+epoch acknowledged by the adapter.
+
+Claude waits for the owned SDK subprocess's actual exit before recreating its
+query with the prior resume ID. Codex and ACP isolate managed conversations into
+dedicated provider processes so one conversation's refresh never restarts another.
+They confirm exit before loading the same history ID in the replacement process;
+load failure cannot fall back to new history. Deleting an idle conversation also
+releases only its owned transports, including prior provider handoffs, before
+removing the local record. The offline adapter fixtures and installed-provider
+history validation gaps are recorded in the
+[refresh evidence](decisions/0127-provider-origin-refresh-evidence.md).
+Cursor's installed `2026.11.11-043ef28` production-adapter probes verify completed
+synthetic history, same-ID replacement, old-context exit and inventory attributed
+to a fresh injected worker after load. Its implementation enables managed
+mutations using the same dedicated-process barrier and exact epoch ACK. Reviews,
+pending/missing ACKs and stale credentials still receive no mutation authority;
+registry reads retain their separate grants. Unverified adapters remain gated.
+Fixture or load-ACK success alone is not the native inventory evidence.
+Copilot's installed 1.0.112 production-adapter probe verifies completed synthetic
+history, same-ID replacement, MCP rotation and process exit with one authorized
+Auto turn. Its implementation enables managed mutations; each actual turn still
+requires successful history restoration and the exact new transport epoch ACK.
+
 A Cursor adapter can run beside Codex and Claude when the user-installed
 Cursor CLI is available. Discovery uses `PATH`, `KETPLUS_CURSOR_AGENT`,
 Unix `~/.local/bin/agent`, and on native Windows
@@ -375,7 +405,12 @@ an active turn. Claude supports selection between turns, with startup, shutdown,
 pending input and live background tasks fenced by the daemon. Its next SDK query
 resumes the same thread in the selected cwd, after copying the newest persisted
 project transcript there; returning to a former cwd must not restore stale history.
-The sidecar independently rejects a cwd change while its background tasks run.
+The sidecar independently rejects a cwd change while legacy native background
+tasks drain. New managed jobs use the daemon registry of ADR 0127 with immutable
+job cwd; the shared `ketplus_agents` MCP tools bind every provider to that API.
+Claude native background/subagent entry points are disabled through the pinned
+SDK settings, tool exclusions and deny hooks. Completion is delivered by the
+daemon's durable owner-wake boundary, not by keeping a Claude query alive.
 The existing `switch_supported` and `switch_available` fields drive both clients;
 no mobile binary or relay contract change is required. Cursor remains unsupported.
 
@@ -443,6 +478,13 @@ Explorer and Source Control render Két row recipes through Qt item delegates, r
 
 ### Pro sidebar presentation
 
+Sidebar placement is separate from mutable execution scope. Conversations retain the
+repository captured by their generation's first navigation record; teams retain their
+creation placement and keep member rows together when tasks use other repositories.
+Known no-repository is distinct from legacy unknown placement. Local and paired display
+metadata preserve this distinction without changing execution routing or authorization
+([decision](decisions/2026-11-17-sidebar-origin-placement.md)).
+
 The native sidebar composes Két NavItem, GroupHeader, ConversationRow and UpdatePill controls; the standalone Agent Workspace uses their QML counterparts. Conversation selection, context actions, collapsed repositories and preview limits keep their existing session-manager routing. Rows draw no user tags and the sidebar has no tag filter (ADR 0117); a team member's row draws only its locked role tag. This UI does not infer a finished turn's approval intent. The `awaitingReply` projection has a distinct kit state when supplied.
 
 The sidebar reads the local daemon's `storage.size.read` capability through the existing CodexAppServer facade. The adapter accepts only read/apply operation names and requires a ready daemon advertising the exact operation. A visible window refreshes advisory status at most once a minute, with one in-flight request, a deadline and stale-response fencing. It shows the warning only from an authoritative successful response, hides stale status on disconnect, and links to Settings. This does not change retention policy or start a provider turn.
@@ -465,6 +507,9 @@ retain their repository/team ancestors. The tree materializes matching history r
 existing per-group diff; unmatched hidden history stays unbuilt. Filtering changes presentation,
 not projections, selection,
 pins, ordering or saved folds. The query is temporary window state and survives model updates.
+After visibility changes, native guide/folder/group layouts refresh from children to parents
+before the list measures its content height. Hidden rows and preview footers contribute no
+reserved height; extra viewport space stays outside the repository tree.
 Ctrl+Alt+K (Cmd+Option+K on macOS) focuses it; Ctrl+K remains an editor chord prefix.
 
 Global Spotlight (Ctrl+P, Cmd+P on macOS) wraps the kit CommandPalette in a transparent native popup so it

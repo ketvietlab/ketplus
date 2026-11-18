@@ -4,6 +4,7 @@
 #include "providers/CopilotCli.h"
 #include "providers/acp/AcpAdapter.h"
 #include <QElapsedTimer>
+#include <memory>
 
 namespace ketplus::daemon {
 // User-installed GitHub Copilot CLI. Authentication stays with the CLI/environment.
@@ -17,12 +18,17 @@ class CopilotAdapter final : public AcpAdapter {
     QString missingMessage() const override;
     bool isAvailable() const override;
     bool supports(const QString& capability) const override;
+    // Installed 1.0.112 verifies same-ID history/MCP replacement (ADR 0127).
+    // Every grant still requires the owned transport's exact epoch ACK.
+    bool supportsManagedMutations() const override { return true; }
     void runtimeStatus(std::function<void(const compat::Runtime&)> done) override;
     void configurationCatalog(Callback done) override;
     void call(const QString& method, const QJsonObject& params, Callback done) override;
 
   protected:
+    AcpAdapter* createSessionWorker() override;
     void configureProcess() override;
+    QJsonArray sessionMcpServers(const QJsonArray& servers) const override;
     bool strictPermissionRequests() const override { return true; }
     void checkLaunch(std::function<void(const QString&)> done) override;
     QString initializationError(const QJsonObject& result) const override;
@@ -38,6 +44,8 @@ class CopilotAdapter final : public AcpAdapter {
     void stopAuxiliaryProcesses() override;
 
   private:
+    struct ManagedMcpFile;
+    QString prepareManagedMcpLaunch(const QJsonObject& params);
     void refreshDiscovery() const;
     void authenticationFailed();
     const QString explicitPath_;
@@ -46,5 +54,7 @@ class CopilotAdapter final : public AcpAdapter {
     bool authenticationFailed_{false};
     CopilotCatalog* catalog_;
     QHash<QString, copilot_catalog::Snapshot> sessionModels_;
+    std::unique_ptr<ManagedMcpFile> managedMcpFile_;
+    QJsonObject managedMcpBootstrap_;
 };
 } // namespace ketplus::daemon
