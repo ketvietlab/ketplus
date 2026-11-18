@@ -1342,9 +1342,10 @@ after that single sequence; they do not replace the original full-run result or
 classify its failures. Cleanup sampling observed one reparented SDK helper after
 Attention, followed by empty inventories after Mermaid and on a later check.
 Its operation and cleanup timing were not captured, so this is not a claim that
-every intermediate inventory was empty. That observation and the remaining
-validation risk require review and explicit disposition; there is no all-T-5,
-release or full-packaging acceptance at this checkpoint.
+every intermediate inventory was empty. After independent verification of the
+append-only summary correction, the team leader accepted the seven-suite validation
+residual for integration, including these cleanup attribution limits. Original
+failures remain unclassified; this is not all-T-5, release or full-packaging acceptance.
 
 The seven-suite summary has an append-only evidence correction: version 2
 supersedes only the original blanket cleanup sentence. The original summary,
@@ -1365,7 +1366,7 @@ decisions remain part of the review.
 | --- | --- | --- |
 | 1. Fake-provider start, UI state, one owner wake and output | `ManagedBackgroundEndToEndTest::registryEventsReachDesktopAndWakeOnlyTheirOwner`; actual socket RED → GREEN and fresh full-matrix pass; native Agent UI suite and four-provider transport checks | Model/socket and synthetic native UI coverage; no live-provider inference claim |
 | 2. Crash, restart, owner lifetime, races, descendants and held wake | `ManagedTaskRuntimeTest` restart/close/commit-failure cases; `ManagedTaskHostTest` provider exit, busy/permission/Stop and nested-child cases; Linux executor daemon/supervisor death and Stop/complete race | Original Linux owner-Stop and fork-count failures remain unclassified under the leader's integration-only residual decision; formal review pending |
-| 3. Wake/auth fences, complete registry and platform assurance | Ledger atomic-outbox/dedup/generation/quota/pagination cases; IPC owner/grant checks; `ManagedTaskOriginHostTest` review/delayed-origin cases; Linux real-helper boundary tests; native birth/audit-token checks | Native bootstrap original remains unclassified under its separate integration-only residual decision; seven-suite residual and intermediate SDK-helper attribution require explicit disposition; no absolute macOS containment claim |
+| 3. Wake/auth fences, complete registry and platform assurance | Ledger atomic-outbox/dedup/generation/quota/pagination cases; IPC owner/grant checks; `ManagedTaskOriginHostTest` review/delayed-origin cases; Linux real-helper boundary tests; native birth/audit-token checks | Native bootstrap original remains unclassified under its separate integration-only residual decision; seven-suite integration-only residual retains the intermediate SDK-helper attribution limits; no absolute macOS containment claim |
 | 4. Build/matrix, honest limits, no quota or app replacement | Fresh Pro build and 251-suite run; offline SDK/contract/public-tree checks; Linux acceptance and CMake-installed daemon/helper staging; source/binary/hash records | Full Mac remains 242 pass / 1 skip / 8 failed suites; whole-tree Runtime install stopped at an unbuilt runner; no full packaging, release or installed-app validation |
 | 5. Reviewed PR into integration and cross-lane resolution | PR #763 contains the minimal deferred IPC routing fix and socket regressions; provider/UI dependencies are merged | Formal PR approval and integration acceptance remain outstanding; evidence-only residual reviews do not substitute for that approval |
 | 6. Native faults, attention, slots, durable owner fences and user-only resolution | Native detached-descendant timeout, supervisor death, reconnect and lease-loss cases passed within the original suite; ledger attention/slot/audit/rollback cases and IPC/UI user-only confirmation cases passed | These are layered fixtures: a single real native attention incident carried through database reopen plus generation/session close is not directly demonstrated by the retained cases. The SDK-helper sample is not that managed-job fault evidence; reviewer/leader must disposition this coverage boundary before closing the criterion |
@@ -1373,6 +1374,59 @@ decisions remain part of the review.
 Portable follow-up work uses the verified SSH/Mutagen workflow above. Mac-only
 identity and renderer checks stay on macOS. This mapping authorizes no additional
 control, provider invocation, toolchain change or production fix.
+
+#### Attention incident lifecycle follow-up (prepared, not yet verified)
+
+`ketplus_managed_attention_recovery_tests` adds only the `owner-close` and
+`generation-change` rows of `attentionSurvivesOwnerLifecycle`. It uses a file-backed
+`LocalJournal`, real `SessionHost`/runtime and scripted FakeCodex. On macOS only,
+the row launches a harmless marker/output/sleep process through the managed API,
+captures its supervisor/root identities, faults the supervisor with the production
+identity-bound signal, and requires `needs_attention`/`unverified` with the known
+executor stopped. On Linux, it injects an executor result without an execution
+identity: that branch checks portable persistence, Host lifecycle and CAS/audit
+plumbing and makes no claim about native faults, birth identity or containment.
+
+Each row closes and reopens both journal and Host/runtime, retains the incident,
+output and root result, checks slot release without terminalizing the incident,
+and deletes the owner through the Host. The generation-change row then inserts a
+replacement generation through the journal while the Host is closed and reopens
+the Host; there is no separate Host command that replaces a generation. Local
+administration must retain access to the old owner's incident. Pruning, automatic
+wake/relaunch/reassignment/resolution, agent acknowledgement and stale revision
+acknowledgement are fenced. A current-revision local user acknowledgement must
+create exactly one durable audit row and retain `unverified`/suppressed completion
+after the final reopen. Diagnostics whitelist bounded fields, never lease values,
+protocol bodies or command arguments.
+
+Before executing this follow-up, submit the exact source/configuration and commands
+for offline review. On the verified Linux source mirror, use a separate build tree
+and a Qt prefix with the headless daemon dependencies; Desktop/WebView is not part
+of this target:
+
+```sh
+cmake -S "$TASK_SOURCE" -B "$TASK_BUILD" -G Ninja \
+  -DKETPLUS_EDITION=pro -DKETPLUS_BUILD_DESKTOP=OFF \
+  -DKETPLUS_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Debug \
+  -DCMAKE_PREFIX_PATH="$QT_ROOT"
+cmake --build "$TASK_BUILD" --target ketplus_managed_attention_recovery_tests -j1
+ctest --test-dir "$TASK_BUILD" -R '^ketplus_managed_attention_recovery_tests$' -j1 -V
+```
+
+Only the real macOS fault/recovery chain may use the existing Mac build, after
+source/binary/config identity and test-owned process inventories are recorded:
+
+```sh
+cmake --preset dev
+cmake --build --preset dev --target ketplus_managed_attention_recovery_tests -j1
+ctest --test-dir build/dev -R '^ketplus_managed_attention_recovery_tests$' -j1 -V
+```
+
+These are proposed commands, not execution evidence. Do not run unrelated suites,
+repeat passed controls, change deadlines or provision shared toolchains. A source-only
+Linux mirror has no Git metadata; retain the independently verified Mac source
+manifest as provenance rather than claiming the generated `unknown` revision is a
+commit identity. Criterion 6 remains open until this follow-up is verified and reviewed.
 
 The opt-in `ketplus_linux_job_executor_tests` runs the real packaged helper and
 registry. It covers missing-manager admission, durable retry/output, double-fork/
