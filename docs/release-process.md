@@ -113,6 +113,13 @@ Turning production mode off in an existing production build does not reset its
 cached control URL. Never repurpose that directory for staging/QA; verify the
 resulting daemon's `--build-info` against the intended deployment before use.
 
+Windows packages are a ZIP built by `cmake --build --preset daemon-release --target package`
+(`release` for the desktop), checked with `packaging/windows/VerifyStagedTree.cmake` after
+unzipping; see [development](development.md#windows-package). They are unsigned: until
+Authenticode signing exists, sign every `.exe` and `.dll` under `bin\` before the ZIP is
+published, and do not publish an unsigned Windows build as a production release. Windows
+artifacts are audited for the license notices in `share\licenses\ketplus` like the others.
+
 A production desktop release additionally requires:
 
 - a clean commit on `main` reached through the approved release flow;
