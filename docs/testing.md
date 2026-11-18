@@ -1946,6 +1946,9 @@ test output.
   (Homebrew), `SessionForkTest::forkRequiresMediaOwnershipBeforeJournalCommit` row
   `source-unreadable` (POSIX mode) and `JournalStartupTest::startupBacklogCharacterization`
   (a 250 ms startup budget; SQLite commits are several times slower on NTFS).
+- `CodexSessionIsolationTest::twoSessionsKeepHistoryWhileOnlyOneProcessRefreshes` and
+  `AcpSessionIsolationTest::twoSessionsKeepHistoryAndIndependentProcesses`: the fixture records its
+  exit from a SIGTERM handler, which Windows' forced process termination never runs.
 - Under investigation, each prints its symptom:
   - `DaemonWorktreeContextTest`, four tests: the provider log has no `provider-input`,
     `steer-input` or `model-list` line, or the pending question is not found.
@@ -1965,8 +1968,6 @@ test output.
   - `TeamFindingRoutingTest::authenticatedClosureUsesRealProducerStoreAndReviewedRecord`: the
     remote branch cannot be read and the test then crashes.
   - `TeamAgentToolsTest::theLeadersFirstTurnCarriesTheGoalAndItsInstructions`: hangs.
-  - `CodexSessionIsolationTest::twoSessionsKeepHistoryWhileOnlyOneProcessRefreshes`: the
-    app-server shuts down before the refresh is counted.
 
 Skipped inside tests on Windows, each with its reason in the test source: fixtures that need POSIX
 symbolic links (`QFile::link` makes a `.lnk` shortcut), file-mode assertions (access is an ACL, see

@@ -1,4 +1,5 @@
 #include "ScriptFixture.h"
+#include "TestPaths.h"
 #include "providers/acp/AcpAdapter.h"
 
 #include <QFile>
@@ -135,6 +136,8 @@ class AcpSessionIsolationTest final : public QObject {
     Q_OBJECT
   private slots:
     void twoSessionsKeepHistoryAndIndependentProcesses() {
+        KETPLUS_SKIP_ON_WINDOWS("the fixture records its exit from a SIGTERM handler, which "
+                                "Windows' forced process termination never runs");
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
         const auto path = directory.filePath(fixtureName("fixture"));
