@@ -103,7 +103,8 @@ target_link_libraries(ketplus_runner_exec_plan_tests PRIVATE Qt6::Test ketplus_r
 add_test(NAME ketplus_runner_exec_plan_tests COMMAND ketplus_runner_exec_plan_tests)
 
 qt_add_executable(ketplus_runner_exec_tests
-    RunnerExecCleanupTest.cpp RunnerExecRunnerTest.cpp RunnerExecTest.cpp RunnerExecTest.h)
+    RunnerExecCleanupTest.cpp RunnerExecLinuxPolicyTest.cpp RunnerExecMountsTest.cpp
+    RunnerExecRunnerTest.cpp RunnerExecTest.cpp RunnerExecTest.h)
 ketplus_enable_warnings(ketplus_runner_exec_tests)
 target_link_libraries(ketplus_runner_exec_tests PRIVATE Qt6::Test ketplus_runner_exec)
 add_test(NAME ketplus_runner_exec_tests COMMAND ketplus_runner_exec_tests)

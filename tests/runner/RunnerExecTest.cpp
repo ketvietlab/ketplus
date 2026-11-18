@@ -161,5 +161,13 @@ int main(int argc, char** argv) {
         runner_exec_test::RunnerExecCleanupTest test;
         status |= QTest::qExec(&test, argc, argv);
     }
+    {
+        runner_exec_test::RunnerExecMountsTest test;
+        status |= QTest::qExec(&test, argc, argv);
+    }
+    {
+        runner_exec_test::RunnerExecLinuxPolicyTest test;
+        status |= QTest::qExec(&test, argc, argv);
+    }
     return status;
 }

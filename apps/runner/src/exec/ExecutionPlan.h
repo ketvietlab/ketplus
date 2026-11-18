@@ -17,27 +17,31 @@ namespace ketplus::runner::exec {
 inline constexpr qsizetype maxLaunchBytes = 192 * 1024;
 
 struct PreparedLaunch {
-    QJsonObject execution; // argv or shell_command, cwd, env_delta
+    QJsonObject execution; // argv or shell_command, cwd, env_delta, and mounts when planned
     QString error;         // [a-z0-9_]: why nothing may run
 };
-
-// The execution of `request`. The command's environment becomes exactly
-// `request.environment`: every variable of `runnerEnvironment` it lacks is removed. `cwd` is
-// relative to the workspace and must stay inside it once symbolic links are resolved.
-[[nodiscard]] PreparedLaunch prepareLaunch(const session::LaunchRequest& request,
-                                           const QMap<QString, QString>& runnerEnvironment);
 
 struct MountPlan {
     QStringList hidden; // replaced by empty file systems, in this order
     QString workspace;  // then mounted again, read-write, at its own path
-    bool privateTmp = true;
+    QString tmp;        // mounted on /tmp
     QString error;
 };
 
-// The mounts of a job: the runner's state, work and user runtime directories are hidden, and only
-// the job's workspace, which must lie inside the work directory, is visible again.
+// The execution of `request`. The command's environment becomes exactly
+// `request.environment`: every variable of `runnerEnvironment` it lacks is removed. `cwd` is
+// relative to the workspace and must stay inside it once symbolic links are resolved. With
+// `mounts`, the execution carries them as `mounts` {hidden, workspace, tmp}.
+[[nodiscard]] PreparedLaunch prepareLaunch(const session::LaunchRequest& request,
+                                           const QMap<QString, QString>& runnerEnvironment,
+                                           const MountPlan* mounts = nullptr);
+
+// The mounts of a job: the runner's state, work and user runtime directories are hidden; the
+// job's workspace and its own tmp directory, both inside the work directory and apart from each
+// other, are visible again.
 [[nodiscard]] MountPlan planMounts(const QString& stateDirectory, const QString& workDirectory,
-                                   const QString& runtimeDirectory, const QString& workspace);
+                                   const QString& runtimeDirectory, const QString& workspace,
+                                   const QString& tmp);
 
 // The executor's task id for a job, and the name of its directory: the first 32 hex digits of
 // the SHA-256 of `jobId`, '-', and `attempt`. Empty without a job.

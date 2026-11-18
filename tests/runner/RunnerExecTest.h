@@ -134,4 +134,29 @@ class RunnerExecCleanupTest : public QObject {
     void runningCommandIsNotALeftover();
 };
 
+class RunnerExecMountsTest : public QObject {
+    Q_OBJECT
+
+  private slots:
+    void launchCarriesTheMounts();
+    void withoutMountsNothingIsAdded();
+    void refusedPlanRunsNothing();
+    void failedStartRemovesTheTmp();
+    void unverifiedEndKeepsTheTmp();
+    void leftTmpIsRemovedAtStart();
+    void tmpOfAnEarlierAttemptIsEmptied();
+};
+
+class RunnerExecLinuxPolicyTest : public QObject {
+    Q_OBJECT
+
+  private slots:
+    void readyWhenEveryCheckHolds();
+    void eachFailedCheckIsUnavailable_data();
+    void eachFailedCheckIsUnavailable();
+    void recoveryIsReadyAtTheNextProbe();
+    void lateAnswerAfterDestruction();
+    void closedPolicyStaysClosed();
+};
+
 } // namespace runner_exec_test

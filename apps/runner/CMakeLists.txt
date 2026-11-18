@@ -155,6 +155,10 @@ add_library(ketplus_runner_exec STATIC
     src/exec/ExecutorDirectories.cpp
     src/exec/ExecutorDirectories.h
     src/exec/ExecutorReadiness.cpp
+    src/exec/JobTmpDirectories.cpp
+    src/exec/JobTmpDirectories.h
+    src/exec/LinuxPolicy.cpp
+    src/exec/LinuxPolicy.h
     src/exec/Readiness.h
 )
 target_link_libraries(ketplus_runner_exec PUBLIC Qt6::Core ketplus_runner_session)
@@ -168,6 +172,12 @@ if(TARGET ketplus_job_client)
         src/exec/NativeExecutor.cpp
         src/exec/NativeExecutor.h
     )
+    if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+        target_sources(ketplus_runner_exec_native PRIVATE
+            src/exec/LinuxSystemHost.cpp
+            src/exec/LinuxSystemHost.h
+        )
+    endif()
     target_link_libraries(ketplus_runner_exec_native PUBLIC ketplus_runner_exec
         PRIVATE ketplus_job_client)
     ketplus_enable_warnings(ketplus_runner_exec_native)

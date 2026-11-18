@@ -183,20 +183,54 @@ class RunnerExecPlanTest : public QObject {
         const QString state = m_root + QStringLiteral("/state");
         const QString work = m_root + QStringLiteral("/work");
         const QString runtime = m_root + QStringLiteral("/run-user");
-        for (const QString& path : {state, work + QStringLiteral("/job/ws"), runtime})
+        const QString tmp = work + QStringLiteral("/jobtmp/t-1");
+        for (const QString& path : {state, work + QStringLiteral("/job/ws"), runtime, tmp})
             QVERIFY(QDir().mkpath(path));
         QVERIFY(QFile::link(work + QStringLiteral("/job/ws"), m_root + QStringLiteral("/alias")));
 
-        const MountPlan plan = planMounts(state, work, runtime, m_root + QStringLiteral("/alias"));
+        const MountPlan plan =
+            planMounts(state, work, runtime, m_root + QStringLiteral("/alias"), tmp);
         QVERIFY2(plan.error.isEmpty(), qPrintable(plan.error));
         QCOMPARE(plan.hidden, QStringList({state, work, runtime}));
         QCOMPARE(plan.workspace, work + QStringLiteral("/job/ws"));
-        QVERIFY(plan.privateTmp);
+        QCOMPARE(plan.tmp, tmp);
 
         const MountPlan noRuntime =
-            planMounts(state, work, QString(), work + QStringLiteral("/job/ws"));
+            planMounts(state, work, QString(), work + QStringLiteral("/job/ws"), tmp);
         QVERIFY(noRuntime.error.isEmpty());
         QCOMPARE(noRuntime.hidden, QStringList({state, work}));
+    }
+
+    // The execution carries the plan as `mounts`; a plan that failed or lacks a part runs
+    // nothing.
+    void launchCarriesTheMounts() {
+        const QString work = m_root + QStringLiteral("/work");
+        const QString workspace = work + QStringLiteral("/job/ws");
+        QVERIFY(QDir().mkpath(workspace));
+        MountPlan plan;
+        plan.hidden = {m_root + QStringLiteral("/state"), work};
+        plan.workspace = workspace;
+        plan.tmp = work + QStringLiteral("/jobtmp/t-1");
+        const PreparedLaunch prepared = prepareLaunch(request(workspace), {}, &plan);
+        QVERIFY2(prepared.error.isEmpty(), qPrintable(prepared.error));
+        const QJsonObject mounts = prepared.execution.value(QStringLiteral("mounts")).toObject();
+        QCOMPARE(mounts.value(QStringLiteral("hidden")).toArray().size(), 2);
+        QCOMPARE(mounts.value(QStringLiteral("workspace")).toString(), workspace);
+        QCOMPARE(mounts.value(QStringLiteral("tmp")).toString(), plan.tmp);
+        QVERIFY(
+            !prepareLaunch(request(workspace), {}).execution.contains(QStringLiteral("mounts")));
+
+        MountPlan failed = plan;
+        failed.error = QStringLiteral("runner_directory_missing");
+        QCOMPARE(prepareLaunch(request(workspace), {}, &failed).error, failed.error);
+        MountPlan noTmp = plan;
+        noTmp.tmp.clear();
+        QCOMPARE(prepareLaunch(request(workspace), {}, &noTmp).error,
+                 QStringLiteral("mounts_missing"));
+        MountPlan otherWorkspace = plan;
+        otherWorkspace.workspace = work + QStringLiteral("/job/other");
+        QCOMPARE(prepareLaunch(request(workspace), {}, &otherWorkspace).error,
+                 QStringLiteral("workspace_outside_work"));
     }
 
     void mountRefusals_data() {
@@ -204,45 +238,66 @@ class RunnerExecPlanTest : public QObject {
         QTest::addColumn<QString>("work");
         QTest::addColumn<QString>("runtime");
         QTest::addColumn<QString>("workspace");
+        QTest::addColumn<QString>("tmp");
         QTest::addColumn<QString>("error");
         QTest::newRow("state missing")
-            << "none" << "work" << "" << "work/ws" << "runner_directory_missing";
+            << "none" << "work" << "" << "work/ws" << "work/tmp" << "runner_directory_missing";
         QTest::newRow("work missing")
-            << "state" << "none" << "" << "work/ws" << "runner_directory_missing";
+            << "state" << "none" << "" << "work/ws" << "work/tmp" << "runner_directory_missing";
         QTest::newRow("outside work")
-            << "state" << "work" << "" << "outside" << "workspace_outside_work";
+            << "state" << "work" << "" << "outside" << "work/tmp" << "workspace_outside_work";
         QTest::newRow("work itself")
-            << "state" << "work" << "" << "work" << "workspace_outside_work";
+            << "state" << "work" << "" << "work" << "work/tmp" << "workspace_outside_work";
         QTest::newRow("dot-dot out")
-            << "state" << "work" << "" << "work/ws/../.." << "workspace_outside_work";
+            << "state" << "work" << "" << "work/ws/../.." << "work/tmp" << "workspace_outside_work";
         QTest::newRow("symlink out")
-            << "state" << "work" << "" << "work/escape" << "workspace_outside_work";
+            << "state" << "work" << "" << "work/escape" << "work/tmp" << "workspace_outside_work";
         QTest::newRow("in state") << "work/state" << "work" << "" << "work/state/ws"
-                                  << "workspace_outside_work";
+                                  << "work/tmp" << "workspace_outside_work";
         QTest::newRow("missing") << "state" << "work" << "" << "work/none"
-                                 << "workspace_outside_work";
-        QTest::newRow("runtime missing")
-            << "state" << "work" << "none" << "work/ws" << "runtime_directory_invalid";
-        QTest::newRow("in runtime")
-            << "state" << "work" << "work" << "work/ws" << "runtime_directory_invalid";
+                                 << "work/tmp" << "workspace_outside_work";
+        QTest::newRow("runtime missing") << "state" << "work" << "none" << "work/ws" << "work/tmp"
+                                         << "runtime_directory_invalid";
+        QTest::newRow("in runtime") << "state" << "work" << "work" << "work/ws" << "work/tmp"
+                                    << "runtime_directory_invalid";
+        QTest::newRow("tmp missing")
+            << "state" << "work" << "" << "work/ws" << "work/none" << "tmp_directory_invalid";
+        QTest::newRow("tmp empty")
+            << "state" << "work" << "" << "work/ws" << "" << "tmp_directory_invalid";
+        QTest::newRow("tmp outside work")
+            << "state" << "work" << "" << "work/ws" << "outside-tmp" << "tmp_directory_invalid";
+        QTest::newRow("tmp is work")
+            << "state" << "work" << "" << "work/ws" << "work" << "tmp_directory_invalid";
+        QTest::newRow("tmp in workspace")
+            << "state" << "work" << "" << "work/ws" << "work/ws/tmp" << "tmp_directory_invalid";
+        QTest::newRow("workspace in tmp")
+            << "state" << "work" << "" << "work/tmp/ws" << "work/tmp" << "tmp_directory_invalid";
+        QTest::newRow("tmp symlink out")
+            << "state" << "work" << "" << "work/ws" << "work/tmp-escape" << "tmp_directory_invalid";
     }
+
     void mountRefusals() {
         QFETCH(QString, state);
         QFETCH(QString, work);
         QFETCH(QString, runtime);
         QFETCH(QString, workspace);
+        QFETCH(QString, tmp);
         QFETCH(QString, error);
-        for (const char* path : {"state", "work/ws", "work/state/ws"})
+        for (const char* path :
+             {"state", "work/ws", "work/state/ws", "work/tmp/ws", "work/ws/tmp", "outside-tmp"})
             QVERIFY(QDir(m_root).mkpath(QLatin1String(path)));
         QVERIFY(QFile::link(m_root + QStringLiteral("/outside"),
                             m_root + QStringLiteral("/work/escape")));
+        QVERIFY(QFile::link(m_root + QStringLiteral("/outside-tmp"),
+                            m_root + QStringLiteral("/work/tmp-escape")));
         const auto at = [this](const QString& path) {
             return path.isEmpty() ? path : m_root + u'/' + path;
         };
-        const MountPlan plan = planMounts(at(state), at(work), at(runtime), at(workspace));
+        const MountPlan plan = planMounts(at(state), at(work), at(runtime), at(workspace), at(tmp));
         QCOMPARE(plan.error, error);
         QVERIFY(plan.hidden.isEmpty());
         QVERIFY(plan.workspace.isEmpty());
+        QVERIFY(plan.tmp.isEmpty());
     }
 
     void taskIdHashesTheJob() {

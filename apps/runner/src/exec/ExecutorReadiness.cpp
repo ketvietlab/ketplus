@@ -134,6 +134,7 @@ void ExecutorCommandRunner::finishScan() {
         if (leftover.clean.value_or(false)) {
             leftover.job->acknowledge();
             m_directories.remove(leftover.entry);
+            removeTmp(leftover.entry.taskId);
             qCInfo(lcRunnerExec) << "job" << leftover.entry.jobId << "attempt"
                                  << leftover.entry.attempt << "left by a restart: cleaned up";
         } else {
@@ -142,6 +143,7 @@ void ExecutorCommandRunner::finishScan() {
     }
     m_leftovers.clear();
     m_scanning = false;
+    sweepTmp();
     m_leftoverCode = !m_unidentified.isEmpty() ? leftoverUnidentified
                      : unclean                 ? cleanupUnverified
                                                : QString();
@@ -156,6 +158,20 @@ void ExecutorCommandRunner::finishScan() {
     updateReadiness();
     if (m_cleanupDone)
         std::exchange(m_cleanupDone, {})(m_leftoverCode.isEmpty(), m_leftoverCode);
+}
+
+// A job tmp directory whose job directory is gone belongs to no job any more. One of a job still
+// left stays until that job's cleanup is confirmed.
+void ExecutorCommandRunner::sweepTmp() {
+    if (!m_tmp)
+        return;
+    const QStringList jobs = m_directories.names();
+    for (const QString& name : m_tmp->names()) {
+        if ((m_running && m_running->entry.taskId == name) ||
+            (m_unsettled && m_unsettled->entry.taskId == name) || jobs.contains(name))
+            continue;
+        removeTmp(name);
+    }
 }
 
 } // namespace ketplus::runner::exec

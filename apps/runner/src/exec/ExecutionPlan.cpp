@@ -32,7 +32,8 @@ PreparedLaunch refused(const QString& error) { return {{}, error}; }
 } // namespace
 
 PreparedLaunch prepareLaunch(const session::LaunchRequest& request,
-                             const QMap<QString, QString>& runnerEnvironment) {
+                             const QMap<QString, QString>& runnerEnvironment,
+                             const MountPlan* mounts) {
     QJsonObject execution;
     const protocol::Invocation& invocation = request.invocation;
     if (invocation.argv && !invocation.argv->isEmpty() && !invocation.shell) {
@@ -77,6 +78,18 @@ PreparedLaunch prepareLaunch(const session::LaunchRequest& request,
         delta.insert(it.key(), it.value());
     }
     execution.insert(QStringLiteral("env_delta"), delta);
+    if (mounts) {
+        if (!mounts->error.isEmpty() || mounts->workspace.isEmpty() || mounts->tmp.isEmpty())
+            return refused(mounts->error.isEmpty() ? QStringLiteral("mounts_missing")
+                                                   : mounts->error);
+        if (mounts->workspace != workspace)
+            return refused(QStringLiteral("workspace_outside_work"));
+        execution.insert(
+            QStringLiteral("mounts"),
+            QJsonObject{{QStringLiteral("hidden"), QJsonArray::fromStringList(mounts->hidden)},
+                        {QStringLiteral("workspace"), mounts->workspace},
+                        {QStringLiteral("tmp"), mounts->tmp}});
+    }
     if (QJsonDocument(execution).toJson(QJsonDocument::Compact).size() +
             QJsonDocument(base).toJson(QJsonDocument::Compact).size() >
         maxLaunchBytes)
@@ -85,7 +98,8 @@ PreparedLaunch prepareLaunch(const session::LaunchRequest& request,
 }
 
 MountPlan planMounts(const QString& stateDirectory, const QString& workDirectory,
-                     const QString& runtimeDirectory, const QString& workspace) {
+                     const QString& runtimeDirectory, const QString& workspace,
+                     const QString& tmp) {
     MountPlan plan;
     const QString state = realDirectory(stateDirectory);
     const QString work = realDirectory(workDirectory);
@@ -98,10 +112,16 @@ MountPlan planMounts(const QString& stateDirectory, const QString& workDirectory
         plan.error = QStringLiteral("workspace_outside_work");
         return plan;
     }
+    const QString jobTmp = realDirectory(tmp);
+    if (jobTmp.isEmpty() || jobTmp == work || !inside(jobTmp, work) || inside(jobTmp, state) ||
+        inside(jobTmp, job) || inside(job, jobTmp)) {
+        plan.error = QStringLiteral("tmp_directory_invalid");
+        return plan;
+    }
     plan.hidden = {state, work};
     if (!runtimeDirectory.isEmpty()) {
         const QString runtime = realDirectory(runtimeDirectory);
-        if (runtime.isEmpty() || inside(job, runtime)) {
+        if (runtime.isEmpty() || inside(job, runtime) || inside(jobTmp, runtime)) {
             plan.error = QStringLiteral("runtime_directory_invalid");
             plan.hidden.clear();
             return plan;
@@ -109,6 +129,7 @@ MountPlan planMounts(const QString& stateDirectory, const QString& workDirectory
         plan.hidden.append(runtime);
     }
     plan.workspace = job;
+    plan.tmp = jobTmp;
     return plan;
 }
 
