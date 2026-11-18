@@ -120,8 +120,14 @@ cleanupNativeAttention(ketplus::daemon::LocalJournal& journal, QString& id, cons
     const auto closed = [&] {
         if (!result.trusted || !record.value("executor_stopped").toBool())
             return false;
-        if (!addressRegistered)
-            return record.value("cleanup_status") == "not_required";
+        if (!addressRegistered) {
+            const auto state = record.value("state").toString();
+            const bool endedBeforeLaunch = state == "cancelled" || state == "failed" ||
+                                           state == "timed_out" || state == "interrupted";
+            // A queued intent's initial executor_stopped flag does not prevent
+            // a later launch. Cancel it before accepting no-executor closure.
+            return endedBeforeLaunch && record.value("cleanup_status") == "not_required";
+        }
         if (!supervisorKnown)
             return false;
         for (const auto& value : captured)
