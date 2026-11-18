@@ -149,7 +149,8 @@ for line in sys.stdin:
             continue
         if text == 'limit-final':
             # #170: the weekly limit, as Codex reports it; the rate limits read then shows it.
-)PY" R"PY(
+)PY"
+                                             R"PY(
             limit_used = True
             emit({'id': message_id, 'result': {'turn': {'id': turn_id}}})
             emit({'method': 'turn/started', 'params': {
