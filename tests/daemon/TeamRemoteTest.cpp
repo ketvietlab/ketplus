@@ -153,6 +153,55 @@ class TeamRemoteTest final : public QObject {
   private slots:
     void initTestCase() { QStandardPaths::setTestModeEnabled(true); }
 
+    void pairedLanguageRejectsWholeMutationAndActorSpoofing() {
+        Fixture fixture;
+        QVERIFY(fixture.open());
+        const Team team = create(fixture); // missing preference: Follow prompt
+        const auto read = [&] {
+            return phone(fixture, "team.get", {{"team_id", team.id}}).value("team").toObject();
+        };
+        const auto before = read();
+        QCOMPARE(before.value("language").toString(), QString("auto"));
+        const auto unchanged = [&] {
+            const auto after = read();
+            for (const QString& key :
+                 {QString("language"), QString("paused"), QString("goal"), QString("revision")})
+                QCOMPARE(after.value(key), before.value(key));
+        };
+        for (const QJsonValue& invalid : {QJsonValue("fr"), QJsonValue(""), QJsonValue(3)}) {
+            const auto refused = phone(fixture, "team.update",
+                                       {{"team_id", team.id},
+                                        {"language", invalid},
+                                        {"paused", true},
+                                        {"expected_revision", revision(fixture, team.id)}});
+            QCOMPARE(refused.value("error_code").toString(), QString("invalid_payload"));
+            unchanged();
+        }
+        const auto spoofed = phone(fixture, "team.update",
+                                   {{"team_id", team.id},
+                                    {"language", "vi"},
+                                    {"actor", "leader"},
+                                    {"paused", true},
+                                    {"expected_revision", revision(fixture, team.id)}});
+        QCOMPARE(spoofed.value("error_code").toString(), QString("invalid_payload"));
+        unchanged();
+        for (const QJsonValue& invalid : {QJsonValue("fr"), QJsonValue(""), QJsonValue(3)}) {
+            auto payload = createPayload(fixture);
+            payload.insert("name", "Refused content preference");
+            payload.insert("language", invalid);
+            const auto refused = phone(fixture, "team.create", payload);
+            QCOMPARE(refused.value("error_code").toString(), QString("invalid_payload"));
+            QCOMPARE(phone(fixture, "team.list", {}).value("teams_total").toInt(), 1);
+            unchanged();
+        }
+        auto payload = createPayload(fixture);
+        payload.insert("name", "Automatic content");
+        payload.insert("language", "auto");
+        const auto created = phone(fixture, "team.create", payload);
+        QVERIFY2(created.value("ok").toBool(), qPrintable(text(created)));
+        QCOMPARE(created.value("team").toObject().value("language").toString(), QString("auto"));
+    }
+
     // §6: each read answers with the fields of the contract's fixture, and no local path.
     void contentLanguageSurvivesPairedProjectionWithoutTranslatingContent() {
         Fixture fixture;

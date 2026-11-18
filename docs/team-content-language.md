@@ -34,6 +34,11 @@ OS locale, menus, New Team, task/history, decisions, sidebar and two-column/narr
 Daemon fixtures cover default/explicit language validation, persisted content/history,
 fixed English decisions and prompt-priority instructions. Paired fixtures verify projection
 keeps the goal and content preference; selected-machine rendering uses the same facade.
+Paired mutation fixtures reject invalid preference values and forged actor fields atomically,
+including when a payload also requests a pause. Transport fixtures reject wrong capability,
+owner, key version and session scope without changing language, goal, pause or the settings
+revision. They compare the settings revision across asynchronous pairing checks because
+unrelated team lifecycle events may advance the aggregate team revision.
 Build, focused checks, render evidence, full Pro results and any original failure/retry are
 recorded with the PR's exact head. No installed-app or hosted-provider behavior is inferred
 from these fixtures.
