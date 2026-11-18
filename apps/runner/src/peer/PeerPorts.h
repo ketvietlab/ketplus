@@ -38,15 +38,27 @@ class PeerClock {
     virtual void disarm(PeerTimer timer) = 0;
 };
 
-// The `/v2/relay` WebSocket. Answers: RelayLink::socketOpened, socketText, socketClosed and
-// socketRefused. At most one socket exists; open() while one is open replaces it silently.
+// Answers of the `/v2/relay` WebSocket.
+class RelaySocketEvents {
+  public:
+    virtual ~RelaySocketEvents() = default;
+    virtual void socketOpened() = 0;
+    virtual void socketText(const QString& text) = 0;
+    // The open socket closed, with its close code (1006 when none was received).
+    virtual void socketClosed(int code) = 0;
+    // The upgrade was refused before the socket opened: the HTTP status, or 0 when unknown.
+    virtual void socketRefused(int status) = 0;
+};
+
+// The `/v2/relay` WebSocket. At most one socket exists; open() while one exists replaces it
+// without answers for the old one.
 class RelaySocket {
   public:
     virtual ~RelaySocket() = default;
     virtual void open(const QString& accessToken) = 0;
     // One text message; false when the socket is not open or the message is too large.
     virtual bool send(const QJsonObject& message) = 0;
-    // Closes without a later socketClosed.
+    // Closes without later answers.
     virtual void close() = 0;
 };
 
