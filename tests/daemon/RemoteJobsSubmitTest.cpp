@@ -121,6 +121,41 @@ class RemoteJobsSubmitTest final : public QObject {
         }
     }
 
+    // Without a usable system git no job is taken: nothing is prepared and the Relay hears
+    // nothing.
+    void noJobIsTakenWithoutAUsableGit() {
+        RemoteHarness h;
+        h.adjust = [](RemoteJobsPorts& ports) { ports.gitProblem = sync::prepare::gitUnsupported; };
+        h.build();
+        QVERIFY(!h.jobs->available());
+        QString code;
+        h.jobs->submit(h.f.remoteTask(), request(), [&](const QString& answer) { code = answer; });
+        QCOMPARE(code, QStringLiteral("runner_unavailable"));
+        QVERIFY(h.prepared.isEmpty());
+        QVERIFY(h.relay.log.isEmpty());
+    }
+
+    // A registry that cannot be opened takes no job either.
+    void noJobIsTakenWithoutTheRegistry() {
+        RemoteHarness h;
+        QSqlDatabase closed; // never opened
+        ketplus::daemon::BackgroundTaskLedger unopened(closed);
+        h.adjust = [&](RemoteJobsPorts& ports) {
+            ports.database = closed;
+            ports.ledger = &unopened;
+        };
+        h.build();
+        QVERIFY(!h.jobs->available());
+        QString code;
+        h.jobs->submit(QStringLiteral("task-1"), request(),
+                       [&](const QString& answer) { code = answer; });
+        QCOMPARE(code, QStringLiteral("runner_unavailable"));
+        QVERIFY(h.prepared.isEmpty());
+        QVERIFY(h.relay.log.isEmpty());
+        h.adjust = {};
+        h.build(); // before `unopened` goes
+    }
+
     void aFailedPrepareLeavesNothingAndTellsNoRelay() {
         RemoteHarness h;
         h.prepare = [](const sync::PrepareRequest&) {
