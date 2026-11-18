@@ -1,13 +1,13 @@
 #include "agent/AgentSessionManager.h"
-#include "daemon/ScriptFixture.h"
 #include "agent/CodexAppServer.h"
 #include "agent/ReasoningHeading.h"
+#include "daemon/ScriptFixture.h"
 
-#include <QScopeGuard>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonArray>
+#include <QScopeGuard>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QtTest>

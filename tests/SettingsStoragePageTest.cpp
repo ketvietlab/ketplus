@@ -535,8 +535,9 @@ class SettingsStoragePageTest final : public QObject {
         QFETCH(int, width);
 #if defined(Q_OS_WIN)
         if (width < 500)
-            QSKIP("The page's minimum width exceeds 440 px with Windows fonts; needs a visual check "
-                  "on a real Windows desktop");
+            QSKIP(
+                "The page's minimum width exceeds 440 px with Windows fonts; needs a visual check "
+                "on a real Windows desktop");
 #endif
         ThemeManager theme(*qApp);
         theme.setMode(dark ? ThemeManager::Mode::Dark : ThemeManager::Mode::Light);

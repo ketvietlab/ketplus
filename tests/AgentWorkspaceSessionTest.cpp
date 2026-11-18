@@ -1,8 +1,8 @@
 #include "AgentWorkspaceViewTest.h"
-#include "daemon/ScriptFixture.h"
 #include "agent/AgentSessionManager.h"
 #include "agent/AgentWorkspaceView.h"
 #include "agent/CodexAppServer.h"
+#include "daemon/ScriptFixture.h"
 #include "ui/Theme.h"
 
 #include <QAbstractItemModelTester>

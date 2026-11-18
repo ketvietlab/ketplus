@@ -1,18 +1,18 @@
 #include "KetSidebarTree.h"
-#include "daemon/ScriptFixture.h"
 #include "agent/AgentSessionManager.h"
 #include "agent/CodexAppServer.h"
 #include "app/WaitingBadge.h"
+#include "daemon/ScriptFixture.h"
 #include "ui/Theme.h"
 #include "workspace/ActivityBar.h"
 #include "workspace/SymbolIcons.h"
 
-#include <QScopeGuard>
 #include <QApplication>
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QLabel>
+#include <QScopeGuard>
 #include <QSettings>
 #include <QSignalSpy>
 #include <QTemporaryDir>

@@ -25,9 +25,9 @@
 #include <QPointer>
 #include <QPushButton>
 #include <QSettings>
-#include <QTemporaryDir>
 #include <QSignalSpy>
 #include <QStandardPaths>
+#include <QTemporaryDir>
 #include <QTimer>
 #include <QtTest>
 
