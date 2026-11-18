@@ -2,6 +2,7 @@
 
 #include "runner/sync/StoreRetention.h"
 #include "storage/BackgroundTaskLedger.h"
+#include "storage/BackgroundTaskOutput.h"
 
 #include <QLoggingCategory>
 
@@ -46,7 +47,9 @@ RemoteJobs::RemoteJobs(RemoteJobsPorts ports)
           ports_.defer),
       cancels_(*ports_.relay, ports_.defer) {
     QString error;
-    open_ = ports_.ledger && ports_.ledger->initialize(&error);
+    // The output store is otherwise created by the first local job that writes output.
+    open_ = ports_.ledger && ports_.ledger->initialize(&error) &&
+            BackgroundTaskOutput(ports_.database).initialize(&error);
     if (!open_)
         qCWarning(lcRemoteJobs) << "remote jobs unavailable: the registry could not be opened";
     coordinator_.setChanged([this](const jobs::RemoteJobRecord& record) { recorded(record); });
