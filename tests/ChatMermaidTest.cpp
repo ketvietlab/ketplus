@@ -617,7 +617,12 @@ class ChatMermaidTest final : public QObject {
             qScopeGuard([&] { QCoreApplication::setApplicationName(previousName); });
         const auto cache = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
         QVERIFY(!cache.isEmpty());
+#if defined(Q_OS_WIN)
+        // Windows appends "cache" below the application directory.
+        QVERIFY(cache.contains(QCoreApplication::applicationName()));
+#else
         QCOMPARE(QFileInfo(cache).fileName(), QCoreApplication::applicationName());
+#endif
         QVERIFY(!QFileInfo::exists(cache));
         QVERIFY(QDir().mkpath(cache));
         const auto cleanup = qScopeGuard([&] { QDir(cache).removeRecursively(); });
