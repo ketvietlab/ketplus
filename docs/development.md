@@ -54,6 +54,10 @@ Ninja, `QT_ROOT` and `OPENSSL_ROOT_DIR` set from `KETPLUS_TOOLS_ROOT` (default
 used (compared as version numbers). The
 presets already read `$env{QT_ROOT}`, so no Windows-specific preset is needed.
 
+MSVC links with `/INCREMENTAL:NO` (`core/cmake/MsvcOptions.cmake`): incremental linking
+leaves a ~180 MB `.ilk` beside every executable, which filled the disk of a Windows build
+machine with the full Pro test set.
+
 ### Sync and build from a Mac
 
 Install mutagen (`brew install mutagen-io/mutagen/mutagen`, or unpack a release
@@ -63,10 +67,13 @@ the OpenSSH default shell must stay `cmd.exe` (the scripts use `cd /d` and
 `if not exist`); `git config --global core.autocrlf false` must be set, because
 the build clones dependencies and patches them with LF-only patterns, which a
 CRLF checkout breaks; and `qtwebview` is installed without a WebEngine, so
-check that a WebView backend plugin is present before relying on it. The runner snapshot library
-(linked by the daemon) stages files with `git add` and `attr:` pathspecs, which Git for Windows
-2.38 rejects (`pathspec magic not supported by this command: 'attr'`) and 2.47 accepts, so the
-snapshot tests need a Git for Windows of the 2.47 series or newer first on `PATH`:
+check that a WebView backend plugin is present before relying on it. Install Git for Windows
+2.47 or newer (the installer upgrades in place: `Git-<version>-64-bit.exe /VERYSILENT
+/NORESTART` keeps `C:\Program Files\Git\cmd` on `PATH`). The runner snapshot library (linked by the daemon) stages files with `git add` and
+`attr:` pathspecs, which Git for Windows 2.38 rejects (`pathspec magic not supported by this
+command: 'attr'`) and 2.47 accepts; `SealedGit::checkVersion` runs that command once and reports
+`GitTooOld` when git refuses it, so an older Git fails with that message instead of in the middle
+of a snapshot:
 
 ```sh
 export KETPLUS_WIN_HOST=user@host            # required

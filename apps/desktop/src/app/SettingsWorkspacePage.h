@@ -5,14 +5,15 @@
 #include "app/SettingsStoragePage.h"
 #include "app/SettingsTeamsPage.h"
 #include "app/SettingsWorkspace.h"
+#include "runners/SettingsRunnersPage.h"
 
 namespace ketplus {
 
 class SettingsDialog;
 
 // Pro's Settings: the shared page (core SettingsWorkspace) with Conversation width on
-// Typography and Pro's sections: Account & devices, Agent models, Teams, Browser, Computer use,
-// Providers, Archived, Storage and Updates.
+// Typography and Pro's sections: Account & devices, Agent models, Teams, Runners, Browser,
+// Computer use, Providers, Archived, Storage and Updates.
 class SettingsWorkspacePage final : public SettingsWorkspace {
     Q_OBJECT
 
@@ -22,13 +23,15 @@ class SettingsWorkspacePage final : public SettingsWorkspace {
                                    QWidget* parent = nullptr,
                                    SettingsClaudeCredentials::Requester credentials = {},
                                    SettingsStoragePage::Requester storage = {},
-                                   SettingsTeamsPage::Requester teams = {});
+                                   SettingsTeamsPage::Requester teams = {},
+                                   runners::Requester runners = {});
 
     // Reads remote.status for Account & devices.
     void setAccountStatusReader(SettingsAccountPage::StatusReader reader) {
         account_->setStatusReader(std::move(reader));
     }
     void refreshAccount() { account_->refresh(); }
+    [[nodiscard]] SettingsRunnersPage* runnersPage() const { return runners_; }
 
   signals:
     void accountDevicesRequested();
@@ -41,6 +44,7 @@ class SettingsWorkspacePage final : public SettingsWorkspace {
     void addConversationWidth();
 
     SettingsAccountPage* account_{nullptr};
+    SettingsRunnersPage* runners_{nullptr};
 };
 
 } // namespace ketplus

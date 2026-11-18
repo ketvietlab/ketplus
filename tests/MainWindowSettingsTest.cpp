@@ -747,8 +747,8 @@ void MainWindowSettingsTest::settingsUsesWorkspacePage() {
     // is missing and the ones after it move up by one; macOS and Linux keep it.
     const bool hasComputerUse = ketplus::computer_tools::isSupportedOnThisPlatform();
     const int afterComputer = hasComputerUse ? 0 : -1;
-    QCOMPARE(settingsNavigation->count(), 11 + afterComputer);
-    QCOMPARE(settingsNavigation->item(9 + afterComputer)->data(Qt::UserRole).toString(),
+    QCOMPARE(settingsNavigation->count(), 12 + afterComputer);
+    QCOMPARE(settingsNavigation->item(10 + afterComputer)->data(Qt::UserRole).toString(),
              QStringLiteral("storage"));
     auto* storageShortcut =
         activity->findChild<QAbstractButton*>(QStringLiteral("sidebarStorageSettings"));
@@ -756,28 +756,31 @@ void MainWindowSettingsTest::settingsUsesWorkspacePage() {
     storageShortcut->click();
     QTRY_VERIFY(
         settingsPage->findChild<QWidget*>(QStringLiteral("settingsWorkspaceStorage"))->isVisible());
-    QCOMPARE(settingsNavigation->item(10 + afterComputer)->data(Qt::UserRole).toString(),
+    QCOMPARE(settingsNavigation->item(11 + afterComputer)->data(Qt::UserRole).toString(),
              QStringLiteral("updates"));
     // ADR 0114, open point 2: Teams follows Agent models, as in the mock.
     QCOMPARE(settingsNavigation->item(4)->data(Qt::UserRole).toString(), QStringLiteral("teams"));
     QCOMPARE(settingsNavigation->item(4)->text(), QStringLiteral("Teams"));
-    QCOMPARE(settingsNavigation->item(5)->data(Qt::UserRole).toString(), QStringLiteral("browser"));
-    QCOMPARE(settingsNavigation->item(5)->text(), QStringLiteral("Browser"));
+    // Runners follows Teams.
+    QCOMPARE(settingsNavigation->item(5)->data(Qt::UserRole).toString(), QStringLiteral("runners"));
+    QCOMPARE(settingsNavigation->item(5)->text(), QStringLiteral("Runners"));
+    QCOMPARE(settingsNavigation->item(6)->data(Qt::UserRole).toString(), QStringLiteral("browser"));
+    QCOMPARE(settingsNavigation->item(6)->text(), QStringLiteral("Browser"));
     auto* computerPage =
         settingsPage->findChild<QWidget*>(QStringLiteral("settingsWorkspaceComputer"));
     if (hasComputerUse) {
-        QCOMPARE(settingsNavigation->item(6)->data(Qt::UserRole).toString(),
+        QCOMPARE(settingsNavigation->item(7)->data(Qt::UserRole).toString(),
                  QStringLiteral("computer"));
-        QCOMPARE(settingsNavigation->item(6)->text(), QStringLiteral("Computer use"));
+        QCOMPARE(settingsNavigation->item(7)->text(), QStringLiteral("Computer use"));
         QVERIFY(computerPage != nullptr);
     } else {
         QVERIFY(computerPage == nullptr);
     }
-    const int providersRow = 7 + afterComputer;
+    const int providersRow = 8 + afterComputer;
     QCOMPARE(settingsNavigation->item(providersRow)->data(Qt::UserRole).toString(),
              QStringLiteral("providers"));
     if (hasComputerUse) {
-        settingsNavigation->setCurrentRow(6);
+        settingsNavigation->setCurrentRow(7);
         QTRY_VERIFY(computerPage->isVisible());
     }
     auto* providersPage =
