@@ -144,3 +144,20 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND TARGET ketplus_runner_exec_native)
     add_test(NAME ketplus_runner_linux_job_tests COMMAND ketplus_runner_linux_job_tests)
     set_tests_properties(ketplus_runner_linux_job_tests PROPERTIES TIMEOUT 900)
 endif()
+
+# Real jobs through `run` as the runner's main wires it (RunnerAssembly::create), with the job
+# executor beside the test binary, the fake Relay over HTTP and a paired desktop the test plays;
+# then a runner killed during its job and started again. Runs only with
+# KETPLUS_RUN_LINUX_JOB_TESTS=1.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND TARGET ketplus_job_executor)
+    qt_add_executable(ketplus_runner_assembly_linux_tests
+        FakeRelay.cpp FakeRelay.h FakeRelayJobs.cpp RunnerAssemblyLinuxTest.cpp
+        RunnerAssemblyRig.cpp RunnerAssemblyRig.h)
+    ketplus_enable_warnings(ketplus_runner_assembly_linux_tests)
+    target_link_libraries(ketplus_runner_assembly_linux_tests PRIVATE
+        Qt6::Test Qt6::Network ketplus_runner_run ketplus_runner_snapshot
+        ketplus_control_crypto_primitives OpenSSL::Crypto)
+    add_dependencies(ketplus_runner_assembly_linux_tests ketplus_job_executor)
+    add_test(NAME ketplus_runner_assembly_linux_tests COMMAND ketplus_runner_assembly_linux_tests)
+    set_tests_properties(ketplus_runner_assembly_linux_tests PROPERTIES TIMEOUT 900)
+endif()
