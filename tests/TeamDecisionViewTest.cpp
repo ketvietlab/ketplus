@@ -425,6 +425,9 @@ class TeamDecisionViewTest final : public QObject {
         TeamPage page(&teams, "7", {});
         page.resize(width, 720);
         page.show();
+        // Visibility can precede native exposure and activation; keyboard checks need both.
+        QVERIFY(QTest::qWaitForWindowExposed(&page));
+        QVERIFY(QTest::qWaitForWindowActive(&page));
         auto* historical = page.findChild<QLabel*>("teamDecisionTrailHistorical");
         QTRY_VERIFY(historical && historical->isVisible());
         QVERIFY2(historical->contentsRect().height() >=
