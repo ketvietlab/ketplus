@@ -80,7 +80,15 @@ version for the same reason. No job in the matrix uses provider quota.
 suite on a Windows build machine with MSVC 2022 and Qt 6.11:
 `cmake --preset lite-dev`, `cmake --build --preset lite-dev`, then
 `ctest --preset lite-dev -j4 --timeout 120`. All 27 Lite tests pass; none is
-skipped for the platform.
+skipped for the platform. On macOS all 28 Lite tests (one more than on Windows) pass with
+`QT_QPA_PLATFORM=offscreen ctest --preset lite-dev -j4`.
+Open, edit and save, Git status and the Markdown preview are covered by
+automated offscreen tests that ran on Windows: `ketplus_lite_window_tests`
+(real Git repository opened in the window), `ketplus_tests` document save and
+`ketplus_editor_file_refresh_tests`, `ketplus_git_tests`,
+`ketplus_git_changes_panel_tests` and `ketplus_preview_tests`. ConPTY terminal
+behavior depends on the Windows terminal task, and Mermaid rendering needs the
+external `mmdc` tool; neither is part of this build check.
 
 Launching the app for a smoke check needs a desktop. An ssh session has none,
 so the default `windows` Qt platform plugin aborts at startup. Deploy the
