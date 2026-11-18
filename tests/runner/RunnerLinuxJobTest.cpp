@@ -176,12 +176,13 @@ QJsonObject mountsOf(const QStringList& hidden, const QString& workspace, const 
             {QStringLiteral("tmp"), tmp}};
 }
 
-// Helper mode: a runner process that starts one job and waits to be killed.
-int holdJob(const QString& parent, const QString& marker) {
+// Helper mode: a runner process that starts one job and waits to be killed. Only the random part
+// of the marker is on its own command line, so the job's is the only one holding it whole.
+int holdJob(const QString& parent, const QString& random) {
     Linux rig(parent);
     if (!rig.ready())
         return 2;
-    rig.runner->launch(rig.shell(QStringLiteral("exec sleep ") + marker));
+    rig.runner->launch(rig.shell(QStringLiteral("exec sleep 4000.") + random));
     QTextStream(stdout) << rig.layout.base << Qt::endl;
     QTest::qWaitFor([] { return false; }, 600'000);
     return 3;
@@ -416,11 +417,12 @@ class RunnerLinuxJobTest : public QObject {
     // The runner process is killed while its job runs; the next one stops the job, never runs it
     // again, and removes its directories.
     void killedRunnerIsCleanedUpAtStart() {
-        const QByteArray nonce =
-            "4000." + QByteArray::number(QRandomGenerator::global()->bounded(100000, 999999));
+        const QByteArray random =
+            QByteArray::number(QRandomGenerator::global()->bounded(100000, 999999));
+        const QByteArray nonce = "4000." + random;
         QProcess holder;
         holder.start(QCoreApplication::applicationFilePath(),
-                     {QStringLiteral("--hold-job"), QDir::homePath(), QString::fromLatin1(nonce)});
+                     {QStringLiteral("--hold-job"), QDir::homePath(), QString::fromLatin1(random)});
         QVERIFY(holder.waitForReadyRead(90'000));
         const QString base = QString::fromUtf8(holder.readLine().trimmed());
         QVERIFY(base.startsWith(QDir::homePath()));
