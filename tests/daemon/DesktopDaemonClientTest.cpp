@@ -50,6 +50,13 @@ QByteArray readFile(const QString& path) {
     return file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray{};
 }
 
+QByteArray firstProviderThread(const QByteArray& log) {
+    for (const auto& line : log.split('\n'))
+        if (line.startsWith("turn:"))
+            return line.mid(5);
+    return {};
+}
+
 // One request on an agent connection, as the ketplus_agents MCP server makes it.
 QJsonObject agentRoundTrip(QLocalSocket& socket, const QString& type, const QJsonObject& payload) {
     const QString id = QUuid::createUuid().toString(QUuid::WithoutBraces);
@@ -471,17 +478,21 @@ class DesktopDaemonClientTest final : public QObject {
                                   {QStringLiteral("model"), QStringLiteral("gpt-5.6-luna")},
                                   {QStringLiteral("effort"), QStringLiteral("medium")}});
             QTRY_VERIFY_WITH_TIMEOUT(desktop.isRunning(worktree), 2000);
-            const auto providerStarted = [&directory] {
+            QByteArray providerThread;
+            const auto providerStarted = [&directory, &providerThread] {
                 QFile log(directory.filePath(QStringLiteral("provider.log")));
-                return log.open(QIODevice::ReadOnly) && log.readAll().contains("turn:thread-1");
+                if (!log.open(QIODevice::ReadOnly))
+                    return false;
+                providerThread = firstProviderThread(log.readAll());
+                return !providerThread.isEmpty();
             };
             QTRY_VERIFY_WITH_TIMEOUT(providerStarted(), 2000);
             desktop.renameConversation(worktree, desktop.activeConversationId(worktree),
                                        QStringLiteral("Renamed across daemon"));
-            const auto providerRenamed = [&directory] {
+            const auto providerRenamed = [&directory, &providerThread] {
                 QFile log(directory.filePath(QStringLiteral("provider.log")));
                 return log.open(QIODevice::ReadOnly) &&
-                       log.readAll().contains("name:thread-1:Renamed across daemon");
+                       log.readAll().contains("name:" + providerThread + ":Renamed across daemon");
             };
             QTRY_VERIFY_WITH_TIMEOUT(providerRenamed(), 2000);
         }
@@ -852,6 +863,73 @@ class DesktopDaemonClientTest final : public QObject {
         QCOMPARE(walks, 2);
         QCOMPARE(liveReads, 1);
         QCOMPARE(repeatedDeletions.size(), 0);
+    }
+
+    // A long-lived install's catalog is larger than a frame: refresh and discovery read it in
+    // live pages and see every conversation, rather than none.
+    void aCatalogLargerThanAFrameIsReadInLivePages() {
+        QTemporaryDir directory;
+        FakeDaemon daemon(useFakeDaemon(directory));
+        const auto restore = qScopeGuard(stopUsingFakeDaemon);
+        QVERIFY(daemon.listening);
+        LocalJournal journal(directory.filePath("journal.sqlite"));
+        constexpr int count = 1300;
+        for (int index = 0; index < count; ++index)
+            QVERIFY(journal.upsertSession({QStringLiteral("s-%1").arg(index, 5, 10, QChar('0')),
+                                           directory.path(),
+                                           "codex",
+                                           {},
+                                           {},
+                                           "ready",
+                                           1,
+                                           0,
+                                           0,
+                                           QString(700, 't')}));
+        CodexAdapter adapter(directory.filePath("missing-provider"));
+        SessionHost host(&journal, &adapter);
+        int continuations = 0;
+        bool discover = false;
+        daemon.onRequest = [&](const QJsonObject& request) {
+            if (request.value("message_type") != "session.list") {
+                daemon.answer(request, {{"ok", true}});
+                return;
+            }
+            const auto payload = request.value("payload").toObject();
+            QCOMPARE(payload.value("live_sessions_page_version").toInt(),
+                     payload.value("deleted_sessions_only").toBool() ? 0 : 1);
+            if (payload.contains("live_sessions_after"))
+                ++continuations;
+            auto result = host.handleCommand(request, "desktop");
+            QVERIFY2(result.value("ok").toBool(), qPrintable(QJsonDocument(result).toJson()));
+            if (discover && result.value("live_sessions_next").toString().isEmpty()) {
+                auto sessions = result.value("sessions").toArray();
+                sessions.append(QJsonObject{{"session_id", "zz-fresh"},
+                                            {"session_generation", 1},
+                                            {"worktree_path", directory.path()},
+                                            {"last_event_cursor", 1}});
+                result.insert("sessions", sessions);
+            }
+            daemon.answer(request, result);
+        };
+        CodexAppServer bridge;
+        QSignalSpy discovered(&bridge, &CodexAppServer::daemonSessionDiscovered);
+        QTRY_COMPARE_WITH_TIMEOUT(discovered.size(), count, 10000);
+        QTRY_VERIFY(!bridge.isRestoring());
+        QVERIFY(continuations >= 2);
+
+        const int refreshPages = continuations;
+        discover = true;
+        daemon.current->write(
+            protocol::encodeFrame({{"message_type", "session.event"},
+                                   {"session_id", "zz-fresh"},
+                                   {"session_generation", 1},
+                                   {"cursor", 1},
+                                   {"payload", QJsonObject{{"event_type", "session.created"}}}}));
+        daemon.current->flush();
+        QTRY_COMPARE_WITH_TIMEOUT(discovered.size(), count + 1, 10000);
+        QCOMPARE(discovered.last().first().toJsonObject().value("session_id").toString(),
+                 "zz-fresh");
+        QVERIFY(continuations > refreshPages);
     }
 
     void continuouslyChangingCatalogStopsAfterBoundedRetries() {
@@ -1647,8 +1725,14 @@ class DesktopDaemonClientTest final : public QObject {
         QFile log(providerLog);
         QVERIFY(log.open(QIODevice::ReadOnly));
         const QByteArray logContents = log.readAll();
-        QVERIFY(logContents.contains("fork:"));
-        QVERIFY(logContents.contains("turn:fork-of-thread-1"));
+        const auto sourceThread = firstProviderThread(logContents);
+        QVERIFY(!sourceThread.isEmpty());
+        QJsonObject forkRequest;
+        for (const auto& line : logContents.split('\n'))
+            if (line.startsWith("fork:"))
+                forkRequest = QJsonDocument::fromJson(line.mid(5)).object();
+        QCOMPARE(forkRequest.value("threadId").toString().toUtf8(), sourceThread);
+        QVERIFY(logContents.contains("turn:fork-of-" + sourceThread));
 
         desktop.selectConversation(worktree, sourceId);
         QTRY_VERIFY_WITH_TIMEOUT(hasBody(QStringLiteral("user"), QStringLiteral("hello")), 5000);
@@ -1777,7 +1861,11 @@ class DesktopDaemonClientTest final : public QObject {
                 QTRY_COMPARE_WITH_TIMEOUT(logText().count("turn:"), index + 1, 3000);
                 QTRY_VERIFY_WITH_TIMEOUT(!desktop.isRunning(worktree), 3000);
             }
-            QCOMPARE(logText().count("args:"), 1);
+            // One catalog process plus a dedicated process for each conversation.
+            const auto initialLaunches = logText().count("args:");
+            QCOMPARE(initialLaunches, worktrees.size() + 1);
+            const auto initialSetups = logText().count("setup:");
+            QCOMPARE(initialSetups, worktrees.size());
             QVERIFY(logText().contains("ketplus_browser"));
 
             settings.enabled = false;
@@ -1797,7 +1885,11 @@ class DesktopDaemonClientTest final : public QObject {
             desktop.submitPrompt(worktrees.first(), QStringLiteral("again"));
             QTRY_COMPARE_WITH_TIMEOUT(logText().count("turn:"), 4, 3000);
             QTRY_VERIFY_WITH_TIMEOUT(!desktop.isRunning(worktrees.first()), 3000);
-            QCOMPARE(logText().count("args:"), 2);
+            // Only this conversation is recreated; the catalog may also restart lazily.
+            const auto refreshedLaunches = logText().count("args:");
+            QVERIFY(refreshedLaunches >= initialLaunches + 1);
+            QVERIFY(refreshedLaunches <= initialLaunches + 2);
+            QCOMPARE(logText().count("setup:"), initialSetups + 1);
             const QByteArray lastArgs = logText().mid(logText().lastIndexOf("args:"));
             QVERIFY(!lastArgs.left(lastArgs.indexOf('\n')).contains("ketplus_browser"));
             QCOMPARE(errorRows(desktop.messages(worktrees.first())), 0);

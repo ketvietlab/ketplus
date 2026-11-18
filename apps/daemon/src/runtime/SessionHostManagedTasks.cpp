@@ -23,8 +23,18 @@ bool SessionHost::acknowledgeManagedTaskOrigin(Session& session, const QString& 
                                                const QJsonObject& result) {
     if (epoch.isEmpty())
         return true;
-    if (result.value("managedTransportEpoch") == epoch && session.mutationOrigin.activate(epoch))
+    if (result.value("managedTransportEpoch") == epoch && session.mutationOrigin.activate(epoch)) {
+        // Dedicated replacements do not emit a provider-wide stopped() signal: that would
+        // fence other conversations. Their verified ACK is the scoped process boundary.
+        if (session.providerIdentityEpoch != epoch) {
+            session.completedTurnId.clear();
+            session.failedTurnId.clear();
+            session.completedItems.clear();
+            session.completedItemOrder.clear();
+            session.providerIdentityEpoch = epoch;
+        }
         return true;
+    }
     failTurnStart(
         session,
         "mutation_refresh_unavailable: The provider did not acknowledge its origin epoch.");

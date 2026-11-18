@@ -51,6 +51,11 @@ QJsonObject agentTaskRow(const Task& task, const AgentMember& owner) {
                                             {QStringLiteral("name"), owner.name}}));
     if (task.state == state::blocked)
         row.insert(QStringLiteral("question"), task.question);
+    if (task.routingDecision) {
+        row.insert(QStringLiteral("routing_decision"), risk::toJson(*task.routingDecision));
+        row.insert(QStringLiteral("conclusion_source"), QStringLiteral("leader_policy"));
+        row.insert(QStringLiteral("routing_status"), QStringLiteral("historical"));
+    }
     return row;
 }
 

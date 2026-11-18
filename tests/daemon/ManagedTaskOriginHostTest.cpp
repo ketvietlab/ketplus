@@ -1,15 +1,21 @@
+#include "FakeCodex.h"
 #include "providers/CodexAdapter.h"
 #include "providers/CopilotAdapter.h"
 #include "providers/CursorAdapter.h"
 #include "runtime/SessionHost.h"
+#include "storage/BackgroundTaskLedger.h"
 #include "storage/LocalJournal.h"
 
+#include <QCoreApplication>
+#include <QEvent>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QScopeGuard>
 #include <QTemporaryDir>
 #include <QTimer>
 #include <QUuid>
 #include <QtTest>
+#include <thread>
 #include <utility>
 
 namespace ketplus::daemon {
@@ -119,6 +125,120 @@ class ManagedTaskOriginHostTest final : public QObject {
     }
 
   private slots:
+    void dedicatedReplacementCanReuseItsPreviousProcessTurnId() {
+        QTemporaryDir directory;
+        const auto executable = directory.filePath("fake-codex");
+        QVERIFY(writeFakeCodex(executable, directory.filePath("codex.log")));
+        LocalJournal journal(directory.filePath("journal.sqlite"));
+        QVERIFY(seed(journal, directory.path(), "codex"));
+        CodexAdapter codex(executable);
+        SessionHost host(&journal, &codex);
+        const auto cleanup = qScopeGuard([&] { codex.stop(); });
+        host.setAgentEndpoint(directory.filePath("socket"), directory.filePath("mcp-helper"));
+        const auto start = [&](const QString& prompt = "fixture",
+                               const QString& permission = "danger-full-access") {
+            return local(
+                host, "session.start_turn",
+                {{"prompt", prompt},
+                 {"options", QJsonObject{{"provider", "codex"}, {"permission", permission}}}});
+        };
+        QVERIFY(start().value("ok").toBool());
+        QTRY_VERIFY_WITH_TIMEOUT(!host.sessions_.value("owner").completedTurnId.isEmpty(), 10000);
+        QTRY_COMPARE_WITH_TIMEOUT(host.sessions_.value("owner").stored.state, "ready", 10000);
+        const auto first = host.sessions_.value("owner");
+        QVERIFY(!first.completedTurnId.isEmpty());
+        QVERIFY(!first.providerIdentityEpoch.isEmpty());
+        const auto completions = [&] {
+            int count = 0;
+            for (const auto& event : journal.eventsAfter("owner", 1, 0, 1000))
+                count += event.toObject().value("event_type") == "turn.completed";
+            return count;
+        };
+        QCOMPARE(completions(), 1);
+        const auto workers = codex.findChildren<CodexAdapter*>(Qt::FindDirectChildrenOnly);
+        QCOMPARE(workers.size(), 1);
+        // Queue an actual old transport connection from another emitting thread. Qt can
+        // deliver already-posted signal callbacks after disconnect; the adapter epoch
+        // guard must reject this event after replacement, even though the native ID recurs.
+        auto* old = workers.first();
+        std::thread stale([old, &first] {
+            emit old->notificationReceived(
+                "turn/completed",
+                {{"threadId", first.stored.threadId},
+                 {"turn", QJsonObject{{"id", first.completedTurnId}, {"status", "completed"}}}});
+        });
+        stale.join();
+        host.sessions_["owner"].stored.executionPolicy = "ask";
+        QVERIFY(start("approve", "workspace-write").value("ok").toBool());
+        QTRY_VERIFY_WITH_TIMEOUT(host.sessions_.value("owner").providerIdentityEpoch !=
+                                     first.providerIdentityEpoch,
+                                 10000);
+        QJsonArray pending;
+        QTRY_VERIFY_WITH_TIMEOUT(
+            !(pending =
+                  local(host, "session.pending_approvals").value("pending_approvals").toArray())
+                 .isEmpty(),
+            10000);
+        QCoreApplication::sendPostedEvents(&codex, QEvent::MetaCall);
+        QCOMPARE(completions(), 1);
+        QCOMPARE(host.sessions_.value("owner").stored.turnId, first.completedTurnId);
+        QVERIFY(local(host, "approval.resolve",
+                      {{"approval_id", pending.first().toObject().value("approval_id")},
+                       {"decision", "accept"}})
+                    .value("ok")
+                    .toBool());
+        QTRY_COMPARE_WITH_TIMEOUT(host.sessions_.value("owner").stored.state, "ready", 10000);
+        const auto& second = host.sessions_["owner"];
+        QCOMPARE(second.stored.threadId, first.stored.threadId);
+        QCOMPARE(second.completedTurnId, first.completedTurnId); // Fake process restarts at 1.
+        QVERIFY(second.providerIdentityEpoch != first.providerIdentityEpoch);
+        QCOMPARE(completions(), 2);
+        QVERIFY(journal.backgroundTasks().deliveryPage(true).value("events").toArray().isEmpty());
+    }
+
+    void identityCachesResetOnlyOnceAfterExactReplacementAck() {
+        QTemporaryDir directory;
+        LocalJournal journal(directory.filePath("journal.sqlite"));
+        QVERIFY(seed(journal, directory.path(), "codex"));
+        CodexAdapter codex(directory.filePath("missing-codex"));
+        SessionHost host(&journal, &codex);
+        host.sessions_["other"].completedTurnId = "other-turn";
+        auto& owner = host.sessions_["owner"];
+        owner.stored.id = "owner";
+        owner.stored.generation = 1;
+        owner.stored.currentTurnSequence = 1;
+        const auto fill = [&] {
+            owner.completedTurnId = "turn-1";
+            owner.failedTurnId = "turn-failed";
+            owner.completedItems = {"item"};
+            owner.completedItemOrder = {"item"};
+        };
+        fill();
+        const auto first = owner.mutationOrigin.prepare("owner", 1, 1, "full", false);
+        QVERIFY(host.acknowledgeManagedTaskOrigin(
+            owner, first.transportEpoch, {{"managedTransportEpoch", first.transportEpoch}}));
+        QVERIFY(owner.completedTurnId.isEmpty());
+        QVERIFY(owner.failedTurnId.isEmpty());
+        QVERIFY(owner.completedItems.isEmpty());
+        QVERIFY(owner.completedItemOrder.isEmpty());
+        QCOMPARE(host.sessions_["other"].completedTurnId, "other-turn");
+        fill();
+        QVERIFY(host.acknowledgeManagedTaskOrigin(
+            owner, first.transportEpoch, {{"managedTransportEpoch", first.transportEpoch}}));
+        QCOMPARE(owner.completedTurnId, "turn-1"); // Repeated ACK is not another replacement.
+        const auto next = owner.mutationOrigin.prepare("owner", 1, 2, "read-only", true);
+        QCOMPARE(owner.completedTurnId, "turn-1"); // Revocation alone cannot clear the fence.
+        QVERIFY(!host.acknowledgeManagedTaskOrigin(
+            owner, next.transportEpoch, {{"managedTransportEpoch", first.transportEpoch}}));
+        QCOMPARE(owner.completedTurnId, "turn-1");
+        QVERIFY(owner.providerIdentityEpoch == first.transportEpoch);
+        const auto review = owner.mutationOrigin.prepare("owner", 1, 3, "read-only", true);
+        QVERIFY(host.acknowledgeManagedTaskOrigin(
+            owner, review.transportEpoch, {{"managedTransportEpoch", review.transportEpoch}}));
+        QVERIFY(owner.completedTurnId.isEmpty());
+        QVERIFY(owner.mutationOrigin.bootstrap().credential.isEmpty());
+    }
+
     void concreteAcpMutationSupportStillRequiresExactEpochAck_data() {
         QTest::addColumn<QString>("name");
         QTest::addColumn<bool>("verified");

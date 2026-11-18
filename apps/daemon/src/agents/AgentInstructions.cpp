@@ -61,10 +61,19 @@ QString teamInstructions(const TeamRoleContext& context) {
     if (context.role == QStringLiteral("leader")) {
         lines
             << QStringLiteral(
-                   "Break the goal into tasks with team_task_create, each with acceptance "
+                   "Answer explanation, advice, synthesis and coordination directly; do not "
+                   "manufacture a developer task or reviewer turn for them. You may record "
+                   "leader_direct with team_task_route_decide, but a tool call is not required "
+                   "to answer. For implementation, break the goal into tasks with "
+                   "team_task_create, each with acceptance "
                    "criteria%1, a lane and its dependencies, and assign them by lane with "
-                   "team_task_assign. Do not write code and do not review: developers do the "
-                   "work and the team's reviewer reviews each task.")
+                   "team_task_assign. Do not write code; developers implement. Choose a route with "
+                   "risk and "
+                   "evidence using team_task_route_decide: verified low risk may use "
+                   "developer_leader; high risk, uncertainty or missing evidence uses "
+                   "developer_reviewer. Request a reviewer only when policy requires it or "
+                   "you give a concrete reason. Confidence above 90 is only supplementary; "
+                   "it never replaces daemon gates, evidence or user permission.")
                    .arg(context.leaderWritesRequirements
                             ? QString{}
                             : QStringLiteral(" (written by the user: you may not change their "
@@ -84,8 +93,13 @@ QString teamInstructions(const TeamRoleContext& context) {
                    "product. You are the only member that speaks to the user. A task whose "
                    "pull request is merged is done by itself; close work merged without one "
                    "with team_task_close, giving the commit or pull request as evidence. A review "
-                   "verdict that should not have counted is voided with team_review_void; a "
-                   "review made on the pull request is accepted with team_review_accept.")
+                   "verdict that should not have counted is voided with team_review_void. "
+                   "team_review_accept takes a version1 decision JSON string and bounded reason: "
+                   "resolve_findings requires a real host receipt for exact reviewed/fix revisions "
+                   "and supported closure; request_review explicitly authorizes one further "
+                   "independent pass. Read current team/task revisions and review_findings first. "
+                   "Never accept a URL/freeform assertion, cancel active review, waive P0/P1 or "
+                   "mandatory risks, or use targeted checks instead of the required full matrix.")
             << QStringLiteral(
                    "The team only moves when a turn ends in an action. Before you end a "
                    "turn, every task that is not done must have an owner working on it, be "
@@ -105,29 +119,33 @@ QString teamInstructions(const TeamRoleContext& context) {
                               "request or answer for the user.")
                    .arg(context.integrationBranch);
     } else if (context.role == QStringLiteral("developer")) {
-        lines << QStringLiteral("Your lane is \"%1\": %2. Shared paths: %3.")
-                     .arg(context.lane,
-                          context.paths.isEmpty() ? QStringLiteral("no paths yet")
-                                                  : context.paths.join(QStringLiteral(", ")),
-                          context.sharedPaths.isEmpty()
-                              ? QStringLiteral("none")
-                              : context.sharedPaths.join(QStringLiteral(", ")))
-              << QStringLiteral(
-                     "Work only on the task assigned to you, in its worktree. Stay inside your "
-                     "lane, or say on the task why you could not. Report through the task with "
-                     "team_task_update (state, note, met marks, pull request), not through "
-                     "messages. If you need an answer, block the task with your question; the "
-                     "leader answers it. Do not end a turn with your task in progress and "
-                     "nothing said: finish it, block it with what you wait for, or, for "
-                     "something outside the team such as a build, call team_wait so you are "
-                     "woken to check again. Hand the "
-                     "task to review (state in_review) once its "
-                     "criteria are met and your work is committed on the task's branch. If "
-                     "you worked in another worktree or repository, hand it to review with "
-                     "its pull_request and head_commit, and name that worktree in the note. "
-                     "Work that belongs in another repository is a task of its own there: ask "
-                     "the leader for one (team_task_create with repository) instead of a "
-                     "worktree you make yourself. Do not merge.");
+        lines
+            << QStringLiteral("Your lane is \"%1\": %2. Shared paths: %3.")
+                   .arg(context.lane,
+                        context.paths.isEmpty() ? QStringLiteral("no paths yet")
+                                                : context.paths.join(QStringLiteral(", ")),
+                        context.sharedPaths.isEmpty()
+                            ? QStringLiteral("none")
+                            : context.sharedPaths.join(QStringLiteral(", ")))
+            << QStringLiteral(
+                   "Work only on the task assigned to you, in its worktree. Stay inside your "
+                   "lane, or say on the task why you could not. Report through the task with "
+                   "team_task_update (state, note, met marks, pull request), not through "
+                   "messages. If you need an answer, block the task with your question; the "
+                   "leader answers it. Do not end a turn with your task in progress and "
+                   "nothing said: finish it, block it with what you wait for, or, for "
+                   "something outside the team such as a build, call team_wait so you are "
+                   "woken to check again. Once committed and checked, submit evidence once "
+                   "to the leader; team_task_route_verify can mint host evidence only for "
+                   "its supported mechanical scope. An unsupported scope needs the reviewer. "
+                   "Do not repeatedly message or poll for review. Hand the "
+                   "task to review (state in_review) when the chosen route requires review and its "
+                   "criteria are met and your work is committed on the task's branch. If "
+                   "you worked in another worktree or repository, hand it to review with "
+                   "its pull_request and head_commit, and name that worktree in the note. "
+                   "Work that belongs in another repository is a task of its own there: ask "
+                   "the leader for one (team_task_create with repository) instead of a "
+                   "worktree you make yourself. Do not merge.");
     } else {
         lines << QStringLiteral(
             "When a task enters review you receive its criteria and its diff. Review it "
@@ -158,6 +176,13 @@ QString teamInstructions(const TeamRoleContext& context) {
                             "whole. A team with two reviewers lists both in team_get; "
                             "\"reviewer\" then reaches the one that reviews your task, and "
                             "otherwise you send to its number.")
+          << QStringLiteral("Routing decisions are historical audit, not reviewer verdicts, "
+                            "task completion or authorization tokens. Keep the actual task state "
+                            "and reviewer findings visible; revalidate before any downstream "
+                            "mutation. A leader pass is not a reviewer verdict. User approval "
+                            "is needed for an action outside the user's existing authorization, "
+                            "never inferred from confidence. Do not ask the user to approve "
+                            "again an action already authorized in this session.")
           << QStringLiteral("[/KetPlus team]");
     return lines.join(QLatin1Char('\n'));
 }

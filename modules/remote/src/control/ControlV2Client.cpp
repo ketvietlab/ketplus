@@ -25,13 +25,34 @@ bool allowedOrigin(const QUrl& origin) {
 } // namespace
 ControlV2Client::ControlV2Client(QUrl origin, QObject* parent)
     : QObject(parent), origin_(std::move(origin)), credentials_(storageNamespace(origin_)) {
-    installationId_ = QString::fromUtf8(credentials_.read("installation-id"));
-    credential_ = QJsonDocument::fromJson(credentials_.read("user-session")).object();
+    const auto installation = credentials_.read("installation-id", &storageReadError_);
+    if (!storageReadError_.isEmpty())
+        return;
+    const auto session = credentials_.read("user-session", &storageReadError_);
+    if (!storageReadError_.isEmpty())
+        return;
+    const auto pins = credentials_.read("host-pins", &storageReadError_);
+    if (!storageReadError_.isEmpty())
+        return;
+    QJsonParseError parse;
+    const auto sessionDocument = QJsonDocument::fromJson(session, &parse);
+    if (!session.isEmpty() &&
+        (parse.error != QJsonParseError::NoError || !sessionDocument.isObject())) {
+        storageReadError_ =
+            "The stored remote session is invalid; existing credentials were preserved.";
+        return;
+    }
+    const auto pinsDocument = QJsonDocument::fromJson(pins, &parse);
+    if (!pins.isEmpty() && (parse.error != QJsonParseError::NoError || !pinsDocument.isObject())) {
+        storageReadError_ = "The stored host pins are invalid; existing trust was preserved.";
+        return;
+    }
+    installationId_ = QString::fromUtf8(installation);
+    credential_ = sessionDocument.object();
     deviceId_ = credential_.value("deviceId").toString();
     keyVersion_ = credential_.value("deviceKeyVersion").toInt(1);
-    const QByteArray pins = credentials_.read("host-pins");
     hostPinsStored_ = !pins.isEmpty();
-    hostPins_ = QJsonDocument::fromJson(pins).object();
+    hostPins_ = pinsDocument.object();
 }
 std::optional<QStringList> ControlV2Client::entitlements() const {
     const QJsonValue value = credential_.value("entitlements");
@@ -44,6 +65,11 @@ std::optional<QStringList> ControlV2Client::entitlements() const {
     return names;
 }
 bool ControlV2Client::storeHostPins(const QJsonObject& pins, QString* error) {
+    if (!storageReadError_.isEmpty()) {
+        if (error)
+            *error = storageReadError_;
+        return false;
+    }
     if (!credentials_.write("host-pins", QJsonDocument(pins).toJson(QJsonDocument::Compact), error))
         return false;
     hostPins_ = pins;
@@ -73,6 +99,11 @@ QString ControlV2Client::pinnedFingerprint(const QString& machineId) const {
                : QString{};
 }
 QJsonObject ControlV2Client::identity(QString* error) {
+    if (!storageReadError_.isEmpty()) {
+        if (error)
+            *error = storageReadError_;
+        return {};
+    }
     if (installationId_.isEmpty()) {
         installationId_ = "desktop_" + QUuid::createUuid().toString(QUuid::Id128);
         if (!credentials_.write("installation-id", installationId_.toUtf8(), error)) {

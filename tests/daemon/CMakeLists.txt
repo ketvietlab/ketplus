@@ -159,6 +159,10 @@ add_subdirectory(acp-isolation)
 ketplus_add_daemon_test(ketplus_agent_urgent_delivery_tests AgentUrgentDeliveryTest.cpp)
 ketplus_add_daemon_test(ketplus_team_store_tests TeamStoreTest.cpp)
 ketplus_add_daemon_test(ketplus_team_risk_policy_tests TeamRiskPolicyTest.cpp)
+ketplus_add_daemon_test(ketplus_team_routing_tools_tests TeamRoutingToolsTest.cpp)
+ketplus_add_daemon_test(ketplus_team_review_policy_tests TeamReviewPolicyTest.cpp)
+ketplus_add_daemon_test(ketplus_team_finding_resolution_tests TeamFindingResolutionTest.cpp)
+ketplus_add_daemon_test(ketplus_team_finding_routing_tests TeamFindingRoutingTest.cpp)
 ketplus_add_daemon_test(ketplus_team_protocol_tests TeamProtocolTest.cpp)
 ketplus_add_daemon_test(ketplus_team_task_tests TeamTaskTest.cpp)
 ketplus_add_daemon_test(ketplus_team_task_git_tests TeamTaskGitTest.cpp)
@@ -212,6 +216,7 @@ ketplus_add_daemon_test(ketplus_provider_framing_tests ProviderFramingTest.cpp)
 ketplus_add_daemon_test(ketplus_provider_malformed_frame_tests ProviderMalformedFrameTest.cpp)
 ketplus_add_daemon_test(ketplus_provider_stderr_flood_tests ProviderStderrFloodTest.cpp)
 ketplus_add_daemon_test(ketplus_provider_line_reader_tests ProviderLineReaderTest.cpp)
+ketplus_add_daemon_test(ketplus_credential_batch_tests cloud-privacy/CredentialBatchTest.cpp)
 ketplus_add_daemon_test(ketplus_daemon_credential_store_tests CredentialStoreTest.cpp)
 set(CREDENTIAL_STORAGE_LIBRARY ketplus_control_crypto)
 include(credential-store/NativeTests.cmake)
@@ -302,6 +307,7 @@ if(KETPLUS_SIDECAR_TEST_NODE)
         "${CMAKE_CURRENT_SOURCE_DIR}/claude-sidecar/managed-background.test.mjs"
         "${CMAKE_CURRENT_SOURCE_DIR}/claude-sidecar/managed-transport.test.mjs"
         "${CMAKE_CURRENT_SOURCE_DIR}/claude-sidecar/background-sdk-offline.test.mjs"
+        "${CMAKE_CURRENT_SOURCE_DIR}/claude-sidecar/model-catalog.test.mjs"
         "${PROJECT_SOURCE_DIR}/apps/daemon/providers/claude-sidecar/test/session-delete.test.mjs"
         "${PROJECT_SOURCE_DIR}/apps/daemon/providers/claude-sidecar/test/review-guard.test.mjs"
         "${PROJECT_SOURCE_DIR}/apps/daemon/providers/claude-sidecar/test/review-profile.test.mjs")

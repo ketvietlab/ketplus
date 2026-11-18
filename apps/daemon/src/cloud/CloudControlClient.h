@@ -119,25 +119,26 @@ class CloudControlClient final : public QObject {
                           QString* error);
     void sync();
     void heartbeat();
-    void sendHeartbeatBatches(const QList<QJsonArray>& batches, qsizetype index,
-                              quint64 accountEpoch, const QString& machineId,
-                              const QString& workspaceId);
-    void uploadEvents();
-    void uploadSessionEvents(const QString& sessionId, qint64 generation, qint64 afterCursor);
-    // A deleted generation's history awaits purge but must never leave the machine (ADR 0093).
-    [[nodiscard]] bool isLiveGeneration(const QString& sessionId, qint64 generation) const;
-    void distributeKeys();
-    void pollCommands();
-    // A wake-up that lands while a poll is in flight polls again once it returns: that poll
-    // may have read before the command it announces was written.
-    void wakeCommandPoll();
-    void noteCommandPollFailure(int status);
     struct AccountFence {
         quint64 epoch;
         quint64 enrollmentRevision;
         QString machine;
         QString workspace;
     };
+    void sendHeartbeatBatches(const QList<QJsonArray>& batches, qsizetype index,
+                              const AccountFence& account);
+    void uploadEvents();
+    void uploadSessionEvents(const QString& sessionId, qint64 generation, qint64 afterCursor);
+    // A deleted generation's history awaits purge but must never leave the machine (ADR 0093).
+    [[nodiscard]] bool isLiveGeneration(const QString& sessionId, qint64 generation) const;
+    void distributeKeys();
+    QJsonArray sessionKeyEnvelopes(const QJsonArray& devices, bool requirePins, qsizetype limit,
+                                   QJsonArray* trusted, QString* error);
+    void pollCommands();
+    // A wake-up that lands while a poll is in flight polls again once it returns: that poll
+    // may have read before the command it announces was written.
+    void wakeCommandPoll();
+    void noteCommandPollFailure(int status);
     [[nodiscard]] AccountFence accountFence() const;
     [[nodiscard]] bool accountCurrent(const AccountFence& fence) const;
     // Only a restored legacy enrollment can adopt its first device list.
@@ -173,6 +174,7 @@ class CloudControlClient final : public QObject {
     struct AtlasAccessFence final {
         quint64 machine{0};
         quint64 device{0};
+        AccountFence account{};
     };
     [[nodiscard]] AtlasAccessFence atlasAccessFence(const QString& device) const;
     [[nodiscard]] bool atlasAccessCurrent(const QString& device,
@@ -187,13 +189,13 @@ class CloudControlClient final : public QObject {
                      WorktreeRevisionCache* revisionCache = nullptr, qint64 nowMs = 0);
     // Seals each snapshot's metadata (branch, machine name, whether its worktree still
     // exists, conversation number, the conversation whose message started its turn) for the
-    // phone; a snapshot whose metadata cannot be sealed is
-    // sent without it.
+    // phone. A failed credential transaction cancels publication of this heartbeat.
     [[nodiscard]] QList<QJsonArray>
     withSessionMetadata(const QList<QJsonArray>& batches,
                         const QHash<QString, QJsonObject>& metadata);
     [[nodiscard]] QJsonObject sealedSessionMetadata(const QJsonObject& snapshot,
-                                                    const QJsonObject& metadata);
+                                                    const QJsonObject& metadata,
+                                                    CloudCrypto& crypto);
     QByteArray ensurePathIdSalt(QString* error = nullptr);
     // Where a conversation can start: every checkout of each repository a conversation
     // ran in, those with conversations first.
@@ -227,6 +229,7 @@ class CloudControlClient final : public QObject {
                                                            qint64 responseCursor, bool terminal,
                                                            const QString& responseDigest,
                                                            const QJsonObject& content) const;
+    void restoreEnrollment();
     [[nodiscard]] QString storedString(const QString& account) const;
     bool storeString(const QString& account, const QString& value, QString* error = nullptr);
 

@@ -1,5 +1,11 @@
 # ADR 0114: Agent teams — a leader, developers and a reviewer on one goal
 
+Review lifecycle amendment: [ADR 0132](0132-bounded-review-arbitration.md) supersedes
+free-form manual acceptance, automatic retry after source-integrity failure and
+execution beyond two content rounds. Historical settings remain readable; further
+review requires explicit leader arbitration. The original decisions below describe
+the earlier contract where the amendment does not say otherwise.
+
 Status: accepted (Jay, 2026-11-10 for the rules marked *decided*; the open points
 below were fixed in this ADR with the recommendation of epic #450). Implements
 ketvietlab/ketplus#450; this record is #454.

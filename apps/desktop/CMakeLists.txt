@@ -68,10 +68,13 @@ add_library(ketplus_desktop_support STATIC
     src/workspace/SidebarControls.h
     src/workspace/ActivityBar.h
     src/workspace/SymbolIcons.h
+    src/workspace/SidebarRepositoryListFilter.cpp
+    src/workspace/SidebarFilterText.h
     src/workspace/SidebarRepositoryList.cpp
     src/workspace/SidebarRepositoryList.h
     src/workspace/SidebarRepositoryListDetail.h
     src/workspace/SidebarRepositoryListLayout.cpp
+    src/workspace/SidebarRepositoryListGroups.cpp
     src/workspace/SidebarRepositoryListRows.cpp
     src/workspace/SidebarRepositoryListTeams.cpp
     src/workspace/SidebarRepositoryPins.cpp
@@ -701,6 +704,7 @@ qt6_deploy_runtime_dependencies(
     NO_TRANSLATIONS
     DEPLOY_TOOL_OPTIONS
         \"-executable=KetPlus.app/Contents/Helpers/ketplus_daemon\"
+        \"-executable=KetPlus.app/Contents/Helpers/ketplus_job_executor\"
 )
 set(KETPLUS_APP_BUNDLE \"\${QT_DEPLOY_PREFIX}/KetPlus.app\")
 include(\"${PROJECT_SOURCE_DIR}/packaging/macos/SignDeployedFrameworks.cmake\")"

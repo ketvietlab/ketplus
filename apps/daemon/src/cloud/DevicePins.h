@@ -43,7 +43,7 @@ class DevicePins final {
     [[nodiscard]] bool trustsKeys(const QString& deviceId, int keyVersion,
                                   const QJsonObject& keys) const;
     // The active rows of a device list whose keys match their pins.
-    [[nodiscard]] QJsonArray trusted(const QJsonArray& devices) const;
+    [[nodiscard]] QJsonArray trusted(const QJsonArray& devices, QString* error = nullptr) const;
 
   private:
     [[nodiscard]] QJsonObject read(QString* error) const;

@@ -47,6 +47,8 @@ QJsonObject tool(const QString& name, const QString& description, const QJsonObj
 const QStringList& names() {
     static const QStringList value{QStringLiteral("team_get"),
                                    QStringLiteral("team_tasks"),
+                                   QStringLiteral("team_task_route_verify"),
+                                   QStringLiteral("team_task_route_decide"),
                                    QStringLiteral("team_task_update"),
                                    QStringLiteral("team_wait"),
                                    QStringLiteral("team_task_create"),
@@ -84,6 +86,37 @@ QJsonArray teamTools() {
                             "slug when the title is not English."));
     const QJsonObject member = text(QStringLiteral("The member's conversation number."));
     return {
+        tool(QStringLiteral("team_task_route_verify"),
+             QStringLiteral("Task developer or leader: ask the host to verify a clean exact "
+                            "revision using its fixed mechanical prose-reflow recipe. Returns "
+                            "an opaque short-lived receipt, or review_required for unknown "
+                            "semantic scope. Submit evidence once to the leader. No user "
+                            "approval, reviewer verdict, task completion or merge is granted."),
+             {{"task_id", taskId},
+              {"expected_team_revision", number("Exact revision from team_get.", 0)},
+              {"head_commit", text("Exact full lowercase Git commit.")}},
+             {"task_id", "expected_team_revision", "head_commit"}),
+        tool(QStringLiteral("team_task_route_decide"),
+             QStringLiteral("Same-team leader: record leader_direct advice, developer_leader "
+                            "verification or developer_reviewer routing through daemon policy. "
+                            "Advice needs no task or receipt. Changes require an existing task "
+                            "and exact head; only host-issued evidence can establish low risk. "
+                            "Confidence is supplementary, never authority. A decision is an "
+                            "audit record, not approval, a reviewer verdict or a state change."),
+             {{"task_id", taskId},
+              {"expected_team_revision", number("Exact revision from team_get.", 0)},
+              {"kind", QJsonObject{{"type", "string"},
+                                   {"enum", QJsonArray{"explanation", "proposal", "synthesis",
+                                                       "coordination", "change"}}}},
+              {"route", QJsonObject{{"type", "string"},
+                                    {"enum", QJsonArray{"auto", "leader_direct", "developer_leader",
+                                                        "developer_reviewer"}}}},
+              {"head_commit", text("For change: exact full lowercase commit.")},
+              {"evidence_id",
+               text("Optional host-issued 64-hex receipt ID; never caller assertions.")},
+              {"confidence", number("Supplementary percentage; it grants no permission.", 0, 100)},
+              {"reason", text("Bounded machine reason code, not transcripts or check output.")}},
+             {"expected_team_revision", "kind", "reason"}),
         tool(QStringLiteral("team_get"),
              QStringLiteral("Your team: its goal, settings, members with roles and lanes, and "
                             "your own role and lane."),
@@ -212,16 +245,25 @@ QJsonArray teamTools() {
              {{QStringLiteral("task_id"), taskId},
               {QStringLiteral("reason"), text(QStringLiteral("Why the verdict does not count."))}},
              {QStringLiteral("task_id"), QStringLiteral("reason")}),
-        tool(QStringLiteral("team_review_accept"),
-             QStringLiteral("Leader: accept a review made outside the board, for example on the "
-                            "pull request. A task in review, or blocked by its review, becomes "
-                            "ready."),
-             {{QStringLiteral("task_id"), taskId},
-              {QStringLiteral("evidence"),
-               text(QStringLiteral("Where the review is: a pull request review or comment URL, "
-                                   "or what was checked."))},
-              {QStringLiteral("reason"), text(QStringLiteral("Why it is accepted."))}},
-             {QStringLiteral("task_id"), QStringLiteral("evidence"), QStringLiteral("reason")}),
+        tool(
+            QStringLiteral("team_review_accept"),
+            QStringLiteral(
+                "Leader: submit a version1 review decision. Resolve only host-verified bounded "
+                "findings, or explicitly authorize one further independent review. Does not cancel "
+                "active/queued review, create a reviewer verdict, merge or bypass user decisions."),
+            {{QStringLiteral("task_id"), taskId},
+             {QStringLiteral("evidence"),
+              text(QStringLiteral(
+                  "JSON string: version:1, action:resolve_findings|request_review, "
+                  "expected_team_revision, expected_task_revision, head_commit. resolve_findings "
+                  "also requires confidence integer >90, evidence_id from host route_verify, "
+                  "resolutions:[{id,status:fixed|deferred,reason,owner only when deferred}]. "
+                  "request_review accepts no evidence/resolutions/confidence. Read current "
+                  "task.review_findings; unsupported findings/legacy/P0/P1/mandatory risks require "
+                  "reviewer. URLs and caller risk/pass facts are not receipts."))},
+             {QStringLiteral("reason"),
+              text(QStringLiteral("Bounded lowercase reason code for this leader arbitration."))}},
+            {QStringLiteral("task_id"), QStringLiteral("evidence"), QStringLiteral("reason")}),
         tool(QStringLiteral("team_lane_set"),
              QStringLiteral("Leader: change a developer's lane and path prefixes. Logged in "
                             "Updates and in the history of the tasks it affects."),

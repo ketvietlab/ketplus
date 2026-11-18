@@ -1,6 +1,8 @@
 #include "app/MainWindow.h"
 #include "app/theme/SchemeQuickPicker.h"
 #include "ui/AboutDialog.h"
+#include "workspace/SidebarControls.h"
+#include "workspace/SidebarFilterText.h"
 
 #include "app/RepositoryRouter.h"
 #include "app/SpotlightDialog.h"
@@ -356,6 +358,10 @@ void MainWindow::createActions() {
     goToFileAction->setObjectName(QStringLiteral("goToFileAction"));
     goToFileAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+P")));
     connect(goToFileAction, &QAction::triggered, this, &MainWindow::showFileSpotlight);
+    auto* filterAction = goMenu->addAction(sidebar_filter::text(sidebar_filter::name));
+    filterAction->setObjectName(QStringLiteral("sidebarFilterAction"));
+    filterAction->setShortcut(SidebarFilterField::shortcut());
+    connect(filterAction, &QAction::triggered, activityBar_, &ActivityBar::focusRepositoryFilter);
     auto* goToSymbolAction = goMenu->addAction(QStringLiteral("Go to &Symbol…"));
     goToSymbolAction->setShortcuts(
         {QKeySequence(QStringLiteral("Ctrl+Shift+O")), QKeySequence(QStringLiteral("Ctrl+R"))});
@@ -446,6 +452,7 @@ void MainWindow::createActions() {
     connect(searchPanelAction_, &QAction::toggled, this, &MainWindow::setSearchPanelVisible);
 
     agentWorkspaceAction_ = viewMenu->addAction(QStringLiteral("Agent Workspace"));
+    agentWorkspaceAction_->setObjectName(QStringLiteral("agentWorkspaceAction"));
     agentWorkspaceAction_->setCheckable(true);
     agentWorkspaceAction_->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+A")));
     connect(agentWorkspaceAction_, &QAction::toggled, this, [this](const bool checked) {

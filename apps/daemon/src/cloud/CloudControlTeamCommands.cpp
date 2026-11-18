@@ -103,12 +103,12 @@ void CloudControlClient::executeTeamCommand(const QJsonObject& command, const QJ
                             {QStringLiteral("message_type"), kind},
                             {QStringLiteral("sent_at"), protocol::timestamp()},
                             {QStringLiteral("payload"), localPayload}};
-    const quint64 requestEpoch = accountEpoch_;
+    const auto requestAccount = accountFence();
     host_->remoteTeamCommand(local, ids,
-                             [guard = QPointer<CloudControlClient>(this), scoped, requestEpoch,
+                             [guard = QPointer<CloudControlClient>(this), scoped, requestAccount,
                               answer](const QJsonObject& result) {
                                  // Answered only while the Mac is still in that account.
-                                 if (guard && guard->accountEpoch_ == requestEpoch)
+                                 if (guard && guard->accountCurrent(requestAccount))
                                      answer(scoped, result);
                              });
 }

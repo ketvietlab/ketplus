@@ -3,6 +3,34 @@ class RemoteControlClientTest final : public QObject {
     Q_OBJECT
   private slots:
     void init() { r03::resetCredentials(); }
+    void hostPinReadFailureCannotBecomeLegacyAdoption() {
+        const QUrl origin("https://synthetic.invalid/native/ketplus");
+        FixtureTransport network;
+        ControlV2Client previous(origin);
+        EncryptedFixture fixture(previous, network);
+        RemoteControlTestAccess::pinHost(previous, "second-host", 1, fixture.hostKeys);
+        RemoteControlTestAccess::persist(previous);
+        const auto before = r03::credentials;
+        // Session restoration succeeds; only the following host-pin fetch fails.
+        r03::failReadsOf = "host-pins";
+        ControlV2Client restored(origin);
+        r03::failReadsOf.clear();
+        RemoteControlTestAccess::transport(restored, network);
+        bool answered = false;
+        RemoteControlTestAccess::hostKeys(
+            restored, [&](const QJsonObject& keys, const QString& error) {
+                answered = true;
+                QVERIFY(keys.isEmpty());
+                QVERIFY(error.contains("synthetic credential read failure"));
+            });
+        QTRY_VERIFY(answered);
+        QVERIFY(r03::credentials == before);
+        QVERIFY(RemoteControlTestAccess::hostPins(restored).isEmpty());
+        QVERIFY(!restored.signedIn());
+        ControlV2Client retried(origin);
+        QCOMPARE(RemoteControlTestAccess::hostPins(retried),
+                 RemoteControlTestAccess::hostPins(previous));
+    }
     void browserSignInReturnsOnlyTheRelayPageAndCanBeCanceled() {
         FixtureTransport network;
         ControlV2Client client(QUrl("https://synthetic.invalid/native/ketplus"));

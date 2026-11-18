@@ -25,7 +25,7 @@ class Banner;
 
 namespace ketplus {
 
-class SidebarSearchButton;
+class SidebarFilterField;
 
 struct ThemePalette;
 
@@ -44,6 +44,7 @@ class ActivityBar final : public QWidget {
     explicit ActivityBar(QWidget* parent = nullptr);
 
     void setMode(Mode mode);
+    void focusRepositoryFilter();
     void setSidebarWidth(int width);
     // Unscaled (Medium) width, persisted as `sidebar/width`.
     [[nodiscard]] int sidebarWidth() const noexcept { return sidebarWidth_; }
@@ -66,7 +67,6 @@ class ActivityBar final : public QWidget {
 
   signals:
     void modeRequested(ketplus::ActivityBar::Mode mode);
-    void quickSearchRequested();
     void repositoryRequested();
     void machineRequested(const QString& machineId);
     void repositoryActivationRequested(const QString& path);
@@ -94,7 +94,7 @@ class ActivityBar final : public QWidget {
     void refreshIcons();
 
     QButtonGroup* group_{nullptr};
-    SidebarSearchButton* quickSearchButton_{nullptr};
+    SidebarFilterField* repositoryFilter_{nullptr};
     BrandLockup* brandLockup_{nullptr};
     ket::NavItem* explorerButton_{nullptr};
     ket::NavItem* sourceControlButton_{nullptr};

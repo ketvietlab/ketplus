@@ -198,11 +198,14 @@ void SidebarRepositoryList::updateTeamFolders(const QVector<SidebarRepository>& 
 void SidebarRepositoryList::presentTeamFolders(QWidget* group) {
     for (QWidget* folder : group->findChildren<QWidget*>(QStringLiteral("productTeamFolder"),
                                                          Qt::FindDirectChildrenOnly)) {
+        folder->show();
         const bool folded = collapsedTeams_.contains(teamFoldKey(
             folder->property("repositoryPath").toString(), folder->property("teamId").toString()));
         auto* branch = branchOf(folder);
         branch->setExpanded(!folded);
         auto* members = membersOf(folder);
+        for (auto* row : members->findChildren<ket::SidebarRow*>())
+            row->show();
         members->setVisible(!folded && !members->findChildren<ket::SidebarRow*>().isEmpty());
     }
 }

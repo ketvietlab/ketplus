@@ -1188,15 +1188,40 @@ void AgentWorkspaceViewTest::streamingResponseStaysAnchoredAboveRunStatus() {
                qMax(qreal(0),
                     transcript->property("contentHeight").toDouble() - transcript->height());
     };
-    for (const int distance : {4, 31, 33, 80}) {
-        transcript->setProperty("contentY", endY() - distance);
-        QTRY_VERIFY(qAbs(endY() - transcript->property("contentY").toDouble() - distance) < 0.5);
+    for (const int distance : {4, 31, 32, 33, 80}) {
+        // Probe nearTail in reading mode. Assigning contentY while followTail is still
+        // true lets an ordinary layout settle legitimately put the viewport back at the end.
+        // Navigation records reading intent and its anchor before any deferred restoration.
+        const auto maximum =
+            transcript->property("contentHeight").toDouble() - transcript->height();
+        QVERIFY(maximum > distance);
+        QVERIFY(QMetaObject::invokeMethod(root, "setBenchmarkScrollProgress",
+                                          Q_ARG(QVariant, 1.0 - distance / maximum)));
+        // A deferred row measurement can request this ordinary post-layout settle between
+        // assigning contentY and inspecting the boundary. Exercise that ordering explicitly.
+        QVERIFY(QMetaObject::invokeMethod(root, "settleTranscriptLayout"));
+        QVERIFY(!transcript->property("followTail").toBool());
+        const auto geometry = [&] {
+            return QStringLiteral("requestedDistance=%1 actualDistance=%2 endY=%3 contentY=%4 "
+                                  "contentHeight=%5 viewportHeight=%6 followTail=%7")
+                .arg(distance)
+                .arg(endY() - transcript->property("contentY").toDouble())
+                .arg(endY())
+                .arg(transcript->property("contentY").toDouble())
+                .arg(transcript->property("contentHeight").toDouble())
+                .arg(transcript->height())
+                .arg(transcript->property("followTail").toBool());
+        };
+        QTRY_VERIFY2(qAbs(endY() - transcript->property("contentY").toDouble() - distance) < 0.5,
+                     qPrintable(geometry()));
         QVariant nearTail;
         QVERIFY(
             QMetaObject::invokeMethod(transcript, "nearTail", Q_RETURN_ARG(QVariant, nearTail)));
         QCOMPARE(nearTail.toBool(), distance <= 32);
     }
-    transcript->setProperty("contentY", endY());
+    QVERIFY(QMetaObject::invokeMethod(root, "jumpToLatest"));
+    QTRY_VERIFY(transcript->property("followTail").toBool());
+    QTRY_VERIFY(transcript->property("atYEnd").toBool());
     for (int update = 0; update < 4; ++update) {
         // Keep following across consecutive coalesced streaming updates.
         streamedBody += QStringLiteral("More streamed content.\n\n").repeated(20);

@@ -1174,3 +1174,86 @@ The acceptance evidence maps to the implementation as follows:
 - Validation/budget: docs and fixtures are committed for review. Both exhausted
   parent ledgers remain unchanged; the additional Cursor ledger stays **3/10**.
   Full independent T-3 review is still required before acceptance or merge.
+
+### Integration merge and process-scoped identity caches
+
+Full independent review accepts the implementation at
+`456ad14ef86b25e56348c29c78f766ede9383d63` within the provider/version scope above.
+Merging integration `3272463cc03ae5d0b22a1486a2b60b2534b9a06d` retains both sets
+of sidecar tests: the three managed-background/control fixtures and the incoming
+model-catalog fixture. The latter must copy the two new imported policy/barrier
+modules into its synthetic sidecar directory; changing its fixture does not
+change model-catalog runtime behavior.
+
+The wider Pro matrix also exercises multiple managed turns in newer team
+fixtures. Provider-native turn/item IDs belong to a process and may be reused
+after replacement. The shared provider-stopped path clears their duplicate/error
+caches, but a dedicated replacement deliberately does not broadcast that signal
+to unrelated conversations. The host therefore records the acknowledged identity
+epoch and clears only that owner's completed/failed turn and completed-item
+caches once, after the exact fresh transport ACK. Preparation or revocation alone
+does not clear them; a repeated ACK for that context preserves them. Wrong or
+missing ACKs retain the failure fence, and review refresh still grants no
+mutation authority.
+
+New Host regressions require two real local fixture processes to resume one
+history ID and complete despite reusing a turn ID. They also check the precise
+cache boundary, repeated/wrong ACK behavior and isolation from another owner.
+An old queued completion cannot add a journal completion or wake while the
+replacement waits for approval. A separate Codex regression retains the retired
+worker object after confirming its process exit, then invokes its actual
+epoch-bound callbacks after the replacement ACK. Even a completion carrying the
+new process's reused native ID is rejected, and the current turn remains active.
+Durable delivery deduplication and accepted origin-policy snapshots are unchanged.
+The fake provider's ID behavior is retained, rather than changed to avoid this
+boundary. The resolution and this lifecycle delta need independent review on the
+merged baseline; no additional model request is made and the extra budget stays
+**3/10**.
+
+The first merged Pro run exposed separate environment and integration failures:
+the signing fixture reported ENOSPC and the Atlas fixture could not write its
+bounded test manifest; later team/conversation cases exposed the process-ID cache
+boundary. Desktop fixtures also assumed a shared process and a fixed initial
+thread ID. They now assert the actual source thread and per-session process
+counts without changing production Desktop behavior. The initial failure list is
+retained separately; the original temporary stdout logs became unavailable after
+an interruption. After the scoped runtime/fixture fixes and reclaiming only
+completed-build artifacts, the full Pro build and the focused ten-suite matrix
+pass (155.16 seconds), including both environment cases, Host/Codex lifecycle,
+four affected team suites and both Desktop daemon/discovery suites. The final
+full Pro run is required separately; focused success does not replace it.
+
+That run was interrupted after test 133. The retained CTest output records
+132 passes and one explicit SSH platform skip with their commands, and its
+checkpoint contains exactly indices 1–133; neither contains a failure. CTest's
+per-test log labels the skipped test "Test Passed", so the skip is distinguished
+using its explicit platform message and configured skip return code. These files
+were copied before CTest
+failover resumed at test 134. The evidence also records the complete 239-test
+catalog, merge parents, source patch and executable identities. Hashes were
+captured at resume, not presented as historical pre-run hashes. Source and Pro
+executables remained unchanged; documentation edits do not change that build.
+The resulting validation must be reported as a run continued after interruption,
+rather than a fresh uninterrupted full run. The stale failure-list timestamp
+predates both the focused passing run and this interrupted run.
+
+The continued run completed all remaining 106 tests in 1212.70 seconds:
+105 passed and `ketplus_team_reply_tests` failed. Across the full catalog this
+is **237 passed, one platform skip and one failed suite**, not a green full run.
+Its `theOutboxGitHoldsUpNothing` case received both assignments but did not observe
+both conversations in their task worktrees. The exact case passed in isolation;
+a whole-suite diagnostic overlapping the remaining Pro tests instead failed
+`resumeIsAnsweredBeforeTheHeldMessagesAreSent` while waiting for Git to start.
+After the Pro run ended, a serialized whole-suite control on the unchanged
+executable passed all nine QtTest entries in 28.968 seconds. Both original
+failures and the separate passing control are retained; no timeout or assertion
+was relaxed and no team production code was changed to obtain that result.
+
+The test, common agent fixture and worktree/outbox implementation match integration
+`3272463c` byte for byte. T-3 changes provider lifecycle/transport behavior, so
+source ownership alone does not establish causality or exclude a regression.
+No equivalent failure has been established on a separately built integration
+baseline. The observed failures did not reproduce in the serialized control;
+their cause remains unclassified pending leader/reviewer assessment, including
+whether a focused baseline control is needed before merge. This resolution does
+not inherit acceptance from the previously reviewed source revision.

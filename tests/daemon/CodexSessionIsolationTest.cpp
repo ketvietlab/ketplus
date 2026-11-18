@@ -3,6 +3,7 @@
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QProcess>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QtTest>
@@ -54,7 +55,8 @@ for line in sys.stdin:
     elif method=='turn/start':
         text=p['input'][0]['text'];history.append(text)
         with open(state(),'w') as f:json.dump(history,f)
-        turn='turn-'+str(len(history));note('turn',text=text,count=len(history),model=p.get('model'),effort=p.get('effort'))
+        turn='turn-reused' if epoch.startswith('reuse-') else 'turn-'+str(len(history))
+        note('turn',text=text,count=len(history),model=p.get('model'),effort=p.get('effort'))
         reply(id,dict(turn=dict(id=turn)))
         emit(dict(method='turn/started',params=dict(threadId=thread,turn=dict(id=turn))))
         if text=='crash':os._exit(7)
@@ -113,6 +115,53 @@ void start(CodexAdapter& adapter, const QString& thread, const QString& text) {
 class CodexSessionIsolationTest final : public QObject {
     Q_OBJECT
   private slots:
+    void retiredEpochCannotCompleteAReplacementWithTheSameNativeId() {
+        QTemporaryDir folder;
+        const auto path = folder.filePath("fake-codex");
+        QVERIFY(fixture(path));
+        CodexAdapter adapter(path);
+        QString thread;
+        adapter.call("thread/start", setup(folder.path(), "A", "reuse-a1"),
+                     [&](const QJsonObject& result, const QString& error) {
+                         QVERIFY2(error.isEmpty(), qPrintable(error));
+                         thread = result.value("thread").toObject().value("id").toString();
+                     });
+        QTRY_VERIFY(!thread.isEmpty());
+        QSignalSpy firstNotifications(&adapter, &CodexAdapter::notificationReceived);
+        start(adapter, thread, "complete");
+        QTRY_VERIFY(
+            std::any_of(firstNotifications.begin(), firstNotifications.end(),
+                        [](const QList<QVariant>& e) { return e.at(0) == "turn/completed"; }));
+        QTRY_VERIFY(adapter.sessionWorkers_.value("A").adapter->isIdle());
+        // Keep the retired QObject solely to invoke its actual epoch-bound callbacks
+        // after process exit and fresh ACK. Production normally deletes it at closure.
+        const auto retired = adapter.sessionWorkers_.take("A");
+        QVERIFY(retired.adapter);
+        retired.adapter->stop();
+        QCOMPARE(retired.adapter->process_->state(), QProcess::NotRunning);
+        bool resumed = false;
+        adapter.call("thread/resume", setup(folder.path(), "A", "reuse-a2", thread),
+                     [&](const QJsonObject& result, const QString& error) {
+                         QVERIFY2(error.isEmpty(), qPrintable(error));
+                         QCOMPARE(result.value("managedTransportEpoch"), "reuse-a2");
+                         resumed = true;
+                     });
+        QTRY_VERIFY(resumed);
+        start(adapter, thread, "hold");
+        QTRY_COMPARE(adapter.sessionWorkers_.value("A").turnId, "turn-reused");
+        QSignalSpy notifications(&adapter, &CodexAdapter::notificationReceived);
+        emit retired.adapter->notificationReceived(
+            "turn/completed",
+            {{"threadId", thread},
+             {"turn", QJsonObject{{"id", "turn-reused"}, {"status", "completed"}}}});
+        emit retired.adapter->stopped("late retired-process callback");
+        QCOMPARE(notifications.size(), 0);
+        QCOMPARE(adapter.sessionWorkers_.value("A").turnId, "turn-reused");
+        QVERIFY(!adapter.sessionWorkers_.value("A").adapter->isIdle());
+        delete retired.adapter.data();
+        adapter.stop();
+    }
+
     void twoSessionsKeepHistoryWhileOnlyOneProcessRefreshes() {
         QTemporaryDir folder;
         const auto path = folder.filePath("fake-codex");

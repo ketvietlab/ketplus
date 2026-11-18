@@ -21,6 +21,10 @@ response return an explicit upgrade error. This is backend/transport work;
 live-catalog bounds and the remaining #68 acceptance gates stay open. Incremental discovery now requests only live sessions
 (ADR 0092), avoiding tombstone walks and repeated deletion signals. Full refresh
 and CLI retain complete reconciliation; older daemon replies remain compatible.
+The live catalog is now paged too (ADR 0131): an install with thousands of
+conversations used to exceed the 1 MiB frame and list none. Desktop applies a
+catalog with one settings write and one list update per workspace; Control v2
+clients still read an unpaged catalog.
 
 OS credential storage (ADR 0130) replaces the Control credential file with a
 transactional Keychain/Secret Service record and verified legacy-file migration.
@@ -291,7 +295,13 @@ Linux store policy, signed upgrade prompts and platform release acceptance remai
   (the state's mark, title and #number; role, state, origin and worktree in the hint),
   guide lines run under each chevron, and folds of repositories and teams survive a
   restart (a folded repository shows a dot while something inside waits). Also the mock's
-  field-styled Quick search, a machine header with its chevron, and update pills. Rows draw no user tags and the sidebar has no tag filter (ADR 0117); the
+  editable repo/conversation filter, a machine header with its chevron, and update pills.
+  The filter matches names/paths or titles in place, keeps matching ancestors, temporarily
+  reveals folded/previewed results, and restores the normal tree when cleared. It retains its
+  temporary query through local/selected-machine updates without changing selection or order.
+  Cmd+Option+K focuses it on macOS (Ctrl+Alt+K elsewhere); Cmd+P remains global Spotlight.
+  Escape clears; Enter does not navigate. New filter text follows the UI locale (vi/en).
+ Rows draw no user tags and the sidebar has no tag filter (ADR 0117); the
   daemon still stores tags and their catalog (ADR 0107, 0113) for other clients.
   Repository groups keep pin order, then name/path order across conversation and
   team updates; conversations inside each group still follow their newest turn.
@@ -1079,11 +1089,27 @@ visible in the draft. Per-file limits match the local workspace; daemon draft qu
 remain authoritative. Attachments require an existing conversation/session. See ADR
 0119 for lifecycle and protocol details and ADR 0007 for staging limits.
 
-## Team routing foundation (pending review)
+## Team routing and host evidence (pending review)
 
 The daemon has a versioned evidence-gated risk routing model and coordinator API
 (ADR 0129). Explicit same-team leader decisions can record advisory, verified
 low-risk or reviewer routes without manufacturing reviewer verdicts or completion.
-The default trusted-evidence adapter returns unknown. Runtime receipt production,
-agent-tool/UI wiring and workflow consumption remain follow-up work; this is not
-a shipped fast-pass or resource-cleanup claim.
+Authenticated agent tools add host receipt verification and explicit leader route
+decisions. The first independent semantic validator proves only mechanical plain
+prose reflow; unknown/code/material changes remain on the reviewer route. Receipts
+come from fixed host checks at the exact task revision, never caller risk/pass
+assertions. See [team-risk-routing.md](team-risk-routing.md). A route is an audit
+record, not a reviewer verdict, a user approval, completion or merge eligibility.
+Workflow consumption and general semantic verification remain separate work;
+there is no automatic cleanup capability.
+
+## Bounded review lifecycle (pending review)
+
+[ADR 0132](decisions/0132-bounded-review-arbitration.md) defines structured findings,
+leader arbitration after at most two automatic content rounds and separate source
+interruption handling. The implementation adds exact-revision consumer guards and separate host recipes
+for nonmandatory prose line-width fixes and unchanged outside-task preference
+deferrals over base/reviewed/current immutable Git objects. Unsupported, mandatory
+or material changes still require reviewer. Native validation follows
+`docs/testing.md`; independent review remains pending. This is not general
+automatic finding closure or resource cleanup.

@@ -17,6 +17,10 @@ result cards and CLI-install retry. For each new renderer process, show a Két
 dialog with the resolved executable, argument boundaries, working directory and
 contract location. Treat all project text as plain text, escaping control and
 direction-format characters in command details. Focus View static by default.
+Unicode line and paragraph separators are shown as visible escapes as well.
+Match the CLI's cwd semantics by normalizing lexical path components before
+resolving filesystem symlinks. A linked sidecar derives cwd and
+`{atlasDirectory}` from its canonical target directory, as the CLI does.
 
 Run once authorizes only that launch. View static, Escape and closing the dialog
 open without `--renderer`. No prompt or verifiable command means static viewing;
@@ -37,6 +41,23 @@ symlink destinations or cwd/executable resolution cannot inherit approval.
 Changed renderer data falls back to static viewing with an explanatory error;
 an invalid or moved bundle path is rejected. There is no silent second attempt
 with renderer opt-in.
+
+## Headless and remote starts
+
+The daemon's `atlas.start` boundary has no host-side per-launch consent UI or
+verified decision handoff. Its runtime therefore starts the read-only static
+viewer only, even when `atlas.renderer.json` is present. Pairing authorizes a
+device to issue scoped Atlas requests; it does not authorize project code to run
+on the host. Remote payload fields, prior desktop approval and renderer-sidecar
+presence cannot supply that missing decision. New starts, reconnects and daemon
+restarts do not obtain a reusable renderer grant. The attachment advertises only
+the viewer origin, never a renderer origin.
+
+Adding remote renderer support requires a separately reviewed host-side,
+launch-bound decision and the same contract/path revalidation as desktop. This
+change adds no permission API or persistent grant. Static screens remain
+available; screens that depend on a running framework are unavailable through
+this daemon path until that boundary exists.
 
 ## Consequences and limits
 
@@ -62,6 +83,12 @@ and verify static fallback without renderer execution. UI checks exercise live
 light/dark/system theme and 90/100/110/125 percent zoom at narrow/wide native
 widget sizes. `ketplus_atlas_workspace_tests` checks that both desktop entry
 points reach the permission dialog before launching the CLI.
+
+`ketplus_atlas_access_tests` uses synthetic paired-device commands and a harmless
+CLI to check static starts and fresh starts after Stop, including remote fields
+that cannot grant renderer permission. `ketplus_atlas_live_runtime_tests` checks
+startup cancellation and the owned viewer's readiness and lifecycle. Command
+detail regressions cover Unicode separators and cwd/sidecar symlink semantics.
 
 These fixtures do not run an actual project renderer or browser and do not prove
 packaging, installed-bundle behavior, or OS containment. Native capture evidence

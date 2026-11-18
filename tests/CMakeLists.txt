@@ -149,9 +149,13 @@ target_link_libraries(ketplus_conversation_menu_tests PRIVATE Qt6::Test ketplus_
 ketplus_add_gui_test(ketplus_sidebar_teams_tests SidebarTeamsTest.cpp)
 target_link_libraries(ketplus_sidebar_teams_tests PRIVATE Qt6::Test ketplus_desktop_shell)
 # Stable repository order across conversation/team updates, pins and conversation grouping.
+ketplus_add_gui_test(ketplus_sidebar_filter_tests SidebarFilterTest.cpp)
+target_link_libraries(ketplus_sidebar_filter_tests PRIVATE Qt6::Test ketplus_desktop_shell)
 ketplus_add_gui_test(ketplus_sidebar_repository_order_tests SidebarRepositoryOrderTest.cpp)
 target_link_libraries(ketplus_sidebar_repository_order_tests PRIVATE Qt6::Test
                       ketplus_desktop_shell)
+ketplus_add_gui_test(ketplus_sidebar_scale_tests SidebarScaleTest.cpp)
+target_link_libraries(ketplus_sidebar_scale_tests PRIVATE Qt6::Test ketplus_desktop_shell)
 
 ketplus_add_gui_test(ketplus_team_dialogs_tests TeamDialogsTest.cpp)
 target_link_libraries(ketplus_team_dialogs_tests PRIVATE Qt6::Test ketplus_desktop_shell)

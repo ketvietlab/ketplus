@@ -10,6 +10,19 @@ cmake --build --preset dev
 ctest --preset dev
 ```
 
+Team route tools (ADR 0130): run `ketplus_team_routing_tools_tests` together with
+the team risk-policy, agent-tools, agent-tasks, protocol and local/remote team
+fixtures. The positive case uses temporary real Git objects → the actual bounded
+prose-reflow producer → the runtime receipt store → coordinator policy. Unsupported
+semantics, forged facts/IDs, wrong actors, dirty/stale revisions and user-client
+impersonation fail closed. It starts no real provider and executes no repository
+scripts. Real Git attack fixtures set `diff.ignoreSubmodules=all` to conceal an
+added gitlink, or replace the base tree to conceal an authentication-code change.
+The producer must reject both complete deltas and the authenticated tools must
+issue no receipt or low-risk route. A shared host header/build-wiring change also
+requires the full build and full Pro suite below; focused fixtures alone are not
+the complete matrix.
+
 Every Pro/daemon ctest test runs with `QT_QPA_PLATFORM=offscreen`: `ketplus_tests_offscreen()`
 (`cmake/OffscreenTests.cmake`) sets it for each test in `tests/` and `tests/daemon/`, over the
 test's own environment and the shell's, so a test run never opens windows on the screen. A
@@ -273,6 +286,14 @@ includes `review-guard.test.mjs` and `review-profile.test.mjs`, and the daemon's
 `ketplus_agent_messaging_tests`. The sidecar tests use a fake SDK that runs every
 command and edit the guard allows, so a wrong allow changes the test checkout.
 
+Bounded review policy changes additionally cover `ketplus_team_review_policy_tests`,
+`ketplus_team_finding_resolution_tests`, `ketplus_team_finding_routing_tests`,
+`ketplus_team_verdict_tests`,
+`ketplus_team_review_place_tests` and `ketplus_team_language_tests` (ADR 0132).
+Fake-host receipt tests establish consumer gates; the finding routing suite checks
+actual three-revision Git proofs, authenticated host receipt closure and attacks
+using ignored gitlinks/replacement trees. Required full Pro checks still apply.
+
 A team reviewer's verify turn writes only in its scratch directory (ADR 0067). Build there:
 `cmake -B <scratch>/build`, `xcodebuild -derivedDataPath <scratch>/DerivedData
 -clonedSourcePackagesDirPath <scratch>/SourcePackages`, and run a script that writes into
@@ -523,6 +544,11 @@ the corresponding Atlas mock first.
   backlog probe asserts the delete command stays under 500 ms and each purge
   pass under 250 ms. `ketplus_daemon_cloud_privacy_tests` covers 413 retry, late
   202 and a fresh upload of a deleted generation's residual history.
+- Paged live catalog (ADR 0131): run `ketplus_provider_deletion_tests` (bounded,
+  complete, ordered pages over the frame limit; malformed requests) and
+  `ketplus_desktop_daemon_client_tests` (refresh and discovery read every page).
+  `ketplus_sidebar_scale_tests` covers building only the rows the sidebar shows.
+  `benchmarks/run-large-workspace.sh` measures the real app with a large install.
 - Live-only discovery (ADR 0092): run provider deletion, Desktop daemon client,
   Desktop session discovery, lifecycle and headless CLI targets. Real temporary
   daemons with fake providers cover 20k/100k retained tombstones and zero repeated
@@ -764,7 +790,7 @@ Build `ketplus_execution_worktree_ui_tests`, `ketplus_daemon_worktree_context_te
 
 Build `ketplus_atlas_live_tunnel_tests`, `ketplus_atlas_live_runtime_tests`, and `ketplus_atlas_tunnel_fixture`. Run the first two with CTest; set `KETPLUS_KETATLAS_CLI` to a private KetAtlas 0.5.2 executable for the real-runtime test (otherwise that case explicitly skips). No provider invocation, credentials, user daemon or running desktop app is used.
 
-The codec/tunnel suite checks tampering, replay, direction/channel binding, credit-window crossing, binary EOF integrity and unregistered-origin refusal. The runtime suite starts a temporary project and renderer, verifies live reads after changing source, reattaches with fresh keys and stable source/ports, and checks process cleanup.
+The codec/tunnel suite checks tampering, replay, direction/channel binding, credit-window crossing, binary EOF integrity and unregistered-origin refusal. The runtime suite checks synthetic CLI readiness and startup cancellation. Its optional real-CLI case serves static project files, verifies live reads after changing source, reattaches with fresh keys and a stable viewer port, and checks process cleanup. It does not authorize a project renderer. `ketplus_atlas_access_tests` exercises paired-device static starts with a fake CLI, including refusal/cancel assertions and fresh starts after Stop. These remote assertions are not a renderer-permission API.
 
 Companion relay and mobile acceptance procedures are maintained privately. The public fixture executable remains available for native daemon tests.
 
@@ -1351,6 +1377,28 @@ is neither installed nor bundled, and production has no environment switch to
 enable this backend. A data-directory override alone does not isolate native
 credential namespaces and must not be used as that isolation boundary.
 
+`ketplus_credential_batch_tests` links the production record codec and lock with a
+counting, synthetic backend. Its standalone equivalent is
+`r03_credential_batch_tests` in `tests/daemon/cloud-privacy`. It checks bounded
+fetches for heartbeat metadata, distribution, pairing and command-key lookup as
+session counts increase; cold keys and wraps commit once. It also covers aborted
+batches, unavailable reads/writes, metadata-cache rollback, current pins, competing
+store instances, and a child process denied by the held lock. Subsequent operations
+must observe committed mutations. Run it with the credential-store, cloud-privacy,
+trust-lifecycle, sender-cache and remote-control suites. Shared headers and CMake
+changes require the full Pro build and unfiltered suite as well.
+
+For an optional synthetic performance run, set `KETPLUS_CREDENTIAL_MEASURE=1` only
+on this target. It emits counts and raw timings for 2,000/8,000/20,000 accounts,
+100 active sessions and a two-millisecond fake backend delay. Retained padding
+values are 420 bytes; seeded wraps exercise the cached path, not cryptographic
+throughput. A queued `session.interrupt` against a loaded idle session must return
+`turn_not_running`; its dispatch time observes event-loop delay, not cancellation
+of an active provider turn or IPC end-to-end latency. These are synthetic backend
+fetches, not measured native OS calls. Record native-store measurements separately,
+including dataset, sample count, environment and cleanup; label any extrapolation
+explicitly. Keep raw security-audit evidence outside the public tree.
+
 The normal test configuration warns if the optional Secret Service fixture tools
 are unavailable on the build host; do not claim that coverage in that case. Fake
 D-Bus tests on macOS do not verify a Linux keyring's ACLs, backup or desktop prompts.
@@ -1742,3 +1790,19 @@ provider, account or worktree is used. Run it with the team store/task/review an
 protocol targets after policy changes; shared-header/CMake changes retain the full
 Pro build/suite requirement above. The synthetic v1 JSON fixture is checked by the
 policy target; no live receipt adapter is enabled by these fixtures.
+
+### Enrollment storage and callback regression matrix
+
+Changes to enrollment storage or callback fences run the native trust-lifecycle,
+sender-key-cache, cloud-privacy, remote-control-client/projection, credential-store and Atlas
+access/runtime/tunnel suites. Shared daemon/remote headers also require a full Pro build and
+unfiltered Pro CTest run. Do not enable live/provider opt-ins for this matrix.
+
+The trust-lifecycle fixture injects read failures after earlier enrollment fields succeed,
+write failures at each enrollment field and delayed challenge/credential POST responses across
+same-identity and different-identity enrollment. It checks complete old-record retention and
+restart, cancellation of old credential waiters, Atlas retirement, stale heartbeat batches and
+sign-in completion semantics. The remote fixture restores a valid session then fails the host-pin
+read, requiring an explicit error and byte-for-byte retention of both previous host pins.
+These are native C++ tests with synthetic credentials and HTTP replies; they do not certify OS
+ACLs, backup recovery, signed upgrades or deployment.

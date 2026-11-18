@@ -80,11 +80,15 @@ class CloudPrivacyTestAccess {
     static void heartbeat(CloudControlClient& client, const QList<QJsonArray>& batches) {
         client.heartbeatInFlight_ = true;
         client.refusalsThisHeartbeat_.clear();
-        client.sendHeartbeatBatches(batches, 0, client.accountEpoch_, client.machineId_,
-                                    client.workspaceId_);
+        client.sendHeartbeatBatches(batches, 0, client.accountFence());
     }
     static bool heartbeatIdle(const CloudControlClient& client) {
         return !client.heartbeatInFlight_;
+    }
+    static QList<QJsonArray> sealMetadata(CloudControlClient& client,
+                                          const QList<QJsonArray>& batches,
+                                          const QHash<QString, QJsonObject>& metadata) {
+        return client.withSessionMetadata(batches, metadata);
     }
     static bool idle(const CloudControlClient& client) {
         return client.eventUploadsInFlight_.isEmpty();
@@ -208,6 +212,7 @@ class CloudPrivacyTestAccess {
         client.daemonToken_.clear();
         client.ensureDaemonCredential(std::move(done));
     }
+    static QString token(const CloudControlClient& client) { return client.daemonToken_; }
     static void pollCommands(CloudControlClient& client) { client.pollCommands(); }
     static void wakeCommandPoll(CloudControlClient& client) { client.wakeCommandPoll(); }
     static bool commandPollInFlight(const CloudControlClient& client) {

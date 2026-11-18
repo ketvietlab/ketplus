@@ -18,12 +18,52 @@ Column {
         const value = detailsRef.length > 0 ? host.resolveTranscriptPayload(detailsRef) : detailsData;
         try { return JSON.parse(value || "{}"); } catch (_) { return {}; }
     }
+    readonly property var groupItems: details.groupItems || []
     spacing: KetTheme.px(8, KetTheme.zoom)
 
+    onGroupItemsChanged: syncSteps()
+    Component.onCompleted: syncSteps()
+
+    // Each new page re-parses the whole group. Steps are matched to their rows by key, so a
+    // step that arrives adds one row and a step that changes updates its own; the rows already
+    // shown are neither destroyed nor laid out again.
+    ListModel {
+        id: steps
+    }
+    function stepKey(item, index) {
+        return item && item.messageKey ? String(item.messageKey) : "#" + index;
+    }
+    function syncSteps() {
+        const items = groupItems;
+        let index = 0;
+        for (; index < items.length; ++index) {
+            const key = stepKey(items[index], index);
+            const data = JSON.stringify(items[index] || {});
+            let found = -1;
+            for (let probe = index; probe < steps.count; ++probe) {
+                if (steps.get(probe).key === key) {
+                    found = probe;
+                    break;
+                }
+            }
+            if (found < 0) {
+                steps.insert(index, { key: key, stepData: data });
+                continue;
+            }
+            if (found > index)
+                steps.remove(index, found - index);
+            if (steps.get(index).stepData !== data)
+                steps.setProperty(index, "stepData", data);
+        }
+        if (steps.count > index)
+            steps.remove(index, steps.count - index);
+    }
+
     Repeater {
-        model: root.details.groupItems || []
+        model: steps
         delegate: TranscriptActivityRow {
-            required property var modelData
+            required property string stepData
+            readonly property var modelData: JSON.parse(stepData)
             width: root.width
 
             host: root.host
@@ -59,8 +99,10 @@ Column {
         }
     }
     Text {
+        objectName: "transcriptRemoteGroupStatus"
         width: root.width
-        visible: !!root.details.loading || !!root.details.error
+        // Reading the next page of an open group leaves its shown steps in place.
+        visible: (!!root.details.loading && steps.count === 0) || !!root.details.error
         text: root.details.error || "Loading activity details…"
         color: root.details.error ? KetTheme.t.danger : KetTheme.t.textMuted
         font.family: KetTheme.fontFamily

@@ -47,6 +47,7 @@ class AgentWorkspaceViewTest final : public QObject {
     void browserStepsReadAsTheMock();
     void browserStepsCollapseAroundEvidence_data();
     void daemonGroupScreenshotsOpenTheLightbox();
+    void daemonGroupStepsKeepTheirRowsAsTheGroupGrows();
     void browserStepsCollapseAroundEvidence();
     void fileChangesStayCompactInsideExpandedGroup();
     void fileStepsOpenTheirDiffInline();

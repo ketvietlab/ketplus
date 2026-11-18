@@ -145,6 +145,10 @@ void ControlV2Client::startSignIn(Callback done) {
         });
 }
 void ControlV2Client::accessToken(std::function<void(const QString&, const QString&)> done) {
+    if (!storageReadError_.isEmpty()) {
+        done({}, storageReadError_);
+        return;
+    }
     if (credential_.isEmpty()) {
         done({}, "Sign in before connecting to a remote host.");
         return;
@@ -227,6 +231,10 @@ void ControlV2Client::accessToken(std::function<void(const QString&, const QStri
         });
 }
 void ControlV2Client::signOut(Callback done) {
+    if (!storageReadError_.isEmpty()) {
+        done({}, storageReadError_);
+        return;
+    }
     cancelSignIn();
     const auto previous = credential_;
     ++epoch_;

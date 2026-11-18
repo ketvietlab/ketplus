@@ -39,6 +39,10 @@ class RemoteControlTestAccess {
     }
     static QJsonObject credential(const ControlV2Client& client) { return client.credential_; }
     static QJsonObject hostPins(const ControlV2Client& client) { return client.hostPins_; }
+    static void hostKeys(ControlV2Client& client,
+                         std::function<void(const QJsonObject&, const QString&)> done) {
+        client.hostKeys("linux-host", 1, std::move(done));
+    }
     // A store written before host pins existed: no host-pins account at all.
     static void beforePins(ControlV2Client& client) {
         if (!client.credentials_.remove("host-pins"))

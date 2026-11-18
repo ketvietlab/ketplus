@@ -38,7 +38,11 @@ QJsonArray CloudControlClient::trustedDevices(const QJsonArray& devices,
         }
         legacyPinAdoptionPending_ = false;
     }
-    return pins_.trusted(devices);
+    QString error;
+    const auto trusted = pins_.trusted(devices, &error);
+    if (!error.isEmpty())
+        lastError_ = error;
+    return trusted;
 }
 
 void CloudControlClient::invalidateSenderKeys() {
@@ -88,6 +92,13 @@ void CloudControlClient::withSenderKeys(const QString& senderId, const int versi
             }
             const QJsonObject keys = object(value).value(QStringLiteral("keys")).toObject();
             // The relay names the keys; only a device pinned on this Mac may use them (#87).
+            QString pinError;
+            const bool initialized = pins_.initialized(&pinError);
+            if (!pinError.isEmpty()) {
+                lastError_ = pinError;
+                callback({}, pinError);
+                return;
+            }
             auto accept = [this, fence, current, senderId, version, cacheKey, keys,
                            callback = std::move(callback)]() {
                 if (!current()) {
@@ -108,7 +119,7 @@ void CloudControlClient::withSenderKeys(const QString& senderId, const int versi
                      fence});
                 callback(keys, {});
             };
-            if (pins_.initialized() || !legacyPinAdoptionPending_) {
+            if (initialized || !legacyPinAdoptionPending_) {
                 accept();
                 return;
             }
@@ -290,33 +301,12 @@ void CloudControlClient::approvePairing(const QJsonObject& payload, LocalCallbac
                     callback({}, QStringLiteral("The device claim does not match its keys."));
                     return;
                 }
-                QJsonArray envelopes;
                 QString cryptoError;
-                for (const StoredSession& session : journal_->sessions()) {
-                    // The relay refuses the whole approval for a key it would not hold.
-                    if (refusedSessions_.contains(session.id))
-                        continue;
-                    const QString account =
-                        QStringLiteral("wrapped-%1-%2-%3-%4")
-                            .arg(session.id)
-                            .arg(session.generation)
-                            .arg(device.value(QStringLiteral("id")).toString())
-                            .arg(device.value(QStringLiteral("keyVersion")).toInt());
-                    QJsonObject envelope =
-                        object(QJsonDocument::fromJson(credentials_.read(account)).object());
-                    if (!CloudCrypto::validWrappedSessionKey(envelope)) {
-                        envelope =
-                            crypto_.wrapSessionKey(session.id, session.generation, 1, device,
-                                                   machineId_, machineKeyVersion_, &cryptoError);
-                        if (envelope.isEmpty() ||
-                            !credentials_.write(
-                                account, QJsonDocument(envelope).toJson(QJsonDocument::Compact),
-                                &cryptoError)) {
-                            callback({}, cryptoError);
-                            return;
-                        }
-                    }
-                    envelopes.append(envelope);
+                const auto envelopes =
+                    sessionKeyEnvelopes(QJsonArray{device}, false, 0, nullptr, &cryptoError);
+                if (!cryptoError.isEmpty()) {
+                    callback({}, cryptoError);
+                    return;
                 }
                 QJsonObject body{{QStringLiteral("claimDigest"), digest}};
                 if (!envelopes.isEmpty())

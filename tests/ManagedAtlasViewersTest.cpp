@@ -318,7 +318,8 @@ class ManagedAtlasViewersTest final : public QObject {
         const auto atlas = fixture();
         auto object = QJsonDocument::fromJson(contract()).object();
         object.insert("command", QJsonArray{QCoreApplication::applicationFilePath(),
-                                            QStringLiteral("one\ntwo") + QChar(0x202e) + "<tag>"});
+                                            QStringLiteral("one\ntwo") + QChar(0x202e) +
+                                                QChar(0x2028) + QChar(0x2029) + "<tag>"});
         QVERIFY(write(atlas.directory + "/atlas.renderer.json", QJsonDocument(object).toJson()));
         const auto permission = ketplus::AtlasRendererPermission::read(
             atlas, QProcessEnvironment::systemEnvironment(), 43121);
@@ -328,11 +329,64 @@ class ManagedAtlasViewersTest final : public QObject {
         auto* dialog = ketplus::rendererPermissionDialog(&window, permission);
         const auto text = dialog->findChild<QLabel*>("atlasRendererCommand")->text();
         QVERIFY(!text.contains(QChar(0x202e)));
+        QVERIFY(!text.contains(QChar(0x2028)));
+        QVERIFY(!text.contains(QChar(0x2029)));
         QVERIFY(!text.contains(QStringLiteral("one\ntwo")));
         QVERIFY(text.contains("u000a"));
         QVERIFY(text.contains("u202e"));
+        QVERIFY(text.contains("u2028"));
+        QVERIFY(text.contains("u2029"));
         QVERIFY(text.contains("<tag>"));
         delete dialog;
+    }
+    void cwdSymlinkParentMatchesCli_data() {
+        QTest::addColumn<QString>("cwd");
+        QTest::addColumn<QString>("expected");
+        QTest::newRow("symlink-target") << "work" << "other/nested";
+        QTest::newRow("lexical-parent") << "work/.." << ".";
+        QTest::newRow("lexical-parent-child") << "work/../nested" << "nested";
+    }
+    void sidecarSymlinkUsesCanonicalTargetDirectory() {
+#ifndef Q_OS_UNIX
+        QSKIP("This contract fixture uses Unix symbolic links.");
+#else
+        const auto atlas = fixture();
+        const auto target = root_->filePath("shared/atlas.renderer.json");
+        QVERIFY(write(target, contract()));
+        const auto sidecar = atlas.directory + "/atlas.renderer.json";
+        QVERIFY(QFile::remove(sidecar));
+        QCOMPARE(::symlink(QFile::encodeName(target), QFile::encodeName(sidecar)), 0);
+        const auto permission = ketplus::AtlasRendererPermission::read(
+            atlas, QProcessEnvironment::systemEnvironment(), 43121);
+        QVERIFY(permission.error.isEmpty());
+        // The CLI canonicalizes the contract itself before deriving its directory.
+        const auto canonicalTarget = QFileInfo(target).canonicalFilePath();
+        const auto directory = QFileInfo(canonicalTarget).absolutePath();
+        QCOMPARE(permission.contractPath, canonicalTarget);
+        QCOMPARE(permission.workingDirectory, directory);
+        QCOMPARE(permission.command.last(), directory);
+#endif
+    }
+    void cwdSymlinkParentMatchesCli() {
+#ifndef Q_OS_UNIX
+        QSKIP("This contract fixture uses Unix symbolic links.");
+#else
+        QFETCH(QString, cwd);
+        QFETCH(QString, expected);
+        const auto atlas = fixture();
+        QVERIFY(QDir().mkpath(atlas.directory + "/other/nested"));
+        QVERIFY(QDir().mkpath(atlas.directory + "/nested"));
+        QCOMPARE(::symlink("other/nested", QFile::encodeName(atlas.directory + "/work")), 0);
+        QVERIFY(write(atlas.directory + "/atlas.renderer.json", contract(cwd)));
+        const auto permission = ketplus::AtlasRendererPermission::read(
+            atlas, QProcessEnvironment::systemEnvironment(), 43121);
+        QVERIFY(permission.error.isEmpty());
+        // KetAtlas 0.6.1 uses fs.realpath(path.resolve(contractDirectory, cwd)).
+        // path.resolve removes '..' lexically before resolving symlink targets.
+        const auto cliCwd = QFileInfo(QDir::cleanPath(QDir(atlas.directory).filePath(expected)))
+                                .canonicalFilePath();
+        QCOMPARE(permission.workingDirectory, cliCwd);
+#endif
     }
     void liveThemeZoomAndLayout() {
         ketplus::ThemeManager theme(*qApp);
@@ -349,10 +403,17 @@ class ManagedAtlasViewersTest final : public QObject {
         window.resize(1000, 720);
         window.show();
         const auto atlas = fixture();
+        auto object = QJsonDocument::fromJson(contract()).object();
+        object.insert("command", QJsonArray{QCoreApplication::applicationFilePath(),
+                                            QStringLiteral("one") + QChar(0x2028) + "two" +
+                                                QChar(0x2029) + "<plain argument>"});
+        QVERIFY(write(atlas.directory + "/atlas.renderer.json", QJsonDocument(object).toJson()));
         const auto permission = ketplus::AtlasRendererPermission::read(
             atlas, QProcessEnvironment::systemEnvironment(), 43121);
         QVERIFY(permission.error.isEmpty());
         auto* dialog = ketplus::rendererPermissionDialog(&window, permission);
+        const auto details = dialog->findChild<QLabel*>("atlasRendererCommand")->text();
+        QVERIFY(details.contains("u2028") && details.contains("u2029"));
         for (const auto mode :
              {ketplus::ThemeManager::Mode::Light, ketplus::ThemeManager::Mode::Dark,
               ketplus::ThemeManager::Mode::System}) {

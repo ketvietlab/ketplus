@@ -263,12 +263,13 @@ class TeamReviewTest final : public QObject {
         finishReview(*teams_, "rev", {}, false, "turn_interrupted");
         QCOMPARE(task(id).state, state::blocked);
         QVERIFY(task(id).question.contains("turn_interrupted"));
+        QCOMPARE(task(id).round, 0);
+        QCOMPARE(task(id).reviewBlock, QStringLiteral("review_interrupted"));
         QVERIFY(firstReviews(team()).reviewing.isEmpty());
     }
 
-    // ketplus#295: a review that changed the branch is not counted and is asked again once;
-    // a second one waits for the leader, who cannot accept it as a verdict.
-    void aReviewThatChangedTheBranchTwiceWaitsForTheLeader() {
+    // Readable snapshots prove a change, but not who made it. Recovery is explicit.
+    void aReviewThatChangedTheBranchWaitsForTheLeaderWithoutRetrying() {
         const QString id = inReview("Cart", "dev1");
         const QJsonArray changes{
             QJsonObject{{"field", "head"}, {"before", "aaa"}, {"after", "bbb"}}};
@@ -279,20 +280,50 @@ class TeamReviewTest final : public QObject {
         teams_->reviewTampered("rev", "other-request", changes); // not the bound request
         QCOMPARE(task(id).history.last().kind == QStringLiteral("review_tampered"), false);
         teams_->reviewTampered("rev", firstReviews(team()).message, changes);
-        QCOMPARE(task(id).state, state::inReview);
-        QCOMPARE(task(id).round, 1); // the round asked again, not a new one
-        QCOMPARE(reviewsTo("rev").size(), 2);
+        QCOMPARE(task(id).state, state::blocked);
+        QCOMPARE(task(id).round, 0);
+        QCOMPARE(reviewsTo("rev").size(), 1);
         bool recorded = false;
         for (const HistoryEntry& entry : task(id).history)
             recorded = recorded || (entry.kind == QStringLiteral("review_tampered") &&
                                     entry.data.value("changes").toArray() == changes);
         QVERIFY(recorded);
-        teams_->reviewTampered("rev", firstReviews(team()).message, changes);
         QCOMPARE(task(id).state, state::blocked);
         QCOMPARE(task(id).reviewBlock, QStringLiteral("review_tampered"));
         QCOMPARE(task(id).resumeState, state::inReview);
         QCOMPARE(task(id).round, 0);
         QVERIFY(!teams_->acceptReview(team_, id, "checked", "looked at it", "lead").ok());
+    }
+
+    void unavailableSourceInterruptsWithoutCountingOrRetrying() {
+        const QString id = inReview("Cart", "dev1");
+        const QJsonArray changes{
+            QJsonObject{{"field", "worktree"}, {"before", "readable"}, {"after", "unreadable"}}};
+        const QString request = firstReviews(team()).message;
+        teams_->reviewTampered("rev", request, changes);
+        QCOMPARE(task(id).state, state::blocked);
+        QCOMPARE(task(id).round, 0);
+        QCOMPARE(task(id).reviewBlock, QStringLiteral("review_interrupted"));
+        QCOMPARE(reviewsTo("rev").size(), 1);
+        QVERIFY(firstReviews(team()).reviewing.isEmpty());
+        bool interrupted = false;
+        for (const HistoryEntry& entry : task(id).history)
+            if (entry.kind == QStringLiteral("review_interrupted")) {
+                interrupted = true;
+                QVERIFY(!entry.data.value("content_round_counted").toBool(true));
+                QVERIFY(entry.text.contains("No reviewer edit is inferred"));
+            }
+        QVERIFY(interrupted);
+        // An obsolete callback cannot consume another round or create a retry loop.
+        teams_->reviewTampered("rev", request, changes);
+        QCOMPARE(task(id).round, 0);
+        QCOMPARE(reviewsTo("rev").size(), 1);
+        QVERIFY(!teams_->acceptReview(team_, id, "checked", "looked at it", "lead").ok());
+        QVERIFY(!teams_->moveTask(team_, id, state::inReview, "dev1").ok());
+        QVERIFY(teams_->moveTask(team_, id, state::inProgress, "dev1").ok());
+        QVERIFY(teams_->moveTask(team_, id, state::inReview, "dev1").ok());
+        QCOMPARE(task(id).round, 1);
+        QCOMPARE(reviewsTo("rev").size(), 2);
     }
 
     void onlyTheReviewerFinishesAReview() {
@@ -492,7 +523,7 @@ class TeamReviewTest final : public QObject {
     // ketplus#295: a Codex reviewer reviews with the team's Full access, and the daemon compares
     // the task's branch before and after each review turn. A change voids that round (not
     // counted, nothing reverted), the history and the leader say what changed, and the reviewer
-    // is asked again; the next, clean review counts.
+    // waits for explicit recovery; no automatic review loop is started.
     void aCodexReviewerIsCheckedAroundEachReview_data() {
         QTest::addColumn<QString>("action");
         QTest::addColumn<QString>("field");
@@ -505,6 +536,7 @@ class TeamReviewTest final : public QObject {
                                          << "symbolic_ref";
         QTest::newRow("moved remote head") << "cd '%1' && git push -q origin HEAD:refs/heads/%2"
                                            << "remote_head";
+        QTest::newRow("source unavailable") << "mv '%1' '%1-unavailable'" << "worktree";
     }
 
     void aCodexReviewerIsCheckedAroundEachReview() {
@@ -586,14 +618,18 @@ class TeamReviewTest final : public QObject {
                 .value("task")
                 .toObject();
         };
-        QTRY_COMPARE_WITH_TIMEOUT(task().value("state").toString(), QStringLiteral("ready"), 15000);
+        const QString expected =
+            field.isEmpty() ? QStringLiteral("ready") : QStringLiteral("blocked");
+        const QString outcome = field == "worktree" ? QStringLiteral("review_interrupted")
+                                                    : QStringLiteral("review_tampered");
+        QTRY_COMPARE_WITH_TIMEOUT(task().value("state").toString(), expected, 15000);
         // The review turns ran with Full access, never read-only.
         const QByteArray log = agent_test::logText(fixture.codexLog);
         QVERIFY(log.contains("review-turn"));
         QVERIFY2(!log.contains("\"readOnly\""), log.constData());
         QJsonObject tampered;
         for (const QJsonValue& entry : task().value("history").toArray())
-            if (entry.toObject().value("kind").toString() == QStringLiteral("review_tampered"))
+            if (entry.toObject().value("kind").toString() == outcome)
                 tampered = entry.toObject();
         const auto reviews = fixture.journal->agentMessagesOf(reviewer, 1, 10);
         if (field.isEmpty()) {
@@ -603,14 +639,14 @@ class TeamReviewTest final : public QObject {
             QCOMPARE(reviews.size(), 1);
             return;
         }
-        // Voided, then asked again: the round that counted is the clean one.
+        // Invalidated without consuming a content round or automatically retrying.
         QVERIFY2(!tampered.isEmpty(), qPrintable(agent_test::text(task())));
-        QCOMPARE(task().value("round").toInt(), 1);
-        QCOMPARE(reviews.size(), 2);
+        QCOMPARE(task().value("round").toInt(), 0);
+        QCOMPARE(reviews.size(), 1);
+        QCOMPARE(task().value("review_block").toString(), outcome);
         int voided = 0;
         for (const auto& review : reviews)
-            if (review.state == QStringLiteral("failed") &&
-                review.error == QStringLiteral("review_tampered"))
+            if (review.state == QStringLiteral("failed") && review.error == outcome)
                 ++voided;
         QCOMPARE(voided, 1);
         bool named = false;
@@ -620,11 +656,12 @@ class TeamReviewTest final : public QObject {
                 named = !change.toObject().value("before").toString().isEmpty() ||
                         !change.toObject().value("after").toString().isEmpty();
         QVERIFY2(named, qPrintable(agent_test::text(tampered)));
-        QVERIFY(tampered.value("text").toString().contains("Nothing was reverted"));
+        QVERIFY(tampered.value("text").toString().contains(
+            field == "worktree" ? "No reviewer edit is inferred" : "Nothing was reverted"));
         // The working conversation reads what changed.
         bool told = false;
         for (const QJsonObject& notice : fixture.payloads(developer, "agent_message.state"))
-            told = told || notice.value("state").toString() == QStringLiteral("review_tampered");
+            told = told || notice.value("state").toString() == outcome;
         QVERIFY(told);
     }
 };

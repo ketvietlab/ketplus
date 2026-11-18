@@ -73,15 +73,17 @@ QString publicText(QString text, const Team& team, const Task& task) {
 } // namespace
 
 int TeamCoordinator::roundLimit(const Team& team, const Task& task) {
-    return task.roundLimit > 0 ? task.roundLimit : team.maxRounds;
+    const int normal = std::min(2, task.roundLimit > 0 ? task.roundLimit : team.maxRounds);
+    return task.arbitrationHead == task.headCommit ? std::max(normal, task.arbitratedRound)
+                                                   : normal;
 }
 
 QString TeamCoordinator::noVerdictQuestion(const QString& language, const int round,
                                            const int replies) {
     return say(language,
                QT_TRANSLATE_NOOP(
-                   "Team", "The review of round %1 has no verdict after %2 replies. Accept it "
-                           "with team_review_accept, or hand the task to review again."))
+                   "Team", "Round %1: no verdict after %2 replies. The round is not counted; "
+                           "restore the review prerequisites and explicitly request review again."))
         .arg(round)
         .arg(replies);
 }
@@ -90,8 +92,11 @@ QString TeamCoordinator::roundLimitQuestion(const QString& language, const int r
                                             const int maxRounds) {
     return say(language,
                QT_TRANSLATE_NOOP("Team", "Review round limit reached (%1 of %2) with findings."))
-        .arg(round)
-        .arg(maxRounds);
+               .arg(round)
+               .arg(maxRounds) +
+           say(language,
+               QT_TRANSLATE_NOOP("Team", " Leader arbitration with a reason is required; "
+                                         "no further content round starts automatically."));
 }
 
 QString TeamCoordinator::reviewText(const Team& team, const Task& task,
@@ -144,6 +149,22 @@ QString TeamCoordinator::reviewText(const Team& team, const Task& task,
                             "is met, then each finding with file, line, severity and a one-line "
                             "summary. End with exactly one line: \"Verdict: findings\" or "
                             "\"Verdict: no findings\".");
+    lines << QStringLiteral(
+        "For findings, include one fenced ketplus-findings-v1 JSON object before the verdict: "
+        "{\"version\":1,\"findings\":[{\"id\":\"f1\",\"severity\":\"p2\","
+        "\"impact\":\"behavior\",\"scope\":\"task\",\"evidence\":\"<64 lowercase hex evidence "
+        "digest>\","
+        "\"close_when\":\"regression_passes\",\"mandatory_rule\":false}]}. "
+        "Severity: p0/p1/p2/nit/unknown; impact: "
+        "requirement/required_check/behavior/preference/unknown; "
+        "scope: task/outside_task/unknown. Use bounded lowercase codes for id/close_when and a "
+        "digest "
+        "for evidence; explain the evidence and closure condition in the surrounding review. "
+        "Unstructured or unknown findings remain blocking. Do not supply resolution fields. "
+        "The only host-supported closure codes are prose_line_width_80 for a nonmandatory "
+        "task-scoped prose line-width finding, and owner_accepts_outside_preference for a "
+        "nonmandatory P2 outside-task preference. Use them only when the evidence actually "
+        "matches; other conditions require independent review after a fix.");
     // T-40: the place of this round, chosen when the task entered review.
     if (onPullRequest(task))
         lines << QString{}
@@ -242,7 +263,9 @@ void TeamCoordinator::startReview(const qint64 teamId, const QString& reviewerSe
     ++task->round;
     task->reviewer = reviewerSession;
     // T-40: the team's settings as the task enters this round; a change applies afterwards.
-    task->roundLimit = team->maxRounds;
+    task->roundLimit = std::min(2, team->maxRounds);
+    if (task->arbitrationHead == task->headCommit)
+        task->roundLimit = std::max(task->roundLimit, task->arbitratedRound);
     task->reviewPlace = team->reviewPlace == place::pullRequest && recordsPullRequest(*task)
                             ? place::pullRequest
                             : place::board;
@@ -365,7 +388,9 @@ void TeamCoordinator::recordReview(const QString& reviewerSession, const QString
             task->reviewComment = link;
         const auto verdictData = [&](const QString& verdict) {
             QJsonObject data{
-                {QStringLiteral("verdict"), verdict},
+                {QStringLiteral("verdict"),
+                 noFindings ? QStringLiteral("no_findings") : QStringLiteral("findings")},
+                {QStringLiteral("effective_outcome"), verdict},
                 {QStringLiteral("round"), round},
                 {QStringLiteral("place"), link.isEmpty() ? place::board : place::pullRequest}};
             if (!link.isEmpty())
@@ -388,8 +413,14 @@ void TeamCoordinator::recordReview(const QString& reviewerSession, const QString
                        : say(team->language, QT_TRANSLATE_NOOP("Team", " On the pull request: %1"))
                              .arg(link);
         };
-        if (failure.isEmpty() && !noVerdict)
+        bool cleanVerdict = noFindings;
+        if (failure.isEmpty() && !noVerdict) {
             task->missingVerdicts = 0;
+            task->reviewFindings =
+                review_policy::reply(text, task->headCommit, reviewerSession, round, !noFindings);
+            cleanVerdict =
+                task->reviewFindings ? !review_policy::blocks(*task->reviewFindings) : noFindings;
+        }
         // T-75 (ADR 0114 §7): every verdict is a line for the leader, so its next digest is
         // due without waiting for another update that needs it. At the round limit the same
         // line is the `round_limit` warning, so the leader reads it once.
@@ -413,6 +444,12 @@ void TeamCoordinator::recordReview(const QString& reviewerSession, const QString
                           {QStringLiteral("reviewer"), reviewerName}}});
         };
         if (!failure.isEmpty()) {
+            task->round = std::max(0, task->round - 1);
+            task->reviewBlock = QStringLiteral("review_interrupted");
+            addHistory(*task, QStringLiteral("daemon"), QStringLiteral("review_interrupted"),
+                       QStringLiteral("Review interrupted; no content round counted."),
+                       {{QStringLiteral("round"), round},
+                        {QStringLiteral("content_round_counted"), false}});
             task->resumeState = state::inProgress;
             task->question =
                 say(team->language,
@@ -455,16 +492,26 @@ void TeamCoordinator::recordReview(const QString& reviewerSession, const QString
                 applyMove(*team, *task, state::blocked, QStringLiteral("daemon"), task->question,
                           updates);
             }
-        } else if (noFindings) {
-            addHistory(*task, reviewerSession, QStringLiteral("verdict"),
-                       say(team->language, QT_TRANSLATE_NOOP("Team", "Round %1: no findings."))
-                               .arg(round) +
-                           where(),
-                       verdictData(QStringLiteral("no_findings")));
-            applyMove(*team, *task, state::ready, QStringLiteral("daemon"),
-                      say(team->language, QT_TRANSLATE_NOOP("Team", "reviewed, no findings")),
-                      updates);
-            told(false, false);
+        } else if (cleanVerdict) {
+            addHistory(
+                *task, reviewerSession, QStringLiteral("verdict"),
+                (noFindings
+                     ? say(team->language, QT_TRANSLATE_NOOP("Team", "Round %1: no findings."))
+                           .arg(round)
+                     : say(team->language,
+                           QT_TRANSLATE_NOOP("Team", "Round %1: nonblocking findings."))
+                           .arg(round)) +
+                    where(),
+                verdictData(noFindings ? QStringLiteral("no_findings")
+                                       : QStringLiteral("nonblocking_findings")));
+            applyMove(
+                *team, *task, state::ready, QStringLiteral("daemon"),
+                noFindings
+                    ? say(team->language, QT_TRANSLATE_NOOP("Team", "reviewed, no findings"))
+                    : say(team->language,
+                          QT_TRANSLATE_NOOP("Team", "reviewed, nonblocking preferences only")),
+                updates);
+            told(!noFindings, false);
             offerMerges(*team, updates);
         } else {
             addHistory(

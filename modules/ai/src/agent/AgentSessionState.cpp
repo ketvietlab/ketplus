@@ -18,6 +18,7 @@
 #include <QTimer>
 #include <QUrl>
 #include <QUuid>
+#include <utility>
 
 #include "agent/AgentMessageFormatter.h"
 #include "agent/AgentSessionState.h"
@@ -348,6 +349,43 @@ void AgentSessionManager::failSession(const SessionPtr& session, const QString& 
 }
 
 void AgentSessionManager::persistWorkspace(const QString& path) const {
+    if (deferUpdates_ > 0) {
+        deferredWorkspaces_.insert(path);
+        return;
+    }
+    QSettings settings;
+    writeWorkspace(settings, path);
+}
+
+void AgentSessionManager::notifyConversationsChanged(const QString& path) {
+    if (deferUpdates_ > 0)
+        deferredConversationPaths_.insert(path);
+    else
+        emit conversationsChanged(path, conversations(path));
+}
+
+void AgentSessionManager::notifyActivityChanged() {
+    if (deferUpdates_ > 0)
+        deferredActivity_ = true;
+    else
+        emit activityChanged();
+}
+
+void AgentSessionManager::flushDeferredUpdates() {
+    deferredFlushScheduled_ = false;
+    if (!deferredWorkspaces_.isEmpty()) {
+        // One settings object: each one writes the whole store when it goes.
+        QSettings settings;
+        for (const QString& path : std::exchange(deferredWorkspaces_, {}))
+            writeWorkspace(settings, path);
+    }
+    for (const QString& path : std::exchange(deferredConversationPaths_, {}))
+        emit conversationsChanged(path, conversations(path));
+    if (std::exchange(deferredActivity_, false))
+        emit activityChanged();
+}
+
+void AgentSessionManager::writeWorkspace(QSettings& settings, const QString& path) const {
     const SessionPtr active = sessions_.value(path);
     QVariantList stored;
     for (const SessionPtr& session : conversationsByPath_.value(path)) {
@@ -371,12 +409,12 @@ void AgentSessionManager::persistWorkspace(const QString& path) const {
                         {QStringLiteral("provider"),
                          session->options.value(QStringLiteral("provider")).toString()}});
     }
-    QSettings().setValue(persistedKey(path),
-                         QVariantMap{{QStringLiteral("path"), path},
-                                     {QStringLiteral("activeId"), active ? active->id : QString{}},
-                                     {QStringLiteral("deletedThreadIds"),
-                                      QStringList(deletedThreadsByPath_.value(path).values())},
-                                     {QStringLiteral("conversations"), stored}});
+    settings.setValue(persistedKey(path),
+                      QVariantMap{{QStringLiteral("path"), path},
+                                  {QStringLiteral("activeId"), active ? active->id : QString{}},
+                                  {QStringLiteral("deletedThreadIds"),
+                                   QStringList(deletedThreadsByPath_.value(path).values())},
+                                  {QStringLiteral("conversations"), stored}});
 }
 
 bool AgentSessionManager::isActiveSession(const SessionPtr& session) const {

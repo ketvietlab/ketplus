@@ -102,44 +102,7 @@ CloudControlClient::CloudControlClient(LocalJournal* journal, SessionHost* host,
                   answer(ready ? daemonToken_ : QString());
               });
       }) {
-    machineId_ = storedString(QStringLiteral("machine-id"));
-    workspaceId_ = storedString(QStringLiteral("workspace-id"));
-    accountName_ = storedString(QStringLiteral("account-name"));
-    accountUsername_ = storedString(QStringLiteral("account-username"));
-    machineKeyVersion_ = storedString(QStringLiteral("machine-key-version")).toInt();
-    if (machineKeyVersion_ < 1)
-        machineKeyVersion_ = 1;
-    // An enrollment belongs to the relay that issued it. A build compiled for another relay
-    // presented it there, got errors it could not explain, and uploaded nothing. The identity
-    // stays stored for a build that talks to its relay again; this one reports it signed out.
-    const QString enrolledRelay = storedString(QStringLiteral("control-url"));
-    if (!machineId_.isEmpty() && enrolledRelay.isEmpty()) {
-        // Enrolled before the relay was recorded: the relay this build reaches is the only
-        // one it can have been used with.
-        storeString(QStringLiteral("control-url"), baseUrl_.toString());
-    } else if (!machineId_.isEmpty() && enrolledRelay != baseUrl_.toString()) {
-        otherRelay_ = enrolledRelay;
-        machineId_.clear();
-        workspaceId_.clear();
-        lastError_ = QStringLiteral("This Mac is enrolled with %1, not %2.")
-                         .arg(enrolledRelay, baseUrl_.toString());
-    }
-    // An enrollment stored by a sign-in that did not finish storing it is completed here, and one
-    // from before #84 records its workspace.
-    QString keysError;
-    if (!machineId_.isEmpty() && !sessionCredentials_.adoptWorkspace(workspaceId_, &keysError)) {
-        machineId_.clear();
-        workspaceId_.clear();
-        lastError_ = keysError;
-    }
-    // Migration permission is established only while restoring an existing enrollment.
-    // A missing pin set later (including after sign-out) cannot recreate this permission.
-    QString pinError;
-    const auto storedPins = credentials_.read(QStringLiteral("device-pins"), &pinError);
-    legacyPinAdoptionPending_ = !machineId_.isEmpty() && !workspaceId_.isEmpty() &&
-                                pinError.isEmpty() && storedPins.isEmpty();
-    if (!machineId_.isEmpty())
-        registerCloudCursors();
+    restoreEnrollment();
     initializePeerTransport();
     syncTimer_.setInterval(15'000);
     commandTimer_.setInterval(2'000);
@@ -358,12 +321,17 @@ void CloudControlClient::revokeAtlasAccess(const QString& device) {
 
 CloudControlClient::AtlasAccessFence
 CloudControlClient::atlasAccessFence(const QString& device) const {
-    return {atlasMachineEpoch_, atlasDeviceEpochs_.value(device)};
+    return {atlasMachineEpoch_, atlasDeviceEpochs_.value(device), accountFence()};
 }
 
 bool CloudControlClient::atlasAccessCurrent(const QString& device,
                                             const AtlasAccessFence& fence) const {
-    return fence.machine == atlasMachineEpoch_ && fence.device == atlasDeviceEpochs_.value(device);
+    const auto account = accountFence();
+    return fence.machine == atlasMachineEpoch_ &&
+           fence.device == atlasDeviceEpochs_.value(device) &&
+           fence.account.epoch == account.epoch &&
+           fence.account.enrollmentRevision == account.enrollmentRevision &&
+           fence.account.machine == account.machine && fence.account.workspace == account.workspace;
 }
 
 void CloudControlClient::signOut(LocalCallback callback) {
@@ -628,21 +596,37 @@ CloudControlClient::withSessionMetadata(const QList<QJsonArray>& batches,
         return batches;
     QList<QJsonArray> sealed;
     QSet<QString> current;
-    for (const QJsonArray& batch : batches) {
-        QJsonArray snapshots;
-        for (const QJsonValue& value : batch) {
-            QJsonObject snapshot = value.toObject();
-            const QString sessionId = snapshot.value(QStringLiteral("id")).toString();
-            current.insert(sessionId);
-            if (metadata.contains(sessionId)) {
-                const QJsonObject envelope =
-                    sealedSessionMetadata(snapshot, metadata.value(sessionId));
-                if (!envelope.isEmpty())
-                    snapshot.insert(QStringLiteral("encryptedMetadata"), envelope);
+    const auto previous = sealedMetadata_;
+    QString error;
+    const bool ready = credentials_.batch(
+        [&](CredentialStore& view, QString* failure) {
+            CloudCrypto crypto(&view);
+            for (const QJsonArray& batch : batches) {
+                QJsonArray snapshots;
+                for (const QJsonValue& value : batch) {
+                    QJsonObject snapshot = value.toObject();
+                    const QString sessionId = snapshot.value(QStringLiteral("id")).toString();
+                    current.insert(sessionId);
+                    if (metadata.contains(sessionId)) {
+                        const QJsonObject envelope =
+                            sealedSessionMetadata(snapshot, metadata.value(sessionId), crypto);
+                        if (envelope.isEmpty()) {
+                            *failure = lastError_;
+                            return false;
+                        }
+                        snapshot.insert(QStringLiteral("encryptedMetadata"), envelope);
+                    }
+                    snapshots.append(snapshot);
+                }
+                sealed.append(snapshots);
             }
-            snapshots.append(snapshot);
-        }
-        sealed.append(snapshots);
+            return true;
+        },
+        &error);
+    if (!ready) {
+        sealedMetadata_ = previous;
+        lastError_ = error;
+        return {};
     }
     for (auto it = sealedMetadata_.begin(); it != sealedMetadata_.end();) {
         if (current.contains(it.key()))
@@ -654,7 +638,8 @@ CloudControlClient::withSessionMetadata(const QList<QJsonArray>& batches,
 }
 
 QJsonObject CloudControlClient::sealedSessionMetadata(const QJsonObject& snapshot,
-                                                      const QJsonObject& metadata) {
+                                                      const QJsonObject& metadata,
+                                                      CloudCrypto& crypto) {
     const QString sessionId = snapshot.value(QStringLiteral("id")).toString();
     const qint64 generation = snapshot.value(QStringLiteral("generation")).toInteger();
     // The relay only takes metadata sealed at the snapshot's own cursor and turn.
@@ -670,8 +655,8 @@ QJsonObject CloudControlClient::sealedSessionMetadata(const QJsonObject& snapsho
         cached != sealedMetadata_.cend() && cached->first == fingerprint)
         return cached->second;
     QString cryptoError;
-    const QJsonObject content = crypto_.encrypt(plaintext, aad, sessionId, generation, 1,
-                                                machineId_, machineKeyVersion_, &cryptoError);
+    const QJsonObject content = crypto.encrypt(plaintext, aad, sessionId, generation, 1, machineId_,
+                                               machineKeyVersion_, &cryptoError);
     if (content.isEmpty()) {
         lastError_ = cryptoError;
         return {};

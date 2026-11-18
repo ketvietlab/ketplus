@@ -185,10 +185,10 @@ void CloudControlClient::executeWorktreeCommand(const QJsonObject& command,
     }
     // Git can take seconds on a large repository, so it runs off the main thread; the
     // answer is dropped if the Mac left the account meanwhile.
-    const quint64 requestEpoch = accountEpoch_;
+    const auto requestAccount = accountFence();
     const QPointer<CloudControlClient> guard(this);
     workspaceFilesPool_.start([guard, command, payload, senderAgreementKey, repository, listing,
-                               branch, base, salt, requestEpoch]() {
+                               branch, base, salt, requestAccount]() {
         QJsonObject result;
         QString createdPath;
         if (listing) {
@@ -229,8 +229,8 @@ void CloudControlClient::executeWorktreeCommand(const QJsonObject& command,
         }
         QMetaObject::invokeMethod(
             guard,
-            [guard, command, payload, senderAgreementKey, result, createdPath, requestEpoch]() {
-                if (!guard || guard->accountEpoch_ != requestEpoch)
+            [guard, command, payload, senderAgreementKey, result, createdPath, requestAccount]() {
+                if (!guard || !guard->accountCurrent(requestAccount))
                     return;
                 if (!createdPath.isEmpty())
                     guard->startCreatedConversation(command, payload, createdPath,

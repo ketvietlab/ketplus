@@ -780,7 +780,7 @@ class AgentWorkspaceShellTest final : public QObject {
         window.show();
 
         auto* sidebar = window.findChild<ketplus::ActivityBar*>(QStringLiteral("activityBar"));
-        auto* search = window.findChild<QAbstractButton*>(QStringLiteral("quickSearchButton"));
+        auto* search = window.findChild<QLineEdit*>(QStringLiteral("sidebarRepositoryFilter"));
         auto* addRepository =
             window.findChild<QToolButton*>(QStringLiteral("productAddRepositoryButton"));
         auto* settingsAction = window.findChild<QAction*>(QStringLiteral("productSettingsAction"));
@@ -797,9 +797,8 @@ class AgentWorkspaceShellTest final : public QObject {
         QCOMPARE(sidebar->width(), ketplus::ActivityBar::kWidth);
         QCOMPARE(sidebar->minimumWidth(), ketplus::ActivityBar::kWidth);
         QCOMPARE(sidebar->maximumWidth(), ketplus::ActivityBar::kWidth);
-        // The mock's Quick search is a 28 px field, not a navigation row.
-        QCOMPARE(search->height(),
-                 qRound(ket::Appearance::scale(28, ket::Appearance::instance().zoom())));
+        // The sidebar filter is a real kit field, not a navigation row.
+        QCOMPARE(search->height(), search->sizeHint().height());
         QVERIFY(window.findChild<QWidget*>(QStringLiteral("productTopBar")) == nullptr);
         QVERIFY(window.findChild<QToolButton*>(QStringLiteral("productBranchButton")) == nullptr);
         QVERIFY(window.findChild<QToolButton*>(QStringLiteral("productTerminalButton")) == nullptr);
@@ -828,7 +827,13 @@ class AgentWorkspaceShellTest final : public QObject {
         QVERIFY(identity->accessibleName().contains(QStringLiteral("Personal workspace")));
         QVERIFY(sidebar->isVisible());
 
-        search->click();
+        QTest::mouseClick(search, Qt::LeftButton);
+        QTest::keyClicks(search, "no matching synthetic repository");
+        QTest::keyClick(search, Qt::Key_Return);
+        QVERIFY(window.findChild<ketplus::SpotlightDialog*>() == nullptr);
+        QTest::keyClick(search, Qt::Key_Escape);
+        QVERIFY(search->text().isEmpty());
+        window.findChild<QAction*>(QStringLiteral("goToFileAction"))->trigger();
         QTRY_VERIFY(window.findChild<ketplus::SpotlightDialog*>() != nullptr);
         window.findChild<ketplus::SpotlightDialog*>()->close();
 

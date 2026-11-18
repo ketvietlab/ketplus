@@ -6,7 +6,9 @@ add_library(ketplus_daemon_core STATIC ${KETPLUS_DAEMON_CORE_SOURCES}
     src/providers/ClaudeKeychain.cpp)
 target_sources(ketplus_daemon_core PRIVATE
     src/teams/TeamRiskPolicy.cpp src/teams/TeamRiskPolicy.h
-    src/teams/TeamCoordinatorRiskPolicy.cpp)
+    src/teams/TeamCoordinatorRiskPolicy.cpp
+    src/teams/TeamRoutingEvidence.cpp src/teams/TeamRoutingEvidence.h
+    src/runtime/SessionHostTeamRouting.cpp)
 if(APPLE)
     target_link_libraries(ketplus_daemon_core PRIVATE "-framework Security" "-framework CoreFoundation" "-framework IOKit" proc)
 endif()
@@ -39,6 +41,9 @@ target_include_directories(ketplus_daemon_core PRIVATE
 target_compile_definitions(ketplus_daemon_core PUBLIC
     $<$<AND:$<BOOL:${KETPLUS_ENABLE_REMOTE_DEMO}>,$<CONFIG:Debug>>:KETPLUS_REMOTE_DEMO_AVAILABLE=1>
 )
+target_sources(ketplus_daemon_core PRIVATE
+    src/teams/TeamReviewPolicy.h src/teams/TeamReviewPolicy.cpp
+    src/teams/TeamCoordinatorFindingResolutions.cpp)
 ketplus_enable_warnings(ketplus_daemon_core)
 # Supported provider CLI versions (ADR 0015).
 set_source_files_properties(src/providers/compat/provider-compatibility.json

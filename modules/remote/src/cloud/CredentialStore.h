@@ -23,12 +23,18 @@ class CredentialStore final {
                   QString* error = nullptr) const;
     bool update(const std::function<void(QHash<QString, QByteArray>& accounts)>& change,
                 QString* error = nullptr) const;
+    // One synchronous operation, one locked OS read and at most one commit. The supplied
+    // view must not escape the callback. Do not dispatch events, network calls or callbacks
+    // while holding it. Returning false discards every staged write.
+    bool batch(const std::function<bool(CredentialStore& view, QString* error)>& operation,
+               QString* error = nullptr) const;
 
   private:
-    bool transaction(const std::function<void(QHash<QString, QByteArray>&)>& change,
+    bool transaction(const std::function<bool(QHash<QString, QByteArray>&)>& change,
                      QHash<QString, QByteArray>* result, QString* error) const;
     QString service_;
     std::shared_ptr<CredentialBackend> backend_;
     QString legacyPath_;
+    QHash<QString, QByteArray>* stagedAccounts_{nullptr};
 };
 } // namespace ketplus::daemon
