@@ -1,6 +1,6 @@
 # ADR 0134: Acceptance is consumed by Ready and verified completion
 
-Status: proposed (implementation and regression validation in progress)
+Status: proposed (implementation validated; independent review pending)
 Date: 2026-11-17
 
 ## Context

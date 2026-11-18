@@ -1077,7 +1077,7 @@ prose reflow; unknown/code/material changes remain on the reviewer route. Receip
 come from fixed host checks at the exact task revision, never caller risk/pass
 assertions. See [team-risk-routing.md](team-risk-routing.md). The Ready/completion
 consumer is implemented under [ADR 0134](decisions/0134-exact-head-task-completion.md)
-and undergoing regression validation: verified leader acceptance moves its exact
+and awaiting independent review: verified leader acceptance moves its exact
 head to Ready, while unsupported proof queues independent review. Durable daemon
 acceptance is separate from receipt lifetime and is revalidated against current
 policy and host merge facts. A route grants no user permission and cannot invent

@@ -322,7 +322,10 @@ class TeamRepositoryTest final : public QObject {
         QVERIFY(teams_->assignTask(team_, id, "dev1", "lead").ok());
         QVERIFY(teams_->moveTask(team_, id, state::inProgress, "dev1").ok());
         QVERIFY(QDir().mkpath(get(id).worktree));
-        QVERIFY(teams_->closeTask(team_, id, evidence, "Merged.", "lead").ok());
+        QVERIFY(teams_
+                    ->moveTask(team_, id, state::done, "user", "Intentional fixture completion", {},
+                               true)
+                    .ok());
         QVERIFY(move("/ketplus").ok());
         TeamResult result{.error = TeamError{"unanswered", {}}, .teamId = team_};
         teams_->removeWorktree(team_, id, "user",
@@ -370,18 +373,27 @@ class TeamRepositoryTest final : public QObject {
         QVERIFY(teams_->moveTask(team_, first, state::inProgress, "dev1").ok());
         QVERIFY(teams_->assignTask(team_, second, "dev1", "lead").ok());
         host_.conversations["dev1"].worktree = get(first).worktree;
-        QVERIFY(teams_->closeTask(team_, first, evidence, "Merged.", "lead").ok());
+        QVERIFY(teams_
+                    ->moveTask(team_, first, state::done, "user", "Intentional fixture completion",
+                               {}, true)
+                    .ok());
         QTRY_COMPARE(host_.conversations.value("dev1").worktree, get(second).worktree);
         QVERIFY(team().relocations.isEmpty());
 
         QVERIFY(teams_->moveTask(team_, second, state::inProgress, "dev1").ok());
-        QVERIFY(teams_->closeTask(team_, second, evidence, "Merged.", "lead").ok());
+        QVERIFY(teams_
+                    ->moveTask(team_, second, state::done, "user", "Intentional fixture completion",
+                               {}, true)
+                    .ok());
         QTRY_COMPARE(host_.conversations.value("dev1").worktree, team().repository);
         // A member that already left the worktree is not moved again.
         const QString third = create({.title = "Pay", .lane = "Web"});
         QVERIFY(teams_->assignTask(team_, third, "dev2", "lead").ok());
         host_.conversations["dev2"].worktree = QStringLiteral("/somewhere");
-        QVERIFY(teams_->closeTask(team_, third, evidence, "Merged.", "lead").ok());
+        QVERIFY(teams_
+                    ->moveTask(team_, third, state::done, "user", "Intentional fixture completion",
+                               {}, true)
+                    .ok());
         QTest::qWait(10);
         QCOMPARE(host_.conversations.value("dev2").worktree, QStringLiteral("/somewhere"));
     }
