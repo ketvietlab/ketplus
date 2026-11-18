@@ -57,7 +57,8 @@ struct RemoteJobRecord {
     QString reason;
     QString cleanupStatus = cleanup::notRequired;
     QString jobId;
-    QString stopReason;   // "user" or "deadline" once stopping was entered
+    QString stopReason;   // "user", "deadline" or "snapshot_failed" once stopping was entered
+    QString stopCode;     // the desktop's snapshot failure code, with "snapshot_failed"
     QString dispatchedTo; // the runner the spec may have reached; never two
     std::optional<QDateTime> dispatchedAt;
     std::optional<QDateTime> lastPeerContact;
