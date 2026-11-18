@@ -2828,6 +2828,9 @@ class DaemonProtocolTest final : public QObject {
     }
 
     void runningServiceKeepsItsLocksWhenTheyAge() {
+#if defined(Q_OS_WIN)
+        QSKIP("QLockFile holds its file exclusively on Windows, so the fixture cannot reopen it.");
+#endif
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
         const DaemonConfiguration configuration{

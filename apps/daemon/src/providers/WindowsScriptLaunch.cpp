@@ -44,6 +44,17 @@ QString nodeForNpmShim(const QString& executable, QString* script) {
     return {};
 }
 
+QString windowsPath(QString path) {
+    path.replace(QLatin1Char('/'), QLatin1Char('\\'));
+    return path;
+}
+
+// A Windows path, judged the same on every host so the policy is testable anywhere.
+bool windowsAbsolute(const QString& path) {
+    static const QRegularExpression drive(QStringLiteral("^[A-Za-z]:[\\\\/]"));
+    return drive.match(path).hasMatch() || path.startsWith(QStringLiteral("\\\\"));
+}
+
 ScriptLaunch refused(const QString& message) { return {{}, {}, {}, message}; }
 } // namespace
 
@@ -56,11 +67,11 @@ ScriptLaunch scriptLaunch(const QString& executable, const QStringList& argument
     const bool powershell = suffix == QStringLiteral("ps1");
     if (!command && !powershell)
         return {executable, arguments, {}, {}};
-    if (!QFileInfo(systemRoot).isAbsolute())
+    if (!windowsAbsolute(systemRoot))
         return refused(QStringLiteral("Windows SystemRoot must be an absolute path to launch a "
                                       "script wrapper."));
     const QString system = QDir::cleanPath(systemRoot + QStringLiteral("/System32"));
-    const QString nativePath = QDir::toNativeSeparators(executable);
+    const QString nativePath = windowsPath(executable);
     if (powershell)
         return {system + QStringLiteral("/WindowsPowerShell/v1.0/powershell.exe"),
                 QStringList{QStringLiteral("-NoProfile"), QStringLiteral("-NonInteractive"),
@@ -73,7 +84,7 @@ ScriptLaunch scriptLaunch(const QString& executable, const QStringList& argument
         QString entry;
         const QString node = nodeForNpmShim(executable, &entry);
         if (!node.isEmpty())
-            return {node, QStringList{QDir::toNativeSeparators(entry)} + arguments, {}, {}};
+            return {node, QStringList{windowsPath(entry)} + arguments, {}, {}};
     }
     if (unsafeForCmd(nativePath))
         return refused(QStringLiteral("A Windows command-wrapper path cannot contain percent or "

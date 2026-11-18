@@ -798,7 +798,12 @@ differs from macOS/Linux:
   orphaned. A grandchild spawned between `CreateProcess` and the job assignment escapes the
   private job, but not the daemon-wide one.
 - **Provider launch.** `.cmd`/`.bat` wrappers must apply `nativeArguments` (see
-  [development](development.md)); the Copilot adapter does.
+  [development](development.md)); the Copilot and Cursor adapters do. Codex goes through
+  `providers/WindowsScriptLaunch`: npm's `codex.cmd` is replaced by `node` on its
+  `node_modules/@openai/codex/bin/codex.js` (node found beside the shim, on `PATH`, then under
+  `%ProgramFiles%\\nodejs`), which keeps every argument out of cmd.exe's parser; otherwise
+  `cmd.exe /d /v:off /s /c` with `nativeArguments`, and arguments containing quotes, percent
+  signs or newlines are refused rather than mis-parsed.
 - **Not available.** Managed background process jobs (`ketplus_job_executor`, cgroup/process
   group supervision) are POSIX-only. On Windows `ManagedTaskRuntime` refuses a `process` task with
   `containment_unavailable`; `NativeJobUnsupported.cpp` only lets the daemon link.

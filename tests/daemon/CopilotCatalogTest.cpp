@@ -139,7 +139,9 @@ class CopilotCatalogTest final : public QObject {
         QCOMPARE(count(logEntries, "session/prompt"), 0);
         int launches = 0;
         for (const auto& value : logEntries) {
+#if !defined(Q_OS_WIN) // QProcess drains the pipe in a thread, so a producer finishes first.
             QVERIFY(!value.toObject().contains("floodCompleted"));
+#endif
             if (value.toObject()["launched"].toBool()) {
                 ++launches;
                 QCOMPARE(value.toObject()["argv"].toArray(), QJsonArray({"--acp", "--stdio"}));

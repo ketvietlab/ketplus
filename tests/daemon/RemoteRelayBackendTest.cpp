@@ -634,9 +634,6 @@ class RemoteRelayBackendTest final : public QObject {
     }
 
     void theOutboxRetriesTheSameCiphertextAfterARestartAndAppliesItOnce() {
-#if defined(Q_OS_WIN)
-        QSKIP("Not yet verified on Windows: the restarted backend delivers no completion.");
-#endif
         QTemporaryDir dir;
         const auto outbox = dir.filePath("machines/linux-host/outbox.json");
         FixtureTransport network;
@@ -679,6 +676,9 @@ class RemoteRelayBackendTest final : public QObject {
 #if !defined(Q_OS_WIN) // Windows access is an ACL, not mode bits: see WindowsPlatformTest.
         QCOMPARE(file.permissions() & (QFile::ReadGroup | QFile::ReadOther), QFile::Permissions{});
 #endif
+        // An open handle without delete sharing makes the next atomic replace of the outbox
+        // fail on Windows; the restarted backend writes it again.
+        file.close();
         first.reset();
 
         // The restarted Desktop: a new client from the stored credential, a new backend.
