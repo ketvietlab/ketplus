@@ -79,6 +79,27 @@ target_link_libraries(ketplus_runner_snapshot_receiver
     ketplus_runner_protocol)
 ketplus_enable_warnings(ketplus_runner_snapshot_receiver)
 
+# The runner's Relay socket and its peer connection to a desktop: pure logic over the
+# interfaces in PeerPorts.h, plus the Qt and WebRTC adapters.
+add_library(ketplus_runner_peer STATIC
+    src/peer/PeerPorts.h
+    src/peer/PeerSignals.cpp
+    src/peer/PeerSignals.h
+    src/peer/QtPeerClock.cpp
+    src/peer/QtPeerClock.h
+    src/peer/RelayWakeups.cpp
+    src/peer/RelayWakeups.h
+    src/peer/WebRtcTransport.cpp
+    src/peer/WebRtcTransport.h
+)
+target_link_libraries(ketplus_runner_peer
+    PUBLIC Qt6::Core ketplus_runner_pairing ketplus_peer_link
+    PRIVATE ketplus_control_crypto_primitives)
+target_include_directories(ketplus_runner_peer PUBLIC
+    "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>"
+)
+ketplus_enable_warnings(ketplus_runner_peer)
+
 add_executable(ketplus-runner src/main.cpp)
 # The receiver brings ketplus_runner_app and ketplus_runner_session with it.
 target_link_libraries(ketplus-runner PRIVATE ketplus_runner_snapshot_receiver)
