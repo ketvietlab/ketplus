@@ -1408,10 +1408,18 @@ of this target:
 cmake -S "$TASK_SOURCE" -B "$TASK_BUILD" -G Ninja \
   -DKETPLUS_EDITION=pro -DKETPLUS_BUILD_DESKTOP=OFF \
   -DKETPLUS_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Debug \
-  -DCMAKE_PREFIX_PATH="$QT_ROOT"
+  -DCMAKE_PREFIX_PATH="$QT_ROOT" -DFETCHCONTENT_FULLY_DISCONNECTED=ON \
+  -DFETCHCONTENT_SOURCE_DIR_KETPLUS_LIBDATACHANNEL="$TASK_DATACHANNEL_SOURCE"
 cmake --build "$TASK_BUILD" --target ketplus_managed_attention_recovery_tests -j1
 ctest --test-dir "$TASK_BUILD" -R '^ketplus_managed_attention_recovery_tests$' -j1 -V
 ```
+
+`TASK_DATACHANNEL_SOURCE` must be a separately hashed/synced source-only export of
+the libdatachannel commit and its dependency pins recorded in `cmake/WebRtc.cmake`,
+including the patched libjuice pin. Prepare it on the Mac, without Git metadata,
+build output, cache or credentials. The source override and disconnected mode
+prevent CMake's normal Git clone/update/patch path from writing Git state on Linux.
+Do not run configure until this dependency export is verified too.
 
 Only the real macOS fault/recovery chain may use the existing Mac build, after
 source/binary/config identity and test-owned process inventories are recorded:
