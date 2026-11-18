@@ -2182,10 +2182,15 @@ test output.
 What the daemon tests learned about Windows, for the next fixture:
 
 - A test that edits the Python source of a fixture edits `scriptSourcePath()`, not the launcher.
-- A test that waits for the daemon to refuse a client and then connects again pauses first: a
-  named-pipe client that connects while the server is closing the refused one gets no reply.
-- Git for Windows converts line endings on checkout, so the evidence Git run in the daemon sets
-  `core.autocrlf=input` to read such a checkout as clean; the review snapshot copies the index
+- A test that connects again after the daemon refused a client uses a new `QLocalSocket`, not the
+  aborted one: on Windows, an aborted `QLocalSocket` that reconnects at once connects but never gets
+  a reply, while a new object against the same server does (3 of 3 runs hang when reused, 0 of 4
+  with a new object). The server is not the cause. `DaemonClient` does reuse its socket after
+  `abort()` (`connectToDaemon()`); it reconnects after a timer delay, and whether that delay is
+  always enough on Windows is not measured.
+- Git for Windows converts line endings on checkout, so on Windows only, the evidence Git run in
+  the daemon sets `core.autocrlf=input` to read such a checkout as clean (a worktree file that only
+  swaps LF for CRLF still reads as modified there, as on the other platforms: a test checks it); the review snapshot copies the index
   to a plain file, because git could not replace the index of a `QTemporaryFile`.
 - A fixture that holds a daemon, a host and adapters tears down the adapters first.
 

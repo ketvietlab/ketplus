@@ -331,6 +331,20 @@ class TeamRoutingToolsTest final : public QObject {
         QVERIFY(!result.reason.isEmpty());
     }
 
+    // The worktree must match the revision: a file that only swaps LF for CRLF is a change.
+    // Run everywhere; `core.autocrlf=input` (Windows only) does not hide it from `git status`.
+    void aWorktreeFileThatOnlySwapsLineEndingsIsStale() {
+        QTemporaryDir directory;
+        const QString base = init(directory.path());
+        QVERIFY(write(directory.path(), "docs/prose.md", reflow));
+        const QString head = commit(directory.path());
+        QByteArray crlf = reflow;
+        crlf.replace("\n", "\r\n");
+        QVERIFY(write(directory.path(), "docs/prose.md", crlf));
+        QCOMPARE(teams::RoutingEvidence::produce(team(), task(directory.path(), base), head).reason,
+                 QString("stale_revision"));
+    }
+
     void dirtyHeadModeAndPendingApprovalCannotMintReceipt() {
         QTemporaryDir directory;
         const QString base = init(directory.path());

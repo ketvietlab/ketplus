@@ -889,18 +889,18 @@ class AgentMessagingTest final : public QObject {
         const QString token = tokenPattern.match(QString::fromUtf8(providerLog)).captured(1);
         QVERIFY(!token.isEmpty());
 
-        QLocalSocket agent;
-        agent.connectToServer(directory.filePath("daemon.sock"));
-        QVERIFY(agent.waitForConnected(3000));
-        QCOMPARE(roundTrip(agent, request("daemon.hello", {{"agent_token", "forged"}}))
+        QLocalSocket refused;
+        refused.connectToServer(directory.filePath("daemon.sock"));
+        QVERIFY(refused.waitForConnected(3000));
+        QCOMPARE(roundTrip(refused, request("daemon.hello", {{"agent_token", "forged"}}))
                      .value("error_code")
                      .toString(),
                  "authentication_failed");
-        agent.abort();
-        // On Windows a client that connects right after another one was refused can reach the
-        // pipe instance that is still closing and never gets its reply; give the server time to
-        // open the next instance.
-        QTest::qWait(500);
+        refused.abort();
+        // A new socket object, not `refused` again: on Windows a QLocalSocket that connects
+        // again right after abort() connects but never gets a reply (measured: 3 of 3 runs hang
+        // when the object is reused, 0 of 4 with a new object, and the server is the same).
+        QLocalSocket agent;
         agent.connectToServer(directory.filePath("daemon.sock"));
         QVERIFY(agent.waitForConnected(3000));
         const auto agentHello = roundTrip(agent, request("daemon.hello", {{"agent_token", token}}));

@@ -21,10 +21,11 @@ QString digest(const QByteArray& bytes) {
 
 // No shell, hooks, external diff/textconv, replacement objects or inherited
 // GIT_* repository overrides. Every operation reads the immutable named objects.
-// The user's own configuration is ignored, so `core.autocrlf=input` is set here: a Windows
-// checkout that Git rewrote with CRLF endings (Git for Windows does that by default) would
-// otherwise read as modified, and a clean worktree could never be proven. `input` only affects
-// how worktree files are compared; it rewrites nothing.
+// The user's own configuration is ignored. On Windows `core.autocrlf=input` is set: a checkout
+// that Git rewrote with CRLF endings (Git for Windows does that by default) would otherwise read
+// as modified, and a clean worktree could never be proven. It is not set elsewhere, so no other
+// platform's check depends on it. `git status` still reports a worktree file that only swaps
+// LF for CRLF as modified with it (a test runs on every platform).
 std::optional<QByteArray> git(const QString& directory, const QStringList& arguments) {
     QProcess process;
     process.setWorkingDirectory(directory);
@@ -41,12 +42,13 @@ std::optional<QByteArray> git(const QString& directory, const QStringList& argum
 #endif
     environment.insert(QStringLiteral("GIT_OPTIONAL_LOCKS"), QStringLiteral("0"));
     process.setProcessEnvironment(environment);
-    process.start(QStringLiteral("git"),
-                  QStringList{QStringLiteral("--no-replace-objects"), QStringLiteral("-c"),
-                              QStringLiteral("core.fsmonitor=false"), QStringLiteral("-c"),
-                              QStringLiteral("core.untrackedCache=false"), QStringLiteral("-c"),
-                              QStringLiteral("core.autocrlf=input")} +
-                      arguments);
+    QStringList options{QStringLiteral("--no-replace-objects"), QStringLiteral("-c"),
+                        QStringLiteral("core.fsmonitor=false"), QStringLiteral("-c"),
+                        QStringLiteral("core.untrackedCache=false")};
+#if defined(Q_OS_WIN)
+    options += {QStringLiteral("-c"), QStringLiteral("core.autocrlf=input")};
+#endif
+    process.start(QStringLiteral("git"), options + arguments);
     QElapsedTimer elapsed;
     elapsed.start();
     QByteArray output;
