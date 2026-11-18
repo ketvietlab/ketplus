@@ -1,70 +1,47 @@
 #pragma once
 
 #include "runner/entry/RemoteGuidance.h"
+#include "runner/entry/RemoteJobPort.h"
 
 #include <QJsonObject>
 #include <QSet>
 #include <QString>
-#include <QStringList>
 
-#include <functional>
 #include <memory>
 #include <optional>
 
-namespace ketplus::daemon {
-struct BackgroundTaskIntent;
-}
 namespace ketplus::daemon::runner::remote {
 class RemoteJobs;
 }
 
 // Where the background task runtime meets the remote jobs: the checks before a task with
-// runs_on exists, its submit once approved, and its records in replies. A task with runs_on
-// never runs on this machine.
+// runs_on exists, its submit once approved, and its records in replies.
 namespace ketplus::daemon::runner::entry {
 
-class RemoteJobEntry final {
+class RemoteJobEntry final : public RemoteJobPort {
   public:
-    struct Ports {
-        // Ends a reserved task that never got a record: failed with `code`, never launched.
-        // Ignored by the runtime when the task already ended.
-        std::function<void(const QString& taskId, const QString& code)> failReserved;
-        // A remote record was stored: the runtime reads the task again and publishes it.
-        std::function<void(const QString& taskId)> changed;
-    };
-
     explicit RemoteJobEntry(remote::RemoteJobs& jobs);
-    ~RemoteJobEntry();
+    ~RemoteJobEntry() override;
     RemoteJobEntry(const RemoteJobEntry&) = delete;
     RemoteJobEntry& operator=(const RemoteJobEntry&) = delete;
 
-    void setPorts(Ports ports) { ports_ = std::move(ports); }
+    void setPorts(Ports ports) override { ports_ = std::move(ports); }
 
-    // A failure reply when a task with runs_on cannot be created now: invalid_request when a
-    // runner cannot take its execution, then runner_unavailable, git_unsupported,
-    // not_a_worktree, resource_exhausted or storage_error. Empty when it can, and for a local
-    // task. Creates nothing.
+    // invalid_request when a runner cannot take the execution, then runner_unavailable,
+    // git_unsupported, not_a_worktree, resource_exhausted or storage_error.
     [[nodiscard]] QJsonObject admit(const BackgroundTaskIntent& intent,
-                                    const QJsonObject& execution) const;
-
-    // Once the task was approved: freezes its worktree and submits it, once. A submit that ends
-    // before a record exists ends the reserved task through Ports::failReserved.
-    void submit(const QString& taskId, const QJsonObject& execution, qint64 timeoutMs,
-                const QStringList& runsOn);
-
-    // nullopt when the task has no remote record (a local task, or one still reserved: the
-    // runtime ends it as a queued task). Otherwise the stop's code, empty when it was taken.
-    [[nodiscard]] std::optional<QString> stop(const QString& taskId);
-    // nullopt when the task has no remote record; otherwise the acknowledgement's code.
+                                    const QJsonObject& execution) const override;
+    // The labels and timeout are those the reserved task was created with.
+    void submit(const QString& taskId, const QJsonObject& execution) override;
+    [[nodiscard]] std::optional<QString> stop(const QString& taskId) override;
     [[nodiscard]] std::optional<QString> resolveCleanup(const QString& taskId,
-                                                        const QString& userClientId);
-
-    // `placement` and `runner` added to the task or tasks of a get or list reply.
-    [[nodiscard]] QJsonObject withPlacement(QJsonObject reply) const;
-    [[nodiscard]] bool hasRecord(const QString& taskId) const;
+                                                        const QString& userClientId) override;
+    [[nodiscard]] QJsonObject withPlacement(QJsonObject reply) const override;
+    [[nodiscard]] bool hasRecord(const QString& taskId) const override;
 
   private:
     [[nodiscard]] QJsonObject placed(QJsonObject task) const;
+    void failReserved(const QString& taskId, const QString& code) const;
 
     remote::RemoteJobs& jobs_;
     Ports ports_;

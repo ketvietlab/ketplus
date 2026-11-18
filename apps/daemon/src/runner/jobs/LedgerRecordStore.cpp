@@ -164,6 +164,14 @@ std::optional<int> LedgerRecordStore::unfinishedReserved() const {
     return query.value(0).toInt();
 }
 
+std::optional<LedgerRecordStore::Reservation>
+LedgerRecordStore::reservation(const QString& taskId) const {
+    const auto row = rowOf(database_, taskId);
+    if (!row || row->revision != 0 || row->runsOn.isEmpty())
+        return std::nullopt;
+    return Reservation{row->runsOn, row->timeoutMs};
+}
+
 std::optional<QString> LedgerRecordStore::abandonUnreadable(const QString& taskId) {
     if (taskId.isEmpty() || !database_.transaction())
         return std::nullopt;

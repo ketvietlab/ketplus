@@ -1,6 +1,7 @@
 #include "runner/entry/RemoteJobEntry.h"
 
 #include "runner/entry/RemoteSpec.h"
+#include "runner/jobs/LedgerRecordStore.h"
 #include "runner/jobs/RemoteJobCoordinator.h"
 #include "runner/remote/RemoteJobs.h"
 #include "runner/sync/SnapshotPreparation.h"
@@ -59,30 +60,37 @@ QJsonObject RemoteJobEntry::admit(const BackgroundTaskIntent& intent,
     return {};
 }
 
-void RemoteJobEntry::submit(const QString& taskId, const QJsonObject& execution,
-                            const qint64 timeoutMs, const QStringList& runsOn) {
+void RemoteJobEntry::submit(const QString& taskId, const QJsonObject& execution) {
     if (submitted_.contains(taskId))
         return;
     submitted_.insert(taskId);
-    std::optional<protocol::JobSpec> spec = jobSpecOf(execution, timeoutMs);
+    const auto reservation = jobs_.store().reservation(taskId);
+    if (!reservation) {
+        failReserved(taskId, QStringLiteral("storage_error"));
+        return;
+    }
+    std::optional<protocol::JobSpec> spec = jobSpecOf(execution, reservation->timeoutMs);
     if (!spec) {
-        if (ports_.failReserved)
-            ports_.failReserved(taskId, QStringLiteral("invalid_request"));
+        failReserved(taskId, QStringLiteral("invalid_request"));
         return;
     }
     remote::SubmitRequest request;
     request.spec = std::move(*spec);
-    request.runsOn = runsOn;
-    request.timeoutMs = timeoutMs;
+    request.runsOn = reservation->runsOn;
+    request.timeoutMs = reservation->timeoutMs;
     const std::weak_ptr<int> alive = alive_;
     jobs_.submit(taskId, std::move(request), [this, alive, taskId](const QString& code) {
         if (alive.expired() || code.isEmpty() || jobs_.record(taskId))
             return; // the record carries the task from here
-        qCInfo(lcRemoteEntry).noquote()
-            << QStringLiteral("remote job not submitted task=%1 code=%2").arg(taskId, code);
-        if (ports_.failReserved)
-            ports_.failReserved(taskId, code);
+        failReserved(taskId, code);
     });
+}
+
+void RemoteJobEntry::failReserved(const QString& taskId, const QString& code) const {
+    qCInfo(lcRemoteEntry).noquote()
+        << QStringLiteral("remote job not submitted task=%1 code=%2").arg(taskId, code);
+    if (ports_.failReserved)
+        ports_.failReserved(taskId, code);
 }
 
 std::optional<QString> RemoteJobEntry::stop(const QString& taskId) {

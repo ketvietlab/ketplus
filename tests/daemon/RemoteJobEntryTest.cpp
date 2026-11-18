@@ -297,7 +297,7 @@ class RemoteJobEntryTest final : public QObject {
         // One of them recorded: still 64 unfinished.
         QVERIFY(e.h.f.approve(ids.first()));
         e.h.prepare = [&](const sync::PrepareRequest&) { return preparedIn(e.h, w.root); };
-        e.entry->submit(ids.first(), execution(w.inside), 60'000, linuxLabels);
+        e.entry->submit(ids.first(), execution(w.inside));
         QVERIFY(e.h.jobs->record(ids.first()));
         QCOMPARE(e.h.jobs->outstanding(), 1);
         QCOMPARE(e.entry->admit(intentFor("one-more"), execution(w.inside))
@@ -322,8 +322,8 @@ class RemoteJobEntryTest final : public QObject {
         Entry e;
         Worktree w;
         const QString id = e.h.f.remoteTask();
-        e.entry->submit(id, execution(w.inside), 60'000, linuxLabels);
-        e.entry->submit(id, execution(w.inside), 60'000, linuxLabels);
+        e.entry->submit(id, execution(w.inside));
+        e.entry->submit(id, execution(w.inside));
         QCOMPARE(e.h.prepared.size(), 1);
         QCOMPARE(e.h.prepared.first().cwd, w.inside);
         e.h.preparing.takeFirst()(preparedIn(e.h, w.root));
@@ -344,7 +344,7 @@ class RemoteJobEntryTest final : public QObject {
         Entry e;
         Worktree w;
         const QString id = e.h.f.remoteTask();
-        e.entry->submit(id, execution(w.inside), 60'000, linuxLabels);
+        e.entry->submit(id, execution(w.inside));
         if (code == QStringLiteral("runner_unavailable")) {
             e.h.relay.offered = false;
             e.h.preparing.takeFirst()(preparedIn(e.h, w.root));
@@ -362,7 +362,7 @@ class RemoteJobEntryTest final : public QObject {
         Entry e;
         Worktree w;
         const QString id = e.h.f.remoteTask();
-        e.entry->submit(id, execution(w.inside), 60'000, linuxLabels);
+        e.entry->submit(id, execution(w.inside));
         QVERIFY(!e.entry->stop(id)); // no record: the runtime cancels the task
         QVERIFY(cancelQueued(e.h.f, id));
         e.h.preparing.takeFirst()(preparedIn(e.h, w.root));
@@ -377,7 +377,7 @@ class RemoteJobEntryTest final : public QObject {
         Worktree w;
         e.h.prepare = [&](const sync::PrepareRequest&) { return preparedIn(e.h, w.root); };
         const QString id = e.h.f.remoteTask();
-        e.entry->submit(id, execution(w.inside), 60'000, linuxLabels);
+        e.entry->submit(id, execution(w.inside));
         const auto first = e.entry->stop(id);
         QVERIFY(first);
         QCOMPARE(*first, QString());
@@ -397,7 +397,7 @@ class RemoteJobEntryTest final : public QObject {
         Worktree w;
         e.h.prepare = [&](const sync::PrepareRequest&) { return preparedIn(e.h, w.root); };
         const QString id = e.h.f.remoteTask();
-        e.entry->submit(id, execution(w.inside), 60'000, linuxLabels);
+        e.entry->submit(id, execution(w.inside));
         QCOMPARE(e.entry->resolveCleanup(id, "user-client"),
                  std::optional<QString>("invalid_state"));
     }
@@ -429,12 +429,12 @@ class RemoteJobEntryTest final : public QObject {
             Worktree w;
             (void)e.entry->admit(intentFor("remote"), execution(w.inside));
             const QString id = e.h.f.remoteTask();
-            e.entry->submit(id, execution(w.inside), 60'000, linuxLabels);
+            e.entry->submit(id, execution(w.inside));
             e.h.preparing.takeFirst()(
                 sync::PreparedOutcome{std::nullopt, sync::prepare::snapshotBuildFailed});
             const QString other = e.h.f.remoteTask();
             e.h.prepare = [&](const sync::PrepareRequest&) { return preparedIn(e.h, w.root); };
-            e.entry->submit(other, execution(w.inside), 60'000, linuxLabels);
+            e.entry->submit(other, execution(w.inside));
             (void)e.entry->stop(other);
             for (const QString& line : std::as_const(capturedLog)) {
                 QVERIFY2(!line.contains(secretArgument) && !line.contains(secretValue) &&
