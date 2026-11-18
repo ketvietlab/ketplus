@@ -31,6 +31,9 @@ class WebRtcAnswerTransportFactory;
 namespace peer {
 class QtJobPeerClock;
 }
+namespace entry {
+class RemoteJobEntry;
+} // namespace entry
 namespace sync {
 class RunnerSecret;
 }
@@ -71,6 +74,8 @@ class RemoteJobsService final : public QObject {
     // Once, before the Control client starts: resumes the records and takes runner messages.
     void start();
     [[nodiscard]] RemoteJobs& jobs() { return *jobs_; }
+    // Where background tasks started with runs_on meet the remote jobs.
+    [[nodiscard]] entry::RemoteJobEntry& entry() { return *entry_; }
 
   private:
     class Signals;
@@ -92,6 +97,7 @@ class RemoteJobsService final : public QObject {
     QTimer sweep_;
     // Last, so it goes first: it holds references to every part above.
     std::unique_ptr<RemoteJobs> jobs_;
+    std::unique_ptr<entry::RemoteJobEntry> entry_;
 };
 
 } // namespace ketplus::daemon::runner::remote

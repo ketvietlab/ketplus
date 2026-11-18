@@ -67,7 +67,9 @@ add_test(NAME ketplus_background_ledger_tests COMMAND ketplus_background_ledger_
 add_executable(ketplus_managed_task_spec_tests
     ../ManagedTaskSpecTest.cpp
     "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/storage/BackgroundTaskFingerprint.cpp"
-    "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/runtime/ManagedTaskSpec.cpp")
+    "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/runtime/ManagedTaskSpec.cpp"
+    "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/runner/entry/RunsOnRequest.cpp"
+    "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/runner/jobs/RemoteJobLabels.cpp")
 target_include_directories(ketplus_managed_task_spec_tests PRIVATE
     "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src")
 target_link_libraries(ketplus_managed_task_spec_tests PRIVATE Qt6::Core Qt6::Sql Qt6::Test)

@@ -66,6 +66,12 @@ bool RemoteJobs::available() const {
     return open_ && ports_.gitProblem.isEmpty() && ports_.relayAvailable && ports_.relayAvailable();
 }
 
+QString RemoteJobs::refusal() const {
+    if (!open_ || !ports_.relayAvailable || !ports_.relayAvailable())
+        return runnerUnavailable;
+    return ports_.gitProblem;
+}
+
 std::optional<jobs::RemoteJobRecord> RemoteJobs::record(const QString& taskId) const {
     return coordinator_.record(taskId);
 }

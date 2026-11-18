@@ -3,6 +3,7 @@
 #include "cloud/CloudControlClient.h"
 #include "runner/RunnerPinStore.h"
 #include "runner/RunnerService.h"
+#include "runner/entry/RemoteJobEntry.h"
 #include "runner/jobs/PinRunnerTrust.h"
 #include "runner/jobs/QtJobClock.h"
 #include "runner/jobs/RemoteJobRelay.h"
@@ -134,6 +135,7 @@ RemoteJobsService::RemoteJobsService(BackgroundTaskLedger ledger, RunnerRelayPor
     };
     ports.defer = defer;
     jobs_ = std::make_unique<RemoteJobs>(std::move(ports));
+    entry_ = std::make_unique<entry::RemoteJobEntry>(*jobs_);
 
     jobClock_->setFired([this](const QString& taskId, const jobs::JobTimer timer) {
         jobs_->jobTimer(taskId, timer);
@@ -149,6 +151,7 @@ RemoteJobsService::~RemoteJobsService() {
     sweep_.stop();
     jobClock_->setFired({});
     linkClock_->setFired({});
+    entry_.reset();
     jobs_.reset();
 }
 

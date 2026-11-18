@@ -1,4 +1,5 @@
 #include "runtime/ManagedTaskSpec.h"
+#include "runner/entry/RunsOnRequest.h"
 
 #include <QCryptographicHash>
 #include <QDir>
@@ -32,7 +33,7 @@ ManagedTaskAdmission validateManagedTask(const QJsonObject& payload,
         result.error = error;
         return result;
     };
-    if (!keysAllowed(payload,
+    if (!keysAllowed(runner::entry::withoutRunsOn(payload),
                      {"client_request_id", "kind", "title", "execution_spec", "timeout_ms"}) ||
         !text(payload.value("client_request_id"), 128) || !text(payload.value("title"), 256) ||
         !payload.value("execution_spec").isObject() || context.owner.sessionId.isEmpty() ||
@@ -41,6 +42,9 @@ ManagedTaskAdmission validateManagedTask(const QJsonObject& payload,
     const auto kind = payload.value("kind").toString();
     if (kind != "process" && kind != "agent")
         return fail("invalid_request", "The task kind must be process or agent.");
+    const auto runsOn = runner::entry::readRunsOn(payload);
+    if (!runsOn.ok())
+        return fail(runsOn.errorCode, runsOn.error);
     const auto timeoutValue = payload.value("timeout_ms");
     const auto timeout = timeoutValue.toDouble(-1);
     // JSON's exact integer range, leaving room for an epoch-millisecond deadline.
@@ -139,6 +143,7 @@ ManagedTaskAdmission validateManagedTask(const QJsonObject& payload,
                      kind,          payload.value("title").toString(),
                      fingerprint,   qint64(timeout),
                      metadata,      payload};
+    result.intent.runsOn = runsOn.runsOn;
     result.execution = execution;
     return result;
 }

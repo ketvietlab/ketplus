@@ -12,6 +12,9 @@ namespace ketplus::daemon {
 namespace executor {
 class NativeJobClient;
 }
+namespace runner::entry {
+class RemoteJobPort;
+}
 
 // Owns execution independently of provider transport. SessionHost validates the
 // caller/workspace and uses its existing ApprovalBroker before granting permission.
@@ -24,9 +27,11 @@ class ManagedTaskRuntime final : public QObject {
     using Done = std::function<void(QJsonObject)>;
     ManagedTaskRuntime(BackgroundTaskLedger ledger, QString directory, QString executor,
                        QObject* parent = nullptr);
+    ~ManagedTaskRuntime() override;
     void setCallbacks(Changed changed, Permission permission, ChildStart childStart,
                       ChildStop childStop);
     bool initialize(QString* error);
+    void setRemoteJobs(runner::entry::RemoteJobPort* port);
     void start(const BackgroundTaskIntent& intent, const QJsonObject& execution, Done done);
     QJsonObject stop(const QString& taskId, const BackgroundTaskOwner& owner,
                      bool localAdministration = false);
@@ -42,6 +47,9 @@ class ManagedTaskRuntime final : public QObject {
     QJsonObject parkChild(const QString& taskId);
     QJsonObject resumeChild(const QString& taskId);
     bool appendChildOutput(const QString& taskId, qint64 turn, const QByteArray& bytes);
+    // Whether the task is still followed here, and whether anything is.
+    [[nodiscard]] bool isLive(const QString& taskId) const { return live_.contains(taskId); }
+    [[nodiscard]] bool isPumping() const { return timer_.isActive(); }
 
   private:
     QJsonObject accept(const BackgroundTaskIntent& intent, const QJsonObject& execution);
@@ -71,5 +79,6 @@ class ManagedTaskRuntime final : public QObject {
     ChildStart childStart_;
     ChildStop childStop_;
     bool pumping_{false};
+    runner::entry::RemoteJobPort* remoteJobs_{nullptr};
 };
 } // namespace ketplus::daemon

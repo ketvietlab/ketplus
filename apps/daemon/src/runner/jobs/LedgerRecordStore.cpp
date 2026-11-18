@@ -154,6 +154,24 @@ std::optional<QStringList> LedgerRecordStore::reserved() const {
     return tasks;
 }
 
+std::optional<int> LedgerRecordStore::unfinishedReserved() const {
+    QSqlQuery query(database_);
+    if (!query.exec("SELECT count(*) FROM remote_jobs r JOIN managed_jobs j "
+                    "ON j.task_id=r.task_id WHERE r.revision=0 AND j.state NOT IN "
+                    "('completed','failed','cancelled','timed_out','interrupted')") ||
+        !query.next())
+        return std::nullopt;
+    return query.value(0).toInt();
+}
+
+std::optional<LedgerRecordStore::Reservation>
+LedgerRecordStore::reservation(const QString& taskId) const {
+    const auto row = rowOf(database_, taskId);
+    if (!row || row->revision != 0 || row->runsOn.isEmpty())
+        return std::nullopt;
+    return Reservation{row->runsOn, row->timeoutMs};
+}
+
 std::optional<QString> LedgerRecordStore::abandonUnreadable(const QString& taskId) {
     if (taskId.isEmpty() || !database_.transaction())
         return std::nullopt;

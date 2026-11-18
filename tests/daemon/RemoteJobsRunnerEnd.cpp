@@ -171,7 +171,7 @@ void LinkedParts::attach(RemoteHarness& h) {
             -> std::unique_ptr<ketplus::daemon::runner::peer::OutputSpool> {
             if (failSpool)
                 return nullptr;
-            return ketplus::daemon::runner::output::TaskOutputSpool::open(h.f.database, taskId);
+            return ketplus::daemon::runner::output::TaskOutputSpool::open(h.database(), taskId);
         };
     };
     h.trust.pins.insert(linkedRunner, QStringLiteral("builder"));
@@ -221,7 +221,9 @@ bool writeFile(const QString& path, const QByteArray& content) {
 
 } // namespace
 
-EndToEnd::EndToEnd() {
+EndToEnd::EndToEnd(const std::function<void(RemoteHarness&)>& before) {
+    if (before)
+        before(h);
     parts.attach(h);
     const QString root = QFileInfo(dir.path()).canonicalFilePath();
     home = QDir(root).filePath(QStringLiteral("home"));

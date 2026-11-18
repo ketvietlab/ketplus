@@ -1,4 +1,6 @@
+#include "runner/entry/RemoteGuidance.h"
 #include "storage/BackgroundTaskLedger.h"
+#include "storage/RemoteJobRows.h"
 
 #include <QDateTime>
 #include <QJsonDocument>
@@ -59,6 +61,9 @@ QJsonObject BackgroundTaskLedger::applyTransition(const QString& id, QJsonObject
         }
         record.insert("manual_guidance", "Check the recorded executor and descendants, then "
                                          "acknowledge cleanup in the task UI.");
+        if (remote_job_rows::phaseOf(database_, id).value_or(remote_job_rows::Phase::Local) !=
+            remote_job_rows::Phase::Local)
+            record.insert("manual_guidance", runner::entry::remoteManualGuidance());
     }
     if (change.permissionApproved)
         record.insert("permission_approved", true);

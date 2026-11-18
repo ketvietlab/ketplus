@@ -26,6 +26,15 @@ class LedgerRecordStore final : public RecordStore {
     [[nodiscard]] QStringList unreadable() const { return unreadable_; }
     // Tasks created with runs_on that have no record yet; nullopt when they cannot be read.
     [[nodiscard]] std::optional<QStringList> reserved() const;
+    // How many of those tasks have not ended; nullopt when they cannot be counted.
+    [[nodiscard]] std::optional<int> unfinishedReserved() const;
+    // The labels and timeout a task without a record was created with; nullopt when it has a
+    // record, is not remote or cannot be read.
+    struct Reservation {
+        QStringList runsOn;
+        qint64 timeoutMs = 0;
+    };
+    [[nodiscard]] std::optional<Reservation> reservation(const QString& taskId) const;
 
     // A local user's cleanup acknowledgement for the next put that ends the task from
     // needs_attention; held in memory and used once. `source` is "user" or "runner_removed".

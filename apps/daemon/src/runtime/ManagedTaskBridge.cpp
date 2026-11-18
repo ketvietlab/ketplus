@@ -1,5 +1,8 @@
 #include "runtime/ManagedTaskBridge.h"
 #include "providers/ProviderAdapter.h"
+#include "runner/entry/RemoteCleanup.h"
+#include "runner/entry/RemoteJobPort.h"
+#include "runner/entry/RunsOnRequest.h"
 #include "runtime/ManagedTaskSpec.h"
 #include "runtime/SessionHost.h"
 
@@ -15,6 +18,15 @@ namespace {
 QJsonObject failure(const QString& code, const QString& message) {
     return {{"ok", false}, {"error_code", code}, {"error_message", message}};
 }
+// Why a task with runs_on cannot be created now; empty when it can, and for a local task.
+QJsonObject remoteRefusal(runner::entry::RemoteJobPort* port, const BackgroundTaskIntent& intent,
+                          const QJsonObject& execution) {
+    if (!intent.runsOn)
+        return {};
+    if (!port)
+        return failure("runner_unavailable", "No runner is available to this machine.");
+    return port->admit(intent, execution);
+}
 } // namespace
 
 ManagedTaskBridge::ManagedTaskBridge(SessionHost* host)
@@ -27,6 +39,12 @@ ManagedTaskBridge::ManagedTaskBridge(SessionHost* host)
             timer_.start();
     });
     connect(host_, &SessionHost::teamEvent, this, [this] { timer_.start(); });
+}
+
+void ManagedTaskBridge::setRemoteJobs(runner::entry::RemoteJobPort* port) {
+    remoteJobs_ = port;
+    if (runtime_)
+        runtime_->setRemoteJobs(port);
 }
 
 bool ManagedTaskBridge::initialize(QString* error) {
@@ -118,8 +136,9 @@ void ManagedTaskBridge::command(const QJsonObject& request, const QString& clien
         return;
     }
     if (type == "session.task.list") {
-        done(ledger_.list(owner, payload.value("cursor").toString(),
-                          payload.value("limit").toInt(50), localAdministration));
+        const auto listed = ledger_.list(owner, payload.value("cursor").toString(),
+                                         payload.value("limit").toInt(50), localAdministration);
+        done(remoteJobs_ ? remoteJobs_->withPlacement(listed) : listed);
         return;
     }
     const auto id = payload.value("task_id").toString();
@@ -138,12 +157,24 @@ void ManagedTaskBridge::command(const QJsonObject& request, const QString& clien
         done(authorized);
         return;
     }
+    const auto remote = [&](const std::optional<QString>& code) {
+        done(code->isEmpty() ? ledger_.get(id, owner, localAdministration)
+                             : failure(*code, "The remote job cannot take this change now."));
+    };
     if (type == "session.task.get")
-        done(authorized);
+        done(remoteJobs_ ? remoteJobs_->withPlacement(authorized) : authorized);
+    else if (const auto code =
+                 type == "session.task.stop" && remoteJobs_ ? remoteJobs_->stop(id) : std::nullopt)
+        remote(code);
     else if (type == "session.task.stop")
         done(runtime_->stop(id, owner, localAdministration));
     else if (type == "session.task.output")
         done(runtime_->output(id, owner, payload.value("cursor").toString(), localAdministration));
+    else if (const auto code = type == "session.task.resolve_cleanup" && remoteJobs_
+                                   ? runner::entry::resolveRemoteCleanup(*remoteJobs_, id, payload,
+                                                                         authorized, clientId)
+                                   : std::nullopt)
+        remote(code);
     else if (type == "session.task.resolve_cleanup")
         done(runtime_->resolveCleanup(id, payload.value("revision").toInteger(-1), clientId));
     else
@@ -152,13 +183,14 @@ void ManagedTaskBridge::command(const QJsonObject& request, const QString& clien
 
 void ManagedTaskBridge::start(const QJsonObject& request, const BackgroundTaskOwner& owner,
                               Done done, std::optional<AgentMutationGrant> origin) {
-    const auto payload = request.value("payload").toObject();
+    const auto payload = runner::entry::normalizedRequest(request.value("payload").toObject());
     BackgroundTaskIntent retryIntent;
     retryIntent.owner = owner;
     retryIntent.requestPayload = payload;
     retryIntent.clientRequestId = payload.value("client_request_id").toString();
     retryIntent.specFingerprint = QCryptographicHash::hash(
         QJsonDocument(payload).toJson(QJsonDocument::Compact), QCryptographicHash::Sha256);
+    runner::entry::prepareRetry(retryIntent);
     const auto retry = ledger_.retry(retryIntent);
     if (!retry.value("ok").toBool() || !retry.value("task").isNull()) {
         auto reply = retry;
@@ -224,6 +256,10 @@ void ManagedTaskBridge::start(const QJsonObject& request, const BackgroundTaskOw
         const auto admitted = validateManagedTask(payload, context);
         if (!admitted.error.isEmpty())
             done(failure(admitted.errorCode, admitted.error));
+        else if (const auto refused =
+                     remoteRefusal(remoteJobs_, admitted.intent, admitted.execution);
+                 !refused.isEmpty())
+            done(refused);
         else {
             runtime_->start(admitted.intent, admitted.execution,
                             [done = std::move(done)](QJsonObject reply) {
