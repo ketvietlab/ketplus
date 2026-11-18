@@ -75,7 +75,19 @@ class RunnerRelayTest final : public QObject {
             << QByteArray("POST") << "/v2/runners/challenges" << false;
         QTest::newRow("runner claim")
             << QByteArray("POST") << "/v2/runner/pairing/tickets/t-1/claim" << false;
-        QTest::newRow("runner jobs") << QByteArray("POST") << "/v2/runner-jobs" << false;
+        QTest::newRow("job submit") << QByteArray("POST") << "/v2/runner-jobs" << true;
+        QTest::newRow("job get") << QByteArray("GET") << "/v2/runner-jobs/j-1" << true;
+        QTest::newRow("job cancel") << QByteArray("POST") << "/v2/runner-jobs/j-1/cancel" << true;
+        QTest::newRow("job list") << QByteArray("GET") << "/v2/runner-jobs" << false;
+        QTest::newRow("job submit query") << QByteArray("POST") << "/v2/runner-jobs?x=1" << false;
+        QTest::newRow("job get by POST") << QByteArray("POST") << "/v2/runner-jobs/j-1" << false;
+        QTest::newRow("job cancel by GET")
+            << QByteArray("GET") << "/v2/runner-jobs/j-1/cancel" << false;
+        QTest::newRow("job other action")
+            << QByteArray("POST") << "/v2/runner-jobs/j-1/finish" << false;
+        QTest::newRow("runner leases")
+            << QByteArray("POST") << "/v2/runner/leases/l-1/start" << false;
+        QTest::newRow("runner acquire") << QByteArray("POST") << "/v2/runner/jobs:acquire" << false;
         QTest::newRow("status by POST")
             << QByteArray("POST") << "/v2/runner-pairing/tickets/t-1" << false;
         QTest::newRow("approve by GET")

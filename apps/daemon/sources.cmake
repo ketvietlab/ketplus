@@ -80,6 +80,18 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/runner/RunnerRelaySchema.h
     src/runner/RunnerService.cpp
     src/runner/RunnerService.h
+    src/runner/jobs/RemoteJobCoordinator.cpp
+    src/runner/jobs/RemoteJobCoordinator.h
+    src/runner/jobs/RemoteJobLabels.cpp
+    src/runner/jobs/RemoteJobLabels.h
+    src/runner/jobs/RemoteJobPeerEvents.cpp
+    src/runner/jobs/RemoteJobPorts.h
+    src/runner/jobs/RemoteJobRecord.cpp
+    src/runner/jobs/RemoteJobRecord.h
+    src/runner/jobs/RemoteJobRelay.cpp
+    src/runner/jobs/RemoteJobRelay.h
+    src/runner/jobs/RemoteJobSchema.cpp
+    src/runner/jobs/RemoteJobSchema.h
     src/cloud/SessionCredentials.cpp
     src/cloud/CloudControlSignIn.cpp
     src/cloud/CloudControlBatching.h

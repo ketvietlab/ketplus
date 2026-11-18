@@ -40,6 +40,8 @@ bool isRunnerRoute(const QByteArray& method, const QString& path) {
         QStringLiteral("^/v2/runner-pairing/tickets/[A-Za-z0-9_-]{1,128}(/approve|/reject)?$"));
     static const QRegularExpression runner(
         QStringLiteral("^/v2/runners/[A-Za-z0-9_-]{1,128}/(unpair|disable|enable|remove)$"));
+    static const QRegularExpression job(
+        QStringLiteral("^/v2/runner-jobs/[A-Za-z0-9_-]{1,128}(/cancel)?$"));
     const qsizetype mark = path.indexOf(QLatin1Char('?'));
     const QString route = mark < 0 ? path : path.left(mark);
     const QString query = mark < 0 ? QString() : path.mid(mark + 1);
@@ -47,8 +49,11 @@ bool isRunnerRoute(const QByteArray& method, const QString& path) {
         return runnersQuery(query);
     if (mark >= 0)
         return false;
-    if (method == "POST" && route == QStringLiteral("/v2/runner-pairing/tickets"))
+    if (method == "POST" && (route == QStringLiteral("/v2/runner-pairing/tickets") ||
+                             route == QStringLiteral("/v2/runner-jobs")))
         return true;
+    if (const auto match = job.match(route); match.hasMatch())
+        return method == (match.captured(1).isEmpty() ? "GET" : "POST");
     if (const auto match = ticket.match(route); match.hasMatch())
         return method == (match.captured(1).isEmpty() ? "GET" : "POST");
     return method == "POST" && runner.match(route).hasMatch();

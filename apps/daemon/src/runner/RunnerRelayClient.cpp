@@ -59,6 +59,13 @@ QString message(const QString& code) {
                         "ticket.")},
         {QStringLiteral("too_many_pairings"),
          QStringLiteral("Too many pairings are open. Finish or reject one first.")},
+        {QStringLiteral("job_not_found"), QStringLiteral("The relay has no such job.")},
+        {QStringLiteral("idempotency_conflict"),
+         QStringLiteral("A job with this key was submitted with other labels.")},
+        {QStringLiteral("no_matching_runner"),
+         QStringLiteral("No runner paired with this machine has every label.")},
+        {QStringLiteral("queue_full"), QStringLiteral("The account's job queue is full.")},
+        {QStringLiteral("invalid_labels"), QStringLiteral("The job's labels are not valid.")},
     };
     return messages.value(code, messages.value(QStringLiteral("relay_error")));
 }
@@ -70,9 +77,10 @@ const Codes& commonCodes() {
     return codes;
 }
 
-// The failure of a reply that did not succeed, or nullopt when it answered `expected`.
-std::optional<RunnerFailure> refusal(const RelayReply& reply, int expected,
-                                     const Codes& operationCodes) {
+} // namespace
+
+std::optional<RunnerFailure> refusal(const RelayReply& reply, const int expected,
+                                     const QSet<QString>& operationCodes) {
     switch (reply.failure) {
     case RelayFailure::None:
         break;
@@ -95,6 +103,8 @@ std::optional<RunnerFailure> refusal(const RelayReply& reply, int expected,
         return runnerFailure(code);
     return runnerFailure(QStringLiteral("relay_error"));
 }
+
+namespace {
 
 template <typename T>
 void answer(const std::function<void(const RunnerOutcome<T>&)>& callback, std::optional<T> value) {
