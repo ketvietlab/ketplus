@@ -1,5 +1,6 @@
 #include "preview/MermaidRenderer.h"
 #include "KetAppearance.h"
+#include "preview/MermaidLaunch.h"
 
 #include "ui/Theme.h"
 
@@ -438,9 +439,20 @@ void MermaidRenderer::startNext() {
 #ifdef Q_OS_WIN
     if (executablePath_.endsWith(QStringLiteral(".cmd"), Qt::CaseInsensitive) ||
         executablePath_.endsWith(QStringLiteral(".bat"), Qt::CaseInsensitive)) {
-        arguments.prepend(executablePath_);
-        arguments.prepend(QStringLiteral("/C"));
-        process_->start(qEnvironmentVariable("COMSPEC", QStringLiteral("cmd.exe")), arguments);
+        QStringList nodeCandidates{QDir(executableDirectory).filePath(QStringLiteral("node.exe"))};
+        const QString nodeOnPath = QStandardPaths::findExecutable(QStringLiteral("node"));
+        if (!nodeOnPath.isEmpty())
+            nodeCandidates.append(nodeOnPath);
+        const MermaidLaunch launch =
+            mermaidWindowsLaunch(qEnvironmentVariable("COMSPEC", QStringLiteral("cmd.exe")),
+                                 executablePath_, arguments, nodeCandidates);
+        if (!launch.error.isEmpty()) {
+            finishCurrent(false, launch.error);
+            return;
+        }
+        if (!launch.nativeArguments.isEmpty())
+            process_->setNativeArguments(launch.nativeArguments);
+        process_->start(launch.program, launch.arguments);
         return;
     }
 #endif

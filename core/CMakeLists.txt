@@ -222,6 +222,8 @@ add_library(ketplus_preview STATIC
     src/preview/MarkdownModeController.h
     src/preview/MermaidDiagramDialog.cpp
     src/preview/MermaidDiagramDialog.h
+    src/preview/MermaidLaunch.cpp
+    src/preview/MermaidLaunch.h
     src/preview/MermaidRenderer.cpp
     src/preview/MermaidRenderer.h
 )
@@ -819,6 +821,11 @@ if(KETPLUS_CM_BUILD_TESTS)
     ketplus_enable_warnings(ketplus_markdown_modes_tests)
     ketplus_cm_add_test(ketplus_markdown_modes_tests ketplus_markdown_modes_tests)
     set_tests_properties(ketplus_markdown_modes_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+    add_executable(ketplus_mermaid_launch_tests tests/MermaidLaunchTest.cpp)
+    target_link_libraries(ketplus_mermaid_launch_tests PRIVATE Qt6::Test ketplus_preview)
+    ketplus_enable_warnings(ketplus_mermaid_launch_tests)
+    ketplus_cm_add_test(ketplus_mermaid_launch_tests ketplus_mermaid_launch_tests)
 
     add_executable(ketplus_preview_tests tests/MarkdownPreviewPaneTest.cpp)
     target_link_libraries(ketplus_preview_tests PRIVATE Qt6::Test ketplus_preview)
