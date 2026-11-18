@@ -1,4 +1,5 @@
 #include "storage/BackgroundTaskLedger.h"
+#include "storage/RemoteJobRows.h"
 
 #include <QDateTime>
 #include <QJsonDocument>
@@ -18,6 +19,9 @@ QJsonObject BackgroundTaskLedger::reserveChild(const QString& id, qint64 expecte
         database_.rollback();
         return error(code, message);
     };
+    if (const auto refused = remote_job_rows::localExecutionRefusal(database_, id);
+        !refused.isEmpty())
+        return fail(refused, "A remote job never runs locally.");
     auto record = task(id);
     if (record.contains("error_code"))
         return fail(record.value("error_code").toString(),
