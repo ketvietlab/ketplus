@@ -1,4 +1,5 @@
 #include "FakeCodex.h"
+#include "ManagedTaskIntentLookup.h"
 #include "providers/CodexAdapter.h"
 #include "runtime/SessionHost.h"
 #include "runtime/executor/NativeProcessIdentity.h"
@@ -168,6 +169,44 @@ bool stopped(const QJsonObject& value) {
 class ManagedTaskAttentionRecoveryTest final : public QObject {
     Q_OBJECT
   private slots:
+#ifdef Q_OS_LINUX
+    void acceptedIntentWithoutCallerIdIsRecoverable() {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto path = directory.path() + "/journal.sqlite";
+        QString expected;
+        {
+            LocalJournal journal(path);
+            QVERIFY(journal.isOpen());
+            QVERIFY(seed(journal, directory.path()));
+            BackgroundTaskIntent intent{{"owner", 1, "fixture"},
+                                        "attention",
+                                        "process",
+                                        "Lost callback",
+                                        "fixture",
+                                        60000,
+                                        {}};
+            const auto accepted = journal.backgroundTasks().create(intent);
+            QVERIFY(accepted.value("ok").toBool());
+            expected = accepted.value("task").toObject().value("task_id").toString();
+            QVERIFY(!expected.isEmpty());
+        }
+        // No callback ID, open Host or executor: recover only the committed intent.
+        QString callerId;
+        QCOMPARE(attention_fixture::resolveCleanupIntent(path, "owner", 1, "attention", callerId),
+                 attention_fixture::IntentLookup::Found);
+        QCOMPARE(callerId, expected);
+        QString absentId;
+        QCOMPARE(attention_fixture::resolveCleanupIntent(path, "owner", 2, "attention", absentId),
+                 attention_fixture::IntentLookup::Absent);
+        QVERIFY(absentId.isEmpty());
+        QCOMPARE(attention_fixture::resolveCleanupIntent(directory.path() + "/missing.sqlite",
+                                                         "owner", 1, "attention", absentId),
+                 attention_fixture::IntentLookup::Error);
+        QVERIFY(absentId.isEmpty());
+        QVERIFY(!QFileInfo::exists(directory.path() + "/missing.sqlite"));
+    }
+#endif
     void attentionSurvivesOwnerLifecycle_data() {
         QTest::addColumn<bool>("replaceGeneration");
         QTest::newRow("owner-close") << false;

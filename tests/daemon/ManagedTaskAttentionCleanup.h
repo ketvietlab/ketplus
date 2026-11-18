@@ -2,6 +2,7 @@
 
 // Test-only native failure cleanup. The caller keeps Host/journal/directory alive
 // until this returns; uncertainty retains the fixture instead of erasing receipts.
+#include "ManagedTaskIntentLookup.h"
 #include "runtime/executor/NativeProcessIdentity.h"
 #include "storage/BackgroundTaskLedger.h"
 #include "storage/LocalJournal.h"
@@ -33,22 +34,14 @@ cleanupNativeAttention(ketplus::daemon::LocalJournal& journal, QString& id, cons
     CleanupResult result;
     auto ledger = journal.backgroundTasks();
     if (id.isEmpty()) {
-        const auto page = ledger.list({"owner", 1, {}}, {}, 50, true);
-        if (!page.value("ok").toBool() || !page.value("next_cursor").toString().isEmpty()) {
+        const auto lookup =
+            resolveCleanupIntent(journal.databasePath(), "owner", 1, "attention", id);
+        if (lookup == IntentLookup::Error) {
             result.trusted = false;
             return result;
         }
-        for (const auto value : page.value("tasks").toArray()) {
-            const auto record = value.toObject();
-            if (record.value("client_request_id") == "attention") {
-                id = record.value("task_id").toString();
-                break;
-            }
-        }
-        if (id.isEmpty()) {
-            // Nonempty/unidentifiable intent data is uncertainty, not no launch.
-            result.closed = page.value("tasks").toArray().isEmpty();
-            result.trusted = result.closed;
+        if (lookup == IntentLookup::Absent) {
+            result.closed = true; // Successful journal read proves no accepted intent.
             return result;
         }
     }

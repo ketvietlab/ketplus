@@ -1377,7 +1377,7 @@ control, provider invocation, toolchain change or production fix.
 
 #### Attention incident lifecycle follow-up (prepared, not yet verified)
 
-`ketplus_managed_attention_recovery_tests` adds only the `owner-close` and
+`ketplus_managed_attention_recovery_tests` adds the `owner-close` and
 `generation-change` rows of `attentionSurvivesOwnerLifecycle`. It uses a file-backed
 `LocalJournal`, real `SessionHost`/runtime and scripted FakeCodex. On macOS only,
 the row launches a harmless marker/output/sleep process through the managed API,
@@ -1408,6 +1408,13 @@ before `running` or local identity capture. Stop/reconcile and birth-bound signa
 must reach bounded closure before fixture deletion. Signal/Stop errors or unproven
 closure fail the test and retain the private directory. Diagnostics whitelist
 bounded fields, never lease values, protocol bodies or command arguments.
+
+The Linux-only `acceptedIntentWithoutCallerIdIsRecoverable` regression persists an
+intent in a file-backed journal, closes it without retaining a caller task ID, and
+recovers the ID through the same read-only tuple lookup used by native fixture
+cleanup. It distinguishes an absent generation from a database lookup error and
+launches no executor. Cleanup never searches the API projection for request keys.
+The macOS target still executes only the two native lifecycle rows.
 
 Before executing this follow-up, submit the exact source/configuration and commands
 for offline review. On the verified Linux source mirror, use a separate build tree
