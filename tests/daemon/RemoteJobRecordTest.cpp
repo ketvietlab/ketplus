@@ -157,7 +157,7 @@ class RemoteJobRecordTest final : public QObject {
               "runner_directory_missing", "workspace_outside_work", "runtime_directory_invalid",
               "executor_directory_unavailable", "handshake_failed", "containment_unavailable",
               "executor_leftover_unidentified", "timed_out", "executor_interrupted",
-              "exit_status_unknown", "a_code_not_yet_known"})
+              "exit_status_unknown", "expired", "a_code_not_yet_known"})
             QTest::addRow("failed %s", code)
                 << "failed" << -1LL << -1LL << code << "failed" << code;
         // A code this desktop, its ledger or the Relay gives a meaning of its own is not kept.
