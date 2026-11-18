@@ -1,10 +1,12 @@
+// One record store contract, run on the memory store and on the store in the background task
+// registry; both give the same results.
+#include "RemoteJobLedgerFixture.h"
 #include "RemoteJobStoreContract.h"
 #include "runner/jobs/RemoteJobRecordJson.h"
 
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
-
 #include <QTest>
 
 #include <algorithm>
@@ -13,15 +15,32 @@ using namespace remote_job_store_test;
 
 namespace {
 
-const QString taskA = QStringLiteral("0b6f7c1e-2d4a-4f39-9a51-2c1f0e7d8a01");
-const QString taskB = QStringLiteral("0b6f7c1e-2d4a-4f39-9a51-2c1f0e7d8a02");
+struct Fixture {
+    virtual ~Fixture() = default;
+    virtual StoreUnderTest under() = 0;
+};
 
 // The memory store; reopening sees the same records.
-struct MemoryFixture {
+struct MemoryFixture final : Fixture {
     MemoryRecordStore memory;
-    StoreUnderTest under() {
+    int prepared = 0;
+    StoreUnderTest under() override {
         return {&memory, [this](const bool fail) { memory.failWrites = fail; },
-                [this] { return static_cast<RecordStore*>(&memory); }, [](const QString&) {}};
+                [this] { return static_cast<RecordStore*>(&memory); },
+                [this] {
+                    return QStringLiteral("0b6f7c1e-2d4a-4f39-9a51-2c1f0e7d8a%1")
+                        .arg(++prepared, 2, 10, QLatin1Char('0'));
+                }};
+    }
+};
+
+// The registry's store; reopening is a new connection to the same file.
+struct RegistryFixture final : Fixture {
+    remote_job_ledger_test::LedgerFixture ledger;
+    StoreUnderTest under() override {
+        return {ledger.store.get(), [this](const bool fail) { ledger.failRemoteWrites(fail); },
+                [this] { return static_cast<RecordStore*>(ledger.reopen()); },
+                [this] { return ledger.remoteTask(); }};
     }
 };
 
@@ -44,11 +63,23 @@ class RemoteJobStoreTest : public QObject {
     Q_OBJECT
 
   private slots:
+    void initTestCase_data() {
+        QTest::addColumn<bool>("registry");
+        QTest::newRow("memory") << false;
+        QTest::newRow("registry") << true;
+    }
     void init() {
-        fixture_ = std::make_unique<MemoryFixture>();
+        QFETCH_GLOBAL(bool, registry);
+        fixture_.reset();
+        if (registry)
+            fixture_ = std::make_unique<RegistryFixture>();
+        else
+            fixture_ = std::make_unique<MemoryFixture>();
         under_ = fixture_->under();
-        under_.prepare(taskA);
-        under_.prepare(taskB);
+        QVERIFY(under_.store);
+        taskA = under_.prepare();
+        taskB = under_.prepare();
+        QVERIFY(!taskA.isEmpty() && !taskB.isEmpty());
     }
 
     void aNewRecordIsStoredWithRevisionOne() {
@@ -165,8 +196,10 @@ class RemoteJobStoreTest : public QObject {
     }
 
   private:
-    std::unique_ptr<MemoryFixture> fixture_;
+    std::unique_ptr<Fixture> fixture_;
     StoreUnderTest under_;
+    QString taskA;
+    QString taskB;
 };
 
 QTEST_GUILESS_MAIN(RemoteJobStoreTest)

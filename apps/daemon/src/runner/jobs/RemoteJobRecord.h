@@ -50,7 +50,7 @@ struct RemoteRunner {
 struct RemoteJobRecord {
     QString taskId; // also the job's submitKey
     QStringList runsOn;
-    qint64 timeoutMs = 0; // from job.started; 0: none
+    qint64 timeoutMs = 0; // counted from job.started; a registry task always has one above 0
     QString state = state::queued;
     QString placement = placement::submitting;
     std::optional<RemoteRunner> runner;

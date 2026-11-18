@@ -1,4 +1,5 @@
 #include "storage/BackgroundTaskLedger.h"
+#include "storage/RemoteJobRows.h"
 
 #include <QSqlError>
 #include <QSqlQuery>
@@ -24,6 +25,9 @@ QJsonObject BackgroundTaskLedger::changeImpl(const QString& id, qint64 expectedR
         database_.rollback();
         return failure(code, message);
     };
+    if (const auto refused = remote_job_rows::changeRefusal(database_, id, change.state);
+        !refused.isEmpty())
+        return fail(refused, "A remote job changes only through its record.");
     auto record = task(id);
     if (record.contains("error_code"))
         return fail(record.value("error_code").toString(),

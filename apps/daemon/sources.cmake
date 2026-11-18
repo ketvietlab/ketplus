@@ -85,6 +85,8 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/runner/RunnerRelaySchema.h
     src/runner/RunnerService.cpp
     src/runner/RunnerService.h
+    src/runner/jobs/LedgerRecordStore.cpp
+    src/runner/jobs/LedgerRecordStore.h
     src/runner/jobs/PinRunnerTrust.cpp
     src/runner/jobs/PinRunnerTrust.h
     src/runner/jobs/QtJobClock.cpp
@@ -105,6 +107,8 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/runner/jobs/RemoteJobSchema.h
     src/runner/jobs/RemoteJobSpecs.cpp
     src/runner/jobs/RemoteJobSpecs.h
+    src/runner/jobs/RemoteJobTransitions.cpp
+    src/runner/jobs/RemoteJobTransitions.h
     src/cloud/SessionCredentials.cpp
     src/cloud/CloudControlSignIn.cpp
     src/cloud/CloudControlBatching.h

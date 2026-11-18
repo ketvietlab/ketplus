@@ -3,6 +3,7 @@
 #include <QJsonObject>
 #include <QSqlDatabase>
 #include <QString>
+#include <QStringList>
 #include <optional>
 
 namespace ketplus::daemon {
@@ -24,6 +25,8 @@ struct BackgroundTaskIntent final {
     QJsonObject executionMetadata;
     QJsonObject requestPayload{};
     QString containmentMode{"native_best_effort"}; // Set by the trusted platform runtime.
+    // Normalized runner labels: the task is a remote job from its creation and never runs here.
+    std::optional<QStringList> runsOn{};
 };
 
 QByteArray backgroundTaskFingerprint(QJsonObject request, const QJsonObject& defaults);

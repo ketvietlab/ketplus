@@ -20,8 +20,8 @@ struct StoreUnderTest {
     std::function<void(bool)> failWrites;
     // The same data seen by a fresh store, as after a daemon restart.
     std::function<RecordStore*()> reopen;
-    // Makes `taskId` a task the store may hold a record for.
-    std::function<void(const QString& taskId)> prepare;
+    // A task the store may hold a record for: runs_on {"os:linux"}, timeout 60 seconds.
+    std::function<QString()> prepare;
 };
 
 inline QDateTime at(const int minute, const int msec = 0) {
@@ -32,8 +32,8 @@ inline QDateTime at(const int minute, const int msec = 0) {
 inline RemoteJobRecord fullRecord(const QString& taskId) {
     RemoteJobRecord record;
     record.taskId = taskId;
-    record.runsOn = {QStringLiteral("arch:x86_64"), QStringLiteral("os:linux")};
-    record.timeoutMs = 600'000;
+    record.runsOn = {QStringLiteral("os:linux")};
+    record.timeoutMs = 60'000;
     record.state = state::stopping;
     record.placement = placement::running;
     record.runner = RemoteRunner{QStringLiteral("runner-1"), QStringLiteral("build-1"), 2};

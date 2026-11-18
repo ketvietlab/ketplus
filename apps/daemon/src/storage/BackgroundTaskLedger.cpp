@@ -1,4 +1,6 @@
 #include "storage/BackgroundTaskLedger.h"
+#include "runner/jobs/RemoteJobLabels.h"
+#include "storage/RemoteJobRows.h"
 
 #include <QDateTime>
 #include <QJsonDocument>
@@ -104,6 +106,8 @@ bool BackgroundTaskLedger::initialize(QString* error) {
             return false;
         }
     }
+    if (!remote_job_rows::initialize(database_, error))
+        return false;
     return true;
 }
 
@@ -143,6 +147,8 @@ QJsonObject BackgroundTaskLedger::get(const QString& taskId, const BackgroundTas
 }
 
 QJsonObject BackgroundTaskLedger::create(const BackgroundTaskIntent& intent) {
+    if (intent.runsOn && !runner::jobs::isValidRunsOn(*intent.runsOn))
+        return failure("invalid_labels", "The runner labels are not valid.");
     if (intent.owner.sessionId.isEmpty() || intent.owner.generation <= 0 ||
         intent.clientRequestId.isEmpty() || intent.specFingerprint.isEmpty() ||
         (intent.kind != "process" && intent.kind != "agent") || intent.timeoutMs <= 0)
@@ -168,7 +174,9 @@ QJsonObject BackgroundTaskLedger::create(const BackgroundTaskIntent& intent) {
         return fail("storage_error", query.lastError().text());
     if (query.next()) {
         const QString id = query.value(0).toString();
-        const bool matches = query.value(1).toByteArray() == intent.specFingerprint;
+        const bool matches =
+            query.value(1).toByteArray() ==
+            remote_job_rows::fingerprint(intent.specFingerprint, intent.runsOn, intent.timeoutMs);
         query.finish();
         database_.rollback();
         if (!matches)
@@ -248,12 +256,17 @@ QJsonObject BackgroundTaskLedger::create(const BackgroundTaskIntent& intent) {
     query.addBindValue(intent.owner.sessionId);
     query.addBindValue(intent.owner.generation);
     query.addBindValue(intent.clientRequestId);
-    query.addBindValue(intent.specFingerprint);
+    query.addBindValue(
+        remote_job_rows::fingerprint(intent.specFingerprint, intent.runsOn, intent.timeoutMs));
     query.addBindValue(json(record));
     query.addBindValue(rootSession);
     query.addBindValue(rootGeneration);
     if (!query.exec())
         return fail("storage_error", query.lastError().text());
+    QString reserveError;
+    if (intent.runsOn &&
+        !remote_job_rows::reserve(database_, id, *intent.runsOn, intent.timeoutMs, &reserveError))
+        return fail("storage_error", reserveError);
     if (!database_.commit())
         return fail("storage_error", database_.lastError().text());
     return {{"ok", true}, {"task", record}, {"reused", false}};

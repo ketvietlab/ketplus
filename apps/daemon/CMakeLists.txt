@@ -9,7 +9,8 @@ target_sources(ketplus_daemon_core PRIVATE
     src/teams/TeamCoordinatorRiskPolicy.cpp
     src/teams/TeamRoutingEvidence.cpp src/teams/TeamRoutingEvidence.h
     src/runtime/SessionHostTeamRouting.cpp
-    src/storage/BackgroundTaskEffects.cpp)
+    src/storage/BackgroundTaskEffects.cpp
+    src/storage/RemoteJobRows.cpp src/storage/RemoteJobRows.h)
 if(APPLE)
     target_link_libraries(ketplus_daemon_core PRIVATE "-framework Security" "-framework CoreFoundation" "-framework IOKit" proc)
 endif()
