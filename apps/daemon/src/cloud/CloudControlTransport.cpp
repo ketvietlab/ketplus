@@ -63,8 +63,8 @@ void CloudControlClient::initializePeerTransport() {
             return;
         signaling_->receive(message);
     });
-    connect(&wakeups_, &RelayWakeups::opened, this, [this] {
-        if (relayOpened_)
+    connect(&wakeups_, &RelayWakeups::openChanged, this, [this](bool open) {
+        if (open && relayOpened_)
             relayOpened_();
     });
     connect(signaling_, &transport::Signaling::outgoing, this, [this](const QJsonObject& message) {

@@ -66,9 +66,11 @@ class RemoteJobsRelaySocketTest final : public QObject {
         Fixture f;
         int opened = 0;
         f.client->setRunnerMessages([](const QJsonObject&) { return false; }, [&] { ++opened; });
-        emit Access::wakeups(*f.client).opened();
+        emit Access::wakeups(*f.client).openChanged(true);
         QCOMPARE(opened, 1);
-        emit Access::wakeups(*f.client).opened();
+        emit Access::wakeups(*f.client).openChanged(false);
+        QCOMPARE(opened, 1);
+        emit Access::wakeups(*f.client).openChanged(true);
         QCOMPARE(opened, 2);
     }
 
