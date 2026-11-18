@@ -952,15 +952,16 @@ Linux store policy, signed upgrade prompts and platform release acceptance remai
   `codex.js` refuses arguments containing quotes or percent signs.
 - Windows Pro desktop (MSVC 2022, Qt 6.11, Ninja): `cmake --preset dev` configures and builds
   `KetPlus.exe`, `ketplus_daemon.exe`, `ketplusctl.exe` and the Pro test executables.
-  `ketplus-runner` is the Linux build-node process and is not built on Windows. On the first full
-  `ctest` run about 84% of the 190 enabled tests pass. Known Windows test failures, caused by
-  test fixtures rather than product code, still to be fixed or skipped one by one: fixtures that
-  write POSIX shell scripts as fake provider executables (Codex/Copilot/daemon integration),
-  macOS bundle layouts (`KetPlus.app/Contents/...`, bundled browser runtime), POSIX path and
-  permission assumptions (Atlas manifests, worktree mentions, Codex browser tools config),
-  and some GUI timing tests (conversation attention, chat Mermaid). Runtime verification of the
-  desktop shell (daemon auto-start, workspace, Agent Workspace, terminal) needs an interactive
-  Windows session and has not been done over ssh.
+  Started headless over ssh (`QT_QPA_PLATFORM=offscreen`), `KetPlus.exe` stays up, auto-starts
+  `ketplus_daemon.exe` and the daemon creates its state under `%LOCALAPPDATA%`. POSIX-only runner
+  code (`apps/runner`, the worktree snapshot library, the peer-session runner suite) is not built
+  on Windows; computer use reports itself unsupported and the daemon stores credentials with
+  DPAPI. MSVC links with `/INCREMENTAL:NO` to keep build trees small.
+  Not verified: the desktop shell with a visible window (workspace, Agent Workspace, terminal,
+  Atlas WebView, computer use hidden in the UI); this is tracked as T-15 and needs an interactive
+  Windows session. Not passing yet: about 28 Pro tests on Windows (fake shell-script provider
+  fixtures, macOS bundle layouts, POSIX path assumptions), tracked as T-13; the Codex browser
+  tools and chat Mermaid suites already pass there.
 - Cross-block native selection/accessibility mapping and physical-device
   CPU/frame-time/RSS evidence for the bounded transcript renderer. Giant bodies
   already use block rows and the active presentation window is capped at 300
