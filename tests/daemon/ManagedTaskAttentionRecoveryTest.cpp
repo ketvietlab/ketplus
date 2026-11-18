@@ -92,8 +92,14 @@ QJsonObject stored(const QString& path, const QString& id) {
             }
             query.prepare("SELECT reason FROM managed_job_owner_fences "
                           "WHERE owner_session_id='owner' AND owner_generation=1");
-            if (query.exec() && query.next())
+            const bool fenceRead = query.exec();
+            result.insert("owner_fence_read_ok", fenceRead);
+            if (fenceRead && query.next())
                 result.insert("owner_fence", query.value(0).toString());
+            if (query.exec("SELECT count(*) FROM session_tombstones "
+                           "WHERE session_id='owner' AND generation=1") &&
+                query.next())
+                result.insert("owner_tombstones", query.value(0).toInt());
             query.prepare("SELECT count(*) FROM managed_job_outbox WHERE task_id=?");
             query.addBindValue(id);
             if (query.exec() && query.next())
@@ -102,6 +108,11 @@ QJsonObject stored(const QString& path, const QString& id) {
     }
     QSqlDatabase::removeDatabase(name);
     return result;
+}
+bool noOwnerInvalidation(const QString& path, const QString& id) {
+    const auto snapshot = stored(path, id);
+    return snapshot.value("owner_fence_read_ok").toBool() && !snapshot.contains("owner_fence") &&
+           snapshot.value("owner_tombstones").toInt(-1) == 0;
 }
 bool noTurnEvents(const QSignalSpy& events) {
     for (const auto& values : events) {
@@ -426,7 +437,7 @@ class ManagedTaskAttentionRecoveryTest final : public QObject {
             } else {
                 // A close fence/tombstone must not mask generation mismatch.
                 QVERIFY(journal.sessionTombstone("owner", 1).sessionId.isEmpty());
-                QVERIFY(!stored(databasePath, id).contains("owner_fence"));
+                QVERIFY(noOwnerInvalidation(databasePath, id));
             }
             QVERIFY(noTurnEvents(events));
         }
@@ -434,11 +445,11 @@ class ManagedTaskAttentionRecoveryTest final : public QObject {
             phase = "replacement-generation";
             LocalJournal journal(databasePath);
             QVERIFY(journal.sessionTombstone("owner", 1).sessionId.isEmpty());
-            QVERIFY(!stored(databasePath, id).contains("owner_fence"));
+            QVERIFY(noOwnerInvalidation(databasePath, id));
             QVERIFY(seed(journal, cwd, 2));
             QCOMPARE(journal.sessionHead("owner").generation, 2);
             QVERIFY(journal.sessionTombstone("owner", 1).sessionId.isEmpty());
-            QVERIFY(!stored(databasePath, id).contains("owner_fence"));
+            QVERIFY(noOwnerInvalidation(databasePath, id));
         }
         {
             phase = "owner-invalid-reopen";
