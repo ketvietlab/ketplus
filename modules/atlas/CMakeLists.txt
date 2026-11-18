@@ -18,6 +18,7 @@ target_link_libraries(ketplus_atlas PUBLIC
     Qt6::Svg
     Qt6::WebView
     Qt6::Widgets
+    ketplus_tool_locations
     ketplus_typography
     KetQt::Widgets
 )

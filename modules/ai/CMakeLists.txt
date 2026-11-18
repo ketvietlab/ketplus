@@ -119,8 +119,6 @@ add_library(ketplus_ai STATIC
     src/agent/CopilotSetupGuide.cpp
     src/agent/CopilotSetupGuide.h
     src/agent/FileMentions.cpp
-    src/agent/ToolLocations.cpp
-    src/agent/ToolLocations.h
     src/agent/FileMentions.h
     src/agent/FileReveal.cpp
     src/agent/FileReveal.h
@@ -138,6 +136,7 @@ target_link_libraries(ketplus_ai
         Qt6::Widgets
         ketplus_browser_tools
         ketplus_remote
+        ketplus_tool_locations
         ketplus_typography
         KetPlusCM::git
         KetPlusCM::preview

@@ -1,8 +1,8 @@
+#include "ToolLocations.h"
 #include "agent/AgentSessionManager.h"
 #include "agent/AgentSessionState.h"
 #include "agent/CodexAppServer.h"
 #include "agent/ConversationWorktreeStore.h"
-#include "agent/ToolLocations.h"
 
 #include "git/GitParser.h"
 

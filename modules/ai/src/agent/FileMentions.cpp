@@ -1,6 +1,6 @@
 #include "agent/FileMentions.h"
 
-#include "agent/ToolLocations.h"
+#include "ToolLocations.h"
 
 #include <QDir>
 #include <QDirIterator>

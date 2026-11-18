@@ -743,8 +743,8 @@ void MainWindowSettingsTest::settingsUsesWorkspacePage() {
     auto* settingsNavigation =
         settingsPage->findChild<QListWidget*>(QStringLiteral("settingsWorkspaceNavigation"));
     QVERIFY(settingsNavigation != nullptr);
-    // Computer use is macOS-only, so Windows and Linux lack that item and the ones after it
-    // move up by one.
+    // Windows hosts do not offer computer use (isSupportedOnThisPlatform), so there that item
+    // is missing and the ones after it move up by one; macOS and Linux keep it.
     const bool hasComputerUse = ketplus::computer_tools::isSupportedOnThisPlatform();
     const int afterComputer = hasComputerUse ? 0 : -1;
     QCOMPARE(settingsNavigation->count(), 11 + afterComputer);

@@ -124,6 +124,7 @@ target_include_directories(ketplus_product_version INTERFACE
     "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/generated>"
 )
 
+add_subdirectory(modules/tools)
 add_subdirectory(modules/browser)
 add_subdirectory(modules/computer)
 add_subdirectory(modules/remote)
