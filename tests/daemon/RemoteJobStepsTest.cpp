@@ -4,6 +4,7 @@
 #include "RemoteJobLedgerFixture.h"
 #include "RemoteJobTestFakes.h"
 
+#include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
 
@@ -20,6 +21,11 @@ using remote_job_test::runnerA;
 namespace {
 
 constexpr qint64 minute = 60'000;
+
+QStringList capturedLog;
+void captureLog(QtMsgType, const QMessageLogContext&, const QString& message) {
+    capturedLog.append(message);
+}
 
 QStringList taskIds(const QJsonObject& reply, const char* name) {
     QStringList ids;
@@ -171,6 +177,62 @@ class RemoteJobStepsTest final : public QObject {
         QVERIFY(!s.f.task(s.id).value("cleanup_pending").toBool());
         QCOMPARE(s.f.task(s.id).value("cleanup_status").toString(), QStringLiteral("verified"));
         QCOMPARE(s.outbox(), 1);
+    }
+
+    // A failed result keeps the runner's code on the task row; a reason that is not a code
+    // ends spawn_failed and is written nowhere: not the registry, its JSON or the log.
+    void aFailedResultKeepsTheRunnersCode_data() {
+        QTest::addColumn<QString>("reason");
+        QTest::addColumn<QString>("kept");
+        for (const char* code :
+             {"spawn_failed", "invalid_invocation", "workspace_missing", "cwd_missing",
+              "cwd_outside_workspace", "invalid_environment", "launch_too_large",
+              "runner_directory_missing", "workspace_outside_work", "runtime_directory_invalid",
+              "executor_directory_unavailable", "handshake_failed", "containment_unavailable",
+              "executor_leftover_unidentified", "timed_out", "executor_interrupted",
+              "exit_status_unknown", "a_code_not_yet_known"})
+            QTest::addRow("%s", code) << QString::fromLatin1(code) << QString::fromLatin1(code);
+        QTest::newRow("snapshot code") << "disk_full" << "snapshot_failed";
+        QTest::newRow("empty") << "" << "spawn_failed";
+        QTest::newRow("capitals") << "Marker_Reason" << "spawn_failed";
+        QTest::newRow("space") << "marker reason" << "spawn_failed";
+        QTest::newRow("newline") << "marker_reason\nnext" << "spawn_failed";
+        QTest::newRow("html") << "<i>marker_reason</i>" << "spawn_failed";
+        QTest::newRow("too long") << QString(65, QLatin1Char('m')) << "spawn_failed";
+    }
+    void aFailedResultKeepsTheRunnersCode() {
+        QFETCH(QString, reason);
+        QFETCH(QString, kept);
+        Steps s;
+        QVERIFY(s.running());
+        capturedLog.clear();
+        const auto previous = qInstallMessageHandler(captureLog);
+        const bool recorded = s.jobs->result(job, runnerA, jobResult("failed", {}, reason)).ok();
+        qInstallMessageHandler(previous);
+        QVERIFY(recorded);
+        QCOMPARE(s.task(), QStringLiteral("failed"));
+        const QJsonObject row = s.f.task(s.id);
+        QCOMPARE(row.value("reason").toString(), kept);
+        QCOMPARE(row.value("cleanup_status").toString(), QStringLiteral("verified"));
+        QCOMPARE(s.outbox(), 1);
+        const QJsonObject completion = s.outboxRow();
+        QCOMPARE(completion.value("status").toString(), QStringLiteral("pending"));
+        QCOMPARE(completion.value("payload").toObject().value("state").toString(),
+                 QStringLiteral("failed"));
+        if (reason == kept || reason.isEmpty() || kept == "snapshot_failed")
+            return;
+        // The malformed string itself went nowhere.
+        QVERIFY(!QJsonDocument(row).toJson().contains(reason.toUtf8()));
+        QVERIFY(!QJsonDocument(completion).toJson().contains(reason.toUtf8()));
+        for (const QString& line : std::as_const(capturedLog))
+            QVERIFY2(!line.contains(reason), qPrintable(line));
+        s.jobs.reset(); // before the store it refers to
+        s.f.close();
+        for (const QString& suffix : {QString(), QStringLiteral("-wal")}) {
+            QFile file(s.f.path() + suffix);
+            if (file.open(QIODevice::ReadOnly))
+                QVERIFY(!file.readAll().contains(reason.toUtf8()));
+        }
     }
 
     // S8 and the running results: the runner ends a job the desktop did not stop.

@@ -44,8 +44,11 @@ RemoteJobRecord applyResult(RemoteJobRecord record, const JobResult& result) {
         reason = clean ? QString() : QStringLiteral("exit_code");
     } else if (result.state == QStringLiteral("failed")) {
         terminal = state::failed;
-        reason = snapshotCodes().contains(result.reason) ? QStringLiteral("snapshot_failed")
-                                                         : QStringLiteral("spawn_failed");
+        // The runner's own code is kept; one that is not a code is never stored.
+        if (snapshotCodes().contains(result.reason))
+            reason = QStringLiteral("snapshot_failed");
+        else
+            reason = isReasonCode(result.reason) ? result.reason : QStringLiteral("spawn_failed");
     } else if (result.state == QStringLiteral("cancelled")) {
         terminal = state::cancelled;
         reason = QStringLiteral("user");

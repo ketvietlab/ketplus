@@ -149,8 +149,30 @@ class RemoteJobRecordTest final : public QObject {
                                  "disk_full", "checkout_failed"})
             QTest::addRow("failed %s", code)
                 << "failed" << -1LL << -1LL << code << "failed" << "snapshot_failed";
-        QTest::newRow("failed spawn") << "failed" << -1LL << -1LL << "spawn_failed" << "failed"
-                                      << "spawn_failed";
+        // The runner's own code is kept: launch reasons, the executor's ends, and a code this
+        // desktop does not know yet.
+        for (const char* code :
+             {"spawn_failed", "invalid_invocation", "workspace_missing", "cwd_missing",
+              "cwd_outside_workspace", "invalid_environment", "launch_too_large",
+              "runner_directory_missing", "workspace_outside_work", "runtime_directory_invalid",
+              "executor_directory_unavailable", "handshake_failed", "containment_unavailable",
+              "executor_leftover_unidentified", "timed_out", "executor_interrupted",
+              "exit_status_unknown", "a_code_not_yet_known"})
+            QTest::addRow("failed %s", code)
+                << "failed" << -1LL << -1LL << code << "failed" << code;
+        // A reason that is not a code is never kept.
+        const QString tooLong = QString(65, QLatin1Char('a'));
+        const QStringList malformed = {QString(),
+                                       QStringLiteral("Cwd_Missing"),
+                                       QStringLiteral("cwd-missing"),
+                                       QStringLiteral("cwd missing"),
+                                       QStringLiteral("cwd_missing\nx"),
+                                       QStringLiteral("<b>x</b>"),
+                                       QStringLiteral("9_starts_with_a_digit"),
+                                       tooLong};
+        for (qsizetype i = 0; i < malformed.size(); ++i)
+            QTest::addRow("failed malformed %d", int(i))
+                << "failed" << -1LL << -1LL << malformed.at(i) << "failed" << "spawn_failed";
         QTest::newRow("cancelled") << "cancelled" << -1LL << 15LL << "user" << "cancelled"
                                    << "user";
         QTest::newRow("timed out") << "timed_out" << -1LL << 9LL << "deadline" << "timed_out"
