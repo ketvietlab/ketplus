@@ -920,7 +920,10 @@ Linux store policy, signed upgrade prompts and platform release acceptance remai
   Codex (per-conversation MCP binding), before/after thumbnails in the
   transcript, minimized windows and other Spaces, shortcuts
   that need a key window in background apps, and Windows.
-- Windows daemon/desktop CI once required Qt WebView packages are available.
+- Windows daemon/desktop CI once required Qt WebView packages are available. The daemon is
+  ported in source (named-pipe IPC with per-user access, DACL-protected state, DPAPI credentials,
+  Job Object process trees; see [daemon architecture](daemon-architecture.md)) but not yet
+  verified on a Windows build; managed background process jobs are unavailable there.
 - Cross-block native selection/accessibility mapping and physical-device
   CPU/frame-time/RSS evidence for the bounded transcript renderer. Giant bodies
   already use block rows and the active presentation window is capped at 300

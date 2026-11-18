@@ -12,6 +12,9 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     ../../modules/atlas/src/workspace/AtlasIndex.cpp
     src/runtime/SessionHostWorkspaceCatalog.cpp
     src/service/UnixSignals.cpp
+    src/service/WindowsShutdown.cpp
+    src/platform/ProcessTree.cpp
+    src/runtime/executor/NativeJobUnsupported.cpp
     src/runtime/SessionHostWorktrees.cpp
     src/storage/LocalJournalContexts.cpp
     src/storage/LocalJournalTurnStart.cpp

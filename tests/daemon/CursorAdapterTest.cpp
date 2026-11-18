@@ -916,8 +916,11 @@ class CursorAdapterTest final : public QObject {
         const auto cmd = CursorAdapter::processInvocation(
             QStringLiteral("C:/Users/dev/AppData/Local/cursor-agent/agent.cmd"));
         QCOMPARE(cmd.program, QStringLiteral("cmd.exe"));
-        QCOMPARE(cmd.arguments.at(0), QStringLiteral("/c"));
-        QCOMPARE(cmd.arguments.last(), QStringLiteral("acp"));
+        QCOMPARE(cmd.arguments, (QStringList{QStringLiteral("/d"), QStringLiteral("/v:off"),
+                                             QStringLiteral("/s"), QStringLiteral("/c")}));
+        QCOMPARE(
+            cmd.nativeArguments,
+            QStringLiteral("\"\"C:\\Users\\dev\\AppData\\Local\\cursor-agent\\agent.cmd\" acp\""));
         const auto ps1 = CursorAdapter::processInvocation(
             QStringLiteral("C:/Users/dev/AppData/Local/cursor-agent/agent.ps1"));
         QCOMPARE(ps1.program, QStringLiteral("powershell.exe"));

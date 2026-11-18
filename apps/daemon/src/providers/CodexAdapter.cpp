@@ -1,5 +1,6 @@
 #include "providers/CodexAdapter.h"
 #include "BrowserAgentInstructions.h"
+#include "platform/ProcessTree.h"
 #include "providers/ProviderFrameValidation.h"
 #include "providers/ProviderResponseEnvelope.h"
 #include "providers/ProviderResponseId.h"
@@ -48,6 +49,7 @@ CodexAdapter::CodexAdapter(const QString& executable, QObject* parent)
                      QStringLiteral("params.turn.id")}),
       restartTimer_(new QTimer(this)), versionProbe_(new compat::ProviderVersionProbe(
                                            compat::policy(QStringLiteral("codex")), {}, this)) {
+    attachProcessTree(process_);
     restartTimer_->setSingleShot(true);
     reloader_ = new browser_tools::CodexLaunchReloader(
         [this] { return browserArguments(); }, [this] { return isIdle(); },
@@ -275,7 +277,7 @@ void CodexAdapter::stop() {
     if (process_->state() != QProcess::NotRunning) {
         process_->terminate();
         if (!process_->waitForFinished(500)) {
-            process_->kill();
+            killProcessTree(process_);
             process_->waitForFinished(500);
         }
     }
@@ -479,7 +481,7 @@ void CodexAdapter::consumeLine(const QByteArray& line) {
         setReady(false);
         stdoutReader_.clear();
         process_->closeReadChannel(QProcess::StandardOutput);
-        process_->kill();
+        killProcessTree(process_);
         return;
     }
     const QJsonObject object = document.object();

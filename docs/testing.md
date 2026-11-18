@@ -1480,3 +1480,13 @@ sign-in completion semantics. The remote fixture restores a valid session then f
 read, requiring an explicit error and byte-for-byte retention of both previous host pins.
 These are native C++ tests with synthetic credentials and HTTP replies; they do not certify OS
 ACLs, backup recovery, signed upgrades or deployment.
+
+## Windows daemon tests
+
+`cmake --preset daemon-dev` and `ctest --preset daemon-dev` run on Windows (MSVC) once the
+toolchain from `tools/windows` is installed. Skipped there, by design: the managed-task and
+Linux job-executor tests (the executor is POSIX-only and is not built), the macOS ACL checks in
+`DaemonProtocolTest`, and the POSIX permission assertions guarded by `Q_OS_UNIX`. The Windows
+equivalents of those permission checks are not yet automated; verify the state directory ACL with
+`icacls "%LOCALAPPDATA%\Ketsuite\KetPlus\daemon"` (only the current user listed, no inherited
+entries).

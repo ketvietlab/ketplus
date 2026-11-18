@@ -264,6 +264,9 @@ void CursorAdapter::startCatalogProcess() {
     const ProcessInvocation invocation = listModelsInvocation(executable_.path());
     process->setProgram(invocation.program);
     process->setArguments(invocation.arguments);
+#if defined(Q_OS_WIN)
+    process->setNativeArguments(invocation.nativeArguments);
+#endif
     connect(process, &QProcess::started, process, &QProcess::closeWriteChannel);
     struct Output final {
         QByteArray stdoutBytes;

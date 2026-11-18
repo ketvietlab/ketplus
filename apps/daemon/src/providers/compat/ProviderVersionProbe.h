@@ -26,6 +26,8 @@ class ProviderVersionProbe final : public QObject {
     struct Invocation final {
         QString program;
         QStringList arguments;
+        QString
+            nativeArguments{}; // Windows cmd.exe command line; see QProcess::setNativeArguments.
     };
     using InvocationBuilder = std::function<Invocation(const QString& executable)>;
 

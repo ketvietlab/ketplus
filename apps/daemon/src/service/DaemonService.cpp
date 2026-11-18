@@ -1,6 +1,7 @@
 #include "service/DaemonService.h"
 #include "DaemonCredentialFile.h"
 #include "DaemonPaths.h"
+#include "OwnerOnlyAccess.h"
 #include "providers/ClaudeAccountUsage.h"
 #include "providers/ClaudeCredentials.h"
 
@@ -137,6 +138,15 @@ bool DaemonService::start() {
     // a place to keep or replace them.
     if (!restrictDirectory(stateInfo.absolutePath()) ||
         !restrictDirectory(tokenInfo.absolutePath())) {
+        error_ = QStringLiteral("Unable to restrict the daemon state directory to its owner.");
+        return false;
+    }
+#endif
+#if defined(Q_OS_WIN)
+    // Mode bits do not exist here: replace the directory's access list with the current user
+    // alone and make everything created below inherit it (journal, WAL/SHM, token, media).
+    if (!remote::restrictToCurrentUser(stateInfo.absolutePath(), true, &error_) ||
+        !remote::restrictToCurrentUser(tokenInfo.absolutePath(), true, &error_)) {
         error_ = QStringLiteral("Unable to restrict the daemon state directory to its owner.");
         return false;
     }

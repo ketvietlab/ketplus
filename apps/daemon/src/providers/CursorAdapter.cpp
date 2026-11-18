@@ -1,4 +1,5 @@
 #include "providers/CursorAdapter.h"
+#include "platform/ProcessTree.h"
 #include "providers/compat/ProviderVersionProbe.h"
 #include <QDate>
 #include <QDateTime>
@@ -37,19 +38,31 @@ CursorAdapter::ProcessInvocation wrapExecutable(const QString& executable,
 #if defined(Q_OS_WIN)
     const QString suffix = QFileInfo(executable).suffix().toLower();
     if (suffix == QStringLiteral("cmd") || suffix == QStringLiteral("bat")) {
-        QStringList wrapped{QStringLiteral("/c"), QDir::toNativeSeparators(executable)};
-        wrapped.append(arguments);
-        return {QStringLiteral("cmd.exe"), wrapped};
+        // Percent expansion happens even inside quotes, so such a path cannot be quoted safely:
+        // launch it directly and let the launch fail visibly instead of running another path.
+        const QString nativePath = QDir::toNativeSeparators(executable);
+        if (nativePath.contains(QLatin1Char('%')) || nativePath.contains(QLatin1Char('"')))
+            return {executable, arguments, {}};
+        QStringList quoted;
+        for (const QString& argument : arguments)
+            quoted.append(
+                argument.contains(QRegularExpression(QStringLiteral("[^A-Za-z0-9_.:=/-]")))
+                    ? QStringLiteral("\"%1\"").arg(argument)
+                    : argument);
+        return {QStringLiteral("cmd.exe"),
+                {QStringLiteral("/d"), QStringLiteral("/v:off"), QStringLiteral("/s"),
+                 QStringLiteral("/c")},
+                QStringLiteral("\"\"%1\" %2\"").arg(nativePath, quoted.join(QLatin1Char(' ')))};
     }
     if (suffix == QStringLiteral("ps1")) {
         QStringList wrapped{QStringLiteral("-NoProfile"), QStringLiteral("-ExecutionPolicy"),
                             QStringLiteral("Bypass"), QStringLiteral("-File"),
                             QDir::toNativeSeparators(executable)};
         wrapped.append(arguments);
-        return {QStringLiteral("powershell.exe"), wrapped};
+        return {QStringLiteral("powershell.exe"), wrapped, {}};
     }
 #endif
-    return {executable, arguments};
+    return {executable, arguments, {}};
 }
 
 bool looksRunnable(const QFileInfo& info) {
@@ -72,8 +85,8 @@ CursorAdapter::CursorAdapter(const QString& executable, QObject* parent)
         compat::policy(QStringLiteral("cursor")),
         [](const QString& executable) {
             const ProcessInvocation invocation = versionInvocation(executable);
-            return compat::ProviderVersionProbe::Invocation{invocation.program,
-                                                            invocation.arguments};
+            return compat::ProviderVersionProbe::Invocation{
+                invocation.program, invocation.arguments, invocation.nativeArguments};
         },
         this);
     catalogTimer_ = new QTimer(this);
@@ -337,7 +350,7 @@ void CursorAdapter::restartUnpinned() {
     stopping_ = true;
     process_->terminate();
     if (!process_->waitForFinished(500)) {
-        process_->kill();
+        killProcessTree(process_);
         process_->waitForFinished(500);
     }
     // The finished handler settles the state and forgets the ACP sessions; the next turn loads
@@ -352,6 +365,9 @@ void CursorAdapter::configureProcess() {
     pendingSpawnModel_.clear();
     process_->setProgram(invocation.program);
     process_->setArguments(invocation.arguments);
+#if defined(Q_OS_WIN)
+    process_->setNativeArguments(invocation.nativeArguments);
+#endif
 }
 
 bool CursorAdapter::looksLikeAuthError(const QString& message) {

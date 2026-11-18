@@ -1,3 +1,6 @@
+#include <QtGlobal>
+// POSIX-only; Windows builds NativeJobUnsupported.cpp instead.
+#if !defined(Q_OS_WIN)
 #include "runtime/executor/NativeJobControlAddress.h"
 
 #include <QCryptographicHash>
@@ -41,3 +44,4 @@ bool ensureControlDirectory(QString* error) {
     return true;
 }
 } // namespace ketplus::daemon::executor
+#endif // !Q_OS_WIN

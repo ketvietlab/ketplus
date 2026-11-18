@@ -1,7 +1,9 @@
 #include "agents/AgentMcpServer.h"
 #include "cloud/CloudControlClient.h"
+#include "platform/ProcessTree.h"
 #include "service/DaemonService.h"
 #include "service/UnixSignals.h"
+#include "service/WindowsShutdown.h"
 
 #include "KetPlusBuildIdentity.h"
 #include "KetPlusProductVersion.h"
@@ -137,6 +139,17 @@ int main(int argc, char* argv[]) {
         QTextStream(stderr) << "Unable to install daemon shutdown handlers.\n";
         return 1;
     }
+#endif
+#if defined(Q_OS_WIN)
+    WindowsShutdown shutdownSignals;
+    if (!shutdownSignals.isReady()) {
+        QTextStream(stderr) << "Unable to install daemon shutdown handlers.\n";
+        return 1;
+    }
+    // Provider processes and their helpers must not outlive the daemon, even when it is killed.
+    QString confinementError;
+    if (!confineDaemonProcessTree(&confinementError))
+        qWarning("%s", qUtf8Printable(confinementError));
 #endif
     DaemonService service(std::move(configuration));
     if (!service.start()) {

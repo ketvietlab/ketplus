@@ -86,6 +86,9 @@ class CursorAdapter final : public AcpAdapter {
     struct ProcessInvocation final {
         QString program;
         QStringList arguments;
+        // Windows cmd.exe command line; apply with QProcess::setNativeArguments (Qt's normal
+        // quoting does not follow cmd.exe's parsing). Empty for every other launch.
+        QString nativeArguments{};
     };
     // .cmd/.bat go through cmd.exe; .ps1 through powershell. Unix is the file plus `acp`.
     // A non-empty model becomes `agent --model <id> acp` (Cursor's supported ACP pin).
