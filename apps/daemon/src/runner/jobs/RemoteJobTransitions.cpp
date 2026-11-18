@@ -37,6 +37,7 @@ RemoteStep taskStep(const RemoteJobRecord& to, const bool acknowledgement = fals
         *to.exitCode <= std::numeric_limits<int>::max())
         change.exitCode = int(*to.exitCode);
     change.neverLaunched = to.terminal() && to.cleanupStatus == cleanup::notRequired;
+    change.cleanupPending = to.state == state::stopping && to.cleanupStatus == cleanup::pending;
     if (acknowledgement)
         change.suppressReason = acknowledged;
     return step;

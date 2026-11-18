@@ -4,6 +4,7 @@
 #include "RemoteJobLedgerFixture.h"
 #include "RemoteJobTestFakes.h"
 
+#include <QJsonArray>
 #include <QJsonDocument>
 
 using namespace remote_job_ledger_test;
@@ -19,6 +20,13 @@ using remote_job_test::runnerA;
 namespace {
 
 constexpr qint64 minute = 60'000;
+
+QStringList taskIds(const QJsonObject& reply, const char* name) {
+    QStringList ids;
+    for (const QJsonValue& task : reply.value(QLatin1StringView(name)).toArray())
+        ids.append(task.toObject().value("task_id").toString());
+    return ids;
+}
 constexpr qint64 day = 24 * 60 * minute;
 
 // The coordinator on the registry's store, for one remote task with no timeout.
@@ -156,9 +164,11 @@ class RemoteJobStepsTest final : public QObject {
         QVERIFY(s.running());
         QVERIFY(s.jobs->stop(s.id).ok());
         QCOMPARE(s.task(), QStringLiteral("stopping"));
+        QVERIFY(s.f.task(s.id).value("cleanup_pending").toBool());
         const auto code = exitCode < 0 ? std::nullopt : std::optional(exitCode);
         QVERIFY(s.jobs->result(job, runnerA, jobResult(result, code)).ok());
         QCOMPARE(s.task(), ended);
+        QVERIFY(!s.f.task(s.id).value("cleanup_pending").toBool());
         QCOMPARE(s.f.task(s.id).value("cleanup_status").toString(), QStringLiteral("verified"));
         QCOMPARE(s.outbox(), 1);
     }
@@ -238,6 +248,7 @@ class RemoteJobStepsTest final : public QObject {
         QVERIFY(s.queued());
         QVERIFY(s.jobs->stop(s.id).ok());
         QCOMPARE(s.task(), QStringLiteral("stopping"));
+        QVERIFY(!s.f.task(s.id).value("cleanup_pending").toBool()); // nothing was dispatched
         QVERIFY(s.relay.answer("cancel", relayJob("cancelled")));
         QCOMPARE(s.task(), QStringLiteral("cancelled"));
         QCOMPARE(s.f.task(s.id).value("cleanup_status").toString(), QStringLiteral("not_required"));
@@ -334,6 +345,43 @@ class RemoteJobStepsTest final : public QObject {
         QCOMPARE(refused("timed_out"), QJsonValue("invalid_transition"));
         QCOMPARE(refused("needs_attention"), QJsonValue("invalid_transition"));
         QCOMPARE(f.state(local), QStringLiteral("queued"));
+    }
+
+    // A stopping remote row with cleanup pending, through a reopened registry: the local paths
+    // leave it as it is, it holds no slot, and it ends with the cleanup fields a local job has.
+    void aStoppingRowWithCleanupPendingIsLeftToItsRecord() {
+        Steps s;
+        QVERIFY(s.running() && s.jobs->stop(s.id).ok());
+        const QJsonObject before = s.f.task(s.id);
+        QCOMPARE(before.value("state").toString(), QStringLiteral("stopping"));
+        QVERIFY(before.value("cleanup_pending").toBool());
+        QVERIFY(!before.value("slot_held").toBool());
+
+        QVERIFY(s.f.reopen());
+        s.reopenJobs();
+        s.jobs->restore();
+        QCOMPARE(s.f.task(s.id), before);
+        QVERIFY(!taskIds(s.f.ledger->nonterminal(), "tasks").contains(s.id));
+        QCOMPARE(s.f.ledger->resolveCleanup(s.id, s.f.revision(s.id), "client")
+                     .value("error_code")
+                     .toString(),
+                 QStringLiteral("invalid_state"));
+        const QString local = taskIdOf(s.f.ledger->create(intentFor("local", std::nullopt)));
+        QVERIFY(s.f.approve(local));
+        QCOMPARE(s.f.ledger->claimNext().value("task").toObject().value("task_id").toString(),
+                 local);
+        QCOMPARE(s.f.task(s.id), before);
+
+        QVERIFY(s.jobs->result(job, runnerA, jobResult("cancelled", {})).ok());
+        const QJsonObject ended = s.f.task(s.id);
+        QCOMPARE(ended.value("state").toString(), QStringLiteral("cancelled"));
+        QVERIFY(!ended.value("cleanup_pending").toBool());
+        QCOMPARE(ended.value("cleanup_status").toString(), QStringLiteral("verified"));
+        QVERIFY(!ended.value("slot_held").toBool());
+        QCOMPARE(s.f.count("SELECT count(*) FROM managed_job_cleanup_audit WHERE task_id='" + s.id +
+                           "'"),
+                 0);
+        QCOMPARE(s.outbox(), 1);
     }
 
     void aRestartContinuesEachKindOfRecord_data() {
