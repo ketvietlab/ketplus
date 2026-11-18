@@ -34,7 +34,7 @@ cleanupNativeAttention(ketplus::daemon::LocalJournal& journal, QString& id, cons
     auto ledger = journal.backgroundTasks();
     if (id.isEmpty()) {
         const auto page = ledger.list({"owner", 1, {}}, {}, 50, true);
-        if (!page.value("ok").toBool()) {
+        if (!page.value("ok").toBool() || !page.value("next_cursor").toString().isEmpty()) {
             result.trusted = false;
             return result;
         }
@@ -46,7 +46,9 @@ cleanupNativeAttention(ketplus::daemon::LocalJournal& journal, QString& id, cons
             }
         }
         if (id.isEmpty()) {
-            result.closed = true; // This private journal never accepted the fixture intent.
+            // Nonempty/unidentifiable intent data is uncertainty, not no launch.
+            result.closed = page.value("tasks").toArray().isEmpty();
+            result.trusted = result.closed;
             return result;
         }
     }
