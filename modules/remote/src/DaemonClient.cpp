@@ -603,10 +603,11 @@ QString DaemonClient::daemonExecutable() {
 #else
     const QString name = QStringLiteral("ketplus_daemon");
 #endif
-    const QStringList candidates{applicationDirectory.filePath(name),
-                                 applicationDirectory.filePath(QStringLiteral("../Helpers/") + name),
-                                 applicationDirectory.filePath(QStringLiteral("../../../") + name),
-                                 QStandardPaths::findExecutable(QStringLiteral("ketplus_daemon"))};
+    const QStringList candidates{
+        applicationDirectory.filePath(name),
+        applicationDirectory.filePath(QStringLiteral("../Helpers/") + name),
+        applicationDirectory.filePath(QStringLiteral("../../../") + name),
+        QStandardPaths::findExecutable(QStringLiteral("ketplus_daemon"))};
     for (const QString& candidate : candidates) {
         if (!candidate.isEmpty() && QFileInfo(candidate).isExecutable()) {
             return QFileInfo(candidate).absoluteFilePath();
