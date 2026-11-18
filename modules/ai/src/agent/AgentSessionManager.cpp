@@ -76,7 +76,7 @@ AgentSessionManager::AgentSessionManager(QObject* parent)
 }
 
 AgentSessionManager::AgentSessionManager(CodexAppServer* server, QObject* parent)
-    : QObject(parent), server_(server),
+    : QObject(parent), server_(server), serverGuard_(server),
       worktreeStore_(std::make_unique<ConversationWorktreeStore>(
           qEnvironmentVariable("KETPLUS_CONVERSATION_WORKTREES"))) {
     activityGroups_ = new ActivityGroupLoader(
@@ -264,6 +264,10 @@ AgentSessionManager::AgentSessionManager(CodexAppServer* server, QObject* parent
 }
 
 AgentSessionManager::~AgentSessionManager() {
+    // Calls still waiting for an answer hold lambdas that point into this object; the server
+    // may outlive it (or, as a child, be destroyed after the members they use).
+    if (serverGuard_)
+        serverGuard_->abandonCallbacks();
     if (!deferredWorkspaces_.isEmpty()) {
         QSettings settings;
         for (const QString& path : std::as_const(deferredWorkspaces_))

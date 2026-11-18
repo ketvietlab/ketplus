@@ -45,6 +45,18 @@ bool CodexAppServer::hasArchiveSupport() const noexcept {
     return daemon_ && daemon_->hasFeature(QStringLiteral("session.archive/1"));
 }
 
+void CodexAppServer::abandonCallbacks() {
+    pending_.clear();
+    queued_.clear();
+    if (daemon_ != nullptr)
+        daemon_->abandonCallbacks();
+}
+
+int CodexAppServer::callbackCount() const {
+    const auto own = static_cast<int>(pending_.size() + queued_.size());
+    return own + (daemon_ != nullptr ? daemon_->callbackCount() : 0);
+}
+
 QString CodexAppServer::executable() const { return executable_; }
 
 void CodexAppServer::call(const QString& method, const QJsonObject& params,

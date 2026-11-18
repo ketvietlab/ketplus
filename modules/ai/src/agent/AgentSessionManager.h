@@ -4,6 +4,7 @@
 #include <QHash>
 #include <QJsonObject>
 #include <QObject>
+#include <QPointer>
 #include <QSet>
 #include <QTimer>
 #include <QVariantList>
@@ -429,6 +430,8 @@ class AgentSessionManager final : public QObject {
     [[nodiscard]] static QString normalizedPath(const QString& path);
 
     CodexAppServer* server_{nullptr};
+    // Tells the destructor whether an injected server was destroyed first.
+    QPointer<CodexAppServer> serverGuard_;
     CodexRateLimits* rateLimits_{nullptr};
     ProviderRuntimeStatus* providerStatus_{nullptr};
     std::unique_ptr<ConversationWorktreeStore> worktreeStore_;

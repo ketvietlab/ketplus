@@ -252,6 +252,43 @@ class AgentBackgroundTaskTransportTest final : public QObject {
                  "opaque/output==");
         QCOMPARE(peer.requests.last().value("session_generation").toInteger(), 1);
     }
+    // The server outlives the manager here: its calls must not run callbacks that point into
+    // the destroyed manager when the daemon answers late or the connection drops.
+    void destroyedManagerLeavesNoCallbackForTheServer() {
+        TaskPeer peer;
+        peer.respond = [&](const QJsonObject& request) {
+            return request.value("message_type").toString() == "session.list" ? peer.catalog()
+                                                                              : QJsonObject{};
+        };
+        ketplus::CodexAppServer server;
+        auto* manager = new ketplus::AgentSessionManager(&server);
+        QTRY_VERIFY(server.hasDaemonSession("owner"));
+        QSignalSpy errors(manager, &ketplus::AgentSessionManager::errorOccurred);
+        manager->loadModels();
+        QTRY_VERIFY(server.callbackCount() > 0);
+        delete manager;
+        QCOMPARE(server.callbackCount(), 0);
+        QVERIFY(peer.client);
+        peer.client->abort();
+        QTest::qWait(200);
+        server.stop();
+        QCOMPARE(server.callbackCount(), 0);
+    }
+    void liveManagerStillReceivesFailedCalls() {
+        TaskPeer peer;
+        peer.respond = [&](const QJsonObject& request) {
+            return request.value("message_type").toString() == "session.list"
+                       ? peer.catalog()
+                       : QJsonObject{{"ok", false}, {"error_message", "refused"}};
+        };
+        ketplus::CodexAppServer server;
+        ketplus::AgentSessionManager manager(&server);
+        QTRY_VERIFY(server.hasDaemonSession("owner"));
+        QSignalSpy errors(&manager, &ketplus::AgentSessionManager::errorOccurred);
+        manager.loadModels();
+        QTRY_VERIFY(!errors.isEmpty());
+        QCOMPARE(errors.first().first().toString(), QString("refused"));
+    }
 };
 
 QTEST_MAIN(AgentBackgroundTaskTransportTest)

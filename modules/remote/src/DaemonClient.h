@@ -29,6 +29,12 @@ class DaemonClient final : public QObject {
     explicit DaemonClient(CredentialSource credential, QObject* parent = nullptr);
     ~DaemonClient() override;
 
+    // Drops every call that has not completed without running its callback, and ignores the
+    // replies still to come. For an owner whose callbacks point into itself and that is going
+    // away while this client outlives it.
+    void abandonCallbacks();
+    [[nodiscard]] int callbackCount() const;
+
     [[nodiscard]] bool isAvailable() const noexcept;
     [[nodiscard]] bool isReady() const noexcept;
     // Negotiated at daemon.hello (ADR 0015 step 5); 0 and empty until then or with an older daemon.

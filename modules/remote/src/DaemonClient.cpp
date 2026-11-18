@@ -222,6 +222,20 @@ DaemonClient::~DaemonClient() {
     queued_.clear();
 }
 
+void DaemonClient::abandonCallbacks() {
+    pending_.clear();
+    queued_.clear();
+}
+
+int DaemonClient::callbackCount() const {
+    const auto counted = [](const auto& calls) {
+        return static_cast<int>(std::count_if(calls.cbegin(), calls.cend(), [](const auto& call) {
+            return static_cast<bool>(call.callback);
+        }));
+    };
+    return counted(pending_) + counted(queued_);
+}
+
 bool DaemonClient::isAvailable() const noexcept { return !daemonExecutable().isEmpty(); }
 
 bool DaemonClient::isReady() const noexcept { return ready_; }
