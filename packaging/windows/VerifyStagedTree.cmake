@@ -44,10 +44,16 @@ execute_process(COMMAND "${STAGE}/bin/ketplusctl.exe" --help RESULT_VARIABLE res
 if(NOT result EQUAL 0)
     message(FATAL_ERROR "ketplusctl --help failed (${result})")
 endif()
-if(EXISTS "${STAGE}/bin/ketplus.exe")
-    # A GUI program has no console output to read: it must stay up for a few seconds.
-    execute_process(COMMAND "${STAGE}/bin/ketplus.exe" --version RESULT_VARIABLE result
-        OUTPUT_QUIET ERROR_QUIET TIMEOUT 20)
-    message(STATUS "ketplus.exe --version exited with ${result}")
+if(EXISTS "${STAGE}/bin/KetPlus.exe")
+    # A GUI program has no console output to read: started without a display (offscreen) it must
+    # still be running after a few seconds, so a missing DLL or plugin shows as an early exit.
+    set(ENV{QT_QPA_PLATFORM} offscreen)
+    set(ENV{KETPLUS_DISABLE_DAEMON_AUTOSTART} 1)
+    execute_process(COMMAND "${STAGE}/bin/KetPlus.exe" RESULT_VARIABLE result
+        OUTPUT_QUIET ERROR_VARIABLE gui_error TIMEOUT 8)
+    if(NOT result MATCHES "timeout")
+        message(FATAL_ERROR "KetPlus.exe did not stay up offscreen (${result}): ${gui_error}")
+    endif()
+    message(STATUS "KetPlus.exe stayed up offscreen")
 endif()
 message(STATUS "Staged tree OK: daemon ${product_version}")

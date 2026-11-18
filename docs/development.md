@@ -120,9 +120,13 @@ directories, so a local Qt or OpenSSL cannot hide a missing DLL):
 cmake -DSTAGE=<dir> -DKETPLUS_VERSION=<x.y.z> -P packaging/windows/VerifyStagedTree.cmake
 ```
 
+On the Pro tree it also starts `KetPlus.exe` with `QT_QPA_PLATFORM=offscreen` and expects it to
+still be running after a few seconds; a missing Qt DLL or plugin shows as an early exit. That
+proves the libraries load, not that the window looks right.
+
 Not done yet: code signing, an installer (NSIS/WiX), the bundled browser runtime and a bundled
-Node for the Claude sidecar (the daemon needs `node` on `PATH` for Claude sessions), and
-verifying the Pro `KetPlus.exe` tree.
+Node for the Claude sidecar (the daemon needs `node` on `PATH` for Claude sessions), and a check
+of the Pro window on a real Windows desktop.
 
 ## Build presets
 
