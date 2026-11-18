@@ -47,6 +47,7 @@ add_library(ketplus_daemon_runner_sync STATIC
     src/runner/sync/SnapshotPreparation.cpp src/runner/sync/SnapshotPreparation.h
     src/runner/sync/SnapshotSender.cpp src/runner/sync/SnapshotSender.h
     src/runner/sync/SnapshotSyncPorts.h
+    src/runner/sync/SnapshotWorker.cpp src/runner/sync/SnapshotWorker.h
     src/runner/sync/StoreRetention.cpp src/runner/sync/StoreRetention.h)
 target_link_libraries(ketplus_daemon_runner_sync PUBLIC
     Qt6::Core OpenSSL::Crypto ketplus_control_crypto ketplus_control_crypto_primitives
