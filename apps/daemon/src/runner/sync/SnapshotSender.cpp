@@ -62,12 +62,12 @@ void SnapshotSender::packBuilt(const PackOutcome& outcome, const QString& baseId
             build({});
             return;
         }
-        fail(outcome.code.isEmpty() ? code::snapshotUnavailable : outcome.code);
+        fail(outcome.code.isEmpty() ? code::snapshotBuildFailed : outcome.code);
         return;
     }
     const PackFile& pack = *outcome.pack;
     if (pack.snapshotId != job_.snapshotId || pack.baseId != baseId || pack.size < 1) {
-        fail(code::snapshotUnavailable);
+        fail(code::snapshotBuildFailed);
         return;
     }
     if (pack.size > limits_.maxPackBytes) {

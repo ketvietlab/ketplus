@@ -19,7 +19,7 @@ namespace protocol = ketplus::runner::protocol;
 // Codes the sender ends with besides the runner's own `snapshot.error` codes.
 namespace code {
 inline const QString packUnreadable = QStringLiteral("pack_unreadable");
-inline const QString snapshotUnavailable = QStringLiteral("snapshot_unavailable");
+inline const QString snapshotBuildFailed = QStringLiteral("snapshot_build_failed");
 inline const QString snapshotTooLarge = QStringLiteral("snapshot_too_large");
 inline const QString packInvalid = QStringLiteral("pack_invalid");
 inline const QString storageError = QStringLiteral("storage_error");

@@ -92,7 +92,7 @@ class SnapshotSenderTest final : public QObject {
         Harness other;
         other.sender->start({});
         other.work.failBuild(PackOutcome{std::nullopt, true, {}}); // full pack: base not the cause
-        QCOMPARE(other.events.failed.first().second, code::snapshotUnavailable);
+        QCOMPARE(other.events.failed.first().second, code::snapshotBuildFailed);
     }
 
     void haveSendsNothingAndWaitsForReady() {

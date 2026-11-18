@@ -43,6 +43,7 @@ ketplus_enable_warnings(ketplus_daemon_runner_peer)
 # Runner snapshot sync on the desktop: keys, preparation and the sender, on abstract ports.
 add_library(ketplus_daemon_runner_sync STATIC
     src/runner/sync/SnapshotKeys.cpp src/runner/sync/SnapshotKeys.h
+    src/runner/sync/SnapshotPreparation.cpp src/runner/sync/SnapshotPreparation.h
     src/runner/sync/SnapshotSender.cpp src/runner/sync/SnapshotSender.h
     src/runner/sync/SnapshotSyncPorts.h)
 target_link_libraries(ketplus_daemon_runner_sync PUBLIC
