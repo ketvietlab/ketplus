@@ -106,7 +106,7 @@ and is skipped otherwise. Rendering Mermaid needs the external `mmdc` tool.
 
 Launching the app for a smoke check needs a desktop. An ssh session has none,
 so the default `windows` Qt platform plugin aborts at startup. Deploy the
-offscreen plugin next to the executable and use the review capture (probably the same cause, see
+offscreen plugin next to the executable and use the review capture (see
 `docs/design-system.md`):
 
 ```bat
@@ -782,7 +782,7 @@ node --test apps/daemon/providers/claude-sidecar/test/browser.test.mjs apps/daem
 
 Computer-use changes also run `(cd apps/computer && swift test)`. TCC grants
 cannot run in CI. After changing the agent, run `apps/computer/scripts/e2e.mjs`
-on a Mac against a `--testing` build and the fixture app (probably the same cause, see
+on a Mac against a `--testing` build and the fixture app (see
 `apps/computer/README.md`). It covers background input under a covering window
 and foreground input on the work display. With two displays connected it also
 checks that granted apps move to the secondary display. Use `--manual-esc` when
@@ -1902,7 +1902,7 @@ ACLs, backup recovery, signed upgrades or deployment.
 ## Windows daemon tests
 
 `cmake --preset daemon-dev`, `cmake --build --preset daemon-dev` and `ctest --preset daemon-dev`
-run on Windows (MSVC) with the toolchain from `tools/windows` (probably the same cause, see
+run on Windows (MSVC) with the toolchain from `tools/windows` (see
 [development](development.md)). Windows-specific coverage: `ketplus_windows_platform_tests`
 (owner-only access list on a directory and its children; killing a provider ends its helper
 processes through the Job Object), `ketplus_windows_script_launch_tests` (`cmd.exe` with
@@ -1977,9 +1977,9 @@ symbolic links (`QFile::link` makes a `.lnk` shortcut), file-mode assertions (ac
 `ketplus_windows_platform_tests`), permission-denial fixtures, FIFOs and resource limits, the
 Linux/macOS user-unit socket probe, the uncheckpointed-WAL fixture (the only `python3` on `PATH` is
 the Microsoft Store alias), and producer-flood timing (QProcess drains the pipe in a thread).
-`ketplus_daemon_usage_retention_tests` passes but takes several minutes in a Debug build,
-probably for the same reason as the journal migration recovery test above. Fixtures that write exact byte counts switch stdout to binary mode
-(`BinaryStdio.h`), because the C runtime would otherwise add `\r`.
+`ketplus_daemon_usage_retention_tests` passes but takes several minutes in a Debug build on
+Windows; its cause has not been measured. Fixtures that write exact byte counts switch stdout to
+binary mode (`BinaryStdio.h`), because the C runtime would otherwise add `\r`.
 
 ## English chrome and multilingual team content (T30)
 
