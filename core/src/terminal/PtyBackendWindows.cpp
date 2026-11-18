@@ -81,6 +81,9 @@ std::vector<wchar_t> environmentBlock() {
     }
     environment.insert(QStringLiteral("TERM_PROGRAM"), program);
     environment.insert(QStringLiteral("TERM_PROGRAM_VERSION"), version);
+    if (!environment.contains(QStringLiteral("TERM"))) {
+        environment.insert(QStringLiteral("TERM"), QStringLiteral("xterm-256color"));
+    }
     environment.insert(QStringLiteral("COLORTERM"), QStringLiteral("truecolor"));
     QStringList entries;
     for (const QString& key : environment.keys()) {

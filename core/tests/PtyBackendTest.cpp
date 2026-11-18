@@ -5,10 +5,16 @@
 #include <QCoreApplication>
 #include <QDir>
 #include <QElapsedTimer>
+#include <QFileInfo>
 #include <QRegularExpression>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
+
+#if defined(Q_OS_WIN)
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#endif
 
 namespace ketplus {
 namespace {
@@ -119,6 +125,63 @@ class PtyBackendTest final : public QObject {
         QTest::qWait(300);
         QCOMPARE(exitSpy.count(), 0);
     }
+
+#if defined(Q_OS_WIN)
+    void controlCInterruptsTheForegroundCommand() {
+        const QString shellName =
+            QFileInfo(qEnvironmentVariable("SHELL")).completeBaseName().toLower();
+        const bool powerShell =
+            shellName == QLatin1String("powershell") || shellName == QLatin1String("pwsh");
+        PtyProcess process;
+        QByteArray output;
+        connect(&process, &PtyProcess::outputReceived, this,
+                [&output](const QByteArray& bytes) { output.append(bytes); });
+        QVERIFY(process.start(QDir::tempPath(), 24, 80));
+        // The marker is assembled by the shell, so the echoed command line cannot match it.
+        process.send(QByteArray(powerShell ? "$a='KP_'" : "set A=KP_") + kNewline);
+        process.send(powerShell ? QByteArray("echo \"${a}READY\"; Start-Sleep 60")
+                                : QByteArray("echo %A%READY& ping -n 60 127.0.0.1 >nul"));
+        process.send(kNewline);
+        QTRY_VERIFY_WITH_TIMEOUT(output.contains("KP_READY"), 30000);
+        QTest::qWait(1500);
+        output.clear();
+        process.send(QByteArray(1, '\x03'));
+        QTest::qWait(500);
+        process.send(powerShell ? QByteArray("echo \"${a}AFTER\"") : QByteArray("echo %A%AFTER"));
+        process.send(kNewline);
+        QTRY_VERIFY2_WITH_TIMEOUT(output.contains("KP_AFTER"), output.constData(), 15000);
+        process.stop();
+    }
+
+    void stopEndsDescendantProcesses() {
+        PtyProcess process;
+        QByteArray output;
+        connect(&process, &PtyProcess::outputReceived, this,
+                [&output](const QByteArray& bytes) { output.append(bytes); });
+        QVERIFY(process.start(QDir::tempPath(), 24, 80));
+        // A detached grandchild of the shell; it must still die with the terminal.
+        const QString shellName =
+            QFileInfo(qEnvironmentVariable("SHELL")).completeBaseName().toLower();
+        const bool powerShell =
+            shellName == QLatin1String("powershell") || shellName == QLatin1String("pwsh");
+        const QByteArray script =
+            "$p = Start-Process ping -ArgumentList '-t','127.0.0.1' -PassThru -WindowStyle "
+            "Hidden; Write-Output ('KP_CHILD=' + $p.Id + '=')";
+        // cmd.exe needs a PowerShell child to run it; PowerShell runs it directly.
+        process.send((powerShell ? script : "powershell -NoProfile -Command \"" + script + "\"") +
+                     kNewline);
+        static const QRegularExpression pidLine(QStringLiteral("KP_CHILD=(\\d+)="));
+        QTRY_VERIFY_WITH_TIMEOUT(pidLine.match(QString::fromLocal8Bit(output)).hasMatch(), 30000);
+        const DWORD pid = pidLine.match(QString::fromLocal8Bit(output)).captured(1).toULong();
+        HANDLE child = ::OpenProcess(SYNCHRONIZE, FALSE, pid);
+        QVERIFY(child != nullptr);
+        QCOMPARE(::WaitForSingleObject(child, 0), static_cast<DWORD>(WAIT_TIMEOUT));
+        process.stop();
+        const DWORD waited = ::WaitForSingleObject(child, 10000);
+        ::CloseHandle(child);
+        QCOMPARE(waited, static_cast<DWORD>(WAIT_OBJECT_0));
+    }
+#endif
 
     void rejectsMissingWorkingDirectory() {
         PtyProcess process;
