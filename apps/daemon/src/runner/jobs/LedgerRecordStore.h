@@ -32,6 +32,11 @@ class LedgerRecordStore final : public RecordStore {
     [[nodiscard]] bool acknowledge(const QString& taskId, const QString& source,
                                    const QString& userClientId);
 
+    // Ends a task whose record could not be read: interrupted, reason record_unreadable, cleanup
+    // unverified, and a readable record in its place so no later load finds it again. Answers
+    // the job id the row names (empty when none), or nullopt when nothing could be written.
+    [[nodiscard]] std::optional<QString> abandonUnreadable(const QString& taskId);
+
   private:
     struct Acknowledgement {
         QString source;

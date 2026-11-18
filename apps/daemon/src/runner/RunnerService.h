@@ -36,7 +36,9 @@ class RunnerService final : public QObject {
     ~RunnerService() override;
 
     [[nodiscard]] static bool handlesType(const QString& type);
-    void handle(const QString& type, const QJsonObject& payload, Callback callback);
+    // `clientId` names the local connection that asked; empty when there is none.
+    void handle(const QString& type, const QJsonObject& payload, Callback callback,
+                const QString& clientId = {});
 
     // Tests drive time; production uses the UTC clock and QTimer.
     void setTime(Clock clock, Scheduler scheduler);
@@ -45,6 +47,9 @@ class RunnerService final : public QObject {
   signals:
     // {"ticket_id", "state"}: never a code, a token or a secret.
     void pairingChanged(const QJsonObject& payload);
+    // The runner is no longer trusted here: removed or unpaired, its pin already gone.
+    // `clientId` names the local connection that asked, or is empty; never read from a payload.
+    void runnerRemoved(const QString& runnerId, const QString& clientId);
 
   private:
     using PairingPointer = std::shared_ptr<RunnerPairing>;
@@ -58,8 +63,8 @@ class RunnerService final : public QObject {
     void collectRunners(QList<RunnerSummary> runners, const std::optional<QString>& cursor,
                         int page, Callback callback);
     void changeState(const QJsonObject& payload, RunnerRelayClient::StateChange change,
-                     Callback callback);
-    void unpairRunner(const QJsonObject& payload, Callback callback);
+                     Callback callback, const QString& clientId);
+    void unpairRunner(const QJsonObject& payload, Callback callback, const QString& clientId);
 
     void schedulePoll(const PairingPointer& pairing, int delayMs);
     void poll(const QString& ticketId, quint64 generation);

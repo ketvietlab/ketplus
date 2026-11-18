@@ -662,6 +662,30 @@ class RunnerPairingDaemonTest final : public QObject {
         QVERIFY(listed.contains("pin_error"));
     }
 
+    // Removing or unpairing names the local connection that asked, never a client id of the
+    // payload; without a connection the client id is empty.
+    void runnerRemovalNamesTheAskingConnection() {
+        Fixture f;
+        QList<std::pair<QString, QString>> removed;
+        QObject::connect(&f.service(), &runner::RunnerService::runnerRemoved,
+                         [&](const QString& runnerId, const QString& clientId) {
+                             removed.append({runnerId, clientId});
+                         });
+        f.relay.answer("POST /v2/runners/runner-a/unpair", 0);
+        bool done = false;
+        f.client->handleLocal(
+            "runner.unpair", {{"runner_id", "runner-a"}, {"client_id", "spoofed"}},
+            [&](const QJsonObject&, const QString&) { done = true; },
+            QStringLiteral("connection-7"));
+        QVERIFY(QTest::qWaitFor([&] { return done; }, 5000));
+        f.relay.answer("POST /v2/runners/runner-b/unpair", 0);
+        f.call("runner.unpair", {{"runner_id", "runner-b"}, {"client_id", "spoofed"}});
+        QCOMPARE(removed.size(), 2);
+        QCOMPARE(removed.at(0),
+                 std::make_pair(QStringLiteral("runner-a"), QStringLiteral("connection-7")));
+        QCOMPARE(removed.at(1), std::make_pair(QStringLiteral("runner-b"), QString()));
+    }
+
     void noSecretLeaves() {
         capturedLog.clear();
         const auto previous = qInstallMessageHandler(captureLog);

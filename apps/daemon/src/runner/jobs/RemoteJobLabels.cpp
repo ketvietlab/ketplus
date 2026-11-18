@@ -3,6 +3,8 @@
 #include <QRegularExpression>
 #include <QSet>
 
+#include <algorithm>
+
 namespace ketplus::daemon::runner::jobs {
 
 bool isRunsOnLabel(const QString& label) {
@@ -21,6 +23,11 @@ bool isValidRunsOn(const QStringList& labels) {
         seen.insert(label);
     }
     return true;
+}
+
+QStringList normalizedRunsOn(QStringList labels) {
+    std::sort(labels.begin(), labels.end());
+    return labels;
 }
 
 } // namespace ketplus::daemon::runner::jobs

@@ -20,6 +20,9 @@ class LocalIpcServer;
 class LocalJournal;
 class ClaudeCredentials;
 class SessionHost;
+namespace runner::remote {
+class RemoteJobsService;
+}
 
 struct DaemonConfiguration final {
     QString statePath;
@@ -63,6 +66,8 @@ class DaemonService final : public QObject {
     std::unique_ptr<SessionHost> host_;
     std::unique_ptr<CloudControlClient> cloud_;
     std::unique_ptr<LocalIpcServer> ipc_;
+    // After cloud_, whose Relay socket and runner port it uses; destroyed before it.
+    std::unique_ptr<runner::remote::RemoteJobsService> remoteJobs_;
     QTimer* spaceTimer_{nullptr};
 };
 

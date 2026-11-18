@@ -11,6 +11,7 @@
 #include "providers/CodexAdapter.h"
 #include "providers/CopilotAdapter.h"
 #include "providers/CursorAdapter.h"
+#include "runner/remote/RemoteJobsService.h"
 #include "runtime/SessionHost.h"
 #include "storage/JournalSpace.h"
 #include "storage/LocalJournal.h"
@@ -118,6 +119,7 @@ DaemonService::~DaemonService() {
         cursor_->stop();
     }
     ipc_.reset();
+    remoteJobs_.reset();
     cloud_.reset();
     host_.reset();
     cursor_.reset();
@@ -245,6 +247,10 @@ bool DaemonService::start() {
     }
     // ADR 0027: agents reach this endpoint through `ketplus_daemon --mcp-agents`.
     host_->setAgentEndpoint(ipc_->fullServerName(), QCoreApplication::applicationFilePath());
+    // Remote jobs resume and take runner messages before the Relay socket first opens.
+    remoteJobs_ = std::make_unique<runner::remote::RemoteJobsService>(
+        journal_->backgroundTasks(), *cloud_, stateInfo.absolutePath());
+    remoteJobs_->start();
     cloud_->start();
     spaceTimer_ = new QTimer(this);
     spaceTimer_->setInterval(reclaimIntervalMs);

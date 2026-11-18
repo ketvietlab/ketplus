@@ -471,7 +471,8 @@ void LocalIpcServer::consumeFrame(QLocalSocket* socket, const QByteArray& frame)
                      remoteError.isEmpty()
                          ? protocol::response(request, result)
                          : protocol::failure(request, QStringLiteral("remote_error"), remoteError));
-            });
+            },
+            it->clientId);
         return;
     }
     auto result = host_->handleCommand(request, it->clientId);
