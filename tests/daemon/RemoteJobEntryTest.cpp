@@ -244,6 +244,23 @@ class RemoteJobEntryTest final : public QObject {
         QVERIFY(e.h.relay.log.isEmpty());
     }
 
+    // The field rules come before the checks of the remote jobs service.
+    void anExecutionNoRunnerTakesIsInvalidBeforeAnyTask() {
+        Entry e;
+        Worktree w;
+        e.h.relay.offered = false;
+        QJsonObject spec = execution(w.inside);
+        spec.insert("env_delta", QJsonObject{{"KETPLUS_TOKEN", "x"}});
+        const QJsonObject reply = e.entry->admit(intentFor("remote"), spec);
+        QCOMPARE(reply.value("error_code").toString(), QStringLiteral("invalid_request"));
+        QVERIFY(!reply.value("error_message").toString().contains("KETPLUS_TOKEN"));
+        QVERIFY(e.entry->admit(intentFor("remote", linuxLabels, 0), execution(w.inside))
+                    .value("error_code") == QStringLiteral("invalid_request"));
+        QCOMPARE(e.h.f.count("SELECT count(*) FROM managed_jobs"), 0);
+        QCOMPARE(e.h.f.count("SELECT count(*) FROM remote_jobs"), 0);
+        QVERIFY(e.h.relay.log.isEmpty());
+    }
+
     void anOldGitRefusesBeforeAnyTask() {
         Entry e;
         Worktree w;

@@ -1,5 +1,7 @@
 #pragma once
 
+#include "runner/entry/RemoteGuidance.h"
+
 #include <QJsonObject>
 #include <QSet>
 #include <QString>
@@ -38,9 +40,10 @@ class RemoteJobEntry final {
 
     void setPorts(Ports ports) { ports_ = std::move(ports); }
 
-    // A failure reply when a task with runs_on cannot be created now: runner_unavailable,
-    // git_unsupported, not_a_worktree, resource_exhausted or storage_error. Empty when it can,
-    // and for a local task. Creates nothing.
+    // A failure reply when a task with runs_on cannot be created now: invalid_request when a
+    // runner cannot take its execution, then runner_unavailable, git_unsupported,
+    // not_a_worktree, resource_exhausted or storage_error. Empty when it can, and for a local
+    // task. Creates nothing.
     [[nodiscard]] QJsonObject admit(const BackgroundTaskIntent& intent,
                                     const QJsonObject& execution) const;
 
@@ -68,8 +71,5 @@ class RemoteJobEntry final {
     QSet<QString> submitted_; // tasks this entry submitted; a task is submitted once
     std::shared_ptr<int> alive_ = std::make_shared<int>(0);
 };
-
-// What the user does about a remote job left in needs_attention.
-[[nodiscard]] QString remoteManualGuidance();
 
 } // namespace ketplus::daemon::runner::entry

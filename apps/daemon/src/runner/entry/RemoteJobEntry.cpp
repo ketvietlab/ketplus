@@ -42,6 +42,8 @@ QJsonObject RemoteJobEntry::admit(const BackgroundTaskIntent& intent,
                                   const QJsonObject& execution) const {
     if (!intent.runsOn)
         return {};
+    if (const QString problem = remoteSpecProblem(execution, intent.timeoutMs); !problem.isEmpty())
+        return failure(QStringLiteral("invalid_request"), problem);
     if (const QString code = jobs_.refusal(); !code.isEmpty())
         return failure(code, refusalMessage(code));
     if (!sync::worktreeOf(execution.value(QStringLiteral("cwd")).toString()))
@@ -126,12 +128,6 @@ QJsonObject RemoteJobEntry::withPlacement(QJsonObject reply) const {
         reply.insert(QStringLiteral("tasks"), tasks);
     }
     return reply;
-}
-
-QString remoteManualGuidance() {
-    return QStringLiteral("The job may still be running on its runner. Check the runner, stop "
-                          "the job there or remove the runner, then acknowledge cleanup in the "
-                          "task UI.");
 }
 
 } // namespace ketplus::daemon::runner::entry
