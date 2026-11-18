@@ -38,6 +38,9 @@ class CodexAdapter;
 class CursorAdapter;
 class ProviderAdapter;
 class ManagedTaskBridge;
+namespace runner::entry {
+class RemoteJobPort;
+}
 
 class SessionHost final : public QObject, private AgentHostPort, private teams::TeamHostPort {
     Q_OBJECT
@@ -130,6 +133,7 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     void handleAgentCommandDeferred(const QString& token, const QString& type,
                                     const QJsonObject& payload, CommandCallback done);
     [[nodiscard]] QString agentToken(const QString& sessionId);
+    void setRemoteJobs(runner::entry::RemoteJobPort* port);
 
   signals:
     void eventReady(const QJsonObject& event);

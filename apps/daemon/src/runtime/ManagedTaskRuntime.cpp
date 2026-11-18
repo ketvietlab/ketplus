@@ -1,4 +1,5 @@
 #include "runtime/ManagedTaskRuntime.h"
+#include "runner/entry/RemoteJobPort.h"
 #include "runtime/executor/LinuxJobContainment.h"
 #include "runtime/executor/NativeJobClient.h"
 
@@ -50,6 +51,44 @@ void ManagedTaskRuntime::setCallbacks(Changed changed, Permission permission, Ch
     permission_ = std::move(permission);
     childStart_ = std::move(childStart);
     childStop_ = std::move(childStop);
+}
+
+ManagedTaskRuntime::~ManagedTaskRuntime() { setRemoteJobs(nullptr); }
+
+void ManagedTaskRuntime::setRemoteJobs(runner::entry::RemoteJobPort* port) {
+    if (remoteJobs_)
+        remoteJobs_->setPorts({});
+    remoteJobs_ = port;
+    if (!remoteJobs_)
+        return;
+    const auto failReserved = [this](const QString& id, const QString& code) {
+        const auto live = live_.value(id);
+        if (!live || terminal(live->record.value("state").toString()))
+            return;
+        BackgroundTaskChange failed;
+        failed.state = "failed";
+        failed.reason = "spawn_failed";
+        failed.errorCode = code;
+        failed.neverLaunched = true;
+        apply(id, failed);
+    };
+    // The remote record changed the task: read it again and publish it.
+    const auto remoteChanged = [this](const QString& id) {
+        const auto task = ledger_.runtimeTask(id);
+        if (task.contains("error_code"))
+            return;
+        if (const auto live = live_.value(id)) {
+            live->record = task;
+            if (terminal(task.value("state").toString())) {
+                live_.remove(id);
+                if (live_.isEmpty())
+                    timer_.stop();
+            }
+        }
+        if (changed_)
+            changed_(task);
+    };
+    remoteJobs_->setPorts({failReserved, remoteChanged});
 }
 
 bool ManagedTaskRuntime::initialize(QString* error) {

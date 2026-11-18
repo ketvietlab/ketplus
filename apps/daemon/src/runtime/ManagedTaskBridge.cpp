@@ -1,5 +1,6 @@
 #include "runtime/ManagedTaskBridge.h"
 #include "providers/ProviderAdapter.h"
+#include "runner/entry/RemoteJobPort.h"
 #include "runner/entry/RunsOnRequest.h"
 #include "runtime/ManagedTaskSpec.h"
 #include "runtime/SessionHost.h"
@@ -28,6 +29,12 @@ ManagedTaskBridge::ManagedTaskBridge(SessionHost* host)
             timer_.start();
     });
     connect(host_, &SessionHost::teamEvent, this, [this] { timer_.start(); });
+}
+
+void ManagedTaskBridge::setRemoteJobs(runner::entry::RemoteJobPort* port) {
+    remoteJobs_ = port;
+    if (runtime_)
+        runtime_->setRemoteJobs(port);
 }
 
 bool ManagedTaskBridge::initialize(QString* error) {

@@ -11,6 +11,7 @@
 #include "providers/CodexAdapter.h"
 #include "providers/CopilotAdapter.h"
 #include "providers/CursorAdapter.h"
+#include "runner/entry/RemoteJobEntry.h"
 #include "runner/remote/RemoteJobsService.h"
 #include "runtime/SessionHost.h"
 #include "storage/JournalSpace.h"
@@ -119,6 +120,8 @@ DaemonService::~DaemonService() {
         cursor_->stop();
     }
     ipc_.reset();
+    if (host_)
+        host_->setRemoteJobs(nullptr);
     remoteJobs_.reset();
     cloud_.reset();
     host_.reset();
@@ -251,6 +254,7 @@ bool DaemonService::start() {
     remoteJobs_ = std::make_unique<runner::remote::RemoteJobsService>(
         journal_->backgroundTasks(), *cloud_, stateInfo.absolutePath());
     remoteJobs_->start();
+    host_->setRemoteJobs(&remoteJobs_->entry());
     cloud_->start();
     spaceTimer_ = new QTimer(this);
     spaceTimer_->setInterval(reclaimIntervalMs);

@@ -8,11 +8,15 @@
 
 namespace ketplus::daemon {
 class SessionHost;
+namespace runner::entry {
+class RemoteJobPort;
+}
 class ManagedTaskBridge final : public QObject {
   public:
     using Done = std::function<void(const QJsonObject&)>;
     explicit ManagedTaskBridge(SessionHost* host);
     bool initialize(QString* error);
+    void setRemoteJobs(runner::entry::RemoteJobPort* port);
     void command(const QJsonObject& request, const QString& clientId, Done done, bool agentCaller,
                  std::optional<AgentMutationGrant> origin = std::nullopt);
     bool permission(const QJsonValue& requestId, const QJsonObject& result);
@@ -38,6 +42,7 @@ class ManagedTaskBridge final : public QObject {
     SessionHost* host_;
     BackgroundTaskLedger ledger_;
     std::unique_ptr<ManagedTaskRuntime> runtime_;
+    runner::entry::RemoteJobPort* remoteJobs_{nullptr};
     std::unique_ptr<QTemporaryDir> memoryDirectory_;
     QHash<QString, QPair<QString, QString>> permissions_; // private route -> (task, approval)
     QTimer timer_;
