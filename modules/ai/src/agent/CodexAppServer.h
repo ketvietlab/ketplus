@@ -44,10 +44,6 @@ class CodexAppServer final : public QObject {
     ~CodexAppServer() override;
 
     [[nodiscard]] bool isAvailable() const noexcept;
-    // For an owner whose callbacks point into itself and that is destroyed before this server:
-    // drops the calls still waiting for an answer without running their callbacks.
-    void abandonCallbacks();
-    [[nodiscard]] int callbackCount() const;
     [[nodiscard]] bool isReady() const noexcept;
     [[nodiscard]] QString executable() const;
     [[nodiscard]] bool usesDaemon() const noexcept { return daemon_ != nullptr; }

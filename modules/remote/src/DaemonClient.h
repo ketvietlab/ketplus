@@ -29,12 +29,6 @@ class DaemonClient final : public QObject {
     explicit DaemonClient(CredentialSource credential, QObject* parent = nullptr);
     ~DaemonClient() override;
 
-    // Drops every call that has not completed without running its callback, and ignores the
-    // replies still to come. For an owner whose callbacks point into itself and that is going
-    // away while this client outlives it.
-    void abandonCallbacks();
-    [[nodiscard]] int callbackCount() const;
-
     [[nodiscard]] bool isAvailable() const noexcept;
     [[nodiscard]] bool isReady() const noexcept;
     // Negotiated at daemon.hello (ADR 0015 step 5); 0 and empty until then or with an older daemon.
@@ -78,7 +72,8 @@ class DaemonClient final : public QObject {
     void teamEventReceived(const QString& type, const QJsonObject& payload);
     // ADR 0126: schedule.changed and schedule.run, sent without a session.
     void scheduleEventReceived(const QString& type, const QJsonObject& payload);
-    // A daemon push that is not a session event, such as `tags.changed` (#429).
+    // A daemon push that is not a session event: `tags.changed` (#429) and
+    // `runner.pairing.changed` ({ticket_id, state}).
     void noticeReceived(const QString& type, const QJsonObject& payload);
     void disconnected(const QString& reason);
     // The hello named `presented` instead of the trusted fingerprint (empty: it named none).

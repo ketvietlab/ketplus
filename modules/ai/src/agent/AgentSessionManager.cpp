@@ -76,13 +76,13 @@ AgentSessionManager::AgentSessionManager(QObject* parent)
 }
 
 AgentSessionManager::AgentSessionManager(CodexAppServer* server, QObject* parent)
-    : QObject(parent), server_(server), serverGuard_(server),
+    : QObject(parent), server_(server),
       worktreeStore_(std::make_unique<ConversationWorktreeStore>(
           qEnvironmentVariable("KETPLUS_CONVERSATION_WORKTREES"))) {
     activityGroups_ = new ActivityGroupLoader(
         [this](const QString& session, const QJsonObject& params,
                ActivityGroupLoader::Reply reply) {
-            server_->readDaemonActivityGroup(session, params, std::move(reply));
+            serverReadDaemonActivityGroup(session, params, std::move(reply));
         },
         this);
     connect(activityGroups_, &ActivityGroupLoader::changed, this,
@@ -264,15 +264,62 @@ AgentSessionManager::AgentSessionManager(CodexAppServer* server, QObject* parent
 }
 
 AgentSessionManager::~AgentSessionManager() {
-    // Calls still waiting for an answer hold lambdas that point into this object; the server
-    // may outlive it (or, as a child, be destroyed after the members they use).
-    if (serverGuard_)
-        serverGuard_->abandonCallbacks();
+    // Calls still waiting for an answer hold lambdas that point into this object.
+    callbackGuard_.invalidate();
     if (!deferredWorkspaces_.isEmpty()) {
         QSettings settings;
         for (const QString& path : std::as_const(deferredWorkspaces_))
             writeWorkspace(settings, path);
     }
+}
+
+// Every callback given to the server goes through callbackGuard_ (see the header).
+void AgentSessionManager::serverCall(const QString& method, const QJsonObject& params,
+                                     ServerCallback done) {
+    server_->call(method, params, callbackGuard_.wrap(std::move(done)));
+}
+
+void AgentSessionManager::serverReadDaemonTranscriptWindow(const QString& sessionId,
+                                                           const QJsonObject& params,
+                                                           ServerCallback done,
+                                                           const bool preserveLiveBuffer) {
+    server_->readDaemonTranscriptWindow(sessionId, params, callbackGuard_.wrap(std::move(done)),
+                                        preserveLiveBuffer);
+}
+
+void AgentSessionManager::serverExecutionWorktreeCommand(const QString& sessionId,
+                                                         const QString& type,
+                                                         const QJsonObject& payload,
+                                                         ServerCallback done) {
+    server_->executionWorktreeCommand(sessionId, type, payload,
+                                      callbackGuard_.wrap(std::move(done)));
+}
+
+void AgentSessionManager::serverSetDaemonSessionArchived(const QString& sessionId,
+                                                         const bool archived, ServerCallback done) {
+    server_->setDaemonSessionArchived(sessionId, archived, callbackGuard_.wrap(std::move(done)));
+}
+
+void AgentSessionManager::serverReadDaemonActivityGroup(const QString& sessionId,
+                                                        const QJsonObject& params,
+                                                        ServerCallback done) {
+    server_->readDaemonActivityGroup(sessionId, params, callbackGuard_.wrap(std::move(done)));
+}
+
+void AgentSessionManager::serverMarkDaemonSessionSeen(const QString& sessionId, const qint64 cursor,
+                                                      ServerCallback done) {
+    server_->markDaemonSessionSeen(sessionId, cursor, callbackGuard_.wrap(std::move(done)));
+}
+
+void AgentSessionManager::serverMarkDaemonSessionDone(const QString& sessionId,
+                                                      ServerCallback done) {
+    server_->markDaemonSessionDone(sessionId, callbackGuard_.wrap(std::move(done)));
+}
+
+void AgentSessionManager::serverFinishDaemonTranscriptCatchup(const QString& sessionId,
+                                                              const QJsonObject& page,
+                                                              ServerCallback done) {
+    server_->finishDaemonTranscriptCatchup(sessionId, page, callbackGuard_.wrap(std::move(done)));
 }
 
 bool AgentSessionManager::isAvailable() const noexcept { return server_->isAvailable(); }
@@ -454,7 +501,7 @@ void AgentSessionManager::heldMessageAction(const QString& worktreePath, const Q
         return;
     }
     const QString conversation = session->threadId;
-    server_->call(
+    serverCall(
         release ? QStringLiteral("agentMessages/release") : QStringLiteral("agentMessages/read"),
         {{"threadId", conversation}, {"messageIds", QJsonArray{messageId}}},
         [this, path, conversation, messageId](const QJsonObject& result,
@@ -572,41 +619,40 @@ void AgentSessionManager::loadModels(const QString& cursor) {
     QJsonObject params{{QStringLiteral("limit"), 100}};
     if (!cursor.isEmpty())
         params.insert(QStringLiteral("cursor"), cursor);
-    server_->call(QStringLiteral("model/list"), params,
-                  [this](const QJsonObject& result, const QString& error) {
-                      if (!error.isEmpty()) {
-                          loadingModels_ = false;
-                          emit errorOccurred(error);
-                          emit modelsLoaded({});
-                          return;
-                      }
-                      for (const auto& entry : result.value(QStringLiteral("data")).toArray()) {
-                          if (!entry.toObject().value(QStringLiteral("hidden")).toBool()) {
-                              QVariantMap model = entry.toObject().toVariantMap();
-                              // The daemon tags each entry with its provider and profiles.
-                              if (model.value("provider").toString().isEmpty())
-                                  model.insert("provider", "codex");
-                              if (!model.contains("permissions"))
-                                  model.insert("permissions",
-                                               CodexAppServer::permissionProfilesFor(
-                                                   model.value("provider").toString()));
-                              if (!model.contains("defaultPermission"))
-                                  model.insert("defaultPermission", "workspace-write");
-                              // Copilot permission modes must come from its daemon adapter.
-                              if (model.value("provider") == "copilot" &&
-                                  model.value("permissions").toList().isEmpty())
-                                  continue;
-                              models_.append(model);
-                          }
-                      }
-                      const QString next = result.value(QStringLiteral("nextCursor")).toString();
-                      if (!next.isEmpty())
-                          loadModels(next);
-                      else {
-                          loadingModels_ = false;
-                          emit modelsLoaded(models_);
-                      }
-                  });
+    serverCall(QStringLiteral("model/list"), params,
+               [this](const QJsonObject& result, const QString& error) {
+                   if (!error.isEmpty()) {
+                       loadingModels_ = false;
+                       emit errorOccurred(error);
+                       emit modelsLoaded({});
+                       return;
+                   }
+                   for (const auto& entry : result.value(QStringLiteral("data")).toArray()) {
+                       if (!entry.toObject().value(QStringLiteral("hidden")).toBool()) {
+                           QVariantMap model = entry.toObject().toVariantMap();
+                           // The daemon tags each entry with its provider and profiles.
+                           if (model.value("provider").toString().isEmpty())
+                               model.insert("provider", "codex");
+                           if (!model.contains("permissions"))
+                               model.insert("permissions", CodexAppServer::permissionProfilesFor(
+                                                               model.value("provider").toString()));
+                           if (!model.contains("defaultPermission"))
+                               model.insert("defaultPermission", "workspace-write");
+                           // Copilot permission modes must come from its daemon adapter.
+                           if (model.value("provider") == "copilot" &&
+                               model.value("permissions").toList().isEmpty())
+                               continue;
+                           models_.append(model);
+                       }
+                   }
+                   const QString next = result.value(QStringLiteral("nextCursor")).toString();
+                   if (!next.isEmpty())
+                       loadModels(next);
+                   else {
+                       loadingModels_ = false;
+                       emit modelsLoaded(models_);
+                   }
+               });
 }
 
 void AgentSessionManager::activate(const QString& worktreePath, const bool loadTranscript,
@@ -935,7 +981,7 @@ void AgentSessionManager::steerPrompt(const QString& worktreePath, const QString
     }
     session->steeringPending = true;
     const QString expectedTurnId = session->turnId;
-    server_->call(
+    serverCall(
         QStringLiteral("turn/steer"),
         {{QStringLiteral("threadId"), session->threadId},
          {QStringLiteral("expectedTurnId"), expectedTurnId},
@@ -980,14 +1026,14 @@ void AgentSessionManager::cancelSession(const SessionPtr& session) {
         return;
     }
     updateState(session, QStringLiteral("Stopping…"), true);
-    server_->call(QStringLiteral("turn/interrupt"),
-                  {{QStringLiteral("threadId"), session->threadId},
-                   {QStringLiteral("turnId"), session->turnId}},
-                  [this, session](const QJsonObject&, const QString& error) {
-                      if (!error.isEmpty()) {
-                          failSession(session, error);
-                      }
-                  });
+    serverCall(QStringLiteral("turn/interrupt"),
+               {{QStringLiteral("threadId"), session->threadId},
+                {QStringLiteral("turnId"), session->turnId}},
+               [this, session](const QJsonObject&, const QString& error) {
+                   if (!error.isEmpty()) {
+                       failSession(session, error);
+                   }
+               });
 }
 
 void AgentSessionManager::newSession(const QString& worktreePath) {
@@ -1156,7 +1202,7 @@ bool AgentSessionManager::markSeen(const SessionPtr& target) {
     if (!server_->usesDaemon() || target->threadId.isEmpty())
         return true;
     const QString path = target->path;
-    server_->markDaemonSessionSeen(
+    serverMarkDaemonSessionSeen(
         target->threadId, cursor,
         [this, path, weak = std::weak_ptr<Session>(target)](const QJsonObject& result,
                                                             const QString& error) {
@@ -1332,16 +1378,16 @@ bool AgentSessionManager::deleteConversation(const QString& worktreePath,
         finish();
         return true;
     }
-    server_->call(QStringLiteral("thread/delete"), {{QStringLiteral("threadId"), target->threadId}},
-                  [this, path, target, finish](const QJsonObject&, const QString& error) {
-                      if (!error.isEmpty()) {
-                          emit conversationDeletionFinished(path, target->id, error);
-                          emit errorOccurred(
-                              QStringLiteral("The conversation was not deleted: %1").arg(error));
-                          return;
-                      }
-                      finish();
-                  });
+    serverCall(QStringLiteral("thread/delete"), {{QStringLiteral("threadId"), target->threadId}},
+               [this, path, target, finish](const QJsonObject&, const QString& error) {
+                   if (!error.isEmpty()) {
+                       emit conversationDeletionFinished(path, target->id, error);
+                       emit errorOccurred(
+                           QStringLiteral("The conversation was not deleted: %1").arg(error));
+                       return;
+                   }
+                   finish();
+               });
     return true;
 }
 
@@ -1349,7 +1395,7 @@ void AgentSessionManager::syncConversationTitle(const SessionPtr& session) {
     if (!session || session->threadId.isEmpty() || !server_->usesDaemon()) {
         return;
     }
-    server_->call(
+    serverCall(
         QStringLiteral("thread/name/set"),
         {{QStringLiteral("threadId"), session->threadId}, {QStringLiteral("name"), session->title}},
         [this](const QJsonObject&, const QString& error) {

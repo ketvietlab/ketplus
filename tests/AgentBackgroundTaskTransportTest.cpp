@@ -252,8 +252,8 @@ class AgentBackgroundTaskTransportTest final : public QObject {
                  "opaque/output==");
         QCOMPARE(peer.requests.last().value("session_generation").toInteger(), 1);
     }
-    // The server outlives the manager here: its calls must not run callbacks that point into
-    // the destroyed manager when the daemon answers late or the connection drops.
+    // The server outlives the manager here: a late answer to one of the manager's calls must not
+    // reach its callback, while the server keeps working for everyone else.
     void destroyedManagerLeavesNoCallbackForTheServer() {
         TaskPeer peer;
         peer.respond = [&](const QJsonObject& request) {
@@ -265,14 +265,34 @@ class AgentBackgroundTaskTransportTest final : public QObject {
         QTRY_VERIFY(server.hasDaemonSession("owner"));
         QSignalSpy errors(manager, &ketplus::AgentSessionManager::errorOccurred);
         manager->loadModels();
-        QTRY_VERIFY(server.callbackCount() > 0);
+        const auto modelsRequestIndex = [&] {
+            for (qsizetype i = 0; i < peer.requests.size(); ++i)
+                if (peer.requests.at(i).value("message_type") == "provider.models")
+                    return i;
+            return qsizetype(-1);
+        };
+        QTRY_VERIFY(modelsRequestIndex() >= 0);
+        const QJsonObject modelsRequest = peer.requests.at(modelsRequestIndex());
+        const int dropped = ketplus::CallbackGuard::droppedCount();
         delete manager;
-        QCOMPARE(server.callbackCount(), 0);
         QVERIFY(peer.client);
+        peer.answer(modelsRequest, {{"ok", false}, {"error_message", "late"}});
+        QTRY_COMPARE(ketplus::CallbackGuard::droppedCount(), dropped + 1);
+
+        // Another owner's call on the same server still completes.
+        const auto before = peer.requests.size();
+        QString outcome = "pending";
+        server.call("model/list", {}, [&](const QJsonObject&, const QString& error) {
+            outcome = error.isEmpty() ? QString("answered") : error;
+        });
+        QTRY_VERIFY(peer.requests.size() > before);
+        peer.answer(peer.requests.last(), {{"ok", true}, {"models", QJsonArray{}}});
+        QTRY_COMPARE(outcome, QString("answered"));
+
+        // And the connection still recovers by itself: the client's own hello is untouched.
         peer.client->abort();
-        QTest::qWait(200);
-        server.stop();
-        QCOMPARE(server.callbackCount(), 0);
+        QTRY_VERIFY_WITH_TIMEOUT(!server.isReady(), 5000);
+        QTRY_VERIFY_WITH_TIMEOUT(server.isReady(), 20000);
     }
     void liveManagerStillReceivesFailedCalls() {
         TaskPeer peer;

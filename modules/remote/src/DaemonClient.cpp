@@ -222,20 +222,6 @@ DaemonClient::~DaemonClient() {
     queued_.clear();
 }
 
-void DaemonClient::abandonCallbacks() {
-    pending_.clear();
-    queued_.clear();
-}
-
-int DaemonClient::callbackCount() const {
-    const auto counted = [](const auto& calls) {
-        return static_cast<int>(std::count_if(calls.cbegin(), calls.cend(), [](const auto& call) {
-            return static_cast<bool>(call.callback);
-        }));
-    };
-    return counted(pending_) + counted(queued_);
-}
-
 bool DaemonClient::isAvailable() const noexcept { return !daemonExecutable().isEmpty(); }
 
 bool DaemonClient::isReady() const noexcept { return ready_; }
@@ -549,6 +535,13 @@ void DaemonClient::consumeFrame(const QByteArray& frame) {
                             envelope.value(QStringLiteral("payload")).toObject());
         return;
     }
+    if (envelope.value(QStringLiteral("message_type")).toString() ==
+            QStringLiteral("runner.pairing.changed") &&
+        !envelope.contains(QStringLiteral("correlation_id"))) {
+        emit noticeReceived(QStringLiteral("runner.pairing.changed"),
+                            envelope.value(QStringLiteral("payload")).toObject());
+        return;
+    }
     const QString correlationId = envelope.value(QStringLiteral("correlation_id")).toString();
     const QueuedCall call = pending_.take(correlationId);
     sendQueued();
@@ -604,10 +597,16 @@ QString DaemonClient::daemonExecutable() {
         return QFileInfo(configured).absoluteFilePath();
     }
     const QDir applicationDirectory(QCoreApplication::applicationDirPath());
+    // Windows only treats a file with an executable suffix as executable.
+#if defined(Q_OS_WIN)
+    const QString name = QStringLiteral("ketplus_daemon.exe");
+#else
+    const QString name = QStringLiteral("ketplus_daemon");
+#endif
     const QStringList candidates{
-        applicationDirectory.filePath(QStringLiteral("ketplus_daemon")),
-        applicationDirectory.filePath(QStringLiteral("../Helpers/ketplus_daemon")),
-        applicationDirectory.filePath(QStringLiteral("../../../ketplus_daemon")),
+        applicationDirectory.filePath(name),
+        applicationDirectory.filePath(QStringLiteral("../Helpers/") + name),
+        applicationDirectory.filePath(QStringLiteral("../../../") + name),
         QStandardPaths::findExecutable(QStringLiteral("ketplus_daemon"))};
     for (const QString& candidate : candidates) {
         if (!candidate.isEmpty() && QFileInfo(candidate).isExecutable()) {
