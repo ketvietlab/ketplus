@@ -2,7 +2,9 @@
 
 #include "runtime/executor/LinuxJobContainment.h"
 
+#include <QDir>
 #include <QFile>
+#include <QFileInfo>
 
 #include <sys/stat.h>
 #include <unistd.h>
@@ -47,6 +49,11 @@ bool LinuxSystemHost::socket(const QString& path) const {
 bool LinuxSystemHost::file(const QString& path) const {
     const std::optional<struct stat> info = statOf(path, true);
     return info && S_ISREG(info->st_mode);
+}
+
+QString LinuxSystemHost::realDirectory(const QString& path) const {
+    const QFileInfo info(path);
+    return QDir::isAbsolutePath(path) && info.isDir() ? info.canonicalFilePath() : QString();
 }
 
 void LinuxSystemHost::probeContainment(const QString& program, std::function<void(bool)> done) {

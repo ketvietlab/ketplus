@@ -19,6 +19,7 @@ class LinuxSystemHost final : public LinuxHost {
     [[nodiscard]] std::optional<uint> directoryOwner(const QString& path) const override;
     [[nodiscard]] bool socket(const QString& path) const override;
     [[nodiscard]] bool file(const QString& path) const override;
+    [[nodiscard]] QString realDirectory(const QString& path) const override;
     void probeContainment(const QString& program, std::function<void(bool)> done) override;
     void probeMounts(const QString& program, std::function<void(bool)> done) override;
 

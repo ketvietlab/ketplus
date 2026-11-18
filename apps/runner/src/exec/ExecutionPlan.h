@@ -36,9 +36,13 @@ struct MountPlan {
                                            const QMap<QString, QString>& runnerEnvironment,
                                            const MountPlan* mounts = nullptr);
 
-// The mounts of a job: the runner's state, work and user runtime directories are hidden; the
-// job's workspace and its own tmp directory, both inside the work directory and apart from each
-// other, are visible again.
+// Whether two of `directories`, real paths, are the same or one lies inside the other. Empty
+// entries are skipped.
+[[nodiscard]] bool directoriesNested(const QStringList& directories);
+
+// The mounts of a job: the runner's state, work and user runtime directories, none inside
+// another, are hidden; the job's workspace and its own tmp directory, both inside the work
+// directory and apart from each other, are visible again.
 [[nodiscard]] MountPlan planMounts(const QString& stateDirectory, const QString& workDirectory,
                                    const QString& runtimeDirectory, const QString& workspace,
                                    const QString& tmp);

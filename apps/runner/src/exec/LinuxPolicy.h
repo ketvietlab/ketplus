@@ -3,6 +3,7 @@
 #include "exec/ExecPorts.h"
 
 #include <QString>
+#include <QStringList>
 
 #include <functional>
 #include <memory>
@@ -26,6 +27,8 @@ class LinuxHost {
     [[nodiscard]] virtual std::optional<uint> directoryOwner(const QString& path) const = 0;
     [[nodiscard]] virtual bool socket(const QString& path) const = 0;
     [[nodiscard]] virtual bool file(const QString& path) const = 0;
+    // The real path of an existing directory, or empty.
+    [[nodiscard]] virtual QString realDirectory(const QString& path) const = 0;
     // The executor's containment probe, run as a user unit of the session.
     virtual void probeContainment(const QString& program, std::function<void(bool)> done) = 0;
     // The executor's probe of a job's mounts, run the same way.
@@ -34,8 +37,10 @@ class LinuxHost {
 
 class LinuxPolicy final : public PlatformPolicy {
   public:
-    // `program`: the executor's supervisor program.
-    LinuxPolicy(LinuxHost& host, QString program);
+    // `program`: the executor's supervisor program. `runnerDirectories`: the runner's own
+    // directories a job's mounts hide; with the user runtime directory, none may lie inside
+    // another.
+    LinuxPolicy(LinuxHost& host, QString program, QStringList runnerDirectories = {});
     ~LinuxPolicy() override;
 
     // Each check in order; the first that fails answers `containment_unavailable`, and only the
@@ -47,6 +52,7 @@ class LinuxPolicy final : public PlatformPolicy {
 
     LinuxHost& m_host;
     QString m_program;
+    QStringList m_directories;
     std::shared_ptr<bool> m_alive;
 };
 

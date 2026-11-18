@@ -61,7 +61,8 @@ struct RunnerAssembly::Parts {
         : work(std::move(work)), store(std::move(store)), journal(directory), relay(context),
 #ifdef Q_OS_LINUX
           host(runtimeDirectory(context.environment)),
-          policy(host, exec::NativeExecutor::installedProgram()),
+          policy(host, exec::NativeExecutor::installedProgram(),
+                 {directory.path(), this->work.path()}),
 #endif
           executor(exec::NativeExecutor::installedProgram()), pins(context.state),
           trust(context.state) {

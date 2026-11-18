@@ -155,6 +155,9 @@ class RunnerExecLinuxPolicyTest : public QObject {
     void eachFailedCheckIsUnavailable_data();
     void eachFailedCheckIsUnavailable();
     void recoveryIsReadyAtTheNextProbe();
+    void nestedRunnerDirectoriesAreUnavailable_data();
+    void nestedRunnerDirectoriesAreUnavailable();
+    void separatedRunnerDirectoriesAreReadyAgain();
     void lateAnswerAfterDestruction();
     void closedPolicyStaysClosed();
 };

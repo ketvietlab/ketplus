@@ -14,6 +14,8 @@ namespace {
 
 const QString program = QStringLiteral("/opt/runner/ketplus_job_executor");
 const QString runtime = QStringLiteral("/run/user/1000");
+const QString state = QStringLiteral("/home/runner/.local/state/ketplus-runner");
+const QString work = QStringLiteral("/srv/runner/work");
 
 class FakeLinuxHost final : public LinuxHost {
   public:
@@ -27,6 +29,11 @@ class FakeLinuxHost final : public LinuxHost {
     }
     bool socket(const QString& path) const override { return sockets.contains(path); }
     bool file(const QString& path) const override { return files.contains(path); }
+    // Each path is its own real path unless `realPaths` says otherwise; empty when missing.
+    QString realDirectory(const QString& path) const override {
+        const auto it = realPaths.find(path);
+        return it == realPaths.end() ? path : it->second;
+    }
     void probeContainment(const QString& probed, std::function<void(bool)> done) override {
         containmentProbes.append(probed);
         pendingContainment.append(std::move(done));
@@ -43,6 +50,7 @@ class FakeLinuxHost final : public LinuxHost {
     std::map<QString, uint> owners{{runtime, 1000}};
     QStringList sockets{runtime + QStringLiteral("/bus")};
     QStringList files{QStringLiteral("/sys/fs/cgroup/cgroup.controllers")};
+    std::map<QString, QString> realPaths;
     QStringList containmentProbes;
     QStringList mountProbes;
     QList<std::function<void(bool)>> pendingContainment;
@@ -166,6 +174,74 @@ void RunnerExecLinuxPolicyTest::recoveryIsReadyAtTheNextProbe() {
     QCOMPARE(runner.readiness(),
              (Readiness{Readiness::State::Unavailable, "containment_unavailable"}));
     host.sockets = {runtime + QStringLiteral("/bus")};
+    QTRY_COMPARE(host.pendingContainment.size(), 1);
+    host.pendingContainment.takeFirst()(true);
+    host.pendingMounts.takeFirst()(true);
+    QVERIFY(runner.admit());
+    QCOMPARE(seen.size(), 2);
+}
+
+void RunnerExecLinuxPolicyTest::nestedRunnerDirectoriesAreUnavailable_data() {
+    QTest::addColumn<QString>("stateReal");
+    QTest::addColumn<QString>("workReal");
+    QTest::addColumn<QString>("runtimeReal");
+    QTest::newRow("state in work") << work + "/state" << work << runtime;
+    QTest::newRow("work in state") << state << state + "/work" << runtime;
+    QTest::newRow("state is work") << work << work << runtime;
+    QTest::newRow("runtime in work") << state << work << work + "/run";
+    QTest::newRow("work in runtime") << state << runtime + "/work" << runtime;
+    QTest::newRow("runtime in state") << state << work << state + "/run";
+    QTest::newRow("state in runtime") << runtime + "/state" << work << runtime;
+    QTest::newRow("runtime is work") << state << work << work;
+    QTest::newRow("work missing") << state << QString() << runtime;
+    QTest::newRow("state missing") << QString() << work << runtime;
+}
+
+// The directories a job's mounts hide, resolved: with any two nested, the runner takes no job,
+// before the executor's probes run, and the log names only the step.
+void RunnerExecLinuxPolicyTest::nestedRunnerDirectoriesAreUnavailable() {
+    QFETCH(QString, stateReal);
+    QFETCH(QString, workReal);
+    QFETCH(QString, runtimeReal);
+    FakeLinuxHost host;
+    host.realPaths = {{state, stateReal}, {work, workReal}, {runtime, runtimeReal}};
+    QLoggingCategory::setFilterRules(QStringLiteral("ketplus.runner.exec*=true"));
+    logged.clear();
+    const QtMessageHandler previous = qInstallMessageHandler(capture);
+    LinuxPolicy policy(host, program, {state, work});
+    Answer answer;
+    policy.probe(answer.callback());
+    qInstallMessageHandler(previous);
+
+    QCOMPARE(answer.calls, 1);
+    QVERIFY(!answer.available);
+    QCOMPARE(answer.code, QStringLiteral("containment_unavailable"));
+    QVERIFY(host.containmentProbes.isEmpty());
+    QCOMPARE(logged.size(), 1);
+    QVERIFY(logged.first().endsWith(QStringLiteral("runner_directories")));
+    for (const QString& message : logged)
+        QVERIFY(!message.contains(state) && !message.contains(work) && !message.contains(runtime));
+}
+
+// Directories moved apart meanwhile: the runner, draining, is ready at the next probe.
+void RunnerExecLinuxPolicyTest::separatedRunnerDirectoriesAreReadyAgain() {
+    FakeLinuxHost host;
+    host.realPaths = {{work, state + "/work"}};
+    LinuxPolicy policy(host, program, {state, work});
+    QList<Readiness> seen;
+    ExecutorCommandRunner::Options options;
+    options.directory = QStringLiteral("/nonexistent/executor");
+    options.unavailableProbeMs = 20;
+    FakeExecutor executor;
+    ExecutorCommandRunner::Events events;
+    events.readinessChanged = [&seen](const Readiness& next) { seen.append(next); };
+    ExecutorCommandRunner runner(options, executor, policy, events);
+    runner.probe();
+    QCOMPARE(runner.readiness(),
+             (Readiness{Readiness::State::Unavailable, "containment_unavailable"}));
+    QVERIFY(!runner.admit());
+    QVERIFY(host.containmentProbes.isEmpty());
+    host.realPaths.clear();
     QTRY_COMPARE(host.pendingContainment.size(), 1);
     host.pendingContainment.takeFirst()(true);
     host.pendingMounts.takeFirst()(true);

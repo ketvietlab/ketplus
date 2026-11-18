@@ -1,5 +1,6 @@
 #include "exec/LinuxPolicy.h"
 #include "exec/ExecLog.h"
+#include "exec/ExecutionPlan.h"
 
 #include <utility>
 
@@ -11,8 +12,9 @@ const QString cgroupControllers = QStringLiteral("/sys/fs/cgroup/cgroup.controll
 
 } // namespace
 
-LinuxPolicy::LinuxPolicy(LinuxHost& host, QString program)
-    : m_host(host), m_program(std::move(program)), m_alive(std::make_shared<bool>(true)) {}
+LinuxPolicy::LinuxPolicy(LinuxHost& host, QString program, QStringList runnerDirectories)
+    : m_host(host), m_program(std::move(program)), m_directories(std::move(runnerDirectories)),
+      m_alive(std::make_shared<bool>(true)) {}
 
 // A probe still out answers no one.
 LinuxPolicy::~LinuxPolicy() { *m_alive = false; }
@@ -36,6 +38,13 @@ void LinuxPolicy::probe(std::function<void(bool, const QString&)> done) {
     if (!m_host.executable(systemdRun) || runtime.isEmpty() ||
         m_host.directoryOwner(runtime) != uid || !m_host.socket(runtime + QStringLiteral("/bus")))
         return answer(done, "user_session");
+    if (!m_directories.isEmpty()) {
+        QStringList real{m_host.realDirectory(runtime)};
+        for (const QString& directory : std::as_const(m_directories))
+            real.append(m_host.realDirectory(directory));
+        if (real.contains(QString()) || directoriesNested(real))
+            return answer(done, "runner_directories");
+    }
     if (!m_host.file(cgroupControllers))
         return answer(done, "cgroup");
 

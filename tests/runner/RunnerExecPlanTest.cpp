@@ -253,13 +253,33 @@ class RunnerExecPlanTest : public QObject {
         QTest::newRow("symlink out")
             << "state" << "work" << "" << "work/escape" << "work/tmp" << "workspace_outside_work";
         QTest::newRow("in state") << "work/state" << "work" << "" << "work/state/ws"
-                                  << "work/tmp" << "workspace_outside_work";
+                                  << "work/tmp" << "runtime_directory_invalid";
         QTest::newRow("missing") << "state" << "work" << "" << "work/none"
                                  << "work/tmp" << "workspace_outside_work";
         QTest::newRow("runtime missing") << "state" << "work" << "none" << "work/ws" << "work/tmp"
                                          << "runtime_directory_invalid";
         QTest::newRow("in runtime") << "state" << "work" << "work" << "work/ws" << "work/tmp"
                                     << "runtime_directory_invalid";
+        // Any two of the state, work and runtime directories, one inside the other or the same.
+        QTest::newRow("state in work") << "work/state" << "work" << "" << "work/ws" << "work/tmp"
+                                       << "runtime_directory_invalid";
+        QTest::newRow("work in state") << "state" << "state/work" << "" << "state/work/ws"
+                                       << "state/work/tmp" << "runtime_directory_invalid";
+        QTest::newRow("state is work")
+            << "work" << "work" << "" << "work/ws" << "work/tmp" << "runtime_directory_invalid";
+        QTest::newRow("runtime in work") << "state" << "work" << "work/run" << "work/ws"
+                                         << "work/tmp" << "runtime_directory_invalid";
+        QTest::newRow("work in runtime") << "state" << "run/work" << "run" << "run/work/ws"
+                                         << "run/work/tmp" << "runtime_directory_invalid";
+        QTest::newRow("runtime in state") << "state" << "work" << "state/run" << "work/ws"
+                                          << "work/tmp" << "runtime_directory_invalid";
+        QTest::newRow("state in runtime") << "run/state" << "work" << "run" << "work/ws"
+                                          << "work/tmp" << "runtime_directory_invalid";
+        QTest::newRow("runtime is state") << "state" << "work" << "state" << "work/ws" << "work/tmp"
+                                          << "runtime_directory_invalid";
+        QTest::newRow("runtime through a link into work")
+            << "state" << "work" << "run-link" << "work/ws" << "work/tmp"
+            << "runtime_directory_invalid";
         QTest::newRow("tmp missing")
             << "state" << "work" << "" << "work/ws" << "work/none" << "tmp_directory_invalid";
         QTest::newRow("tmp empty")
@@ -284,12 +304,16 @@ class RunnerExecPlanTest : public QObject {
         QFETCH(QString, tmp);
         QFETCH(QString, error);
         for (const char* path :
-             {"state", "work/ws", "work/state/ws", "work/tmp/ws", "work/ws/tmp", "outside-tmp"})
+             {"state", "work/ws", "work/state/ws", "work/tmp/ws", "work/ws/tmp", "outside-tmp",
+              "work/tmp", "work/run", "state/work/ws", "state/work/tmp", "state/run", "run/work/ws",
+              "run/work/tmp", "run/state"})
             QVERIFY(QDir(m_root).mkpath(QLatin1String(path)));
         QVERIFY(QFile::link(m_root + QStringLiteral("/outside"),
                             m_root + QStringLiteral("/work/escape")));
         QVERIFY(QFile::link(m_root + QStringLiteral("/outside-tmp"),
                             m_root + QStringLiteral("/work/tmp-escape")));
+        QVERIFY(QFile::link(m_root + QStringLiteral("/work/run"),
+                            m_root + QStringLiteral("/run-link")));
         const auto at = [this](const QString& path) {
             return path.isEmpty() ? path : m_root + u'/' + path;
         };
