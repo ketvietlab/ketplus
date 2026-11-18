@@ -2,6 +2,7 @@
 // real journal with a fake runtime; the protocol case uses a temporary Git repository and the
 // scripted fake providers. No real provider is started.
 #include "AgentTestFixture.h"
+#include "TestPaths.h"
 #include "teams/TeamCoordinator.h"
 
 #include <QDir>
@@ -23,7 +24,8 @@ class FakeHost final : public TeamHostPort {
         return it == conversations.cend() ? std::nullopt : std::optional(it.value());
     }
     QString conversationRepository(const QString& sessionId) const override {
-        return conversations.contains(sessionId) ? QStringLiteral("/repo") : QString{};
+        return conversations.contains(sessionId) ? absoluteTestPath(QStringLiteral("repo"))
+                                                 : QString{};
     }
     std::optional<TaskWorktree> createTaskWorktree(const Team& team, const Task& task,
                                                    QString* error) override {
@@ -61,7 +63,7 @@ class FakeHost final : public TeamHostPort {
                                   .number = id,
                                   .title = id,
                                   .provider = provider,
-                                  .worktree = QStringLiteral("/repo"),
+                                  .worktree = absoluteTestPath(QStringLiteral("repo")),
                                   .idle = true});
     }
 
@@ -77,7 +79,7 @@ class FakeHost final : public TeamHostPort {
 
 Team standard(const bool leaderWrites = true) {
     Team team;
-    team.repository = QStringLiteral("/repo");
+    team.repository = absoluteTestPath(QStringLiteral("repo"));
     team.name = QStringLiteral("Checkout");
     team.integrationBranch = QStringLiteral("integration");
     team.leaderWritesRequirements = leaderWrites;
@@ -140,14 +142,20 @@ class TeamTaskTest final : public QObject {
     void initTestCase() { QStandardPaths::setTestModeEnabled(true); }
 
     void init() {
+        // Windows cannot delete a database that is still open.
+        teams_.reset();
+        journal_.reset();
         QFile::remove(directory_.filePath("journal.sqlite3"));
         host_ = {};
         for (const QString& id : {"lead", "dev1", "dev2", "dev3"})
             host_.add(id);
         host_.add("rev", "claude");
         reopen();
-        team_ = teams_->create(standard(), "user").teamId;
-        QVERIFY(team_ > 0);
+        const auto created = teams_->create(standard(), "user");
+        team_ = created.teamId;
+        QVERIFY2(team_ > 0, created.error
+                                ? qPrintable(created.error->code + ": " + created.error->message)
+                                : "");
     }
 
     void idsAreNeverReusedAndOnlyTheLeaderOrTheUserCreates() {
@@ -342,7 +350,7 @@ class TeamTaskTest final : public QObject {
         QCOMPARE(moved.state, state::inProgress);
         QCOMPARE(host_.pointed.value("dev2"), QStringLiteral("/wt/T-1"));
         // The previous owner leaves the worktree that is not its own any more.
-        QCOMPARE(host_.pointed.value("dev1"), QStringLiteral("/repo"));
+        QCOMPARE(host_.pointed.value("dev1"), absoluteTestPath(QStringLiteral("repo")));
         QCOMPARE(host_.messages.size(), 1);
         QVERIFY(host_.messages.first().body.contains("handed over"));
         QVERIFY(host_.messages.first().body.contains("History:"));
@@ -405,7 +413,8 @@ class TeamTaskTest final : public QObject {
 
         host_.busy.clear();
         teams_->memberTurnEnded("dev1");
-        QCOMPARE(host_.conversations.value("dev1").worktree, QStringLiteral("/repo"));
+        QCOMPARE(host_.conversations.value("dev1").worktree,
+                 absoluteTestPath(QStringLiteral("repo")));
         QVERIFY(teams_->team(team_)->relocations.isEmpty());
     }
 
@@ -431,7 +440,8 @@ class TeamTaskTest final : public QObject {
         QVERIFY(teams_->handoverTask(team_, id, "dev2", "Dev 2 knows the cart", "lead").ok());
         QVERIFY(teams_->handoverTask(team_, id, "dev1", "Dev 2 is away", "lead").ok());
         // Dev 2 was free and left at once; Dev 1 owns the task again and stays.
-        QCOMPARE(host_.conversations.value("dev2").worktree, QStringLiteral("/repo"));
+        QCOMPARE(host_.conversations.value("dev2").worktree,
+                 absoluteTestPath(QStringLiteral("repo")));
         host_.busy.clear();
         teams_->memberTurnEnded("dev1");
         QCOMPARE(host_.conversations.value("dev1").worktree, QStringLiteral("/wt/T-1"));

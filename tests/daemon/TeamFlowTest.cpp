@@ -60,6 +60,9 @@ class TeamFlowTest final : public QObject {
     void initTestCase() { QStandardPaths::setTestModeEnabled(true); }
 
     void init() {
+        // Windows cannot delete a database that is still open.
+        teams_.reset();
+        journal_.reset();
         QFile::remove(directory_.filePath("journal.sqlite3"));
         host_ = {};
         for (const QString& id : {"lead", "dev1", "dev2"})
