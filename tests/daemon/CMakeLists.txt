@@ -182,15 +182,16 @@ ketplus_add_daemon_test(ketplus_remote_jobs_restore_tests RemoteJobsRestoreTest.
 ketplus_add_daemon_test(ketplus_remote_jobs_submit_tests RemoteJobsSubmitTest.cpp)
 ketplus_add_daemon_test(ketplus_remote_jobs_relay_socket_tests RemoteJobsRelaySocketTest.cpp)
 target_sources(ketplus_remote_jobs_relay_socket_tests PRIVATE cloud-privacy/MemoryCredentials.cpp)
+# Real remote job parts against a Relay and a runner the test plays.
 ketplus_add_daemon_test(ketplus_remote_jobs_end_to_end_tests RemoteJobsEndToEndTest.cpp)
-target_sources(ketplus_remote_jobs_end_to_end_tests PRIVATE
-    RemoteJobsRunnerEnd.cpp RemoteJobsRunnerEnd.h)
-target_link_libraries(ketplus_remote_jobs_end_to_end_tests PRIVATE
-    ketplus_runner_pairing ketplus_control_crypto_primitives)
 ketplus_add_daemon_test(ketplus_remote_jobs_stop_tests RemoteJobsStopTest.cpp)
-target_sources(ketplus_remote_jobs_stop_tests PRIVATE RemoteJobsRunnerEnd.cpp)
-target_link_libraries(ketplus_remote_jobs_stop_tests PRIVATE
-    ketplus_runner_pairing ketplus_control_crypto_primitives)
+ketplus_add_daemon_test(ketplus_remote_jobs_snapshot_tests RemoteJobsSnapshotTest.cpp)
+foreach(suite end_to_end stop snapshot)
+    set(target ketplus_remote_jobs_${suite}_tests)
+    target_sources(${target} PRIVATE RemoteJobsRunnerEnd.cpp RemoteJobsRunnerEnd.h)
+    target_link_libraries(${target} PRIVATE
+        ketplus_runner_pairing ketplus_control_crypto_primitives)
+endforeach()
 qt_add_executable(ketplus_peer_output_tests PeerOutputTest.cpp)
 ketplus_enable_warnings(ketplus_peer_output_tests)
 target_link_libraries(ketplus_peer_output_tests PRIVATE Qt6::Test ketplus_daemon_runner_peer)

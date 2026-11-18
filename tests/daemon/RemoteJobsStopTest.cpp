@@ -121,6 +121,36 @@ class RemoteJobsStopTest final : public QObject {
         QCOMPARE(outboxOf(r.e.h.f, r.id), 1);
     }
 
+    // A restart while the command runs: the record goes on, its 20-minute window counts from
+    // the restart, and the runner that comes back finishes the job.
+    void aRestartWhileRunningCountsTheWindowAgain() {
+        constexpr qint64 minute = 60 * 1000;
+        Running r;
+        QVERIFY(r.start(2 * 60 * minute));
+        r.end->lose();
+        r.e.h.clock.advance(15 * minute);
+        r.e.h.build();
+        r.e.h.clock.due.clear(); // the timers of the stopped daemon end with it
+        r.e.h.clock.target = &r.e.h.jobs->coordinator();
+        r.e.h.jobs->restore();
+        QCOMPARE(r.e.h.jobs->record(r.id)->state, state::running);
+        r.e.h.clock.advance(19 * minute);
+        QCOMPARE(r.e.h.jobs->record(r.id)->state, state::running);
+
+        r.e.seen.clear();
+        r.e.seenTypes.clear();
+        RunnerEnd second = r.e.connect(2);
+        QVERIFY(
+            r.e.play(second, [&] { return !framesOf<protocol::JobResume>(r.e.seen).isEmpty(); }));
+        QVERIFY(framesOf<protocol::JobSpec>(r.e.seen).isEmpty());
+        protocol::JobResult result = resultOf(QStringLiteral("exited"), 0);
+        second.send(result);
+        QVERIFY(r.e.play(second, [&] { return r.e.resultAcked; }));
+        QCOMPARE(r.e.h.jobs->record(r.id)->state, state::completed);
+        QCOMPARE(r.e.h.f.state(r.id), state::completed);
+        QCOMPARE(outboxOf(r.e.h.f, r.id), 1);
+    }
+
     void aRemovedRunnerEndsItsRunningJob() {
         Running r;
         QVERIFY(r.start());

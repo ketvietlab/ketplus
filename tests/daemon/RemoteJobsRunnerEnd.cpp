@@ -245,7 +245,7 @@ EndToEnd::EndToEnd() {
     };
 }
 
-QString EndToEnd::submit(const qint64 timeoutMs) {
+QString EndToEnd::submit(const qint64 timeoutMs, const QString& jobId) {
     const QString id = h.f.remoteTask(linuxLabels, timeoutMs);
     if (id.isEmpty())
         return {};
@@ -258,9 +258,35 @@ QString EndToEnd::submit(const qint64 timeoutMs) {
     h.jobs->submit(id, request, [&code](const QString& answer) { code = answer; });
     if (!code.isEmpty())
         return {};
+    if (jobId.isEmpty())
+        return id;
     remote_job_test::RelayJob queued = remote_job_test::relayJob(QStringLiteral("queued"));
-    queued.jobId = linkedJob;
+    queued.jobId = jobId;
     return h.relay.answer(QStringLiteral("submit"), queued) ? id : QString();
+}
+
+QStringList EndToEnd::storeRefs(const QString& taskId) const {
+    const auto record = h.jobs->record(taskId);
+    if (!record || !record->snapshot)
+        return {};
+    const QString store =
+        sync::storePathFor(h.stores->storesRoot(), record->snapshot->repositoryId);
+    QProcess process;
+    QProcessEnvironment environment;
+    environment.insert(QStringLiteral("PATH"), qEnvironmentVariable("PATH"));
+    environment.insert(QStringLiteral("HOME"), home);
+    environment.insert(QStringLiteral("GIT_CONFIG_NOSYSTEM"), QStringLiteral("1"));
+    process.setProcessEnvironment(environment);
+    process.start(QStringLiteral("git"),
+                  {QStringLiteral("--git-dir=") + store, QStringLiteral("for-each-ref"),
+                   QStringLiteral("--format=%(refname) %(objectname)")});
+    if (!process.waitForFinished(60'000) || process.exitCode() != 0)
+        return {};
+    return QString::fromUtf8(process.readAllStandardOutput()).split('\n', Qt::SkipEmptyParts);
+}
+
+bool EndToEnd::edit(const QByteArray& content) {
+    return writeFile(QDir(repo).filePath(QStringLiteral("src/edit.c")), content);
 }
 
 void EndToEnd::assign() {

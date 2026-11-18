@@ -119,9 +119,13 @@ struct LinkedParts {
 // Relay and a runner the test plays.
 struct EndToEnd {
     EndToEnd();
-    // A task submitted from `repo/src`, its Relay submit answered queued as linkedJob; empty
-    // on failure.
-    QString submit(qint64 timeoutMs = 60'000);
+    // A task submitted from `repo/src`, its Relay submit answered queued as `jobId` unless that
+    // is empty; empty on failure.
+    QString submit(qint64 timeoutMs = 60'000, const QString& jobId = linkedJob);
+    // The refs of the store of the task's snapshot, as `name object` lines.
+    [[nodiscard]] QStringList storeRefs(const QString& taskId) const;
+    // Changes a file of the worktree.
+    bool edit(const QByteArray& content);
     // The Relay hints a change and answers that linkedRunner took the job.
     void assign();
     // A signed offer of linkedRunner on connection `n`, its channels opened and `hello` sent.
