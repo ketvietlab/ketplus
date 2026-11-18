@@ -296,11 +296,16 @@ using ignored gitlinks/replacement trees. Required full Pro checks still apply.
 
 Team reply/worktree diagnostics use `ketplus_team_reply_tests`. Its existing
 owner-worktree and resume-Git assertions retain their conditions and timeouts;
-on failure they report bounded synthetic task-history/worktree-error metadata,
+on failure they read up to eight `team.task.get` pages (`history_limit=6`) and
+report bounded synthetic task-history/worktree-error metadata,
 owner state/context/turn counters and pending approval kinds. Approval arguments,
 prompts and auth fields are excluded; a failed approval-page read is distinguished
-from an empty page. `diagnosticsExcludeInputsAndBoundHistory` checks the projection
-and actual read-only collector. For order-sensitive failures, preserve the failed
+from an empty page. History totals come from the page API, with separate read
+status/error metadata; a summary or failed read must not appear to be empty
+history. `diagnosticsExcludeInputsAndBoundHistory` checks the projection and
+read status; `collectorReadsRealWorktreeFailureHistory` creates a real fixture
+worktree-switch refusal and verifies its paged history/error through the actual
+collector. For order-sensitive failures, preserve the failed
 log and run a bounded sequence of relevant predecessors (`team_flow`, `team_goal`,
 `team_title`, then `team_reply`) sequentially, recording source/binary identity and
 resource/concurrency metadata. A passing isolated run does not classify an earlier

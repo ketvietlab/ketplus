@@ -33,12 +33,16 @@ inline QJsonObject failureMetadata(const QString& phase, const QJsonObject& team
                 row.insert("worktree_error", text(entry.value("text").toString(), 384));
             history.append(row);
         }
-        tasks.append(QJsonObject{{"id", text(task.value("id").toString())},
-                                 {"owner", text(task.value("owner").toString())},
-                                 {"state", text(task.value("state").toString(), 40)},
-                                 {"worktree", text(task.value("worktree").toString(), 256)},
-                                 {"history_total", entries.size()},
-                                 {"history", history}});
+        tasks.append(QJsonObject{
+            {"id", text(task.value("id").toString())},
+            {"owner", text(task.value("owner").toString())},
+            {"state", text(task.value("state").toString(), 40)},
+            {"worktree", text(task.value("worktree").toString(), 256)},
+            {"history_total", task.value("history_total").toInteger(-1)},
+            {"history_start", task.value("history_start").toInteger(-1)},
+            {"history_read_ok", task.value("history_read_ok").toBool()},
+            {"history_read_error_code", text(task.value("history_read_error_code").toString(), 64)},
+            {"history", history}});
     }
     QJsonArray sessions;
     for (const auto& value : owners) {

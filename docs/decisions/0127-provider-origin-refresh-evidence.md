@@ -1282,3 +1282,29 @@ The final approval-read status/collector additions were then validated by a
 targeted rebuild and the projection/collector case alone (three passing QtTest
 entries, 1.205 seconds). Public-tree hygiene passed four tests; formatting and
 diff checks passed. No extra reproduction attempt or full Pro rerun followed A1.
+
+Review of `e5776000` found a diagnostic defect: `team.get` returns task summaries
+without history (ADR 0115), so the collector could not retain real worktree errors
+and inferred a misleading zero total. Injected projection input did not test that
+API boundary. The corrected collector reads at most eight `team.task.get` pages
+with `history_limit=6`, preserves their actual total/start and separate read
+status/error, and reports an unknown total for a failed read. Its end-to-end
+regression creates a task history longer than one page, holds a fake Claude
+permission request and starts the outbox so the real worktree-switch refusal is
+recorded. It verifies the exact normalized error, actual history total and pending
+approval metadata through the collector rather than injecting history into the
+projection. The focused projection/collector regressions pass four QtTest entries
+in 1.543 seconds in the original Pro Debug `-g`, Desktop-enabled configuration.
+
+One subsequent Pro control (B1) ran `team_flow` → `team_goal` → `team_title` →
+the instrumented `team_reply`, sequentially with no other author-owned suite
+running. All phases passed (6.107, 0.347, 13.075 and 28.301 seconds respectively;
+TeamReply reported eleven passing QtTest entries). Source snapshots/patch,
+executable hashes, selected Pro configuration, environment metadata and per-phase
+resource/process snapshots were recorded before execution. The two original
+failure cases and the actual-history collector regression all passed. Automatic
+probes stopped after this one Pro control; no paired baseline build was warranted
+without a reproduced failure. This passing control and the corrected diagnostics
+are decision evidence for leader/reviewer assessment, not a replacement for the
+original failed full run or an assertion that its cause is known. No new model
+request or full Pro rerun was made; the additional Cursor budget remains 3/10.
