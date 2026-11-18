@@ -90,8 +90,8 @@ struct Joined {
         events = std::make_unique<QSignalSpy>(host.get(), &SessionHost::eventReady);
         host->setRemoteJobs(entry.get());
     }
-    // A daemon restart: the host and its runtime first, then the remote jobs, which end or keep
-    // their records before the host gets their entry, in the order the daemon starts them.
+    // A daemon restart: the host and its runtime first, running before the remote jobs are back;
+    // then the remote jobs, which end or keep their records before the host gets their entry.
     void restart() {
         host->setRemoteJobs(nullptr);
         adapter->stop(); // the provider of the stopped daemon goes with it
@@ -99,10 +99,25 @@ struct Joined {
         entry.reset();
         adapter = std::make_unique<CodexAdapter>(codex);
         host = std::make_unique<SessionHost>(journal.get(), adapter.get());
-        e->h.build();
-        e->h.clock.due.clear(); // the timers of the stopped daemon end with it
-        e->h.jobs->restore();
+        QTest::qWait(100);
+        restore();
         attach();
+    }
+    // The remote jobs service stops and starts again under the running host: the host loses
+    // their entry, the new remote jobs end or keep their records, then the host gets the new
+    // entry. `between` runs before it does.
+    void restartRemoteJobs(const std::function<void()>& between = {}) {
+        host->setRemoteJobs(nullptr);
+        entry.reset();
+        restore();
+        if (between)
+            between();
+        attach();
+    }
+    void restore() {
+        e->h.build();
+        e->h.clock.due.clear(); // the timers of the stopped remote jobs end with them
+        e->h.jobs->restore();
     }
 
     QJsonObject run(const QString& type, const QJsonObject& payload = {},
@@ -229,15 +244,36 @@ struct Joined {
         return count("SELECT count(*) FROM managed_job_outbox WHERE task_id='" + id + "'");
     }
     int rows(const QString& table) { return count("SELECT count(*) FROM " + table); }
-    // The host's tasks.changed events naming `id` since the last attach.
-    int changes(const QString& id) {
+    // The host's tasks.changed events since the last attach that list `id`, in `state` with its
+    // completion `completion` when those are given.
+    int changes(const QString& id, const QString& state = {}, const QString& completion = {}) {
         int found = 0;
         for (const QList<QVariant>& event : *events) {
             const QJsonObject body = event.value(0).toJsonObject();
             if (body.value("event_type") != "tasks.changed")
                 continue;
-            for (const auto value : body.value("payload").toObject().value("tasks").toArray())
-                found += value.toObject().value("task_id") == id ? 1 : 0;
+            for (const auto value : body.value("payload").toObject().value("tasks").toArray()) {
+                const QJsonObject task = value.toObject();
+                found += task.value("task_id") == id &&
+                                 (state.isEmpty() || task.value("state") == state) &&
+                                 (completion.isEmpty() ||
+                                  task.value("completion").toObject().value("status") == completion)
+                             ? 1
+                             : 0;
+            }
+        }
+        return found;
+    }
+    // The completions of `id` the owner session was given since the last attach.
+    int deliveries(const QString& id) {
+        int found = 0;
+        for (const QList<QVariant>& event : *events) {
+            const QJsonObject body = event.value(0).toJsonObject();
+            found += body.value("event_type") == "user.message" &&
+                             body.value("session_id") == "owner" &&
+                             body.value("payload").toObject().value("background_task_id") == id
+                         ? 1
+                         : 0;
         }
         return found;
     }

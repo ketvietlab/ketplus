@@ -100,21 +100,31 @@ class ManagedTaskRemoteJobsTest final : public QObject {
         QVERIFY(j.until([&] { return j.completions(id) == 1; }));
     }
 
-    // A restart ends a job no runner took before the runtime gets the remote jobs: the runtime
-    // reads the ended task when it does, publishes it once, stops pumping it and completes it
-    // once.
-    void aRestartEndsAnUnsentJobAndTheRuntimeLetsItGo() {
+    // F2: the remote jobs service restarts under a running host and ends a job no runner took
+    // while the runtime holds no entry. The runtime reads the ended task when it gets the new
+    // entry: it publishes it once, lets it go, stops pumping, and the task completes once.
+    void aRemoteJobsRestartEndsAnUnsentJobAndTheRuntimeLetsItGo() {
         Joined j;
         const QString id = j.queued();
         QVERIFY(!id.isEmpty());
-        j.restart();
+        bool heldLive = false;
+        QString ended;
+        j.restartRemoteJobs([&] {
+            heldLive = j.runtime()->isLive(id) && j.runtime()->isPumping();
+            ended = j.state(id);
+        });
+        QCOMPARE(ended, QStringLiteral("interrupted")); // before the runtime heard of it
+        QVERIFY(heldLive);
         QVERIFY(j.until([&] { return j.state(id) == "interrupted"; }));
         QCOMPARE(j.task(id).value("reason").toString(), QStringLiteral("daemon_restarted"));
         QVERIFY(j.until([&] { return !j.runtime()->isPumping(); }));
         QVERIFY(!j.runtime()->isLive(id));
         QVERIFY(j.until([&] { return j.completions(id) == 1; }));
         QTest::qWait(600);
-        QCOMPARE(j.changes(id), 1);
+        QCOMPARE(j.changes(id, QStringLiteral("interrupted"), QStringLiteral("pending")), 1);
+        QCOMPARE(j.changes(id, QStringLiteral("interrupted"), QStringLiteral("delivered")), 1);
+        QCOMPARE(j.changes(id), 2); // the end, then its completion delivered
+        QCOMPARE(j.deliveries(id), 1);
         QCOMPARE(j.completions(id), 1);
         QCOMPARE(j.e->h.relay.pending(QStringLiteral("cancel")), 1);
     }
