@@ -9,4 +9,11 @@ qt_add_executable(ketplus_runner_pairing_tests RunnerPairingTest.cpp)
 ketplus_enable_warnings(ketplus_runner_pairing_tests)
 target_link_libraries(ketplus_runner_pairing_tests PRIVATE Qt6::Test ketplus_runner_pairing)
 add_test(NAME ketplus_runner_pairing_tests COMMAND ketplus_runner_pairing_tests)
+
+# Runner peer protocol frames: round trips, limits, malformed input and routing; no network.
+qt_add_executable(ketplus_runner_protocol_tests
+    RunnerProtocolTest.cpp RunnerProtocolLimitsTest.cpp RunnerProtocolTest.h)
+ketplus_enable_warnings(ketplus_runner_protocol_tests)
+target_link_libraries(ketplus_runner_protocol_tests PRIVATE Qt6::Test ketplus_runner_protocol)
+add_test(NAME ketplus_runner_protocol_tests COMMAND ketplus_runner_protocol_tests)
 ketplus_tests_offscreen()

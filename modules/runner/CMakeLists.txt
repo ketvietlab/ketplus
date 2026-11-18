@@ -39,3 +39,24 @@ target_include_directories(ketplus_runner_pairing PUBLIC
     "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>"
 )
 ketplus_enable_warnings(ketplus_runner_pairing)
+
+# Runner peer protocol frames: types, JSON encode/decode and limit checks.
+add_library(ketplus_runner_protocol STATIC
+    src/protocol/Capabilities.h
+    src/protocol/ErrorCodes.cpp
+    src/protocol/ErrorCodes.h
+    src/protocol/FrameDecode.cpp
+    src/protocol/FrameEncode.cpp
+    src/protocol/FrameJson.h
+    src/protocol/FrameLimits.h
+    src/protocol/FrameRoutes.cpp
+    src/protocol/FrameRoutes.h
+    src/protocol/FrameRules.h
+    src/protocol/FrameValidation.cpp
+    src/protocol/Frames.h
+)
+target_link_libraries(ketplus_runner_protocol PUBLIC Qt6::Core)
+target_include_directories(ketplus_runner_protocol PUBLIC
+    "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>"
+)
+ketplus_enable_warnings(ketplus_runner_protocol)

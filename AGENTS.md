@@ -106,7 +106,8 @@ still takes colours or metrics from that stylesheet or from `ThemePalette`:
 - `modules/computer`: computer use settings and provider MCP launch.
 - `modules/runner`: runner job support; `src/snapshot` creates, packs and applies worktree
   snapshots with the system git; `src/pairing` holds the pairing token, fingerprints,
-  confirmation code, signed payloads and pin records shared by the daemon and the runner.
+  confirmation code, signed payloads and pin records shared by the daemon and the runner;
+  `src/protocol` encodes, decodes and checks the peer frames.
 - `tests`: Pro and cross-boundary integration tests.
 - `modules/accounts` and `modules/router`: reserved; create each only with its
   first real implementation.
