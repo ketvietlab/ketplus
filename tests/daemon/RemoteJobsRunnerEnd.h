@@ -126,9 +126,10 @@ struct EndToEnd {
     void assign();
     // A signed offer of linkedRunner on connection `n`, its channels opened and `hello` sent.
     RunnerEnd connect(int n, qint64 attempt = 1);
-    // Plays the runner until `until` holds or the time runs out: accepts the spec, wants and
-    // acknowledges the snapshot, then runs and sends `output` and an exit code of 0 when
-    // `runs` is set. Pumps the event loop and the harness's deferred work.
+    // Plays the runner until `until` holds or the time runs out: accepts the spec, answers
+    // `job.resume` as the runner does, wants and acknowledges the snapshot, then runs and sends
+    // `output` and an exit code of 0 when `runs` is set. Pumps the event loop and the harness's
+    // deferred work.
     bool play(RunnerEnd& end, const std::function<bool()>& until, bool runs = true);
 
     RemoteHarness h;
@@ -142,6 +143,7 @@ struct EndToEnd {
     QStringList seenTypes;
     QByteArray pack;
     QString packSha;
+    bool ready = false; // the runner sent snapshot.ready
     bool started = false;
     bool resultAcked = false;
 };

@@ -292,8 +292,11 @@ bool EndToEnd::play(RunnerEnd& end, const std::function<bool()>& until, const bo
     QElapsedTimer timer;
     timer.start();
     while (!until()) {
-        if (timer.elapsed() > 30'000)
+        if (timer.elapsed() > 30'000) {
+            qWarning() << "end to end: timed out; the runner saw" << seenTypes
+                       << "connection closed" << end.closed();
             return false;
+        }
         QCoreApplication::processEvents(QEventLoop::AllEvents, 10);
         h.run();
         for (const protocol::Frame& frame : end.take()) {
@@ -301,6 +304,12 @@ bool EndToEnd::play(RunnerEnd& end, const std::function<bool()>& until, const bo
             seenTypes.append(QString(protocol::frameType(frame)));
             if (const auto* spec = std::get_if<protocol::JobSpec>(&frame)) {
                 end.send(protocol::JobAccepted{spec->jobId, spec->attempt});
+            } else if (std::holds_alternative<protocol::JobResume>(frame)) {
+                // As the runner does: where the job is on the new connection.
+                if (started)
+                    end.send(protocol::JobStarted{linkedJob, utc(parts.clock.time)});
+                else
+                    end.send(protocol::JobAccepted{linkedJob, 1});
             } else if (const auto* offer = std::get_if<protocol::SnapshotOffer>(&frame)) {
                 if (offer->packSha256 != packSha) {
                     pack.clear();
@@ -331,6 +340,7 @@ bool EndToEnd::play(RunnerEnd& end, const std::function<bool()>& until, const bo
                 packSha.toLatin1())
                 return false;
             end.send(protocol::SnapshotReady{chunk.snapshotId});
+            ready = true;
             if (!runs)
                 continue;
             const QString now = utc(parts.clock.time);
