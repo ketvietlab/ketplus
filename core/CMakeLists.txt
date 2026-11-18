@@ -768,6 +768,13 @@ if(KETPLUS_CM_BUILD_TESTS)
     set_tests_properties(ketplus_terminal_tests PROPERTIES
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
     )
+    if(WIN32)
+        # Each test starts real cmd.exe shells whose cold start can take seconds; run in
+        # parallel with the rest of the suite they miss their wait windows.
+        set_tests_properties(ketplus_pty_backend_tests ketplus_terminal_tests PROPERTIES
+            RUN_SERIAL TRUE
+        )
+    endif()
 
     if(APPLE AND TARGET ketplus_terminal_app_ui)
         add_executable(ketplus_terminal_app_tests tests/TerminalAppTest.cpp)

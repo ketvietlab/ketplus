@@ -271,6 +271,10 @@ class ThemeInputTest : public QObject {
     void includesFromAFilesystemRoot() {
         // The whole drive (or "/") as the source root: the include prefix must not become
         // "C://" and every file below it must still resolve.
+        // Writes a scratch directory into the filesystem root (C:\ or /), so it only runs
+        // when asked for; a crash could leave that directory behind.
+        if (!qEnvironmentVariableIsSet("KETPLUS_TEST_WRITE_FILESYSTEM_ROOT"))
+            QSKIP("Set KETPLUS_TEST_WRITE_FILESYSTEM_ROOT=1 to test a filesystem-root source.");
         const QString root = QDir::rootPath();
         QTemporaryDir dir(QDir(root).filePath(QStringLiteral("ketplus-include-root-XXXXXX")));
         if (!dir.isValid())

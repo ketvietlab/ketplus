@@ -79,23 +79,30 @@ version for the same reason. No job in the matrix uses provider quota.
 `tools/windows/win-run.sh` (see `docs/development.md`, Windows) runs the Lite
 suite on a Windows build machine with MSVC 2022 and Qt 6.11:
 `cmake --preset lite-dev`, `cmake --build --preset lite-dev`, then
-`ctest --preset lite-dev -j4 --timeout 120`. All 28 Lite tests pass (`ketplus_pty_backend_tests` can miss its 20-second shell
-start-up window under `-j4`; run alone it passes). Two cases
-inside `ketplus_preview_tests` are skipped on Windows (QTest `SKIP`, which CTest
-does not list): `discoversMmdcInstalledByNvm` (the nvm layout and `HOME` are POSIX
-only) and `rendersMermaidAndOpensThePopup` (its fake `mmdc` is a `/bin/sh`
-script). Windows `mmdc` discovery and rendering are covered by the Mermaid task;
-that test must then set `USERPROFILE`, which `QDir::homePath()` reads on Windows,
-alongside `HOME`. On macOS all 29 Lite tests (one more than on Windows) pass with
-`QT_QPA_PLATFORM=offscreen ctest --preset lite-dev -j4`.
+`ctest --preset lite-dev -j4 --timeout 180`. All 28 Lite tests pass on Windows.
+The two tests that start real `cmd.exe` shells (`ketplus_pty_backend_tests`,
+`ketplus_terminal_tests`) are `RUN_SERIAL` there, because a cold shell start can
+exceed their wait windows when it competes with the rest of the suite.
+
+macOS runs 29 tests: `ketplus_terminal_app_tests` is built only on Apple
+platforms. Run it with `QT_QPA_PLATFORM=offscreen ctest --preset lite-dev -j4`.
+
+Two cases inside `ketplus_preview_tests` are skipped on Windows (QTest `SKIP`,
+which CTest does not list): `discoversMmdcInstalledByNvm` (the nvm layout and
+`HOME` are POSIX only) and `rendersMermaidAndOpensThePopup` (its fake `mmdc` is
+a `/bin/sh` script). Windows `mmdc` discovery and rendering are not covered yet;
+a Windows version of the first test must set `USERPROFILE`, which
+`QDir::homePath()` reads on Windows, alongside `HOME`.
+
 Open, edit and save, Git status and the Markdown preview are covered by
-automated offscreen tests that ran on Windows: `ketplus_lite_window_tests`
-(real Git repository opened in the window), `ketplus_tests` document save and
+automated offscreen tests that ran on Windows: `ketplus_lite_window_tests` (a
+real Git repository opened in the window), `ketplus_tests` document save,
 `ketplus_editor_file_refresh_tests`, `ketplus_git_tests`,
-`ketplus_git_changes_panel_tests` and `ketplus_preview_tests`. Theme includes from a
-drive root and from a UNC share (`\\localhost\C$`) run in `ketplus_theme_input_tests`. ConPTY terminal
-behavior depends on the Windows terminal task, and Mermaid rendering needs the
-external `mmdc` tool; neither is part of this build check.
+`ketplus_git_changes_panel_tests` and `ketplus_preview_tests`. Theme includes
+from a UNC share (`\\localhost\C$`) run in `ketplus_theme_input_tests`. The
+case with a filesystem root as the source (`C:\` or `/`) writes a scratch
+directory there, so it runs only with `KETPLUS_TEST_WRITE_FILESYSTEM_ROOT=1`
+and is skipped otherwise. Rendering Mermaid needs the external `mmdc` tool.
 
 Launching the app for a smoke check needs a desktop. An ssh session has none,
 so the default `windows` Qt platform plugin aborts at startup. Deploy the
