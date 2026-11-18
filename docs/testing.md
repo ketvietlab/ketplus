@@ -2211,6 +2211,34 @@ the Microsoft Store alias), and producer-flood timing (QProcess drains the pipe 
 Windows; its cause has not been measured. Fixtures that write exact byte counts switch stdout to
 binary mode (`BinaryStdio.h`), because the C runtime would otherwise add `\r`.
 
+## Pro tests on Windows
+
+`cmake --preset dev` builds the Pro tests under `tests/` on Windows (MSVC). Run the GUI ones with
+`QT_QPA_PLATFORM=offscreen`; `ctest` sets it. A test executable run by hand also lacks the
+environment `ctest` sets (`KETPLUS_BROWSER_TOOLS_CONFIG` and the like), so judge a result by
+`ctest -R <name> --output-on-failure`.
+
+Fixtures follow the daemon rules above: Python provider scripts go through `fixtureName()` and
+`finalizeScriptFixture()` (`tests/daemon/ScriptFixture.h`), and a fake executable is named `*.exe`.
+A Python fixture's log lines end in `\r\n`. `QSettings()` needs an organization name on Windows, so
+tests that read settings back call `isolateTestSettings()` (`tests/daemon/TestSettings.h`) or set one.
+`ketplus_agent_tests` needs more than 10 minutes on Windows (about 3 minutes elsewhere).
+
+Fixed for Windows: a path containment check compared a canonical path with `QDir::separator()`
+(a backslash) instead of `/`; `~CodexAppServer` called pending replies back into an
+`AgentSessionManager` that was already destroyed.
+
+Skipped inside a test on Windows, each with its reason in the test output: computer use (macOS app
+bundle only), symbolic-link fixtures (`QFile::link` makes a `.lnk`), the nvm install layout,
+file-mode assertions, the Unix-shell CLI fixtures of the Atlas tests, and layout checks that depend
+on text metrics (`SettingsStoragePageTest` narrow width, `SidebarTeamsTest` list width at 180 px,
+`TeamPageTest::longContentStaysInsideThePage`, two `TeamDialogsTest` tests,
+`RemoteControlViewTest` intro and sign-in font checks, `MachineEndToEndTest` picker label). These
+layout checks need a look on a real Windows desktop. Not diagnosed:
+`DesktopSessionDiscoveryTest::discoversAnotherClientThroughRealDaemon` (the unread marker is not
+set reliably after a quick select and select back). `ketplus_team_translation_catalog_tests` is
+registered only where a real Python 3 exists (Windows has only the Store alias).
+
 ## English chrome and multilingual team content (T30)
 
 See [the inventory](team-content-language.md). Run `ketplus_team_page_language_tests`,
