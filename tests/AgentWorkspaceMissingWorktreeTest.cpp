@@ -15,6 +15,10 @@
 #include <QtTest>
 
 void AgentWorkspaceViewTest::missingWorktreeKeepsHistoryAndCanStop() {
+#if defined(Q_OS_WIN)
+    QSKIP("Windows cannot remove a directory that a running process uses as its working "
+          "directory, so the worktree cannot be deleted under the running provider");
+#endif
     QTemporaryDir directory;
     QVERIFY(directory.isValid());
     const QString path = QDir(QFileInfo(directory.path()).canonicalFilePath()).filePath("worktree");
