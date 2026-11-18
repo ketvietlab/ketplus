@@ -1,8 +1,12 @@
 #include "snapshot/SealedGit.h"
 
 #include <QDir>
+#include <QMutex>
+#include <QMutexLocker>
 #include <QProcess>
 #include <QRegularExpression>
+#include <QSet>
+#include <QTemporaryDir>
 
 namespace ketplus::runner::snapshot {
 namespace {
@@ -125,7 +129,45 @@ Result<QString> SealedGit::checkVersion() const {
             ErrorCode::GitTooOld,
             QStringLiteral("%1 is older than the required %2").arg(text, minimumGitVersion())};
     }
+    // A version number does not say whether `git add` takes `attr:` pathspecs (the snapshot stages
+    // with them): Git for Windows 2.38 refuses them and 2.47 accepts them. Ask git once per
+    // program.
+    static QMutex mutex;
+    static QSet<QString> verified;
+    {
+        const QMutexLocker lock(&mutex);
+        if (verified.contains(m_tool.program))
+            return text;
+    }
+    if (const auto probe = probeAttributePathspecs(); !probe)
+        return probe.error();
+    const QMutexLocker lock(&mutex);
+    verified.insert(m_tool.program);
     return text;
+}
+
+Result<bool> SealedGit::probeAttributePathspecs() const {
+    QTemporaryDir directory;
+    if (!directory.isValid())
+        return Error{ErrorCode::Io, QStringLiteral("cannot create a temporary directory")};
+    const QString gitDir = directory.filePath(QStringLiteral("probe.git"));
+    const QString workTree = directory.filePath(QStringLiteral("work"));
+    QDir().mkpath(workTree);
+    if (const auto init = initBare(gitDir); !init)
+        return init.error();
+    GitRun run;
+    run.gitDir = gitDir;
+    run.workTree = workTree;
+    run.indexFile = directory.filePath(QStringLiteral("probe.index"));
+    run.arguments = {QStringLiteral("add"), QStringLiteral("--all"), QStringLiteral("--"),
+                     QStringLiteral(":(top,attr:!filter)")};
+    if (const auto added = this->run(run); !added) {
+        return Error{ErrorCode::GitTooOld,
+                     QStringLiteral("this git does not accept attr: pathspecs in `git add`, which "
+                                    "snapshots need (%1)")
+                         .arg(added.error().message)};
+    }
+    return true;
 }
 
 Result<GitOutput> SealedGit::run(const GitRun& run) const {

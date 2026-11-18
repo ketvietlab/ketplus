@@ -247,7 +247,7 @@ class SnapshotRetentionTest : public QObject {
     void aRefCommandThatHangsFails() {
 #if defined(Q_OS_WIN)
         QSKIP("The stand-in git is a sh script, which Windows cannot start directly.");
-#endif
+#else
         const QString fake = root_ + QStringLiteral("/hanging-git");
         write(fake, "#!/bin/sh\nexec sleep 60\n");
         QVERIFY(
@@ -266,6 +266,7 @@ class SnapshotRetentionTest : public QObject {
         QVERIFY(timer.elapsed() >= refCommandTimeoutMs - 500); // Git ran and was stopped
         QVERIFY(timer.elapsed() < refCommandTimeoutMs + 3'000);
         QVERIFY(!retention.confirmed(QStringLiteral("run-1"), workspaceKey));
+#endif
     }
 
     void storeRefsFollowTheJobAndTheRunner() {

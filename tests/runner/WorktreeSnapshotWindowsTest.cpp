@@ -9,9 +9,12 @@
 
 #include <QDir>
 #include <QFile>
+#include <QMap>
 #include <QProcess>
 #include <QTemporaryDir>
 #include <QTest>
+
+#include <optional>
 
 using namespace ketplus::runner::snapshot;
 
@@ -61,6 +64,28 @@ bool gitStagesWithAttributePathspecs() {
                 QStringLiteral(":(top,attr:!filter)")});
 }
 
+// Puts back the variables a case sets, so one case does not leak into the next.
+class EnvironmentGuard {
+  public:
+    explicit EnvironmentGuard(const QList<QByteArray>& names) {
+        for (const QByteArray& name : names)
+            saved_.insert(name, qEnvironmentVariableIsSet(name.constData())
+                                    ? std::optional<QByteArray>(qgetenv(name.constData()))
+                                    : std::nullopt);
+    }
+    ~EnvironmentGuard() {
+        for (auto it = saved_.cbegin(); it != saved_.cend(); ++it) {
+            if (it.value())
+                qputenv(it.key().constData(), *it.value());
+            else
+                qunsetenv(it.key().constData());
+        }
+    }
+
+  private:
+    QMap<QByteArray, std::optional<QByteArray>> saved_;
+};
+
 } // namespace
 
 class WorktreeSnapshotWindowsTest : public QObject {
@@ -76,7 +101,12 @@ class WorktreeSnapshotWindowsTest : public QObject {
         const QProcessEnvironment environment = SealedGit().environment();
         QCOMPARE(environment.value(QStringLiteral("GIT_CONFIG_GLOBAL")), QStringLiteral("NUL"));
         QCOMPARE(environment.value(QStringLiteral("GIT_CONFIG_SYSTEM")), QStringLiteral("NUL"));
-        QVERIFY(SealedGit().checkVersion().ok());
+        // A git that cannot stage with attr: pathspecs is reported as too old, not accepted.
+        const auto version = SealedGit().checkVersion();
+        if (gitStagesWithAttributePathspecs())
+            QVERIFY2(version.ok(), qPrintable(version.error().message));
+        else
+            QVERIFY(!version.ok() && version.error().code == ErrorCode::GitTooOld);
 #else
         QSKIP("Windows only.");
 #endif
@@ -126,6 +156,16 @@ class WorktreeSnapshotWindowsTest : public QObject {
                      "\n\tfsmonitor = " + touch.toUtf8() + "\n");
         config.close();
 
+        // Control: plain git does run the hostile hook here. Without this, a machine whose git
+        // cannot start sh scripts would leave the markers empty and the test would prove nothing.
+        QVERIFY(git(home, repo,
+                    {QStringLiteral("commit"), QStringLiteral("--allow-empty"),
+                     QStringLiteral("-qm"), QStringLiteral("control")}));
+        QVERIFY2(QFile::exists(markers + QStringLiteral("/pre-commit")),
+                 "the hostile hook did not run under plain git");
+        for (const QString& name : QDir(markers).entryList(QDir::Files | QDir::Hidden))
+            QVERIFY(QFile::remove(markers + QLatin1Char('/') + name));
+
         // And a hostile user: a global configuration with the same, plus an excludes file.
         QVERIFY(writeFile(home + QStringLiteral("/.gitignore-global"), "globally-ignored.txt\n"));
         const QString globalConfig = home + QStringLiteral("/.gitconfig");
@@ -133,6 +173,7 @@ class WorktreeSnapshotWindowsTest : public QObject {
                                             "\n\tfsmonitor = " + touch.toUtf8() +
                                             "\n\texcludesFile = " + home.toUtf8() +
                                             "/.gitignore-global\n\tautocrlf = true\n"));
+        const EnvironmentGuard guard({"HOME", "USERPROFILE", "GIT_CONFIG_GLOBAL"});
         qputenv("HOME", home.toUtf8());
         qputenv("USERPROFILE", home.toUtf8());
         qputenv("GIT_CONFIG_GLOBAL", globalConfig.toUtf8());
@@ -168,7 +209,7 @@ class WorktreeSnapshotWindowsTest : public QObject {
 #endif
     }
 
-    void applyingAnOlderSnapshotRemovesDroppedFilesEvenWhenReadOnly() {
+    void applyingANewerSnapshotRemovesDroppedFilesEvenWhenReadOnly() {
 #if defined(Q_OS_WIN)
         if (!gitStagesWithAttributePathspecs())
             QSKIP("Needs a Git whose `git add` accepts attr: pathspecs (Git for Windows 2.47+).");
