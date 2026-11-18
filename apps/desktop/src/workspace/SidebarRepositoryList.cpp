@@ -244,9 +244,24 @@ void SidebarRepositoryList::applyPresentation() {
         presentTeamFolders(held);
     }
     applyFilter();
-    for (QWidget* group : std::as_const(groups_))
-        if (group->layout() != nullptr)
-            group->layout()->activate();
+    const auto refreshLayout = [](QWidget* widget) {
+        if (widget != nullptr && widget->layout() != nullptr) {
+            widget->layout()->invalidate();
+            widget->layout()->activate();
+        }
+    };
+    // Refresh from the leaves up: hiding rows/Show more invalidates a guide's hint,
+    // but its ancestors do not receive that LayoutRequest until the next event turn.
+    // Measuring sooner retains the hidden content's height and spreads the surplus.
+    for (QWidget* folder : std::as_const(folders_)) {
+        refreshLayout(folder->findChild<ket::SidebarTreeGuide*>());
+        refreshLayout(folder);
+    }
+    for (QWidget* group : std::as_const(groups_)) {
+        refreshLayout(heldOf(group));
+        refreshLayout(group);
+    }
+    layout_->invalidate();
     layout_->activate();
     setFixedHeight(layout_->hasHeightForWidth() ? layout_->totalHeightForWidth(width())
                                                 : layout_->sizeHint().height());
