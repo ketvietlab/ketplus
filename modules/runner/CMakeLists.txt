@@ -7,6 +7,7 @@ add_library(ketplus_runner_snapshot STATIC
     src/snapshot/SealedGit.cpp
     src/snapshot/SealedGit.h
     src/snapshot/SnapshotResult.h
+    src/snapshot/SnapshotStore.cpp src/snapshot/SnapshotStore.h
     src/snapshot/WorkspaceApply.cpp
     src/snapshot/WorkspaceApply.h
     src/snapshot/WorkspaceStore.cpp
