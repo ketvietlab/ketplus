@@ -19,7 +19,8 @@ std::wstring argumentsOf(const std::wstring& commandLine) {
         if (index == std::wstring::npos)
             index = commandLine.size();
     }
-    while (index < commandLine.size() && (commandLine[index] == L' ' || commandLine[index] == L'\t'))
+    while (index < commandLine.size() &&
+           (commandLine[index] == L' ' || commandLine[index] == L'\t'))
         ++index;
     return commandLine.substr(index);
 }

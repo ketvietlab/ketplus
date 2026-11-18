@@ -1,3 +1,4 @@
+#include "ScriptFixture.h"
 #include "providers/acp/AcpAdapter.h"
 
 #include <QFile>
@@ -95,9 +96,7 @@ for line in sys.stdin:
     elif method is None and msg.get('id') == 'collision':
         note('answer', result=msg.get('result'))
 )PY");
-    file.close();
-    return QFile::setPermissions(path, QFileDevice::ReadOwner | QFileDevice::WriteOwner |
-                                           QFileDevice::ExeOwner);
+    return finalizeScriptFixture(file);
 }
 
 QJsonObject start(const QString& session, const QString& cwd, const QString& epoch,
@@ -138,7 +137,7 @@ class AcpSessionIsolationTest final : public QObject {
     void twoSessionsKeepHistoryAndIndependentProcesses() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const auto path = directory.filePath("fixture.py");
+        const auto path = directory.filePath(fixtureName("fixture"));
         QVERIFY(writeFixture(path));
         FixtureAdapter adapter(path);
         QSignalSpy eventSpy(&adapter, &ProviderAdapter::canonicalEvent);
@@ -212,7 +211,7 @@ class AcpSessionIsolationTest final : public QObject {
     void failedLoadNeverCreatesNewSession() {
         QFETCH(QString, resume);
         QTemporaryDir directory;
-        const auto path = directory.filePath("fixture.py");
+        const auto path = directory.filePath(fixtureName("fixture"));
         QVERIFY(writeFixture(path));
         FixtureAdapter adapter(path);
         bool completed = false;
@@ -234,7 +233,7 @@ class AcpSessionIsolationTest final : public QObject {
 
     void workerCrashDoesNotStopAnotherSession() {
         QTemporaryDir directory;
-        const auto path = directory.filePath("fixture.py");
+        const auto path = directory.filePath(fixtureName("fixture"));
         QVERIFY(writeFixture(path));
         FixtureAdapter adapter(path);
         QSignalSpy stoppedSpy(&adapter, &ProviderAdapter::stopped);
@@ -273,7 +272,7 @@ class AcpSessionIsolationTest final : public QObject {
 
     void staleReplyCannotReachReplacementWithReusedWireId() {
         QTemporaryDir directory;
-        const auto path = directory.filePath("fixture.py");
+        const auto path = directory.filePath(fixtureName("fixture"));
         QVERIFY(writeFixture(path));
         FixtureAdapter adapter(path);
         QSignalSpy requests(&adapter, &ProviderAdapter::requestReceived);

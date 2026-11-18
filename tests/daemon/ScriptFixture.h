@@ -23,7 +23,9 @@ inline QString fixtureName(const QString& name) {
 // closed or closable; on Windows its file name must end in `.exe` (use fixtureName()).
 inline bool finalizeScriptFixture(QFile& script) {
     script.close();
-#if defined(Q_OS_WIN)
+#if defined(Q_OS_WIN) && !defined(KETPLUS_SCRIPT_LAUNCHER)
+    return false; // No Python interpreter was found at configure time, so no launcher was built.
+#elif defined(Q_OS_WIN)
     const QString path = script.fileName();
     const QString source = path + QStringLiteral(".py");
     QFile::remove(source);

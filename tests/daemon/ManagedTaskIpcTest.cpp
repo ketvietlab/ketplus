@@ -65,8 +65,8 @@ class ManagedTaskIpcTest final : public QObject {
     void authenticatedAgentUsesBoundOwnerAndCompleteRegistry() {
         QTemporaryDir directory;
         const auto cwd = QFileInfo(directory.path()).canonicalFilePath();
-        QVERIFY(
-            writeFakeCodex(directory.filePath(fixtureName("fake-codex")), directory.filePath("provider.log")));
+        QVERIFY(writeFakeCodex(directory.filePath(fixtureName("fake-codex")),
+                               directory.filePath("provider.log")));
         LocalJournal journal(directory.filePath("journal.sqlite"));
         for (const auto& id : {"owner", "other"}) {
             StoredSession session;

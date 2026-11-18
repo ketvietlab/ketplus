@@ -1925,18 +1925,48 @@ before; they now run. Last full Windows run (`ctest --preset daemon-dev -j4 --ti
 163 tests, 156 pass, 7 do not (see below); the 40 fixture tests plus `ketplus_claude_sidecar_tests`
 were all disabled before. macOS and Linux are unchanged.
 
-Not passing in that run: `ketplus_daemon_journal_migration_recovery_tests` needs 4-6 minutes on
-NTFS, so it times out at 240 s and passes with a larger `--timeout`; `ketplus_peer_session_runner_tests` and
-the four `ketplus_snapshot_*` tests do not build on Windows yet (runner snapshot code, tracked
-separately). Disabled with a reason: `ketplus_claude_sidecar_posix_tests` (the Claude sidecar
-JavaScript tests that hang or fail under `node --test` on Windows: transcript, permissions,
-agent-tools, usage, compact-window, steer, fork, background-tasks, managed-background,
-model-catalog, review-guard, review-profile; the other sidecar files run in
-`ketplus_claude_sidecar_tests`) and `ketplus_acp_session_isolation_tests`.
+Not passing in that run:
 
-Skipped inside a test on Windows with `KETPLUS_SKIP_ON_WINDOWS(reason)`; the reason prints inthe test output. Needs a Windows port of the fixture: `TeamReplyTest` (three tests),`TeamTaskGitTest` (two) and `TeamDoneTest` (two) use a POSIX shell script as a fake `git` or`gh`. Not yet diagnosed (each prints its symptom): `DaemonWorktreeContextTest` (four tests: theprovider log has no `provider-input`, `steer-input` or `model-list` line, or the pendingquestion is not found), `AgentMessagingTest::agentConnectionsOnlyReachAgentOperations`,`CursorAdapterTest::findsTheCliInstalledAfterStartup`, `ProviderCompatibilityTest::probeCachesUntilTheExecutableChanges`, `SessionForkTest::destinationCreatedWhileProviderForkIsPendingIsPreserved`, `TeamReviewTest` and `TurnReviewTest` (the Codex review checks and fivereview-turn tests), `TeamStorageTest::theMainCheckoutIsRefused`, the `ordinary-prose`,`concurrent-only`, `ignored-gitlink` and `replaced-base-tree` rows of`TeamRoutingToolsTest::authenticatedToolsUseRealProducerThenHostLookupThenPolicy`,`TeamFindingRoutingTest::authenticatedClosureUsesRealProducerStoreAndReviewedRecord` (the remotebranch cannot be read and the test then crashes), `TeamAgentToolsTest::theLeadersFirstTurnCarries
-TheGoalAndItsInstructions` (hangs), `CodexSessionIsolationTest::twoSessionsKeepHistoryWhileOnlyOneProcessRefreshes`. By design: `ComputerProviderIntegrationTest::frontFollowsSettingsForEachProvider` (macOS app bundle path), `ProviderCompatibilityTest::prefersHomebrewUpdateForHomebrewInstalls` (Homebrew), `SessionForkTest::forkRequiresMediaOwnershipBeforeJournalCommit(source-unreadable)` (POSIX mode), `JournalStartupTest::startupBacklogCharacterization` (a 250 ms
-startup budget; SQLite commits are several times slower on NTFS).
+- `ketplus_daemon_journal_migration_recovery_tests` takes 4-6 minutes on NTFS, so it times out at
+  240 s; it passes with a larger `--timeout`. The slowness is under investigation.
+- `ketplus_peer_session_runner_tests` and the four `ketplus_snapshot_*` tests do not build on
+  Windows yet (runner snapshot code).
+- `ketplus_claude_sidecar_posix_tests` is disabled: it holds the Claude sidecar JavaScript tests
+  that hang or fail under `node --test` on Windows (transcript, permissions, agent-tools, usage,
+  compact-window, steer, fork, background-tasks, managed-background, model-catalog, review-guard
+  and review-profile). The other sidecar files run in `ketplus_claude_sidecar_tests`.
+
+Skipped inside a test on Windows with `KETPLUS_SKIP_ON_WINDOWS(reason)`; the reason prints in the
+test output.
+
+- The fixture is a POSIX shell script (a fake `git` or `gh`) that Windows cannot run:
+  `TeamReplyTest` (three tests), `TeamTaskGitTest` (two) and `TeamDoneTest` (two).
+- By design: `ComputerProviderIntegrationTest::frontFollowsSettingsForEachProvider` (macOS app
+  bundle path), `ProviderCompatibilityTest::prefersHomebrewUpdateForHomebrewInstalls`
+  (Homebrew), `SessionForkTest::forkRequiresMediaOwnershipBeforeJournalCommit` row
+  `source-unreadable` (POSIX mode) and `JournalStartupTest::startupBacklogCharacterization`
+  (a 250 ms startup budget; SQLite commits are several times slower on NTFS).
+- Under investigation, each prints its symptom:
+  - `DaemonWorktreeContextTest`, four tests: the provider log has no `provider-input`,
+    `steer-input` or `model-list` line, or the pending question is not found.
+  - `AgentMessagingTest::agentConnectionsOnlyReachAgentOperations`: a `daemon.hello` with an
+    agent token is not reported as an agent connection.
+  - `CursorAdapterTest::findsTheCliInstalledAfterStartup`: no executable is found after the
+    installer moves the CLI.
+  - `ProviderCompatibilityTest::probeCachesUntilTheExecutableChanges`: the probe reports a
+    status other than supported.
+  - `SessionForkTest::destinationCreatedWhileProviderForkIsPendingIsPreserved`: the destination
+    marker is not preserved.
+  - `TeamReviewTest` and `TurnReviewTest`: the Codex review checks and four review-turn tests.
+  - `TeamStorageTest::theMainCheckoutIsRefused`: the task worktree is not created.
+  - `TeamRoutingToolsTest::authenticatedToolsUseRealProducerThenHostLookupThenPolicy`, rows
+    `ordinary-prose`, `concurrent-only`, `ignored-gitlink` and `replaced-base-tree`: the git
+    evidence reports a stale revision.
+  - `TeamFindingRoutingTest::authenticatedClosureUsesRealProducerStoreAndReviewedRecord`: the
+    remote branch cannot be read and the test then crashes.
+  - `TeamAgentToolsTest::theLeadersFirstTurnCarriesTheGoalAndItsInstructions`: hangs.
+  - `CodexSessionIsolationTest::twoSessionsKeepHistoryWhileOnlyOneProcessRefreshes`: the
+    app-server shuts down before the refresh is counted.
 
 Skipped inside tests on Windows, each with its reason in the test source: fixtures that need POSIX
 symbolic links (`QFile::link` makes a `.lnk` shortcut), file-mode assertions (access is an ACL, see
