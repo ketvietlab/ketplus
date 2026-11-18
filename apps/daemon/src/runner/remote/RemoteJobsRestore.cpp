@@ -51,15 +51,17 @@ void RemoteJobs::restore() {
         << QStringLiteral("remote jobs restored live=%1").arg(liveTasks.size());
 }
 
-// interrupted, daemon_restarted, cleanup not_required; the owner hears it through the task's
-// completion, and the Relay is asked to cancel the job (a record without a job id submits
-// again with the same key to learn it).
+// interrupted, daemon_restarted, cleanup not_required; one the user was stopping ends cancelled,
+// user, as a stop does. The owner hears it through the task's completion, and the Relay is asked
+// to cancel the job (a record without a job id submits again with the same key to learn it).
 void RemoteJobs::endUnsent(const QList<jobs::RemoteJobRecord>& loaded) {
     for (const jobs::RemoteJobRecord& stored : loaded) {
         if (!unsent(stored))
             continue;
-        jobs::RemoteJobRecord next = jobs::endUndispatched(stored, jobs::state::interrupted,
-                                                           QStringLiteral("daemon_restarted"));
+        const bool stopping = stored.state == jobs::state::stopping;
+        jobs::RemoteJobRecord next = jobs::endUndispatched(
+            stored, stopping ? jobs::state::cancelled : jobs::state::interrupted,
+            stopping ? QStringLiteral("user") : QStringLiteral("daemon_restarted"));
         if (!store_.put(next, stored.revision)) {
             qCWarning(lcRemoteRestore).noquote()
                 << "remote job could not be ended after restart task=" + stored.taskId;

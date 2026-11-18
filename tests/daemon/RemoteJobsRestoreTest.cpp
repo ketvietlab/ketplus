@@ -67,6 +67,53 @@ class RemoteJobsRestoreTest final : public QObject {
         QVERIFY(!h.jobs->record(submitting) || h.jobs->record(submitting)->terminal());
     }
 
+    // A stop the runner never accepted: the restart finishes it as the stop it was, cancelled by
+    // the user, and the Relay cancel is repeated until answered.
+    void aStopTheRunnerNeverAcceptedEndsCancelledByTheUser() {
+        RemoteHarness h;
+        const QString sent = h.f.remoteTask();
+        QList<RemoteJobRecord> steps = syncingSteps(sent, QStringLiteral("job-h"), runnerA, {});
+        steps.removeLast(); // dispatched, never accepted
+        RemoteJobRecord stopping = steps.last();
+        stopping.state = state::stopping;
+        stopping.stopReason = QStringLiteral("user");
+        stopping.cleanupStatus = cleanup::pending;
+        steps << stopping;
+        QVERIFY(h.write(steps));
+        const QString queued = h.f.remoteTask();
+        steps = queuedSteps(queued, QStringLiteral("job-q"));
+        stopping = steps.last();
+        stopping.state = state::stopping;
+        stopping.stopReason = QStringLiteral("user");
+        stopping.cleanupStatus = cleanup::notRequired;
+        steps << stopping;
+        QVERIFY(h.write(steps));
+
+        h.build();
+        h.jobs->restore();
+        for (const QString& id : {sent, queued}) {
+            QCOMPARE(h.f.state(id), state::cancelled);
+            QCOMPARE(h.f.task(id).value("reason").toString(), QStringLiteral("user"));
+            QCOMPARE(h.f.task(id).value("cleanup_status").toString(), cleanup::notRequired);
+            QCOMPARE(outboxOf(h.f, id), 1);
+        }
+        QVERIFY(cancelled(h.relay, QStringLiteral("job-h")));
+        QVERIFY(cancelled(h.relay, QStringLiteral("job-q")));
+        QCOMPARE(h.relay.sent(QStringLiteral("cancel")), 2);
+        QVERIFY(h.relay.refuse(QStringLiteral("cancel"), QStringLiteral("network")));
+        QCOMPARE(h.run(1000), 1);
+        QCOMPARE(h.relay.sent(QStringLiteral("cancel")), 3);
+        QVERIFY(h.relay.refuse(QStringLiteral("cancel"), QStringLiteral("job_not_found")));
+        QVERIFY(h.relay.refuse(QStringLiteral("cancel"), QStringLiteral("job_not_found")));
+        QCOMPARE(h.run(60'000), 0);
+        QCOMPARE(h.relay.sent(QStringLiteral("cancel")), 3);
+
+        h.build();
+        h.jobs->restore();
+        QCOMPARE(outboxOf(h.f, sent), 1);
+        QCOMPARE(h.relay.sent(QStringLiteral("cancel")), 3);
+    }
+
     void aRelayCancelIsRepeatedUntilAnswered() {
         RemoteHarness h;
         const QString queued = h.f.remoteTask();

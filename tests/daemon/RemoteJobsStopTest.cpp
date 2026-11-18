@@ -4,9 +4,24 @@
 
 #include <QTest>
 
+#include <algorithm>
+
 using namespace remote_jobs_test;
 
 namespace {
+
+QStringList capturedLog;
+void captureLog(QtMsgType, const QMessageLogContext&, const QString& message) {
+    capturedLog.append(message);
+}
+
+// Every timer armed for `taskId`, of any kind.
+int armedFor(const remote_job_test::FakeClock& clock, const QString& taskId) {
+    int armed = 0;
+    for (const auto& [key, due] : clock.due)
+        armed += key.first == taskId ? 1 : 0;
+    return armed;
+}
 
 int outboxOf(LedgerFixture& f, const QString& taskId) {
     return f.count("SELECT count(*) FROM managed_job_outbox WHERE task_id='" + taskId + "'");
@@ -47,6 +62,13 @@ struct Running {
         end->send(protocol::JobStarted{linkedJob, utc(e.h.clock.time)});
         e.started = true;
         return e.h.jobs->record(id)->state == state::running;
+    }
+    // A new RemoteJobs on the same registry, as after a daemon restart.
+    void restart() {
+        e.h.build();
+        e.h.clock.due.clear(); // the timers of the stopped daemon end with it
+        e.h.clock.target = &e.h.jobs->coordinator();
+        e.h.jobs->restore();
     }
 };
 
@@ -148,6 +170,104 @@ class RemoteJobsStopTest final : public QObject {
         QVERIFY(r.e.play(second, [&] { return r.e.resultAcked; }));
         QCOMPARE(r.e.h.jobs->record(r.id)->state, state::completed);
         QCOMPARE(r.e.h.f.state(r.id), state::completed);
+        QCOMPARE(outboxOf(r.e.h.f, r.id), 1);
+    }
+
+    // needs_attention waits through a restart: no window, no Relay call, and only the user's
+    // acknowledgement moves it on.
+    void aRecordThatNeedsAttentionWaitsAcrossARestart() {
+        Running r;
+        QVERIFY(r.start(2 * 60 * 60 * 1000));
+        r.end->lose();
+        r.e.h.clock.advance(20 * 60 * 1000);
+        const auto before = r.e.h.jobs->record(r.id);
+        QCOMPARE(before->state, state::needsAttention);
+        const int relayCalls = int(r.e.h.relay.log.size());
+
+        r.restart();
+        QCOMPARE(r.e.h.jobs->record(r.id), before);
+        QCOMPARE(r.e.h.f.state(r.id), state::needsAttention);
+        QCOMPARE(armedFor(r.e.h.clock, r.id), 0);
+        QCOMPARE(int(r.e.h.relay.log.size()), relayCalls);
+        r.e.h.clock.advance(60 * 60 * 1000);
+        QCOMPARE(r.e.h.jobs->record(r.id)->state, state::needsAttention);
+
+        QVERIFY(r.e.h.jobs->resolveCleanup(r.id, QStringLiteral("client-1")).ok());
+        QCOMPARE(r.e.h.jobs->record(r.id)->state, state::interrupted);
+        QCOMPARE(r.e.h.f.state(r.id), state::interrupted);
+        QCOMPARE(outboxOf(r.e.h.f, r.id), 1);
+    }
+
+    // needs_attention before job.accepted: the spec lived only in memory, so the runner that
+    // comes back after a restart is closed with spec_unavailable and the record stays.
+    void aRecordThatNeedsAttentionWithoutItsSpecClosesTheRunner() {
+        EndToEnd e;
+        const QString id = e.submit(2 * 60 * 60 * 1000);
+        QVERIFY(!id.isEmpty());
+        e.h.clock.target = &e.h.jobs->coordinator();
+        e.assign();
+        e.holdSpec = true;
+        RunnerEnd first = e.connect(1);
+        QVERIFY(e.play(first, [&] { return e.seenTypes.contains("job.spec"); }, false));
+        first.lose();
+        e.h.clock.advance(20 * 60 * 1000);
+        const auto before = e.h.jobs->record(id);
+        QCOMPARE(before->state, state::needsAttention);
+        QVERIFY(before->dispatched());
+        QCOMPARE(before->placement, placement::assigned);
+
+        e.h.build();
+        e.h.clock.due.clear();
+        e.h.clock.target = &e.h.jobs->coordinator();
+        e.h.jobs->restore();
+        QCOMPARE(e.h.jobs->record(id), before);
+        const int relayCalls = int(e.h.relay.log.size());
+
+        capturedLog.clear();
+        const auto previous = qInstallMessageHandler(captureLog);
+        e.seen.clear();
+        e.seenTypes.clear();
+        e.holdSpec = false;
+        RunnerEnd second = e.connect(2);
+        const bool closed = e.play(second, [&] { return second.closed(); }, false);
+        qInstallMessageHandler(previous);
+        QVERIFY(closed);
+        QVERIFY(framesOf<protocol::JobSpec>(e.seen).isEmpty());
+        QVERIFY(framesOf<protocol::JobResume>(e.seen).isEmpty());
+        QVERIFY(std::any_of(capturedLog.cbegin(), capturedLog.cend(), [](const QString& line) {
+            return line.contains(QStringLiteral("closed: spec_unavailable"));
+        }));
+        QCOMPARE(e.h.jobs->record(id), before);
+        QCOMPARE(e.h.f.state(id), state::needsAttention);
+        QCOMPARE(int(e.h.relay.log.size()), relayCalls);
+        QCOMPARE(outboxOf(e.h.f, id), 0);
+    }
+
+    // A stop the runner accepted goes on after a restart: the window counts again, and the
+    // runner that comes back is resumed and told to cancel.
+    void aStopTheRunnerAcceptedGoesOnAfterARestart() {
+        Running r;
+        QVERIFY(r.start(2 * 60 * 60 * 1000));
+        QVERIFY(r.e.h.jobs->stop(r.id).ok());
+        QCOMPARE(r.e.h.jobs->record(r.id)->state, state::stopping);
+        r.end->lose();
+
+        r.restart();
+        QCOMPARE(r.e.h.jobs->record(r.id)->state, state::stopping);
+        QVERIFY(r.e.h.clock.isArmed(r.id, JobTimer::PeerAbsent));
+        QCOMPARE(outboxOf(r.e.h.f, r.id), 0);
+
+        r.e.seen.clear();
+        r.e.seenTypes.clear();
+        RunnerEnd second = r.e.connect(2);
+        QVERIFY(r.e.play(
+            second, [&] { return !framesOf<protocol::JobCancel>(r.e.seen).isEmpty(); }, false));
+        QCOMPARE(r.e.seenTypes.mid(0, 2), (QStringList{"welcome", "job.resume"}));
+        QCOMPARE(framesOf<protocol::JobCancel>(r.e.seen).first().reason, QStringLiteral("user"));
+        second.send(resultOf(QStringLiteral("cancelled")));
+        QVERIFY(r.e.play(second, [&] { return r.e.resultAcked; }));
+        QCOMPARE(r.e.h.jobs->record(r.id)->state, state::cancelled);
+        QCOMPARE(r.e.h.f.state(r.id), state::cancelled);
         QCOMPARE(outboxOf(r.e.h.f, r.id), 1);
     }
 
