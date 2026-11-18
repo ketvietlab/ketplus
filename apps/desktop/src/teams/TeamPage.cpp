@@ -318,6 +318,7 @@ void TeamPage::rebuild() {
         buildHeading(*team);
         buildBanners(*team);
         buildDecisions(*team);
+        buildDecisionTrail(*team);
         buildTasks(*team);
         buildDoneWorktrees(*team);
         buildMembers(*team);

@@ -5,6 +5,7 @@
 #include "KetIcon.h"
 #include "KetTokens.h"
 #include "teams/TeamCommands.h"
+#include "teams/TeamDecisionView.h"
 #include "teams/TeamDirectory.h"
 #include "teams/TeamMenus.h"
 #include "teams/TeamPage.h"
@@ -412,7 +413,9 @@ void TeamPage::buildUpdates() {
     for (qsizetype index = 0; index < updates.size(); ++index) {
         const QJsonObject& update = updates.at(index);
         const QString kind = update.value(QStringLiteral("kind")).toString();
-        const bool warning = kind == QStringLiteral("outside_lane");
+        const bool warning = kind == QStringLiteral("outside_lane") ||
+                             kind == QStringLiteral("review_interrupted") ||
+                             kind == QStringLiteral("review_tampered");
         auto* row = new team_page::Row(panel, index > 0);
         row->setObjectName(QStringLiteral("teamUpdateRow"));
         auto* line = new QHBoxLayout(row);
@@ -427,12 +430,9 @@ void TeamPage::buildUpdates() {
                               warning ? u"warning" : u"text-secondary", row),
                         0, Qt::AlignTop);
         // A report is a paragraph: three lines, and the rest on request.
-        auto* text = new Text(update.value(QStringLiteral("text")).toString(), row);
+        auto* text = new Text(TeamDecisionView::eventText(update), row);
         text->setObjectName(QStringLiteral("teamUpdate"));
-        const QString actor = update.value(QStringLiteral("actor")).toString();
-        QStringList from{actor == QStringLiteral("daemon") ? tr("ketPlus")
-                         : actor == QStringLiteral("user") ? tr("You")
-                                                           : memberName(team, actor)};
+        QStringList from{TeamDecisionView::actorName(team, update.value("actor"))};
         if (const QString task = update.value(QStringLiteral("task_id")).toString();
             !task.isEmpty())
             from.append(task);

@@ -165,6 +165,8 @@ ketplus_add_gui_test(ketplus_copilot_presentation_tests CopilotPresentationTest.
 target_link_libraries(ketplus_copilot_presentation_tests PRIVATE
     Qt6::Test Qt6::Quick ketplus_ai ketplus_desktop_shell)
 ketplus_add_gui_test(ketplus_team_page_tests TeamPageTest.cpp)
+ketplus_add_gui_test(ketplus_team_decision_view_tests TeamDecisionViewTest.cpp)
+target_link_libraries(ketplus_team_decision_view_tests PRIVATE Qt6::Test ketplus_desktop_shell)
 ketplus_add_gui_test(ketplus_team_goal_form_tests TeamGoalFormTest.cpp)
 target_link_libraries(ketplus_team_goal_form_tests PRIVATE Qt6::Test ketplus_desktop_shell)
 ketplus_add_gui_test(ketplus_team_commands_tests TeamCommandsTest.cpp)

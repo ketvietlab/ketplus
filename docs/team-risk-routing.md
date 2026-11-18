@@ -115,6 +115,49 @@ verdict or user approval. Legacy tasks without a decision retain their prior sha
 
 ## Requests
 
+### Desktop decision trail
+
+The team page links each task's decision/review trail and shows the latest advisory
+leader decision when supplied. Task detail presents the three version-1 routes,
+recorded actor, risk, gate reason, assessed revision, evidence references and next
+step. The record is always labelled historical: it is neither a reviewer verdict
+nor user approval, and a different current head is explicitly identified. Individual
+check results and receipt freshness are not present in this audit contract, so the
+view states that they are unavailable rather than inventing passed checks.
+
+Structured findings keep severity, mandatory requirements, closure conditions and
+follow-up owners visible. Recorded fixes/deferrals remain distinct from reviewer
+approval. Unknown formats and legacy reports cannot be presented as closed findings.
+The displayed content round comes from daemon metadata; interrupted reviews do not
+increment it. Timeline interruptions never accuse a reviewer of changing a branch;
+only the distinct source-change event is described as an invalidated review.
+
+This is a read-only trail, not another approval flow. Existing task/user-decision
+controls continue through the daemon and show its refusals. Desktop and paired user
+clients have no leader-agent identity, so this screen does not offer route selection,
+receipt verification or finding-resolution actions that their protocol forbids.
+No leader-review opt-in is inferred from old routing decisions. Application controls,
+helper text and status labels stay English under every locale and team language.
+User/generated team content keeps its original language. Refresh and legacy records
+use the existing transport.
+
+The paired projection adds optional read-only `head_commit`, `reviewer`,
+`review_block`, `round_limit`, validated `review_findings` and the team's latest
+`last_routing_decision`. Finding actors/reviewer use the existing public actor
+shape; unrecognized identities are marked unknown. Opaque evidence references
+remain references. Summary records carry only finding metadata (`summary_only` and
+`finding_total`); opening a task fetches the full validated findings. Detail replies
+are fenced by task revision/head and discarded when a newer refresh is pending.
+Invalid finding records render as unresolved legacy reports.
+History metadata is whitelisted by kind: bounded review round, explicit
+`content_round_counted`, derived `source_unavailable`, and known state transitions.
+Source snapshots, paths, command output and unrelated `data` are not copied.
+When a received history page contains a complete ordered queue-entry/handoff pair
+for the current round, the task shows that recorded queue wait; partial pages
+produce no estimate. Nothing is inferred from the current clock or review duration.
+
+## Request fields
+
 All calls require `expected_team_revision` and a bounded machine `reason` matching
 `[a-z][a-z0-9_]{0,99}`. `route` defaults to `auto`; supported explicit values are
 `leader_direct`, `developer_leader`, `developer_reviewer`. Unknown fields/types/kinds
