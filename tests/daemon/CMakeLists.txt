@@ -413,31 +413,45 @@ endif()
 
 find_program(KETPLUS_SIDECAR_TEST_NODE node)
 if(KETPLUS_SIDECAR_TEST_NODE)
-    add_test(NAME ketplus_claude_sidecar_tests COMMAND "${KETPLUS_SIDECAR_TEST_NODE}" --test
-        "${PROJECT_SOURCE_DIR}/apps/daemon/providers/claude-sidecar/test/authentication.test.mjs"
-        "${PROJECT_SOURCE_DIR}/apps/daemon/providers/claude-sidecar/test/input.test.mjs"
-        "${PROJECT_SOURCE_DIR}/apps/daemon/providers/claude-sidecar/test/process-barrier.test.mjs"
-        "${CMAKE_CURRENT_SOURCE_DIR}/claude-sidecar/transcript.test.mjs"
-        "${CMAKE_CURRENT_SOURCE_DIR}/claude-sidecar/permissions.test.mjs"
-        "${CMAKE_CURRENT_SOURCE_DIR}/claude-sidecar/agent-tools.test.mjs"
-        "${CMAKE_CURRENT_SOURCE_DIR}/claude-sidecar/usage.test.mjs"
-        "${CMAKE_CURRENT_SOURCE_DIR}/claude-sidecar/session-usage.test.mjs"
-        "${CMAKE_CURRENT_SOURCE_DIR}/claude-sidecar/compact-window.test.mjs"
-        "${CMAKE_CURRENT_SOURCE_DIR}/claude-sidecar/steer.test.mjs"
-        "${CMAKE_CURRENT_SOURCE_DIR}/claude-sidecar/fork.test.mjs"
-        "${CMAKE_CURRENT_SOURCE_DIR}/claude-sidecar/background-tasks.test.mjs"
-        "${CMAKE_CURRENT_SOURCE_DIR}/claude-sidecar/managed-background.test.mjs"
-        "${CMAKE_CURRENT_SOURCE_DIR}/claude-sidecar/managed-transport.test.mjs"
-        "${CMAKE_CURRENT_SOURCE_DIR}/claude-sidecar/background-sdk-offline.test.mjs"
-        "${CMAKE_CURRENT_SOURCE_DIR}/claude-sidecar/model-catalog.test.mjs"
-        "${PROJECT_SOURCE_DIR}/apps/daemon/providers/claude-sidecar/test/session-delete.test.mjs"
-        "${PROJECT_SOURCE_DIR}/apps/daemon/providers/claude-sidecar/test/review-guard.test.mjs"
-        "${PROJECT_SOURCE_DIR}/apps/daemon/providers/claude-sidecar/test/review-profile.test.mjs")
+    set(KETPLUS_SIDECAR_DAEMON_TESTS "${PROJECT_SOURCE_DIR}/apps/daemon/providers/claude-sidecar/test")
+    set(KETPLUS_SIDECAR_TESTS "${CMAKE_CURRENT_SOURCE_DIR}/claude-sidecar")
+    set(KETPLUS_SIDECAR_PORTABLE_FILES
+        "${KETPLUS_SIDECAR_DAEMON_TESTS}/authentication.test.mjs"
+        "${KETPLUS_SIDECAR_DAEMON_TESTS}/input.test.mjs"
+        "${KETPLUS_SIDECAR_DAEMON_TESTS}/process-barrier.test.mjs"
+        "${KETPLUS_SIDECAR_DAEMON_TESTS}/session-delete.test.mjs"
+        "${KETPLUS_SIDECAR_TESTS}/session-usage.test.mjs"
+        "${KETPLUS_SIDECAR_TESTS}/managed-transport.test.mjs"
+        "${KETPLUS_SIDECAR_TESTS}/background-sdk-offline.test.mjs")
+    # These hang or fail on Windows under `node --test` (they spawn POSIX helpers and assume
+    # POSIX paths and shells), so there they form a separate, disabled test.
+    set(KETPLUS_SIDECAR_POSIX_FILES
+        "${KETPLUS_SIDECAR_TESTS}/transcript.test.mjs"
+        "${KETPLUS_SIDECAR_TESTS}/permissions.test.mjs"
+        "${KETPLUS_SIDECAR_TESTS}/agent-tools.test.mjs"
+        "${KETPLUS_SIDECAR_TESTS}/usage.test.mjs"
+        "${KETPLUS_SIDECAR_TESTS}/compact-window.test.mjs"
+        "${KETPLUS_SIDECAR_TESTS}/steer.test.mjs"
+        "${KETPLUS_SIDECAR_TESTS}/fork.test.mjs"
+        "${KETPLUS_SIDECAR_TESTS}/background-tasks.test.mjs"
+        "${KETPLUS_SIDECAR_TESTS}/managed-background.test.mjs"
+        "${KETPLUS_SIDECAR_TESTS}/model-catalog.test.mjs"
+        "${KETPLUS_SIDECAR_DAEMON_TESTS}/review-guard.test.mjs"
+        "${KETPLUS_SIDECAR_DAEMON_TESTS}/review-profile.test.mjs")
+    if(WIN32)
+        add_test(NAME ketplus_claude_sidecar_tests COMMAND "${KETPLUS_SIDECAR_TEST_NODE}" --test
+            ${KETPLUS_SIDECAR_PORTABLE_FILES})
+        add_test(NAME ketplus_claude_sidecar_posix_tests COMMAND "${KETPLUS_SIDECAR_TEST_NODE}" --test
+            ${KETPLUS_SIDECAR_POSIX_FILES})
+        set_tests_properties(ketplus_claude_sidecar_tests PROPERTIES LABELS "windows-script-fixture")
+        set_tests_properties(ketplus_claude_sidecar_posix_tests PROPERTIES DISABLED TRUE
+            LABELS "windows-script-fixture")
+    else()
+        add_test(NAME ketplus_claude_sidecar_tests COMMAND "${KETPLUS_SIDECAR_TEST_NODE}" --test
+            ${KETPLUS_SIDECAR_PORTABLE_FILES} ${KETPLUS_SIDECAR_POSIX_FILES})
+    endif()
     add_test(NAME ketplus_codex_contract_tests COMMAND "${KETPLUS_SIDECAR_TEST_NODE}" --test
         "${CMAKE_CURRENT_SOURCE_DIR}/../providers/codex/contract.test.mjs")
-    if(WIN32)
-        set_tests_properties(ketplus_claude_sidecar_tests PROPERTIES LABELS "windows-script-fixture")
-    endif()
 endif()
 if(KETPLUS_BUILD_DESKTOP)
     ketplus_add_daemon_test(ketplus_provider_transcript_tests ProviderTranscriptTest.cpp)

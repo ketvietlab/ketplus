@@ -1,6 +1,7 @@
 #include "ComputerToolLaunch.h"
 #include "FakeClaude.h"
 #include "FakeCursor.h"
+#include "TestPaths.h"
 #include "providers/ClaudeAdapter.h"
 #include "providers/CursorAdapter.h"
 
@@ -59,6 +60,8 @@ class ComputerProviderIntegrationTest final : public QObject {
     }
 
     void frontFollowsSettingsForEachProvider() {
+        KETPLUS_SKIP_ON_WINDOWS(
+            "the front is a macOS app bundle path (Contents/MacOS), not an executable on Windows");
         QFETCH(bool, claude);
         QTemporaryDir root;
         QVERIFY(!qEnvironmentVariable("KETPLUS_COMPUTER_TOOLS_CONFIG").isEmpty());

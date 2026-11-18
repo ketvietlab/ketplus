@@ -4,6 +4,7 @@
 // network, no real provider and no real team.
 #include "AgentTestFixture.h"
 #include "TeamFakeHost.h"
+#include "TestPaths.h"
 #include "runtime/TeamGit.h"
 #include "storage/LocalJournal.h"
 
@@ -103,7 +104,7 @@ class TeamRepositoryTest final : public QObject {
         QVERIFY(journal.isOpen());
         FakeHost host;
         host.conversations = host_.conversations;
-        host.sidebarPlacements.insert(QStringLiteral("/repo"), QString{});
+        host.sidebarPlacements.insert(absoluteTestPath("repo"), QString{});
         TeamCoordinator coordinator(&journal, &host);
         const auto created = coordinator.create(standardTeam(), "user");
         QVERIFY(created.ok());
@@ -112,7 +113,7 @@ class TeamRepositoryTest final : public QObject {
         QVERIFY(team->sidebarRepository);
         QVERIFY(team->sidebarRepository->isEmpty());
         QVERIFY(toJson(*team).value("sidebar_repository").isString());
-        QCOMPARE(team->repository, QStringLiteral("/repo"));
+        QCOMPARE(team->repository, absoluteTestPath("repo"));
         QCOMPARE(team->memberSessions(), standardTeam().memberSessions());
         TeamCoordinator reopened(&journal, &host);
         reopened.load();
@@ -120,7 +121,7 @@ class TeamRepositoryTest final : public QObject {
         QVERIFY(restored);
         QVERIFY(restored->sidebarRepository);
         QVERIFY(restored->sidebarRepository->isEmpty());
-        QCOMPARE(restored->repository, QStringLiteral("/repo"));
+        QCOMPARE(restored->repository, absoluteTestPath("repo"));
         QCOMPARE(restored->memberSessions(), team->memberSessions());
     }
     void legacyTeamFreezesItsPersistedFallbackBeforeChangingExecution() {
@@ -132,14 +133,14 @@ class TeamRepositoryTest final : public QObject {
             qPrintable(error));
         reload();
         QVERIFY(!team().sidebarRepository);
-        const auto changed = move("/ketplus", "main");
+        const auto changed = move(absoluteTestPath("ketplus"), "main");
         QVERIFY(changed.ok());
-        QCOMPARE(team().repository, QStringLiteral("/ketplus"));
+        QCOMPARE(team().repository, absoluteTestPath("ketplus"));
         QVERIFY(team().sidebarRepository);
-        QCOMPARE(*team().sidebarRepository, QStringLiteral("/repo"));
+        QCOMPARE(*team().sidebarRepository, absoluteTestPath("repo"));
         reload();
-        QCOMPARE(*team().sidebarRepository, QStringLiteral("/repo"));
-        QCOMPARE(team().repository, QStringLiteral("/ketplus"));
+        QCOMPARE(*team().sidebarRepository, absoluteTestPath("repo"));
+        QCOMPARE(team().repository, absoluteTestPath("ketplus"));
     }
     void initTestCase() { QStandardPaths::setTestModeEnabled(true); }
 
@@ -162,14 +163,14 @@ class TeamRepositoryTest final : public QObject {
     void aTaskSeesItsOwnRepositoryThroughItsScope() {
         const Team whole = standardTeam();
         Task task;
-        QCOMPARE(taskScope(whole, task).repository, QStringLiteral("/repo"));
+        QCOMPARE(taskScope(whole, task).repository, absoluteTestPath("repo"));
         QCOMPARE(taskScope(whole, task).integrationBranch, QStringLiteral("integration"));
-        task.repository = QStringLiteral("/mobile");
+        task.repository = absoluteTestPath("mobile");
         task.integrationBranch = QStringLiteral("develop");
-        QCOMPARE(taskScope(whole, task).repository, QStringLiteral("/mobile"));
+        QCOMPARE(taskScope(whole, task).repository, absoluteTestPath("mobile"));
         QCOMPARE(taskScope(whole, task).integrationBranch, QStringLiteral("develop"));
         // A task's own repository goes to clients; none means the team's.
-        QCOMPARE(toJson(task, false).value("repository").toString(), QStringLiteral("/mobile"));
+        QCOMPARE(toJson(task, false).value("repository").toString(), absoluteTestPath("mobile"));
         QVERIFY(!toJson(Task{}, false).contains("repository"));
     }
 
@@ -177,27 +178,27 @@ class TeamRepositoryTest final : public QObject {
     // repository it began in, the task not started yet and a new one use the new repository.
     void startedTasksKeepTheirRepositoryAndNewOnesUseTheNewOne() {
         QVERIFY(team().sidebarRepository);
-        QCOMPARE(*team().sidebarRepository, QStringLiteral("/repo"));
+        QCOMPARE(*team().sidebarRepository, absoluteTestPath("repo"));
         const QString started = create({.title = "Cart", .lane = "Web"});
         const QString waiting = create({.title = "Search", .lane = "Web"});
         QVERIFY(teams_->assignTask(team_, started, "dev1", "lead").ok());
-        QCOMPARE(host_.madeIn, QStringList{"/repo"});
+        QCOMPARE(host_.madeIn, QStringList{absoluteTestPath("repo")});
         const QString worktree = get(started).worktree;
         const QString branch = get(started).branch;
 
-        const TeamResult moved = move("/ketplus", "main");
+        const TeamResult moved = move(absoluteTestPath("ketplus"), "main");
         QVERIFY2(moved.ok(), moved.ok() ? "" : qPrintable(moved.error->message));
-        QCOMPARE(team().repository, QStringLiteral("/ketplus"));
-        QCOMPARE(team().sidebarRepository, std::optional<QString>{QStringLiteral("/repo")});
+        QCOMPARE(team().repository, absoluteTestPath("ketplus"));
+        QCOMPARE(team().sidebarRepository, std::optional<QString>{absoluteTestPath("repo")});
         const auto persistedPlacement = team().sidebarRepository;
         reload();
         QCOMPARE(team().sidebarRepository, persistedPlacement);
-        QCOMPARE(team().repository, QStringLiteral("/ketplus"));
+        QCOMPARE(team().repository, absoluteTestPath("ketplus"));
         QCOMPARE(team().integrationBranch, QStringLiteral("main"));
         QCOMPARE(host_.repositoryChecks.last(),
-                 std::make_pair(QStringLiteral("/ketplus"), QStringLiteral("main")));
+                 std::make_pair(absoluteTestPath("ketplus"), QStringLiteral("main")));
         // Kept where it began: nothing on disk moved, its branch and worktree are the same.
-        QCOMPARE(get(started).repository, QStringLiteral("/repo"));
+        QCOMPARE(get(started).repository, absoluteTestPath("repo"));
         QCOMPARE(get(started).integrationBranch, QStringLiteral("integration"));
         QCOMPARE(get(started).worktree, worktree);
         QCOMPARE(get(started).branch, branch);
@@ -206,29 +207,30 @@ class TeamRepositoryTest final : public QObject {
 
         const auto recorded = updates("repository");
         QCOMPARE(recorded.size(), 1);
-        QVERIFY(recorded.first().text.contains("/ketplus"));
+        QVERIFY(recorded.first().text.contains(absoluteTestPath("ketplus")));
         QVERIFY(recorded.first().text.contains("The old one is archived."));
-        QCOMPARE(recorded.first().data.value("from").toString(), QStringLiteral("/repo"));
-        QCOMPARE(recorded.first().data.value("to").toString(), QStringLiteral("/ketplus"));
+        QCOMPARE(recorded.first().data.value("from").toString(), absoluteTestPath("repo"));
+        QCOMPARE(recorded.first().data.value("to").toString(), absoluteTestPath("ketplus"));
         QCOMPARE(recorded.first().data.value("kept").toArray(), QJsonArray{started});
 
         QVERIFY(teams_->assignTask(team_, waiting, "dev2", "lead").ok());
         const QString fresh = create({.title = "Checkout", .lane = "Web"});
         QVERIFY(teams_->assignTask(team_, fresh, "dev1", "lead").ok());
-        QCOMPARE(host_.madeIn, (QStringList{"/repo", "/ketplus", "/ketplus"}));
+        QCOMPARE(host_.madeIn, (QStringList{absoluteTestPath("repo"), absoluteTestPath("ketplus"),
+                                            absoluteTestPath("ketplus")}));
         QVERIFY(get(waiting).repository.isEmpty());
         QVERIFY(get(fresh).repository.isEmpty());
 
         // Stored: a coordinator loaded again reads the same, and lists the team by its new
         // repository.
         reload();
-        QCOMPARE(team().repository, QStringLiteral("/ketplus"));
-        QCOMPARE(get(started).repository, QStringLiteral("/repo"));
-        QCOMPARE(teams_->teams("/ketplus").size(), 1);
-        QVERIFY(teams_->teams("/repo").isEmpty());
+        QCOMPARE(team().repository, absoluteTestPath("ketplus"));
+        QCOMPARE(get(started).repository, absoluteTestPath("repo"));
+        QCOMPARE(teams_->teams(absoluteTestPath("ketplus")).size(), 1);
+        QVERIFY(teams_->teams(absoluteTestPath("repo")).isEmpty());
 
         // The same repository and branch again is no change and records nothing.
-        QVERIFY(move("/ketplus", "main").ok());
+        QVERIFY(move(absoluteTestPath("ketplus"), "main").ok());
         QCOMPARE(updates("repository").size(), 1);
     }
 
@@ -237,19 +239,20 @@ class TeamRepositoryTest final : public QObject {
         const QString started = create({.title = "Cart", .lane = "Web"});
         QVERIFY(teams_->assignTask(team_, started, "dev1", "lead").ok());
         const qint64 revision = team().revision;
-        host_.repositoryErrors.insert("/notes", "/notes is not a Git repository.");
-        TeamResult refused = move("/notes");
+        host_.repositoryErrors.insert(absoluteTestPath("notes"), "/notes is not a Git repository.");
+        TeamResult refused = move(absoluteTestPath("notes"));
         QVERIFY(!refused.ok());
         QCOMPARE(refused.error->code, QStringLiteral("invalid_repository"));
         QCOMPARE(refused.error->message, QStringLiteral("/notes is not a Git repository."));
         refused = move("  ");
         QCOMPARE(refused.error->code, QStringLiteral("invalid_repository"));
-        refused =
-            teams_->update(team_, {{"repository", "/ketplus"}, {"integration_branch", ""}}, "user");
+        refused = teams_->update(
+            team_, {{"repository", absoluteTestPath("ketplus")}, {"integration_branch", ""}},
+            "user");
         QCOMPARE(refused.error->code, QStringLiteral("invalid_payload"));
-        refused = move("/ketplus", "bad..branch");
+        refused = move(absoluteTestPath("ketplus"), "bad..branch");
         QVERIFY(!refused.ok());
-        QCOMPARE(team().repository, QStringLiteral("/repo"));
+        QCOMPARE(team().repository, absoluteTestPath("repo"));
         QCOMPARE(team().integrationBranch, QStringLiteral("integration"));
         QCOMPARE(team().revision, revision);
         QVERIFY(get(started).repository.isEmpty());
@@ -259,25 +262,29 @@ class TeamRepositoryTest final : public QObject {
     // Criterion 3: a task names its own repository; its worktree is made there and the team's
     // stays the default.
     void aTaskCanWorkInARepositoryOfItsOwn() {
-        const QString own = create(
-            {.title = "Phone", .lane = "Web", .repository = "/mobile", .integrationBranch = "dev"});
-        QCOMPARE(get(own).repository, QStringLiteral("/mobile"));
+        const QString own = create({.title = "Phone",
+                                    .lane = "Web",
+                                    .repository = absoluteTestPath("mobile"),
+                                    .integrationBranch = "dev"});
+        QCOMPARE(get(own).repository, absoluteTestPath("mobile"));
         QCOMPARE(get(own).integrationBranch, QStringLiteral("dev"));
-        QVERIFY(get(own).history.first().text.contains("/mobile"));
+        QVERIFY(get(own).history.first().text.contains(absoluteTestPath("mobile")));
         // Its integration branch defaults to the team's.
-        const QString shared = create({.title = "Widget", .lane = "Web", .repository = "/kit"});
+        const QString shared =
+            create({.title = "Widget", .lane = "Web", .repository = absoluteTestPath("kit")});
         QCOMPARE(get(shared).integrationBranch, QStringLiteral("integration"));
         // Naming the team's own repository and branch is the default, stored as none.
-        const QString same = create({.title = "Cart", .lane = "Web", .repository = "/repo"});
+        const QString same =
+            create({.title = "Cart", .lane = "Web", .repository = absoluteTestPath("repo")});
         QVERIFY(get(same).repository.isEmpty());
 
         QVERIFY(teams_->assignTask(team_, own, "dev1", "lead").ok());
-        QCOMPARE(host_.madeIn, QStringList{"/mobile"});
-        QCOMPARE(team().repository, QStringLiteral("/repo"));
+        QCOMPARE(host_.madeIn, QStringList{absoluteTestPath("mobile")});
+        QCOMPARE(team().repository, absoluteTestPath("repo"));
 
         // Moving the team leaves a task's own repository alone.
-        QVERIFY(move("/ketplus").ok());
-        QCOMPARE(get(own).repository, QStringLiteral("/mobile"));
+        QVERIFY(move(absoluteTestPath("ketplus")).ok());
+        QCOMPARE(get(own).repository, absoluteTestPath("mobile"));
         QVERIFY(updates("repository").first().data.value("kept").toArray().isEmpty());
 
         // Refused: a branch without a repository, and a repository that is not one. A refused
@@ -285,8 +292,8 @@ class TeamRepositoryTest final : public QObject {
         TeamResult refused;
         create({.title = "Lost", .lane = "Web", .integrationBranch = "dev"}, &refused);
         QCOMPARE(refused.error->code, QStringLiteral("invalid_payload"));
-        host_.repositoryErrors.insert("/notes", "/notes is not a Git repository.");
-        create({.title = "Lost", .lane = "Web", .repository = "/notes"}, &refused);
+        host_.repositoryErrors.insert(absoluteTestPath("notes"), "/notes is not a Git repository.");
+        create({.title = "Lost", .lane = "Web", .repository = absoluteTestPath("notes")}, &refused);
         QCOMPARE(refused.error->code, QStringLiteral("invalid_repository"));
         QCOMPARE(create({.title = "Next", .lane = "Web"}), QStringLiteral("T-4"));
     }
@@ -301,18 +308,18 @@ class TeamRepositoryTest final : public QObject {
                      {.branch = "team/1/t-1",
                       .worktree = "/wt/T-1",
                       .baseCommit = "base",
-                      .repository = "/repo",
+                      .repository = absoluteTestPath("repo"),
                       .integrationBranch = "integration"});
         QVERIFY(task.repository.isEmpty());
-        stale.repository = QStringLiteral("/ketplus");
+        stale.repository = absoluteTestPath("ketplus");
         Task moved = get(id);
         takeWorktree(stale, moved,
                      {.branch = "team/1/t-1",
                       .worktree = "/wt/T-1",
                       .baseCommit = "base",
-                      .repository = "/repo",
+                      .repository = absoluteTestPath("repo"),
                       .integrationBranch = "integration"});
-        QCOMPARE(moved.repository, QStringLiteral("/repo"));
+        QCOMPARE(moved.repository, absoluteTestPath("repo"));
         QCOMPARE(moved.integrationBranch, QStringLiteral("integration"));
     }
 
@@ -323,13 +330,13 @@ class TeamRepositoryTest final : public QObject {
         QVERIFY(teams_->moveTask(team_, id, state::inProgress, "dev1").ok());
         QVERIFY(QDir().mkpath(get(id).worktree));
         QVERIFY(teams_->closeTask(team_, id, evidence, "Merged.", "lead").ok());
-        QVERIFY(move("/ketplus").ok());
+        QVERIFY(move(absoluteTestPath("ketplus")).ok());
         TeamResult result{.error = TeamError{"unanswered", {}}, .teamId = team_};
         teams_->removeWorktree(team_, id, "user",
                                [&](const TeamResult& r, const QString&) { result = r; });
         QVERIFY(result.ok());
         QCOMPARE(host_.removals.size(), 1);
-        QCOMPARE(host_.removals.first().first, QStringLiteral("/repo"));
+        QCOMPARE(host_.removals.first().first, absoluteTestPath("repo"));
     }
 
     // Criterion 4: a task in progress that resumes (here an answered question) brings its

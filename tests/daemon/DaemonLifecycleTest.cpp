@@ -1625,8 +1625,10 @@ class DaemonLifecycleTest final : public QObject {
         const QString hex = block.value("media_ref").toString().mid(7);
         const QString file = directory.filePath(QStringLiteral("media/%1.png").arg(hex));
         QVERIFY(QFileInfo::exists(file));
+#if !defined(Q_OS_WIN) // Windows reports group/other access from ACLs, not from a mode.
         QCOMPARE(QFile::permissions(file) & (QFileDevice::ReadGroup | QFileDevice::ReadOther),
                  QFileDevice::Permissions{});
+#endif
         adapter.stop();
     }
 

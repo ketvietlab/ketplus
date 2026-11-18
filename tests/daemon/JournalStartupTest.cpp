@@ -1,3 +1,4 @@
+#include "TestPaths.h"
 #include "storage/LocalJournal.h"
 
 #include <QElapsedTimer>
@@ -325,6 +326,9 @@ class JournalStartupTest final : public QObject {
         QTest::newRow("300000-one-session") << 300000 << 1;
     }
     void startupBacklogCharacterization() {
+        KETPLUS_SKIP_ON_WINDOWS(
+            "the 250 ms startup budget is a macOS/Linux timing characterization; SQLite commits "
+            "are several times slower on NTFS");
         QFETCH(int, rows);
         QFETCH(int, sessions);
         if (rows > 1000 && !qEnvironmentVariableIsSet("KETPLUS_RUN_STARTUP_BACKLOG_TESTS"))
