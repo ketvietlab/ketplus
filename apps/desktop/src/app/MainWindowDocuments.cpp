@@ -28,6 +28,7 @@
 #include "machine/MachineWorkspaceView.h"
 #include "preview/MarkdownPreviewPane.h"
 #include "remote/RemoteControlView.h"
+#include "runners/RunnersDaemonLink.h"
 #include "teams/TeamDirectory.h"
 #include "terminal/TerminalPanel.h"
 #include "ui/FindReplaceBar.h"
@@ -987,7 +988,8 @@ void MainWindow::setSettingsWorkspaceVisible(const bool visible) {
                 return;
             }
             window->teams_->request(type, payload, std::move(reply));
-        });
+        },
+        runners::daemonRequester(accountDaemon()));
     workspaceSplit_->addWidget(settingsWorkspace_);
     workspaceSplit_->setStretchFactor(workspaceSplit_->indexOf(settingsWorkspace_), 1);
     connect(settingsWorkspace_, &SettingsWorkspacePage::saved, this, [this] {
@@ -1012,6 +1014,7 @@ void MainWindow::setSettingsWorkspaceVisible(const bool visible) {
     // Account & devices reads the remote.status Connections reads, through its own client;
     // signing out happens in Connections, which asks first.
     auto* accountDaemon = this->accountDaemon(); // shared with the sidebar identity
+    runners::followDaemon(accountDaemon, settingsWorkspace_->runnersPage());
     settingsWorkspace_->setAccountStatusReader(
         [accountDaemon](std::function<void(const QJsonObject&)> reply) {
             if (!accountDaemon->isReady())
