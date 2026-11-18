@@ -159,7 +159,12 @@ qt_add_executable(ketplus_peer_output_tests PeerOutputTest.cpp)
 ketplus_enable_warnings(ketplus_peer_output_tests)
 target_link_libraries(ketplus_peer_output_tests PRIVATE Qt6::Test ketplus_daemon_runner_peer)
 add_test(NAME ketplus_peer_output_tests COMMAND ketplus_peer_output_tests)
-foreach(suite Link Job Output Runner)
+# The Runner suite runs against the runner's own job session, which Windows does not build.
+set(KETPLUS_PEER_SESSION_SUITES Link Job Output)
+if(NOT WIN32)
+    list(APPEND KETPLUS_PEER_SESSION_SUITES Runner)
+endif()
+foreach(suite IN LISTS KETPLUS_PEER_SESSION_SUITES)
     string(TOLOWER ${suite} name)
     set(target ketplus_peer_session_${name}_tests)
     qt_add_executable(${target}
@@ -169,7 +174,9 @@ foreach(suite Link Job Output Runner)
     add_test(NAME ${target} COMMAND ${target})
 endforeach()
 # Against the runner's real job session.
-target_link_libraries(ketplus_peer_session_runner_tests PRIVATE ketplus_runner_session)
+if(NOT WIN32)
+    target_link_libraries(ketplus_peer_session_runner_tests PRIVATE ketplus_runner_session)
+endif()
 # Signed builds may run PCRE2 without JIT; cloud projection must stay linear there too.
 set_tests_properties(ketplus_daemon_cloud_privacy_tests PROPERTIES ENVIRONMENT
     "KETPLUS_DISABLE_DAEMON_AUTOSTART=1;KETPLUS_BROWSER_TOOLS_CONFIG=${CMAKE_CURRENT_BINARY_DIR}/ketplus_daemon_cloud_privacy_tests-browser-tools.json;KETPLUS_COMPUTER_TOOLS_CONFIG=${CMAKE_CURRENT_BINARY_DIR}/ketplus_daemon_cloud_privacy_tests-computer-tools.json;KETPLUS_COMPUTER_DIR=${CMAKE_CURRENT_BINARY_DIR}/ketplus_daemon_cloud_privacy_tests-computer;QT_ENABLE_REGEXP_JIT=0")

@@ -49,6 +49,18 @@ bool git(const QString& home, const QString& directory, const QStringList& argum
            process.exitCode() == 0;
 }
 
+// The snapshot stages files with `git add` and `attr:` pathspecs, which older Git for Windows
+// (2.38) rejects; those releases cannot run the library at all, so the cases that snapshot skip.
+bool gitStagesWithAttributePathspecs() {
+    QTemporaryDir probe;
+    if (!probe.isValid())
+        return false;
+    return git(probe.path(), probe.path(), {QStringLiteral("init"), QStringLiteral("-q")}) &&
+           git(probe.path(), probe.path(),
+               {QStringLiteral("add"), QStringLiteral("--all"), QStringLiteral("--"),
+                QStringLiteral(":(top,attr:!filter)")});
+}
+
 } // namespace
 
 class WorktreeSnapshotWindowsTest : public QObject {
@@ -72,6 +84,8 @@ class WorktreeSnapshotWindowsTest : public QObject {
 
     void hostileHooksFiltersAndUserConfigurationNeverRun() {
 #if defined(Q_OS_WIN)
+        if (!gitStagesWithAttributePathspecs())
+            QSKIP("Needs a Git whose `git add` accepts attr: pathspecs (Git for Windows 2.47+).");
         QTemporaryDir root;
         QVERIFY(root.isValid());
         const QString base = root.path();
@@ -156,6 +170,8 @@ class WorktreeSnapshotWindowsTest : public QObject {
 
     void applyingAnOlderSnapshotRemovesDroppedFilesEvenWhenReadOnly() {
 #if defined(Q_OS_WIN)
+        if (!gitStagesWithAttributePathspecs())
+            QSKIP("Needs a Git whose `git add` accepts attr: pathspecs (Git for Windows 2.47+).");
         QTemporaryDir root;
         QVERIFY(root.isValid());
         const QString base = root.path();
