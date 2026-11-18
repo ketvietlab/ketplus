@@ -136,8 +136,8 @@ struct EndToEnd {
     // deferred work.
     bool play(RunnerEnd& end, const std::function<bool()>& until, bool runs = true);
 
+    LinkedParts parts; // outlives the links RemoteJobs keeps
     RemoteHarness h;
-    LinkedParts parts;
     QTemporaryDir dir;
     QString home;
     QString repo;

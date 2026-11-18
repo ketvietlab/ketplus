@@ -151,6 +151,27 @@ class RemoteJobsStopTest final : public QObject {
         QCOMPARE(outboxOf(r.e.h.f, r.id), 1);
     }
 
+    // Another account: the links of the old one end with their connections, which the job
+    // counts as lost; the runner comes back on the new links and the job goes on.
+    void anAccountChangeEndsTheOldLinks() {
+        Running r;
+        QVERIFY(r.start(2 * 60 * 60 * 1000));
+        r.e.h.scope = QStringLiteral("account-2");
+        QVERIFY(r.e.h.jobs->relayMessage({{QStringLiteral("type"), QStringLiteral("job.changed")},
+                                          {QStringLiteral("jobId"), linkedJob}}));
+        QVERIFY(r.end->closed());
+        QVERIFY(r.e.h.jobs->linksOpen());
+        QCOMPARE(r.e.h.jobs->record(r.id)->state, state::running);
+        QVERIFY(r.e.h.clock.isArmed(r.id, JobTimer::PeerAbsent));
+
+        r.e.seen.clear();
+        r.e.seenTypes.clear();
+        RunnerEnd second = r.e.connect(2);
+        QVERIFY(
+            r.e.play(second, [&] { return !framesOf<protocol::JobResume>(r.e.seen).isEmpty(); }));
+        QVERIFY(!r.e.h.clock.isArmed(r.id, JobTimer::PeerAbsent));
+    }
+
     void aRemovedRunnerEndsItsRunningJob() {
         Running r;
         QVERIFY(r.start());
