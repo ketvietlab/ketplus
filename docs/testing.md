@@ -93,7 +93,7 @@ automated offscreen tests that ran on Windows: `ketplus_lite_window_tests`
 (real Git repository opened in the window), `ketplus_tests` document save and
 `ketplus_editor_file_refresh_tests`, `ketplus_git_tests`,
 `ketplus_git_changes_panel_tests` and `ketplus_preview_tests`. Theme includes from a
-drive root and from a UNC share (`\\\\localhost\\C$`) run in `ketplus_theme_input_tests`. ConPTY terminal
+drive root and from a UNC share (`\\localhost\C$`) run in `ketplus_theme_input_tests`. ConPTY terminal
 behavior depends on the Windows terminal task, and Mermaid rendering needs the
 external `mmdc` tool; neither is part of this build check.
 
