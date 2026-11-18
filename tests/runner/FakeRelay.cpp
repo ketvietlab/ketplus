@@ -301,7 +301,9 @@ Reply FakeRelay::heartbeat(const QString&) {
                            QJsonArray{QStringLiteral("runner.protocol/1")}}}},
              {QStringLiteral("disabled"), disabled},
              {QStringLiteral("serverTime"), pairing::issuedAtString(m_now())},
-             {QStringLiteral("pending"), false}},
+             {QStringLiteral("pending"),
+              std::any_of(jobs.cbegin(), jobs.cend(),
+                          [](const Job& job) { return job.state == QStringLiteral("queued"); })}},
             false};
 }
 
@@ -345,6 +347,8 @@ Reply FakeRelay::handle(const Request& request) {
         if (request.method == "GET" && match.captured(2).isEmpty())
             return state(runnerId, match.captured(1));
     }
+    if (std::optional<Reply> reply = handleJobs(runnerId, request))
+        return *reply;
     if (request.method == "POST" && path == QStringLiteral("/v2/runner/heartbeat"))
         return heartbeat(runnerId);
     if (const auto match = revokePath.match(path); match.hasMatch() && request.method == "POST")

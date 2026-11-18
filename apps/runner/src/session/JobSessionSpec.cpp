@@ -31,7 +31,10 @@ void JobSession::onSpec(const JobSpec& spec) {
         return;
     }
     m_ports.clock.disarm(SessionTimer::PeerOpen);
-    m_ports.accepted.add(spec.jobId, spec.attempt);
+    if (!m_ports.accepted.add(spec.jobId, spec.attempt)) {
+        refuseSpec(ErrorCode::RunnerUnavailable); // not recorded: never run
+        return;
+    }
     m_job->spec = spec;
     m_phase = Phase::Starting;
     m_ports.lease.start(); // `job.accepted` only once the Relay has started the job

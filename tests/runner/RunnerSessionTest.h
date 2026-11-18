@@ -97,8 +97,22 @@ class FakeClock final : public session::SessionClock {
     QMap<SessionTimer, QDateTime> deadlines;
 };
 
+// The in-memory record, with a disk that can fail.
+class FakeAccepted final : public session::AcceptedJobs {
+  public:
+    [[nodiscard]] bool contains(const QString& jobId, qint64 attempt) const override {
+        return memory.contains(jobId, attempt);
+    }
+    [[nodiscard]] bool add(const QString& jobId, qint64 attempt) override {
+        return !failAdd && memory.add(jobId, attempt);
+    }
+    session::MemoryAcceptedJobs memory;
+    bool failAdd = false;
+};
+
 struct Host {
-    Host();
+    // `acceptedJobs` replaces the in-memory record, such as with the one on disk.
+    explicit Host(session::AcceptedJobs* acceptedJobs = nullptr);
 
     // Moves the clock, firing every timer that comes due on the way, earliest first.
     void advance(qint64 milliseconds);
@@ -131,7 +145,7 @@ struct Host {
     FakeSnapshots snapshots;
     FakeCommand command;
     FakeClock clock;
-    session::MemoryAcceptedJobs accepted;
+    FakeAccepted accepted;
     std::unique_ptr<session::JobSession> session;
     QString connectionId;
 };
@@ -166,6 +180,8 @@ class RunnerSessionSpecTest : public QObject {
     void repeatedSpecNeverLaunchesTwice();
     void otherJobWhileBusy();
     void snapshotFailureEndsTheJob();
+    void unrecordedSpecIsRefused();
+    void specAcceptedBeforeARestartIsRefused();
     void nextJobAfterTheResult();
 };
 
@@ -203,6 +219,7 @@ class RunnerSessionStopTest : public QObject {
     void finishReasons();
     void unsupportedAfterStartRunsToTheEnd();
     void relayCancelWithoutChannel();
+    void withdrawOnlyBeforeTheSpec();
 };
 
 } // namespace runner_session_test

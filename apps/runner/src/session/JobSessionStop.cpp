@@ -53,6 +53,15 @@ void JobSession::stop(const QString& state, const QString& reason) {
     m_ports.command.kill();
 }
 
+bool JobSession::withdraw() {
+    if (m_phase != Phase::Assigned)
+        return false;
+    if (m_link != Link::None)
+        closeChannel(QStringLiteral("draining"));
+    endJob();
+    return true;
+}
+
 void JobSession::leaseLost(const QString& code, const QString& reason) {
     if (m_phase == Phase::Idle)
         return;

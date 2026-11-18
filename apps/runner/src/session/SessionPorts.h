@@ -112,11 +112,12 @@ class SessionClock {
 };
 
 // Every (jobId, attempt) whose spec this runner took. A durable store replaces the in-memory one.
+// add() is false when the record could not be kept; the spec is then refused.
 class AcceptedJobs {
   public:
     virtual ~AcceptedJobs() = default;
     [[nodiscard]] virtual bool contains(const QString& jobId, qint64 attempt) const = 0;
-    virtual void add(const QString& jobId, qint64 attempt) = 0;
+    [[nodiscard]] virtual bool add(const QString& jobId, qint64 attempt) = 0;
 };
 
 class MemoryAcceptedJobs final : public AcceptedJobs {
@@ -124,8 +125,9 @@ class MemoryAcceptedJobs final : public AcceptedJobs {
     [[nodiscard]] bool contains(const QString& jobId, const qint64 attempt) const override {
         return m_jobs.contains({jobId, attempt});
     }
-    void add(const QString& jobId, const qint64 attempt) override {
+    [[nodiscard]] bool add(const QString& jobId, const qint64 attempt) override {
         m_jobs.insert({jobId, attempt});
+        return true;
     }
 
   private:

@@ -18,10 +18,10 @@ target_link_libraries(ketplus_runner_protocol_tests PRIVATE Qt6::Test ketplus_ru
 add_test(NAME ketplus_runner_protocol_tests COMMAND ketplus_runner_protocol_tests)
 
 # ketplus-runner against an in-process Relay on loopback: state directory, registration,
-# pairing, access tokens and heartbeat. No network beyond 127.0.0.1.
+# pairing, access tokens, heartbeat and job calls. No network beyond 127.0.0.1.
 qt_add_executable(ketplus_runner_app_tests
-    FakeRelay.cpp FakeRelay.h RunnerAppPairingTest.cpp RunnerAppRunTest.cpp
-    RunnerAppSecretsTest.cpp RunnerAppStateTest.cpp RunnerAppTest.cpp RunnerAppTest.h)
+    FakeRelay.cpp FakeRelay.h FakeRelayJobs.cpp RunnerAppDeliveryFilesTest.cpp RunnerAppJobCallsTest.cpp RunnerAppPairingTest.cpp
+    RunnerAppRunTest.cpp RunnerAppSecretsTest.cpp RunnerAppStateTest.cpp RunnerAppTest.cpp RunnerAppTest.h)
 ketplus_enable_warnings(ketplus_runner_app_tests)
 target_link_libraries(ketplus_runner_app_tests PRIVATE
     Qt6::Test Qt6::Network ketplus_runner_app OpenSSL::Crypto)
@@ -32,7 +32,8 @@ qt_add_executable(ketplus_runner_session_tests
     RunnerSessionHandshakeTest.cpp RunnerSessionOutputTest.cpp RunnerSessionSpecTest.cpp
     RunnerSessionStopTest.cpp RunnerSessionTest.cpp RunnerSessionTest.h)
 ketplus_enable_warnings(ketplus_runner_session_tests)
-target_link_libraries(ketplus_runner_session_tests PRIVATE Qt6::Test ketplus_runner_session)
+target_link_libraries(ketplus_runner_session_tests PRIVATE Qt6::Test ketplus_runner_session
+    ketplus_runner_app)
 add_test(NAME ketplus_runner_session_tests COMMAND ketplus_runner_session_tests)
 
 # The runner's Relay socket and peer connection: fakes for every port, then real links on
@@ -46,6 +47,14 @@ target_link_libraries(ketplus_runner_peer_tests PRIVATE
     ketplus_control_crypto_primitives)
 add_test(NAME ketplus_runner_peer_tests COMMAND ketplus_runner_peer_tests)
 set_tests_properties(ketplus_runner_peer_tests PROPERTIES TIMEOUT 180)
+
+# Job delivery over fake Relay calls, session, journal, pins and clock.
+qt_add_executable(ketplus_runner_delivery_tests
+    RunnerDeliveryAcquireTest.cpp RunnerDeliveryLeaseTest.cpp RunnerDeliveryRestartTest.cpp
+    RunnerDeliveryTest.cpp RunnerDeliveryTest.h)
+ketplus_enable_warnings(ketplus_runner_delivery_tests)
+target_link_libraries(ketplus_runner_delivery_tests PRIVATE Qt6::Test ketplus_runner_delivery)
+add_test(NAME ketplus_runner_delivery_tests COMMAND ketplus_runner_delivery_tests)
 ketplus_tests_offscreen()
 
 # The runner's snapshot receiver with real packs from the snapshot library and the system git;
