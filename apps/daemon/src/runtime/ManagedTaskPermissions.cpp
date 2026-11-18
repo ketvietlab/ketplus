@@ -18,7 +18,15 @@ void ManagedTaskBridge::requestPermission(const QJsonObject& task, const QJsonOb
         runtime_->cancelOwner(owner, "owner_invalid");
         return;
     }
-    if (current->stored.executionPolicy == "full") {
+    const auto policy =
+        task.value("execution").toObject().value("origin_execution_policy").toString();
+    if (policy != "ask" && policy != "full") {
+        // Missing snapshots (including pre-migration pending intents) cannot
+        // borrow broader current-owner policy or be upgraded by manual approval.
+        runtime_->permissionResolved(id, false);
+        return;
+    }
+    if (policy == "full") {
         // The existing owner policy authorizes execution; this is not a grant
         // inherited from some earlier individual approval dialog.
         runtime_->permissionResolved(id, true);

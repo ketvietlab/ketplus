@@ -746,11 +746,34 @@ Linux store policy, signed upgrade prompts and platform release acceptance remai
   The suffix stays outside user-message and steer transcript
   text. Tests verify provider delivery; model style compliance is not guaranteed.
 
-- Claude background tasks survive the end of their turn: the sidecar keeps the query
-  open while they run, the daemon journals and lists them, and desktop shows a bar
-  above the composer with output and Stop. iOS shows the same list through the relay
-  (`session.task.stop`/`session.task.output`). Not yet verified against a live
-  provider run.
+- The shared agent MCP server exposes daemon-owned background start/list/get/stop/
+  output for Claude, Codex and ACP providers (ADR 0127). Claude's pinned SDK native
+  background/subagent paths are disabled with host settings, tool exclusions and
+  deny hooks; the legacy collector/stop/output path remains for drain. Offline MCP,
+  sidecar and real-SDK control checks are implementation evidence, not live-model
+  or shared desktop UI acceptance. Registry completion uses the durable owner-wake
+  path instead of a retained Claude query or a watchdog. Start/stop require an
+  immutable per-turn mutation capability; review origins receive no grant and
+  accepted jobs retain their effective-policy snapshot. Claude waits for actual
+  SDK process exit; Codex/ACP use dedicated per-conversation processes before
+  restoring history and acknowledging a fresh MCP epoch. Offline fixtures pass;
+  installed Codex 0.162.1 also passes production-adapter injection controls and a
+  separately authorized single cheap-model turn: completed synthetic history
+  survives same-ID resume and owned-process/MCP-epoch replacement without recall.
+  Pinned Copilot 1.0.112 passes standalone
+  offline MCP discovery through process-launch configuration; its adapter uses
+  a private immutable file for that bootstrap. A separately approved single Auto
+  turn also passes actual CopilotAdapter completed-history/same-ID/MCP replacement
+  and process-closure checks; managed mutation is enabled subject to each turn's
+  transport ACK and daemon policy. Cursor's `2026.11.11-043ef28` production-adapter
+  Composer non-fast probes now verify completed synthetic history, same-ID replay,
+  owned-context exit and inventory on the exact fresh injected worker after load.
+  The separate gate delta enables Cursor mutation capability; each turn still
+  requires successful history restoration and an exact transport-epoch ACK.
+  Reviews and stale/pending origins retain no mutation authority, while registry
+  reads keep their separate grants. This remains unmerged implementation and
+  validation evidence, not release or shared desktop acceptance. See the
+  [provider evidence and gaps](decisions/0127-provider-origin-refresh-evidence.md).
 
 - Async assistant-question answers use the conversation's current execution-context
   revision for both steering and follow-up turns; switched conversations no longer

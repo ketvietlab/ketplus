@@ -1,6 +1,7 @@
 #pragma once
 
 #include "agents/AgentBroker.h"
+#include "agents/AgentMutationOrigin.h"
 #include "agents/AgentToolLaunch.h"
 #include "runtime/JournalStorageJobs.h"
 #include "runtime/ProviderCatalogCache.h"
@@ -142,9 +143,11 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
 
   private:
     friend class ManagedTaskBridge;
+    friend class ManagedTaskOriginHostTest;
     void initializeManagedTasks();
     void managedTaskCommand(const QJsonObject& request, const QString& clientId,
-                            CommandCallback done, bool agentCaller = false);
+                            CommandCallback done, bool agentCaller = false,
+                            std::optional<AgentMutationGrant> origin = std::nullopt);
     bool managedTaskPermission(const QJsonValue& requestId, const QJsonObject& result);
     void holdManagedTaskWake(const QString& sessionId, qint64 generation, const QString& reason);
     void resumeManagedTaskWake(const QString& sessionId, qint64 generation);
@@ -156,6 +159,7 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
                                 CommandCallback done);
     struct Session final {
         StoredSession stored;
+        AgentMutationOrigin mutationOrigin;
         QString pendingProviderTitle;
         bool attachedToProvider{false};
         qint64 providerCompactWindow{0};
@@ -174,6 +178,9 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
         // completion for it, or a late turn/started, must not end or restart the turn that runs
         // now. Cleared when the process stops or reloads, since the next one may reuse ids.
         QString completedTurnId;
+        // The verified process/context owning these identity caches. Only a fresh epoch ACK
+        // after transport closure permits reuse of provider-native turn/item ids.
+        QString providerIdentityEpoch;
         // The turn a final provider error ended (Codex `error` with willRetry false), which may
         // never send turn/completed. Its approvals are closed: a later request for it is declined.
         // Cleared with completedTurnId.
@@ -218,6 +225,10 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
         QString lastJournalError;
         bool journalBufferFullReported{false};
     };
+    void prepareManagedTaskOrigin(Session& session, const QJsonObject& options);
+    [[nodiscard]] bool isManagedTaskEpoch(const Session& session, const QString& epoch) const;
+    bool acknowledgeManagedTaskOrigin(Session& session, const QString& epoch,
+                                      const QJsonObject& result);
 
     [[nodiscard]] QJsonObject listSessions(const QJsonObject& payload) const;
     [[nodiscard]] QJsonObject storageRetention(const QString& type, const QJsonObject& payload);

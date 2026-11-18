@@ -1,6 +1,7 @@
 # Also read by tests/daemon/cloud-privacy, which builds these against in-memory credentials.
 # PeerLink, WebRtcPeerLink and the frame codec build as ketplus_peer_link (cmake/WebRtc.cmake).
 set(KETPLUS_DAEMON_CORE_SOURCES
+    src/agents/AgentMutationOrigin.cpp
     src/cloud/CloudControlTransport.cpp
     src/transport/RemotePeers.cpp
     src/transport/Signaling.cpp
@@ -122,9 +123,11 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/providers/acp/AcpTurns.cpp
     src/providers/acp/AcpPermissions.cpp
     src/providers/acp/AcpSession.cpp
+    src/providers/acp/AcpSessionIsolation.cpp
     src/providers/acp/AcpToolItem.h
     src/providers/CursorAdapter.h
     src/providers/CodexAdapter.cpp
+    src/providers/CodexSessionIsolation.cpp
     src/providers/CodexAdapter.h
     src/providers/ProviderLineReader.cpp
     src/providers/ProviderLineReader.h

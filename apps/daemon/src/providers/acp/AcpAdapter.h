@@ -6,6 +6,7 @@
 #include <QJsonArray>
 #include <QList>
 #include <QPair>
+#include <QPointer>
 #include <QSet>
 #include <optional>
 #include <utility>
@@ -21,17 +22,28 @@ class AcpAdapter : public ProviderAdapter {
   public:
     explicit AcpAdapter(QString label, QObject* parent = nullptr);
     ~AcpAdapter() override;
-    bool isReady() const override { return ready_; }
+    bool isReady() const override;
     void call(const QString& method, const QJsonObject& params, Callback callback) override;
     void respond(const QJsonValue& requestId, const QJsonObject& result) override;
     void respondError(const QJsonValue& requestId, const QString& code,
                       const QString& message) override;
     void stop() override;
+    bool releaseSessionTransport(const QString& sessionId) override;
+    [[nodiscard]] bool ownsIsolatedSession(const QString& session) const {
+        return sessionWorkers_.contains(session);
+    }
 
   protected:
+    // Managed mutation support remains false until a concrete provider's history
+    // and injected-MCP refresh are verified. A worker factory is not that proof.
+    // A turn with a host transport epoch must never reuse another turn's MCP workers.
+    virtual AcpAdapter* createSessionWorker() { return nullptr; }
+    bool routeIsolatedCall(const QString& method, const QJsonObject& params, Callback& callback);
     // Set process_ program/arguments; the engine owns channels, environment and signals.
     virtual void configureProcess() = 0;
     virtual QJsonObject clientCapabilities() const;
+    // A provider may bootstrap a server at process launch instead of session setup.
+    virtual QJsonArray sessionMcpServers(const QJsonArray& servers) const { return servers; }
     // Opt in to turn-bound permission IDs and strictly advertised one-time options.
     virtual bool strictPermissionRequests() const { return false; }
     // rawInput is provider-owned data, not a portable authenticated MCP identity.
@@ -157,5 +169,16 @@ class AcpAdapter : public ProviderAdapter {
     int restartDelayMs_{0};
     bool checkingLaunch_{false};
     bool launchCleared_{false};
+    bool isolatedWorker_{false};
+    bool requireSessionLoad_{false};
+    QHash<QString, QPointer<AcpAdapter>> sessionWorkers_;
+    struct IsolatedRequest {
+        QPointer<AcpAdapter> worker;
+        QJsonValue originalId;
+    };
+    QHash<QString, IsolatedRequest> isolatedRequests_;
+    bool respondIsolated(const QJsonValue& id, const QJsonObject& result, const QString& code = {},
+                         const QString& message = {});
+    void stopSessionWorkers();
 };
 } // namespace ketplus::daemon

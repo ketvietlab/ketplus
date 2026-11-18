@@ -113,8 +113,10 @@ ketplus_add_daemon_test(ketplus_turn_acceptance_tests TurnAcceptanceTest.cpp)
 if(APPLE OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
     ketplus_add_daemon_test(ketplus_managed_task_host_tests ManagedTaskHostTest.cpp)
     ketplus_add_daemon_test(ketplus_managed_task_ipc_tests ManagedTaskIpcTest.cpp)
+    ketplus_add_daemon_test(ketplus_managed_task_origin_host_tests ManagedTaskOriginHostTest.cpp)
     add_dependencies(ketplus_managed_task_host_tests ketplus_job_executor)
     add_dependencies(ketplus_managed_task_ipc_tests ketplus_job_executor)
+    add_dependencies(ketplus_managed_task_origin_host_tests ketplus_job_executor)
 endif()
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     ketplus_add_daemon_test(ketplus_linux_job_executor_tests LinuxJobExecutorTest.cpp)
@@ -141,10 +143,27 @@ ketplus_add_daemon_test(ketplus_daemon_copilot_adapter_tests CopilotAdapterTest.
 ketplus_add_daemon_test(ketplus_daemon_copilot_tools_tests CopilotToolsTest.cpp)
 ketplus_add_daemon_test(ketplus_copilot_catalog_tests CopilotCatalogTest.cpp)
 ketplus_add_daemon_test(ketplus_daemon_acp_adapter_tests AcpAdapterTest.cpp)
+ketplus_add_daemon_test(ketplus_codex_session_isolation_tests CodexSessionIsolationTest.cpp)
+ketplus_add_daemon_test(ketplus_codex_offline_refresh_tests CodexOfflineRefreshTest.cpp)
+target_compile_definitions(ketplus_codex_offline_refresh_tests PRIVATE
+    KETPLUS_CODEX_OFFLINE_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/../providers/codex/adapter-offline-fixture.py")
+ketplus_add_daemon_test(ketplus_codex_bounded_refresh_tests CodexBoundedRefreshTest.cpp)
+target_compile_definitions(ketplus_codex_bounded_refresh_tests PRIVATE
+    KETPLUS_CODEX_LIVE_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/../providers/codex/adapter-live-fixture.py")
+ketplus_add_daemon_test(ketplus_cursor_bounded_refresh_tests CursorBoundedRefreshTest.cpp)
+target_compile_definitions(ketplus_cursor_bounded_refresh_tests PRIVATE
+    KETPLUS_CODEX_LIVE_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/../providers/codex/adapter-live-fixture.py"
+    KETPLUS_CURSOR_LIVE_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/../providers/cursor/adapter-bounded-fixture.py")
+ketplus_add_daemon_test(ketplus_copilot_bounded_refresh_tests CopilotBoundedRefreshTest.cpp)
+target_compile_definitions(ketplus_copilot_bounded_refresh_tests PRIVATE
+    KETPLUS_CODEX_LIVE_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/../providers/codex/adapter-live-fixture.py"
+    KETPLUS_ACP_LIVE_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/../providers/cursor/adapter-bounded-fixture.py")
 ketplus_add_daemon_test(ketplus_daemon_cursor_adapter_tests CursorAdapterTest.cpp)
 ketplus_add_daemon_test(ketplus_cursor_catalog_bounds_tests CursorCatalogBoundsTest.cpp)
 ketplus_add_daemon_test(ketplus_daemon_session_fork_tests SessionForkTest.cpp)
 ketplus_add_daemon_test(ketplus_agent_messaging_tests AgentMessagingTest.cpp)
+add_subdirectory(agent-background-tools)
+add_subdirectory(acp-isolation)
 ketplus_add_daemon_test(ketplus_agent_urgent_delivery_tests AgentUrgentDeliveryTest.cpp)
 ketplus_add_daemon_test(ketplus_team_store_tests TeamStoreTest.cpp)
 ketplus_add_daemon_test(ketplus_team_risk_policy_tests TeamRiskPolicyTest.cpp)
@@ -293,6 +312,8 @@ find_program(KETPLUS_SIDECAR_TEST_NODE node)
 if(KETPLUS_SIDECAR_TEST_NODE)
     add_test(NAME ketplus_claude_sidecar_tests COMMAND "${KETPLUS_SIDECAR_TEST_NODE}" --test
         "${PROJECT_SOURCE_DIR}/apps/daemon/providers/claude-sidecar/test/authentication.test.mjs"
+        "${PROJECT_SOURCE_DIR}/apps/daemon/providers/claude-sidecar/test/input.test.mjs"
+        "${PROJECT_SOURCE_DIR}/apps/daemon/providers/claude-sidecar/test/process-barrier.test.mjs"
         "${CMAKE_CURRENT_SOURCE_DIR}/claude-sidecar/transcript.test.mjs"
         "${CMAKE_CURRENT_SOURCE_DIR}/claude-sidecar/permissions.test.mjs"
         "${CMAKE_CURRENT_SOURCE_DIR}/claude-sidecar/agent-tools.test.mjs"
@@ -302,6 +323,9 @@ if(KETPLUS_SIDECAR_TEST_NODE)
         "${CMAKE_CURRENT_SOURCE_DIR}/claude-sidecar/steer.test.mjs"
         "${CMAKE_CURRENT_SOURCE_DIR}/claude-sidecar/fork.test.mjs"
         "${CMAKE_CURRENT_SOURCE_DIR}/claude-sidecar/background-tasks.test.mjs"
+        "${CMAKE_CURRENT_SOURCE_DIR}/claude-sidecar/managed-background.test.mjs"
+        "${CMAKE_CURRENT_SOURCE_DIR}/claude-sidecar/managed-transport.test.mjs"
+        "${CMAKE_CURRENT_SOURCE_DIR}/claude-sidecar/background-sdk-offline.test.mjs"
         "${CMAKE_CURRENT_SOURCE_DIR}/claude-sidecar/model-catalog.test.mjs"
         "${PROJECT_SOURCE_DIR}/apps/daemon/providers/claude-sidecar/test/session-delete.test.mjs"
         "${PROJECT_SOURCE_DIR}/apps/daemon/providers/claude-sidecar/test/review-guard.test.mjs"

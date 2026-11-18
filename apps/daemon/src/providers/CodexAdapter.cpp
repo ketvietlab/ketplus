@@ -135,11 +135,20 @@ QString CodexAdapter::missingMessage() const {
     return compat::missing(compat::policy(QStringLiteral("codex"))).message;
 }
 
-bool CodexAdapter::isReady() const { return ready_; }
+bool CodexAdapter::isReady() const {
+    if (ready_)
+        return true;
+    for (const auto& worker : sessionWorkers_)
+        if (worker.adapter && worker.adapter->isReady())
+            return true;
+    return false;
+}
 
 QString CodexAdapter::executable() const { return executable_.path(); }
 
 void CodexAdapter::call(const QString& method, const QJsonObject& params, Callback callback) {
+    if (routeIsolatedCall(method, params, callback))
+        return;
     if (!isAvailable()) {
         callback({}, QStringLiteral("Codex CLI was not found."));
         return;
@@ -206,11 +215,15 @@ void CodexAdapter::configurationCatalog(Callback callback) {
 }
 
 void CodexAdapter::respond(const QJsonValue& requestId, const QJsonObject& result) {
+    if (respondIsolated(requestId, result))
+        return;
     sendObject({{QStringLiteral("id"), requestId}, {QStringLiteral("result"), result}});
 }
 
 void CodexAdapter::respondError(const QJsonValue& requestId, const QString& code,
                                 const QString& message) {
+    if (respondIsolated(requestId, {}, code, message))
+        return;
     sendObject({{QStringLiteral("id"), requestId},
                 {QStringLiteral("error"), QJsonObject{{QStringLiteral("code"), code},
                                                       {QStringLiteral("message"), message}}}});
@@ -222,7 +235,7 @@ bool CodexAdapter::restartScheduled() const { return restartTimer_->isActive(); 
 
 bool CodexAdapter::isIdle() const {
     return activeTurns_.isEmpty() && pending_.isEmpty() && queued_.isEmpty() && !starting_ &&
-           !checkingVersion_;
+           !checkingVersion_ && isolatedWorkersIdle();
 }
 
 void CodexAdapter::trackTurn(const QString& method, const QJsonObject& params) {
@@ -269,6 +282,7 @@ void CodexAdapter::noteUnexpectedStop() {
 }
 
 void CodexAdapter::stop() {
+    stopSessionWorkers();
     stopping_ = true;
     restartTimer_->stop();
     failPending(QStringLiteral("Codex app-server is shutting down."));

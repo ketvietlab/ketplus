@@ -195,6 +195,30 @@ class CopilotCliTest final : public QObject {
             QVERIFY(command.nativeArguments.isEmpty());
         }
     }
+    void privateMcpConfigUsesSafePlatformArguments() {
+        const QString config = "C:/Private & bang! ^/managed.json";
+        const auto command = processInvocation("C:/Tools/copilot.cmd", Platform::Windows,
+                                               windowsEnvironment(), config);
+        QVERIFY(command.error.isEmpty());
+        QCOMPARE(command.arguments, QStringList({"/d", "/v:off", "/s", "/c"}));
+        QVERIFY(command.nativeArguments.contains("--additional-mcp-config \"@" + config + "\""));
+        for (const auto& unsafe :
+             {QString("C:/Private/%name%/config.json"), QString("C:/Private/\"config.json"),
+              QString("C:/Private/config\n.json"), QString("relative.json")})
+            QVERIFY(!processInvocation("C:/Tools/copilot.cmd", Platform::Windows,
+                                       windowsEnvironment(), unsafe)
+                         .error.isEmpty());
+        const auto powershell = processInvocation("C:/Tools/copilot.ps1", Platform::Windows,
+                                                  windowsEnvironment(), config);
+        QVERIFY(powershell.error.isEmpty());
+        QCOMPARE(powershell.arguments.last(), "@" + config);
+        QVERIFY(powershell.nativeArguments.isEmpty());
+        const auto unix = processInvocation("/tools/copilot", Platform::MacOS, {},
+                                            "/private/config with spaces.json");
+        QVERIFY(unix.error.isEmpty());
+        QCOMPARE(unix.arguments, QStringList({"--acp", "--stdio", "--additional-mcp-config",
+                                              "@/private/config with spaces.json"}));
+    }
 
     void windowsCommandWrappersPreserveQuotedPath() {
         for (const auto& extension : {"CMD", "bat"}) {

@@ -133,6 +133,7 @@ ManagedTaskAdmission validateManagedTask(const QJsonObject& payload,
         {"model", context.model},
         {"effort", context.effort}};
     metadata.insert("request_defaults", defaults);
+    metadata.insert("origin_execution_policy", context.executionPolicy);
     const auto fingerprint = backgroundTaskFingerprint(payload, defaults);
     result.intent = {context.owner, payload.value("client_request_id").toString(),
                      kind,          payload.value("title").toString(),

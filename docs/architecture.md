@@ -245,6 +245,35 @@ exemptions default to denied: only a concrete adapter can interpret its own
 trusted tool identity. Provider-specific client capability metadata and session
 mode identifiers are opt-in hooks.
 
+Managed background tools use the daemon registry (ADR 0127). The injected agent
+MCP read credential does not authorize start/stop: those operations require a
+separate, immutable per-turn capability bound to owner, generation, effective
+policy and transport epoch. Reviews receive no mutation grant. Accepted jobs
+retain their policy snapshot after the originating turn ends. The host revokes
+old authority before setup and grants new authority only for the exact refreshed
+epoch acknowledged by the adapter.
+
+Claude waits for the owned SDK subprocess's actual exit before recreating its
+query with the prior resume ID. Codex and ACP isolate managed conversations into
+dedicated provider processes so one conversation's refresh never restarts another.
+They confirm exit before loading the same history ID in the replacement process;
+load failure cannot fall back to new history. Deleting an idle conversation also
+releases only its owned transports, including prior provider handoffs, before
+removing the local record. The offline adapter fixtures and installed-provider
+history validation gaps are recorded in the
+[refresh evidence](decisions/0127-provider-origin-refresh-evidence.md).
+Cursor's installed `2026.11.11-043ef28` production-adapter probes verify completed
+synthetic history, same-ID replacement, old-context exit and inventory attributed
+to a fresh injected worker after load. Its implementation enables managed
+mutations using the same dedicated-process barrier and exact epoch ACK. Reviews,
+pending/missing ACKs and stale credentials still receive no mutation authority;
+registry reads retain their separate grants. Unverified adapters remain gated.
+Fixture or load-ACK success alone is not the native inventory evidence.
+Copilot's installed 1.0.112 production-adapter probe verifies completed synthetic
+history, same-ID replacement, MCP rotation and process exit with one authorized
+Auto turn. Its implementation enables managed mutations; each actual turn still
+requires successful history restoration and the exact new transport epoch ACK.
+
 A Cursor adapter can run beside Codex and Claude when the user-installed
 Cursor CLI is available. Discovery uses `PATH`, `KETPLUS_CURSOR_AGENT`,
 Unix `~/.local/bin/agent`, and on native Windows
@@ -376,7 +405,12 @@ an active turn. Claude supports selection between turns, with startup, shutdown,
 pending input and live background tasks fenced by the daemon. Its next SDK query
 resumes the same thread in the selected cwd, after copying the newest persisted
 project transcript there; returning to a former cwd must not restore stale history.
-The sidecar independently rejects a cwd change while its background tasks run.
+The sidecar independently rejects a cwd change while legacy native background
+tasks drain. New managed jobs use the daemon registry of ADR 0127 with immutable
+job cwd; the shared `ketplus_agents` MCP tools bind every provider to that API.
+Claude native background/subagent entry points are disabled through the pinned
+SDK settings, tool exclusions and deny hooks. Completion is delivered by the
+daemon's durable owner-wake boundary, not by keeping a Claude query alive.
 The existing `switch_supported` and `switch_available` fields drive both clients;
 no mobile binary or relay contract change is required. Cursor remains unsupported.
 

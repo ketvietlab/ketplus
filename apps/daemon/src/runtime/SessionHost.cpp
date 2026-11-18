@@ -1694,6 +1694,14 @@ QJsonObject SessionHost::deleteSession(const QJsonObject& request) {
         if (provider == "codex" || provider == "claude")
             cleanup.append(value);
     }
+    session->mutationOrigin.revoke();
+    // A provider handoff may leave an idle transport in an earlier adapter.
+    // Each adapter releases only this conversation; shared catalog processes stay live.
+    for (auto* adapter : providers_)
+        if (!adapter->releaseSessionTransport(sessionId))
+            return error(
+                "transport_close_failed",
+                "The conversation's provider transport has not exited; deletion was kept.");
     const auto lastCursor = session->stored.lastCursor;
     QString journalError;
     if (!journal_->deleteSession(sessionId, generation, operationId, lifecycleRevision,
@@ -2348,6 +2356,7 @@ void SessionHost::handleProviderNotification(const QString& method, const QJsonO
         const QString turnId = params.value(QStringLiteral("turnId")).toString();
         if (!params.value(QStringLiteral("willRetry")).toBool() &&
             (turnId.isEmpty() || turnId == session->stored.turnId)) {
+            session->mutationOrigin.revoke();
             session->failedTurnId = session->stored.turnId;
             abandonTurnApprovals(session->stored.id);
         }
@@ -2482,8 +2491,8 @@ void SessionHost::handleProviderRequest(const QJsonValue& requestId, const QStri
         // Browser tools never prompt (ADR 0008). The launch config already sets
         // `default_tools_approval_mode = "approve"`; this covers a Codex that ignores it. A
         // `ketplus_browser` server KetPlus did not inject (user config) gets a card like any other.
-        if (codex_requests::isInjectedBrowserToolApproval(params,
-                                                          adapter_->launchedBrowserArguments())) {
+        if (codex_requests::isInjectedBrowserToolApproval(
+                params, adapter_->launchedBrowserArguments(session->stored.threadId))) {
             adapter_->respond(requestId, codex_requests::mcpElicitationResult(true));
             return;
         }

@@ -43,7 +43,8 @@ struct ProcessInvocation final {
 // Windows script wrappers require the daemon's environment to locate SystemRoot/System32;
 // never resolve cmd.exe or powershell.exe through the conversation's cwd.
 [[nodiscard]] ProcessInvocation processInvocation(const QString& executable, Platform platform,
-                                                  const QProcessEnvironment& environment = {});
+                                                  const QProcessEnvironment& environment = {},
+                                                  const QString& mcpConfigFile = {});
 
 struct Failure final {
     QJsonObject acpError;

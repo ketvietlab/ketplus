@@ -47,6 +47,9 @@ class CursorAdapter final : public AcpAdapter {
     void runtimeStatus(std::function<void(const compat::Runtime&)> callback) override;
     // Whether the running CLI has `capability` (ADR 0015 §3); see CodexAdapter::supports.
     [[nodiscard]] bool supports(const QString& capability) const override;
+    // Installed 2026.11.11 verifies owned history reload and injected inventory.
+    // Every grant still requires the dedicated transport's exact epoch ACK.
+    [[nodiscard]] bool supportsManagedMutations() const override { return true; }
     void configurationCatalog(Callback callback) override;
     void respond(const QJsonValue& requestId, const QJsonObject& result) override;
     void respondError(const QJsonValue& requestId, const QString& code,
@@ -95,6 +98,7 @@ class CursorAdapter final : public AcpAdapter {
     [[nodiscard]] static ProcessInvocation versionInvocation(const QString& executable);
 
   private:
+    AcpAdapter* createSessionWorker() override;
     void configureProcess() override;
     QJsonObject clientCapabilities() const override;
     bool autoApprovePermission(const QString& sessionId,

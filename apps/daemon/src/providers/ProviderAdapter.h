@@ -38,6 +38,12 @@ class ProviderAdapter : public QObject {
     virtual void respondError(const QJsonValue& requestId, const QString& code,
                               const QString& message) = 0;
     virtual void stop() = 0;
+    // Release only a deleted conversation's dedicated transport. Shared adapters
+    // have nothing to release; provider history cleanup remains a separate operation.
+    virtual bool releaseSessionTransport(const QString&) { return true; }
+    // Requires verified owned-transport drain and replacement MCP bootstrap.
+    // Protocol load support or an adapter fixture alone cannot enable this.
+    [[nodiscard]] virtual bool supportsManagedMutations() const { return false; }
 
   signals:
     // Providers that emit normalized transcript events (Claude and ACP).
