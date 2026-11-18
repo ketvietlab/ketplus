@@ -17,3 +17,25 @@ target_include_directories(ketplus_runner_snapshot PUBLIC
     "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>"
 )
 ketplus_enable_warnings(ketplus_runner_snapshot)
+
+# Runner pairing: token, fingerprints, pairing code, signed payloads and pin records, shared by
+# the desktop daemon and the runner. Keys are passed in; nothing is stored.
+add_library(ketplus_runner_pairing STATIC
+    src/pairing/PairingIdentity.cpp
+    src/pairing/PairingIdentity.h
+    src/pairing/PairingPins.cpp
+    src/pairing/PairingPins.h
+    src/pairing/PairingResult.cpp
+    src/pairing/PairingResult.h
+    src/pairing/PairingSignatures.cpp
+    src/pairing/PairingSignatures.h
+    src/pairing/PairingToken.cpp
+    src/pairing/PairingToken.h
+)
+target_link_libraries(ketplus_runner_pairing
+    PUBLIC Qt6::Core
+    PRIVATE ketplus_control_crypto_primitives OpenSSL::Crypto)
+target_include_directories(ketplus_runner_pairing PUBLIC
+    "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>"
+)
+ketplus_enable_warnings(ketplus_runner_pairing)
