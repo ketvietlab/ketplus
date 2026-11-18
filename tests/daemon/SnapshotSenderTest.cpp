@@ -4,6 +4,19 @@
 
 using namespace snapshot_sync_test;
 
+namespace {
+
+// A pack of snapshot A on `baseId` the retention still keeps for the job, as after a restart.
+PackFile keptPack(Harness& h, const QString& baseId) {
+    PackFile pack{QStringLiteral("/packs/kept.pack"), 3 * chunk, sha256(QByteArray("kept")),
+                  snapshotA, baseId};
+    h.retention.packs.insert(jobId, pack);
+    h.work.seeds[pack.path] = 9;
+    return pack;
+}
+
+} // namespace
+
 class SnapshotSenderTest final : public QObject {
     Q_OBJECT
 
@@ -378,6 +391,10 @@ class SnapshotSenderTest final : public QObject {
         QCOMPARE(h.sender->phase(), SnapshotSender::Phase::Detached);
         h.ack(3 * chunk); // the old connection is gone
         h.sender->reconnected({});
+        QCOMPARE(h.sender->phase(), SnapshotSender::Phase::Verifying);
+        QCOMPARE(h.link.of<protocol::SnapshotOffer>().size(), 1);
+        h.work.finishHash();
+        QCOMPARE(h.work.hashCount, 1);
         QCOMPARE(h.work.buildCount, 1);
         const auto offers = h.link.of<protocol::SnapshotOffer>();
         QCOMPARE(offers.size(), 2);
@@ -431,8 +448,9 @@ class SnapshotSenderTest final : public QObject {
         h.want(QStringLiteral("need"), 0);
         h.ack(chunk);
         h.ready();
-        QCOMPARE(h.retention.log,
-                 (QStringList{QStringLiteral("confirm"), QStringLiteral("release")}));
+        // Nothing usable was kept, so whatever the cache held for the job went before the build.
+        QCOMPARE(h.retention.log, (QStringList{QStringLiteral("drop"), QStringLiteral("confirm"),
+                                               QStringLiteral("release")}));
         QCOMPARE(h.events.ready, QStringList{jobId});
         QCOMPARE(h.retention.confirmed(runnerId, workspace), std::optional<QString>(snapshotA));
         h.ready();
@@ -491,6 +509,109 @@ class SnapshotSenderTest final : public QObject {
         QVERIFY(h.events.failed.isEmpty());
         h.sender->cancel();
         QCOMPARE(h.retention.released.size(), 1);
+    }
+
+    // ---- A kept pack ----
+
+    void aKeptPackIsOfferedOnlyAfterItsHashMatches() {
+        Harness h;
+        const PackFile kept = keptPack(h, {});
+        h.sender->start({});
+        QCOMPARE(h.sender->phase(), SnapshotSender::Phase::Verifying);
+        QCOMPARE(h.work.hashes.front().pack.path, kept.path);
+        // Nothing is offered yet, and the runner's snapshot frames have nothing to act on.
+        h.want(QStringLiteral("need"), 0);
+        h.ack(chunk);
+        h.ready();
+        h.error(QStringLiteral("base_missing"));
+        h.sender->disconnected();
+        QVERIFY(h.link.frames.isEmpty());
+        QVERIFY(h.events.failed.isEmpty() && h.events.ready.isEmpty());
+        h.work.finishHash();
+        QCOMPARE(h.work.hashCount, 1);
+        QCOMPARE(h.work.buildCount, 0);
+        QCOMPARE(h.link.of<protocol::SnapshotOffer>().size(), 1);
+        QCOMPARE(h.link.of<protocol::SnapshotOffer>().first().packSha256, kept.sha256);
+    }
+
+    void aKeptPackThatChangedIsDroppedAndBuiltAgain_data() {
+        QTest::addColumn<QString>("hash");
+        QTest::newRow("other content") << sha256(QByteArray("changed"));
+        QTest::newRow("unreadable") << QString();
+    }
+    void aKeptPackThatChangedIsDroppedAndBuiltAgain() {
+        QFETCH(QString, hash);
+        Harness h;
+        const PackFile kept = keptPack(h, {});
+        h.sender->start({});
+        h.work.finishHash(hash);
+        QCOMPARE(h.retention.log, QStringList{QStringLiteral("drop")});
+        QVERIFY(h.link.frames.isEmpty());
+        QCOMPARE(h.work.buildCount, 1);
+        const PackFile fresh = h.work.finishBuild(2 * chunk, 7);
+        QVERIFY(fresh.sha256 != kept.sha256);
+        QCOMPARE(h.link.of<protocol::SnapshotOffer>().first().packSha256, fresh.sha256);
+    }
+
+    // An incremental kept pack passes the same base check as a new pack: the confirmed ref and
+    // the current hello.
+    void aKeptIncrementalPackNeedsTheBaseANewPackWouldUse_data() {
+        QTest::addColumn<QString>("confirmed");
+        QTest::addColumn<QString>("listed");
+        QTest::addColumn<bool>("reused");
+        QTest::newRow("confirmed and listed") << snapshotB << snapshotB << true;
+        QTest::newRow("listed, not confirmed") << QString() << snapshotB << false;
+        QTest::newRow("confirmed another") << snapshotC << snapshotB << false;
+        QTest::newRow("confirmed, not listed") << snapshotB << QString() << false;
+    }
+    void aKeptIncrementalPackNeedsTheBaseANewPackWouldUse() {
+        QFETCH(QString, confirmed);
+        QFETCH(QString, listed);
+        QFETCH(bool, reused);
+        Harness h;
+        if (!confirmed.isEmpty())
+            h.retention.confirmedRefs[{runnerId, workspace}] = confirmed;
+        keptPack(h, snapshotB);
+        const QMap<QString, QString> hello = listed.isEmpty()
+                                                 ? QMap<QString, QString>{}
+                                                 : QMap<QString, QString>{{workspace, listed}};
+        h.sender->start(hello);
+        if (reused) {
+            QCOMPARE(h.work.hashCount, 1);
+            h.work.finishHash();
+            QCOMPARE(h.link.of<protocol::SnapshotOffer>().first().baseId, snapshotB);
+            return;
+        }
+        QCOMPARE(h.work.hashCount, 0);
+        QCOMPARE(h.retention.log, QStringList{QStringLiteral("drop")});
+        QCOMPARE(h.work.buildCount, 1);
+        const QString expected = confirmed == listed ? confirmed : QString();
+        QCOMPARE(h.work.builds.front().baseId, expected);
+    }
+
+    void aHelloWhileHashingRechecksTheBase() {
+        Harness h;
+        h.retention.confirmedRefs[{runnerId, workspace}] = snapshotB;
+        keptPack(h, snapshotB);
+        h.sender->start({{workspace, snapshotB}});
+        h.sender->reconnected({});
+        QCOMPARE(h.work.hashCount, 1);
+        h.work.finishHash();
+        QVERIFY(h.link.frames.isEmpty());
+        QCOMPARE(h.work.builds.front().baseId, QString());
+    }
+
+    void cancelWhileHashingIgnoresTheAnswer() {
+        Harness h;
+        keptPack(h, {});
+        h.sender->start({});
+        h.sender->cancel();
+        QCOMPARE(h.retention.released, QStringList{jobId});
+        QVERIFY(!h.retention.pack(jobId));
+        h.work.finishHash();
+        QVERIFY(h.link.frames.isEmpty());
+        QCOMPARE(h.work.buildCount, 0);
+        QVERIFY(h.events.failed.isEmpty());
     }
 
     void aLateAnswerAfterTheSenderIsGoneIsHarmless() {

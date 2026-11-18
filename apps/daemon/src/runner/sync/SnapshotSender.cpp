@@ -29,21 +29,48 @@ void SnapshotSender::start(const QMap<QString, QString>& snapshots) {
     if (phase_ != Phase::Idle)
         return;
     snapshots_ = snapshots;
-    if (!offerKept())
-        build(baseFor(snapshots_));
+    reuseOrBuild();
 }
 
-// Offers the job's kept pack again when it is for this snapshot and its base is still held.
-bool SnapshotSender::offerKept() {
+// Hashes the job's kept pack again when it is still usable; any other kept file is deleted and a
+// new pack is built on the base the current hello allows.
+void SnapshotSender::reuseOrBuild() {
+    stopTransfer();
+    pack_.reset();
     const auto kept = retention_.pack(job_.jobId);
-    const bool baseHeld =
-        kept && (kept->baseId.isEmpty() || snapshots_.value(job_.workspaceKey) == kept->baseId);
-    if (!kept || !baseHeld || kept->snapshotId != job_.snapshotId)
-        return false;
+    if (!kept || !usable(*kept)) {
+        retention_.dropPack(job_.jobId);
+        build(baseFor(snapshots_));
+        return;
+    }
+    phase_ = Phase::Verifying;
+    const quint64 generation = ++generation_;
+    const std::weak_ptr<int> alive = alive_;
+    work_.hashPack(*kept, [this, alive, generation, pack = *kept](const QString& sha256) {
+        if (alive.expired() || generation != generation_)
+            return;
+        packHashed(pack, sha256);
+    });
+}
+
+void SnapshotSender::packHashed(const PackFile& kept, const QString& sha256) {
+    if (phase_ != Phase::Verifying)
+        return;
+    // The hello may have changed while the file was hashed.
+    if (sha256.isEmpty() || sha256 != kept.sha256 || !usable(kept)) {
+        retention_.dropPack(job_.jobId);
+        build(baseFor(snapshots_));
+        return;
+    }
     pack_ = kept;
-    retention_.keepPack(job_.jobId, job_.runnerId, *kept);
+    retention_.keepPack(job_.jobId, job_.runnerId, kept);
     offer();
-    return true;
+}
+
+// A kept pack is for this snapshot, and a pack on a base only on the base baseFor() picks now.
+bool SnapshotSender::usable(const PackFile& kept) const {
+    return kept.snapshotId == job_.snapshotId &&
+           (kept.baseId.isEmpty() || kept.baseId == baseFor(snapshots_));
 }
 
 QString SnapshotSender::baseFor(const QMap<QString, QString>& snapshots) const {
@@ -275,7 +302,8 @@ void SnapshotSender::stopTransfer() {
 }
 
 void SnapshotSender::disconnected() {
-    if (finished() || phase_ == Phase::Idle || phase_ == Phase::Packing)
+    if (finished() || phase_ == Phase::Idle || phase_ == Phase::Packing ||
+        phase_ == Phase::Verifying)
         return;
     stopTransfer();
     phase_ = Phase::Detached;
@@ -285,13 +313,9 @@ void SnapshotSender::reconnected(const QMap<QString, QString>& snapshots) {
     if (finished() || phase_ == Phase::Idle)
         return;
     snapshots_ = snapshots;
-    if (phase_ == Phase::Packing)
-        return; // the base is checked again when the pack arrives
-    stopTransfer();
-    if (offerKept())
-        return;
-    retention_.dropPack(job_.jobId);
-    build(baseFor(snapshots_));
+    if (phase_ == Phase::Packing || phase_ == Phase::Verifying)
+        return; // the base is checked again when the pack or its hash arrives
+    reuseOrBuild();
 }
 
 void SnapshotSender::cancel() {

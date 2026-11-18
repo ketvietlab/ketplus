@@ -54,7 +54,7 @@ class StoreRetention final : public SyncRetention {
     PackCache& packs_;
     ketplus::runner::snapshot::GitTool tool_;
     ketplus::runner::snapshot::GitTool refTool_; // tool_ limited to refCommandTimeoutMs
-    QMap<QString, QString> confirmed_; // ref name -> snapshot id
+    QMap<QString, QString> confirmed_;           // ref name -> snapshot id
 };
 
 // Ends a job that never reached a sender (cancelled in the queue, expired, rejected): drops its

@@ -201,8 +201,8 @@ class SnapshotPreparationTest : public QObject {
     void refusesAGitTooOld() {
         const QString fake = root_ + QStringLiteral("/old-git");
         write(fake, "#!/bin/sh\necho 'git version 2.20.1'\n");
-        QVERIFY(QFile::setPermissions(fake, QFile::ReadOwner | QFile::WriteOwner |
-                                                QFile::ExeOwner));
+        QVERIFY(
+            QFile::setPermissions(fake, QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner));
         snapshot::GitTool tool;
         tool.program = fake;
         QCOMPARE(checkGit(tool), prepare::gitUnsupported);
@@ -213,8 +213,9 @@ class SnapshotPreparationTest : public QObject {
     void preparesFromALinkedWorktree() {
         const QString linked = root_ + QStringLiteral("/linked");
         bool ok = false;
-        git(home_, repo_, {QStringLiteral("worktree"), QStringLiteral("add"), QStringLiteral("-q"),
-                           QStringLiteral("-b"), QStringLiteral("side"), linked},
+        git(home_, repo_,
+            {QStringLiteral("worktree"), QStringLiteral("add"), QStringLiteral("-q"),
+             QStringLiteral("-b"), QStringLiteral("side"), linked},
             &ok);
         QVERIFY(ok);
         write(linked + QStringLiteral("/src/side.c"), "int side;\n");
@@ -239,10 +240,10 @@ class SnapshotPreparationTest : public QObject {
         QCOMPARE(prepared.sourceHead, head_);
         // The linked worktree shares the main worktree's store.
         QCOMPARE(prepared.storePath, prepareSnapshot(request(repo_)).prepared->storePath);
-        const QByteArray files = git(home_, linked,
-                                     {QStringLiteral("--git-dir"), prepared.storePath,
-                                      QStringLiteral("ls-tree"), QStringLiteral("-r"),
-                                      QStringLiteral("--name-only"), prepared.snapshotId});
+        const QByteArray files =
+            git(home_, linked,
+                {QStringLiteral("--git-dir"), prepared.storePath, QStringLiteral("ls-tree"),
+                 QStringLiteral("-r"), QStringLiteral("--name-only"), prepared.snapshotId});
         QVERIFY(files.contains("src/side.c"));
         QCOMPARE(fingerprint(repo_ + QStringLiteral("/.git")), before);
     }

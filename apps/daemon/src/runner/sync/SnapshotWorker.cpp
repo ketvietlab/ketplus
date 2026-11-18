@@ -66,7 +66,8 @@ void SnapshotWorker::buildPack(const QString& jobId, const QString& snapshotId,
             outcome.baseMissing = true;
         } else {
             QFile::remove(request.outputPath);
-            const auto complete = snapshot::snapshotComplete(request.storePath, request.commit, tool);
+            const auto complete =
+                snapshot::snapshotComplete(request.storePath, request.commit, tool);
             outcome.code = complete && !complete.value() ? code::snapshotIncomplete
                                                          : code::snapshotBuildFailed;
         }
@@ -80,6 +81,14 @@ void SnapshotWorker::readChunk(const PackFile& pack, const qint64 offset, const 
     chunks_.start([pack, offset, length, context, callback = std::move(callback)] {
         const ChunkRead read = readPackChunk(pack, offset, length);
         answerOn(context, [callback, read] { callback(read); });
+    });
+}
+
+void SnapshotWorker::hashPack(const PackFile& pack, SyncWork::HashCallback callback) {
+    QObject* context = context_.get();
+    store_.start([pack, context, callback = std::move(callback)] {
+        const QString sha256 = hashPackFile(pack);
+        answerOn(context, [callback, sha256] { callback(sha256); });
     });
 }
 
@@ -98,6 +107,10 @@ void JobSyncWork::readChunk(const PackFile& pack, const qint64 offset, const qin
     worker_.readChunk(pack, offset, length, std::move(callback));
 }
 
+void JobSyncWork::hashPack(const PackFile& pack, HashCallback callback) {
+    worker_.hashPack(pack, std::move(callback));
+}
+
 ChunkRead readPackChunk(const PackFile& pack, const qint64 offset, const qint64 length) {
     if (offset < 0 || length <= 0 || offset + length > pack.size)
         return {};
@@ -111,6 +124,17 @@ ChunkRead readPackChunk(const PackFile& pack, const qint64 offset, const qint64 
     const QString sha256 =
         QString::fromLatin1(QCryptographicHash::hash(bytes, QCryptographicHash::Sha256).toHex());
     return {std::move(bytes), sha256};
+}
+
+QString hashPackFile(const PackFile& pack) {
+    QFile file(pack.path);
+    if (QFileInfo(pack.path).isSymLink() || !file.open(QIODevice::ReadOnly) ||
+        file.size() != pack.size)
+        return {};
+    QCryptographicHash hash(QCryptographicHash::Sha256);
+    if (!hash.addData(&file) || file.pos() != pack.size)
+        return {};
+    return QString::fromLatin1(hash.result().toHex());
 }
 
 } // namespace ketplus::daemon::runner::sync

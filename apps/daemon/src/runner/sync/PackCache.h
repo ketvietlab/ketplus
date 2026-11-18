@@ -44,7 +44,8 @@ class PackCache {
     // Deletes every pack of the runner that is not in flight.
     void removeRunner(const QString& runnerId);
 
-    // Applies the age and size limits as of `now`.
+    // Applies the age and size limits as of `now`; until setLiveJobs() is called it removes no
+    // pack that has a side file.
     void sweep(const QDateTime& now);
     // Bytes of every file in the cache directory.
     [[nodiscard]] qint64 totalBytes() const;

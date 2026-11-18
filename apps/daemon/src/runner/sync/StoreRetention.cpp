@@ -94,8 +94,7 @@ std::optional<PackFile> StoreRetention::pack(const QString& jobId) const {
     return packs_.find(jobId);
 }
 
-void StoreRetention::keepPack(const QString& jobId, const QString& runnerId,
-                              const PackFile& pack) {
+void StoreRetention::keepPack(const QString& jobId, const QString& runnerId, const PackFile& pack) {
     packs_.setInFlight(jobId, true);
     if (!packs_.record(jobId, pack, runnerId))
         qCWarning(lcRetention) << "could not record a pack for job" << jobId;

@@ -74,9 +74,8 @@ void ageJob(const QString& directory, const PackFile& pack, const QDateTime& whe
 }
 
 QByteArray readSide(const PackCache& cache, const QString& jobId) {
-    const QString stem = QFileInfo(cache.pathFor(jobId, QString(40, QLatin1Char('1')), {}))
-                             .fileName()
-                             .left(32);
+    const QString stem =
+        QFileInfo(cache.pathFor(jobId, QString(40, QLatin1Char('1')), {})).fileName().left(32);
     QFile file(QFileInfo(cache.pathFor(jobId, {}, {})).path() + QLatin1Char('/') + stem +
                QStringLiteral(".json"));
     return file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray{};
@@ -229,10 +228,10 @@ class SnapshotRetentionTest : public QObject {
                              runner));
         QVERIFY(cache.record(QStringLiteral("busy"), fakePack(cache, QStringLiteral("busy"), 10),
                              runner));
-        QVERIFY(cache.record(QStringLiteral("other"),
-                             fakePack(cache, QStringLiteral("other"), 10), QStringLiteral("run-2")));
-        QVERIFY(cache.record(QStringLiteral("legacy"),
-                             fakePack(cache, QStringLiteral("legacy"), 10)));
+        QVERIFY(cache.record(QStringLiteral("other"), fakePack(cache, QStringLiteral("other"), 10),
+                             QStringLiteral("run-2")));
+        QVERIFY(
+            cache.record(QStringLiteral("legacy"), fakePack(cache, QStringLiteral("legacy"), 10)));
         cache.setInFlight(QStringLiteral("busy"), true);
         for (const QString& name : filesIn(packs_))
             QVERIFY2(!name.contains(runner), qPrintable(name));
@@ -248,15 +247,15 @@ class SnapshotRetentionTest : public QObject {
     void aRefCommandThatHangsFails() {
         const QString fake = root_ + QStringLiteral("/hanging-git");
         write(fake, "#!/bin/sh\nexec sleep 60\n");
-        QVERIFY(QFile::setPermissions(fake, QFile::ReadOwner | QFile::WriteOwner |
-                                                QFile::ExeOwner));
+        QVERIFY(
+            QFile::setPermissions(fake, QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner));
         QVERIFY(QDir().mkpath(packs_));
         PackCache cache(packs_);
         snapshot::GitTool tool;
         tool.program = fake;
         const QString store = root_ + QStringLiteral("/store");
-        runGit(root_, root_, {QStringLiteral("init"), QStringLiteral("-q"), QStringLiteral("--bare"),
-                              store});
+        runGit(root_, root_,
+               {QStringLiteral("init"), QStringLiteral("-q"), QStringLiteral("--bare"), store});
         StoreRetention retention(store, cache, tool);
         QElapsedTimer timer;
         timer.start();

@@ -33,6 +33,7 @@ class SnapshotSender final {
   public:
     enum class Phase {
         Idle,       // not started
+        Verifying,  // a kept pack is hashed again before it is offered
         Packing,    // a pack is being built
         Offered,    // offer sent, waiting for snapshot.want
         Sending,    // runner needs bytes; chunks go out against acks
@@ -50,14 +51,16 @@ class SnapshotSender final {
     SnapshotSender& operator=(const SnapshotSender&) = delete;
 
     // After the runner accepted the spec; `snapshots` is the current connection's hello map. A
-    // pack kept for the job (after a restart) is offered again when its base is still held.
+    // pack kept for the job (after a restart) is offered again when its base passes the base
+    // check and the file still has its recorded SHA-256.
     void start(const QMap<QString, QString>& snapshots);
     // A frame from the runner on control. Frames that are not `snapshot.*` are ignored.
     void receive(const protocol::Frame& frame);
     void bulkWritable();
     void disconnected();
     // A new connection with this hello map: the same pack is offered again when it is still
-    // kept and its base is still held; otherwise a new pack is built.
+    // kept, its base passes the base check and the file still has its SHA-256; otherwise a new
+    // pack is built.
     void reconnected(const QMap<QString, QString>& snapshots);
     // Stops without a report upward; drops the job's pack and its in-flight snapshot.
     void cancel();
@@ -70,7 +73,9 @@ class SnapshotSender final {
     [[nodiscard]] QString failure() const { return failure_; }
 
   private:
-    [[nodiscard]] bool offerKept();
+    void reuseOrBuild();
+    void packHashed(const PackFile& kept, const QString& sha256);
+    [[nodiscard]] bool usable(const PackFile& kept) const;
     void build(const QString& baseId);
     void packBuilt(const PackOutcome& outcome, const QString& baseId);
     void offer();

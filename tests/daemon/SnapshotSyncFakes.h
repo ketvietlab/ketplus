@@ -19,6 +19,7 @@ using namespace ketplus::daemon::runner::sync;
 inline constexpr qint64 chunk = protocol::limits::chunkBytes;
 inline const QString snapshotA = QString(40, QLatin1Char('a'));
 inline const QString snapshotB = QString(40, QLatin1Char('b'));
+inline const QString snapshotC = QString(40, QLatin1Char('c'));
 inline const QString jobId = QStringLiteral("job-1");
 inline const QString runnerId = QStringLiteral("runner-a");
 inline const QString workspace = QStringLiteral("wkwkwkwkwkwkwkwkwkwkwkwkwkwkwkwk");
@@ -78,6 +79,10 @@ class FakeWork final : public SyncWork {
         qint64 length;
         ChunkCallback callback;
     };
+    struct Hash {
+        PackFile pack;
+        HashCallback callback;
+    };
 
     void buildPack(const QString& snapshotId, const QString& baseId,
                    PackCallback callback) override {
@@ -90,6 +95,17 @@ class FakeWork final : public SyncWork {
         ++readCount;
         if (autoRead)
             finishReads();
+    }
+
+    void hashPack(const PackFile& pack, HashCallback callback) override {
+        hashes.push_back({pack, std::move(callback)});
+        ++hashCount;
+    }
+    // Answers the oldest hash with the pack's own digest, or with `sha256` when given.
+    void finishHash(const std::optional<QString>& sha256 = std::nullopt) {
+        Hash hash = std::move(hashes.front());
+        hashes.pop_front();
+        hash.callback(sha256.value_or(hash.pack.sha256));
     }
 
     // Answers the oldest build with a synthetic pack of `size` bytes.
@@ -129,9 +145,11 @@ class FakeWork final : public SyncWork {
 
     std::deque<Build> builds;
     std::deque<Read> reads;
+    std::deque<Hash> hashes;
     QHash<QString, int> seeds;
     int buildCount = 0;
     int readCount = 0;
+    int hashCount = 0;
     bool autoRead = true;
     bool failRead = false;
     bool shortRead = false;

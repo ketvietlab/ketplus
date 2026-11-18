@@ -179,7 +179,7 @@ Result<bool> snapshotComplete(const QString& storePath, const QString& commit,
                                    tool);
     if (!listed)
         return listed.error().code == ErrorCode::GitFailed ? Result<bool>(false)
-                                                            : Result<bool>(listed.error());
+                                                           : Result<bool>(listed.error());
     const QList<QByteArray> lines = listed.value().out.split('\n');
     for (const QByteArray& line : lines)
         if (line.startsWith('?'))

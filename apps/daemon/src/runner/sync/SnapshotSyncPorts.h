@@ -70,10 +70,14 @@ class SyncWork {
     virtual ~SyncWork() = default;
     using PackCallback = std::function<void(const PackOutcome&)>;
     using ChunkCallback = std::function<void(const ChunkRead&)>;
+    // The SHA-256 of the whole pack file, lowercase hex; empty when the file cannot be read or
+    // its size is no longer the pack's.
+    using HashCallback = std::function<void(const QString&)>;
     virtual void buildPack(const QString& snapshotId, const QString& baseId,
                            PackCallback callback) = 0;
     virtual void readChunk(const PackFile& pack, qint64 offset, qint64 length,
                            ChunkCallback callback) = 0;
+    virtual void hashPack(const PackFile& pack, HashCallback callback) = 0;
 };
 
 // What the store keeps for the sender: the snapshot each runner confirmed per workspace key, and
