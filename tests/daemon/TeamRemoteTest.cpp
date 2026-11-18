@@ -153,6 +153,128 @@ class TeamRemoteTest final : public QObject {
   private slots:
     void initTestCase() { QStandardPaths::setTestModeEnabled(true); }
 
+    void pairedMemberRoles_data() {
+        QTest::addColumn<QString>("wireRole");
+        QTest::addColumn<QString>("expectedRole");
+        QTest::addColumn<bool>("named");
+        QTest::newRow("legacy-omitted") << QString{} << QString("developer") << true;
+        QTest::newRow("developer") << QString("developer") << QString("developer") << true;
+        QTest::newRow("reviewer") << QString("reviewer") << QString("reviewer") << true;
+        QTest::newRow("reviewer-default-name")
+            << QString("reviewer") << QString("reviewer") << false;
+    }
+
+    void pairedMemberRoles() {
+        QFETCH(QString, wireRole);
+        QFETCH(QString, expectedRole);
+        QFETCH(bool, named);
+        Fixture fixture;
+        QVERIFY(fixture.open());
+        const Team team = create(fixture);
+        const int before = local(fixture, "session.list", {}).value("sessions").toArray().size();
+        QJsonObject payload{{"team_id", team.id},
+                            {"provider", expectedRole == "reviewer" ? "claude" : "codex"},
+                            {"expected_revision", revision(fixture, team.id)}};
+        if (!wireRole.isEmpty())
+            payload.insert("role", wireRole);
+        if (named)
+            payload.insert("name", "Added member");
+        if (expectedRole == "developer")
+            payload.insert("paths", QJsonArray{"docs"});
+        const auto added = phone(fixture, "team.member.add", payload, "member-role-add");
+        QVERIFY2(added.value("ok").toBool(), qPrintable(text(added)));
+        const auto members = added.value("team").toObject().value("members").toArray();
+        QCOMPARE(members.size(), 4);
+        int leaders = 0;
+        int matching = 0;
+        for (const auto& value : members) {
+            const auto member = value.toObject();
+            leaders += member.value("role") == "leader";
+            if (member.value("name") == (named ? "Added member" : "Reviewer 2")) {
+                QCOMPARE(member.value("role").toString(), expectedRole);
+                ++matching;
+            }
+        }
+        QCOMPARE(leaders, 1);
+        QCOMPARE(matching, 1);
+        // A lost acknowledgement replays the same result, rather than creating another role.
+        QCOMPARE(phone(fixture, "team.member.add", payload, "member-role-add"), added);
+        QCOMPARE(local(fixture, "session.list", {}).value("sessions").toArray().size(), before + 1);
+    }
+
+    void invalidPairedMemberRolesCreateNothing() {
+        Fixture fixture;
+        QVERIFY(fixture.open());
+        const Team team = create(fixture);
+        const auto count = [&] {
+            return local(fixture, "session.list", {}).value("sessions").toArray().size();
+        };
+        const int before = count();
+        for (const QJsonValue& role :
+             {QJsonValue("leader"), QJsonValue("Reviewer"), QJsonValue(" reviewer"), QJsonValue(""),
+              QJsonValue(QJsonValue::Null), QJsonValue(3), QJsonValue(true),
+              QJsonValue(QJsonArray{})}) {
+            const auto result = phone(fixture, "team.member.add",
+                                      {{"team_id", team.id},
+                                       {"role", role},
+                                       {"name", "Refused member"},
+                                       {"provider", "claude"},
+                                       {"expected_revision", revision(fixture, team.id)}});
+            QCOMPARE(result.value("error_code").toString(), QString("invalid_payload"));
+            QCOMPARE(count(), before);
+        }
+        // Assignment role is not an actor credential: body-level impersonation stays forbidden.
+        const auto spoofed = phone(fixture, "team.member.add",
+                                   {{"team_id", team.id},
+                                    {"role", "reviewer"},
+                                    {"actor", "leader"},
+                                    {"provider", "claude"},
+                                    {"expected_revision", revision(fixture, team.id)}});
+        QCOMPARE(spoofed.value("error_code").toString(), QString("invalid_payload"));
+        const auto escalated = phone(fixture, "team.member.add",
+                                     {{"team_id", team.id},
+                                      {"role", "reviewer"},
+                                      {"provider", "codex"},
+                                      {"execution_policy", "full"},
+                                      {"risk_acknowledged", true},
+                                      {"expected_revision", revision(fixture, team.id)}});
+        QCOMPARE(escalated.value("error_code").toString(), QString("invalid_payload"));
+        QCOMPARE(count(), before);
+        QCOMPARE(phone(fixture, "team.get", {{"team_id", team.id}})
+                     .value("team")
+                     .toObject()
+                     .value("members")
+                     .toArray()
+                     .size(),
+                 3);
+    }
+
+    void pairedReviewerKeepsPolicyLimitAndRevisionFence() {
+        Fixture fixture;
+        QVERIFY(fixture.open());
+        const Team team = create(fixture);
+        const int before = local(fixture, "session.list", {}).value("sessions").toArray().size();
+        QJsonObject payload{{"team_id", team.id},
+                            {"role", "reviewer"},
+                            {"provider", "codex"},
+                            {"expected_revision", revision(fixture, team.id)}};
+        QCOMPARE(phone(fixture, "team.member.add", payload).value("error_code").toString(),
+                 QString("reviewer_unsupported"));
+        payload.insert("provider", "unavailable");
+        QCOMPARE(phone(fixture, "team.member.add", payload).value("error_code").toString(),
+                 QString("provider_unavailable"));
+        QCOMPARE(local(fixture, "session.list", {}).value("sessions").toArray().size(), before);
+        payload.insert("provider", "claude");
+        const auto added = phone(fixture, "team.member.add", payload);
+        QVERIFY2(added.value("ok").toBool(), qPrintable(text(added)));
+        QCOMPARE(phone(fixture, "team.member.add", payload).value("error_code").toString(),
+                 QString("stale_team"));
+        payload.insert("expected_revision", revision(fixture, team.id));
+        QCOMPARE(phone(fixture, "team.member.add", payload).value("error_code").toString(),
+                 QString("role_taken"));
+        QCOMPARE(local(fixture, "session.list", {}).value("sessions").toArray().size(), before + 1);
+    }
+
     void pairedLanguageRejectsWholeMutationAndActorSpoofing() {
         Fixture fixture;
         QVERIFY(fixture.open());
@@ -612,10 +734,22 @@ class TeamRemoteTest final : public QObject {
                                              {"expected_revision", revision(fixture, team.id)}});
             QVERIFY2(added.value("ok").toBool(), qPrintable(text(added)));
         }
-        const QJsonObject second =
-            local(fixture, "team.member.add",
-                  {{"team_id", team.id}, {"role", "reviewer"}, {"provider", "claude"}});
+        const QJsonObject second = phone(fixture, "team.member.add",
+                                         {{"team_id", team.id},
+                                          {"role", "reviewer"},
+                                          {"provider", "claude"},
+                                          {"expected_revision", revision(fixture, team.id)}});
         QVERIFY2(second.value("ok").toBool(), qPrintable(text(second)));
+        QCOMPARE(phone(fixture, "team.member.add",
+                       {{"team_id", team.id},
+                        {"role", "developer"},
+                        {"name", "Extra developer"},
+                        {"paths", QJsonArray{"extra"}},
+                        {"provider", "codex"},
+                        {"expected_revision", revision(fixture, team.id)}})
+                     .value("error_code")
+                     .toString(),
+                 QString("team_full"));
 
         const auto members = [](const QJsonObject& team) {
             QStringList roles;

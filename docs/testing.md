@@ -430,6 +430,15 @@ full Pro matrix results, initial failures, one isolated retry and platform skips
 
 ## Minimum verification
 
+Paired member-role contract: run `ketplus_team_remote_tests`,
+`ketplus_team_remote_cloud_tests` and `ketplus_team_protocol_tests`, plus the directly
+affected team rules/provider-policy fixtures. Cover Developer/Reviewer/omitted role,
+strict type/enum rejection without new sessions, actor/policy injection, cached replay,
+member limits and stale member revision. The cloud fixture applies capability/owner/
+key/session/pairing refusals to settings and both assignment roles. No live provider
+is needed. See [paired-team-member-roles.md](paired-team-member-roles.md).
+
+
 Linux Pro packaging changes run `tests/packaging/test_linux_desktop_packages.py`,
 the offscreen bundled-browser/Claude-adapter tests and production build-info
 checks through `packaging/linux/build-desktop.sh`. Verify both actual package

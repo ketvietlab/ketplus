@@ -184,10 +184,17 @@ describes them.
 | Language | `team.update` | `team_id`, `language` (`en` or `vi`, ADR 0125), `expected_revision` | settings | `invalid_payload` |
 | Delete the team (its conversations stay) | `team.delete` | `team_id`, `confirmation: "DELETE"`, `expected_revision` | settings and members | `confirmation_required` |
 | New team | `team.create` | envelope `repositoryId` and `expectedCatalogRevision`; `name`, `goal`, `integration_branch`, `merge_policy`, `leader_writes_requirements`, `execution_policy`, `risk_acknowledged`, `plan {leader, developers {count, members?}, reviewer}`, each agent being `{provider, model?, effort?}`, `turn_budget?`, `language?` (`auto`, `en` or `vi`, [T30](2026-11-18-english-ui-team-content.md); without it a new team follows the prompt) (without `turn_budget`, the team takes the global value of Settings → Teams, which the phone reads from `team.list`'s `settings`; an older phone that does not read it shows "The Mac's default (Settings → Teams)" for an empty field) | the worktree catalog | `repository_not_found`, `invalid_repository`, `team_full`, `last_developer`, `provider_unavailable`, `reviewer_unsupported`, `member_unavailable`, `lane_overlap`, `execution_policy_denied` |
-| Add a developer (a new conversation) | `team.member.add` | `team_id`, `name`, `lane?`, `paths?`, `provider`, `model?`, `effort?`, `expected_revision` | members | `team_full`, `provider_unavailable`, `member_unavailable`, `lane_overlap` |
+| Add a developer or reviewer (a new conversation) | `team.member.add` | `team_id`, `role?` (`developer` or `reviewer`, defaults to `developer`), `name?` (required for developer), `lane?`, `paths?`, `provider`, `model?`, `effort?`, `expected_revision` | members | `invalid_payload`, `team_full`, `role_taken`, `provider_unavailable`, `reviewer_unsupported`, `member_unavailable`, `lane_overlap` |
 | Remove a member | `team.member.remove` | `team_id`, `session_id`, `expected_revision` | members | `not_member`, `last_developer`, `role_required` |
 | Add an existing conversation to a team | `team.member.join` | `team_id`, `session_id`, `lane?`, `paths?`, `expected_revision` | members | `session_not_found`, `already_member`, `other_repository`, `team_full`, `lane_overlap` |
 | Hand a task over | `team.task.handover` | `team_id`, `task_id`, `owner` (a developer's or the leader's `session_id`), `reason` (1 to 500 characters), `expected_revision` | that task | `task_not_found`, `not_member`, `role_forbidden`, `invalid_transition`, `worktree_unavailable` |
+
+- `team.member.add` has a strict optional assignment `role`: only omission selects
+  the legacy developer default. Empty, non-string, differently cased or unsupported
+  values, including `leader`, are `invalid_payload` before a conversation is created.
+  This role assigns the new member; it is not an actor credential. Existing pairing,
+  capability, revision, provider-policy and member-limit checks still apply. See the
+  [member-add contract](../paired-team-member-roles.md) for defaults and compatibility.
 
 - A phone may change only the `team.update` fields listed above. Any other field is
   refused with `invalid_payload`. Changing the name, the goal, the branch, the shared
