@@ -75,20 +75,34 @@ void SnapshotWorker::buildPack(const QString& jobId, const QString& snapshotId,
     });
 }
 
-void SnapshotWorker::readChunk(const PackFile& pack, const qint64 offset, const qint64 length,
-                               SyncWork::ChunkCallback callback) {
+// A job released while a thread had its pack open could not delete it there: Windows refuses to
+// remove an open file. The pack is removed again once the thread is done and has answered.
+void SnapshotWorker::removeIfReleased(const QString& jobId) {
+    if (!packs_.inFlight(jobId))
+        packs_.remove(jobId);
+}
+
+void SnapshotWorker::readChunk(const QString& jobId, const PackFile& pack, const qint64 offset,
+                               const qint64 length, SyncWork::ChunkCallback callback) {
     QObject* context = context_.get();
-    chunks_.start([pack, offset, length, context, callback = std::move(callback)] {
+    chunks_.start([this, jobId, pack, offset, length, context, callback = std::move(callback)] {
         const ChunkRead read = readPackChunk(pack, offset, length);
-        answerOn(context, [callback, read] { callback(read); });
+        answerOn(context, [this, jobId, callback, read] {
+            callback(read);
+            removeIfReleased(jobId);
+        });
     });
 }
 
-void SnapshotWorker::hashPack(const PackFile& pack, SyncWork::HashCallback callback) {
+void SnapshotWorker::hashPack(const QString& jobId, const PackFile& pack,
+                              SyncWork::HashCallback callback) {
     QObject* context = context_.get();
-    store_.start([pack, context, callback = std::move(callback)] {
+    store_.start([this, jobId, pack, context, callback = std::move(callback)] {
         const QString sha256 = hashPackFile(pack);
-        answerOn(context, [callback, sha256] { callback(sha256); });
+        answerOn(context, [this, jobId, callback, sha256] {
+            callback(sha256);
+            removeIfReleased(jobId);
+        });
     });
 }
 
@@ -104,11 +118,11 @@ void JobSyncWork::buildPack(const QString& snapshotId, const QString& baseId,
 
 void JobSyncWork::readChunk(const PackFile& pack, const qint64 offset, const qint64 length,
                             ChunkCallback callback) {
-    worker_.readChunk(pack, offset, length, std::move(callback));
+    worker_.readChunk(jobId_, pack, offset, length, std::move(callback));
 }
 
 void JobSyncWork::hashPack(const PackFile& pack, HashCallback callback) {
-    worker_.hashPack(pack, std::move(callback));
+    worker_.hashPack(jobId_, pack, std::move(callback));
 }
 
 ChunkRead readPackChunk(const PackFile& pack, const qint64 offset, const qint64 length) {

@@ -27,14 +27,18 @@ class SnapshotWorker {
     // pack is deleted on arrival when the job was released meanwhile.
     void buildPack(const QString& jobId, const QString& snapshotId, const QString& baseId,
                    SyncWork::PackCallback callback);
-    void readChunk(const PackFile& pack, qint64 offset, qint64 length,
+    // Reading or hashing a pack of a job released meanwhile deletes the pack once the answer is
+    // delivered (a file open in the thread cannot be deleted on Windows).
+    void readChunk(const QString& jobId, const PackFile& pack, qint64 offset, qint64 length,
                    SyncWork::ChunkCallback callback);
     // Hashes the whole pack file on the store queue, where packs are built.
-    void hashPack(const PackFile& pack, SyncWork::HashCallback callback);
+    void hashPack(const QString& jobId, const PackFile& pack, SyncWork::HashCallback callback);
     // Any other work on the store queue, such as preparing a snapshot or pruning.
     void runOnStore(std::function<void()> work);
 
   private:
+    void removeIfReleased(const QString& jobId);
+
     QString storePath_;
     PackCache& packs_;
     ketplus::runner::snapshot::GitTool tool_;
