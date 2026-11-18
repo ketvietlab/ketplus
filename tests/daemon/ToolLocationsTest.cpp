@@ -84,6 +84,36 @@ class ToolLocationsTest final : public QObject {
                                       QStringLiteral("@openai/codex"), QStringLiteral("codex")));
     }
 
+    void scriptWrappersAreNotPrograms() {
+        for (const char* path : {"C:/x/node.cmd", "C:/x/node.BAT", "/x/tool.ps1"})
+            QVERIFY(tools::isScriptWrapper(QString::fromLatin1(path)));
+        for (const char* path : {"C:/x/node.exe", "/usr/bin/node", "/x/codex"})
+            QVERIFY(!tools::isScriptWrapper(QString::fromLatin1(path)));
+    }
+
+#if defined(Q_OS_WIN)
+    void aNodeCmdOnPathIsNotNode() {
+        QTemporaryDir root;
+        QVERIFY(makeShimTree(root.path(), R"({"bin":{"codex":"bin/codex.js"}})"));
+        QVERIFY(QFile::remove(QDir(root.path()).filePath(QStringLiteral("node.exe"))));
+        QTemporaryDir onPath;
+        QVERIFY(write(QDir(onPath.path()).filePath(QStringLiteral("node.cmd")), "@echo off\r\n"));
+        const QByteArray previousPath = qgetenv("PATH");
+        const QByteArray previousProgramFiles = qgetenv("ProgramFiles");
+        const QByteArray previousProgramFilesX86 = qgetenv("ProgramFiles(x86)");
+        qputenv("PATH", QDir::toNativeSeparators(onPath.path()).toLocal8Bit());
+        qputenv("ProgramFiles", QByteArray());
+        qputenv("ProgramFiles(x86)", QByteArray());
+        const auto command =
+            tools::npmCliCommand(QDir(root.path()).filePath(QStringLiteral("codex.cmd")),
+                                 QStringLiteral("@openai/codex"), QStringLiteral("codex"));
+        qputenv("PATH", previousPath);
+        qputenv("ProgramFiles", previousProgramFiles);
+        qputenv("ProgramFiles(x86)", previousProgramFilesX86);
+        QVERIFY(!command);
+    }
+#endif
+
     void findToolSearchesPathThenTheCommonDirectories() {
         QVERIFY(tools::findTool(QStringLiteral("ketplus-no-such-tool-for-test")).isEmpty());
 #if !defined(Q_OS_WIN)

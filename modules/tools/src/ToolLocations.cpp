@@ -34,6 +34,12 @@ QString findTool(const QString& name) {
                             : onPath;
 }
 
+bool isScriptWrapper(const QString& path) {
+    const QString suffix = QFileInfo(path).suffix().toLower();
+    return suffix == QLatin1String("cmd") || suffix == QLatin1String("bat") ||
+           suffix == QLatin1String("ps1");
+}
+
 namespace {
 
 QString binScript(const QDir& packageDirectory, const QString& binName) {
@@ -56,8 +62,7 @@ QString binScript(const QDir& packageDirectory, const QString& binName) {
 std::optional<Command> npmCliCommand(const QString& executable, const QString& package,
                                      const QString& binName) {
     const QFileInfo shim(executable);
-    const QString suffix = shim.suffix().toLower();
-    if (suffix != QLatin1String("cmd") && suffix != QLatin1String("bat"))
+    if (!isScriptWrapper(executable))
         return Command{executable, {}};
     const QDir directory = shim.absoluteDir();
     const QString script =
@@ -69,7 +74,8 @@ std::optional<Command> npmCliCommand(const QString& executable, const QString& p
     QString node = directory.filePath(QStringLiteral("node.exe"));
     if (!QFileInfo::exists(node))
         node = findTool(QStringLiteral("node"));
-    if (node.isEmpty())
+    // PATHEXT can make `node` resolve to node.cmd; that is a wrapper, not the runtime.
+    if (node.isEmpty() || isScriptWrapper(node))
         return std::nullopt;
     return Command{node, {QDir::toNativeSeparators(script)}};
 }
