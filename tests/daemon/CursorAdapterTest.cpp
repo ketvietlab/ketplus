@@ -73,8 +73,6 @@ class CursorAdapterTest final : public QObject {
 
   private slots:
     void findsTheCliInstalledAfterStartup() {
-        KETPLUS_SKIP_ON_WINDOWS("finding an updated Cursor CLI after startup returns no executable "
-                                "on Windows; cause not yet diagnosed");
         // The daemon outlives a CLI install: Cursor's installer runs while KetPlus is open and
         // the setup banner's Retry has to see it without restarting KetPlus.
         QTemporaryDir directory;
