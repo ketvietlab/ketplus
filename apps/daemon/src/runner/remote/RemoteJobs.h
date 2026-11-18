@@ -81,6 +81,10 @@ class RemoteJobs final : public link::LinkEvents {
 
     // Signed in, runners offered, Git usable and the registry open.
     [[nodiscard]] bool available() const;
+    // Why a remote job cannot start now: empty, runner_unavailable or git_unsupported.
+    [[nodiscard]] QString refusal() const;
+    // Records not ended yet; tasks still waiting for their first record are not among them.
+    [[nodiscard]] int outstanding() const { return coordinator_.outstanding(); }
     void submit(const QString& taskId, SubmitRequest request, Callback callback);
     [[nodiscard]] jobs::JobDecision stop(const QString& taskId);
     [[nodiscard]] jobs::JobDecision resolveCleanup(const QString& taskId,

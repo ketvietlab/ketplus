@@ -97,7 +97,8 @@ target_include_directories(ketplus_daemon_runner_link PUBLIC
     "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>")
 ketplus_enable_warnings(ketplus_daemon_runner_link)
 # Remote jobs on the running daemon: the records, peer sessions, runner links, snapshot sender
-# and output spool on the real registry, Relay socket and pin store.
+# and output spool on the real registry, Relay socket and pin store, and the entry of tasks
+# started with runs_on.
 target_sources(ketplus_daemon_core PRIVATE
     src/runner/remote/CoordinatorRecords.cpp src/runner/remote/CoordinatorRecords.h
     src/runner/remote/RelayCancels.cpp src/runner/remote/RelayCancels.h
@@ -107,7 +108,10 @@ target_sources(ketplus_daemon_core PRIVATE
     src/runner/remote/RemoteJobsService.cpp src/runner/remote/RemoteJobsService.h
     src/runner/remote/SnapshotPorts.cpp src/runner/remote/SnapshotPorts.h
     src/runner/remote/SnapshotStores.cpp src/runner/remote/SnapshotStores.h
-    src/runner/remote/TaskSnapshots.cpp src/runner/remote/TaskSnapshots.h)
+    src/runner/remote/TaskSnapshots.cpp src/runner/remote/TaskSnapshots.h
+    src/runner/entry/RemoteJobEntry.cpp src/runner/entry/RemoteJobEntry.h
+    src/runner/entry/RemoteSpec.cpp src/runner/entry/RemoteSpec.h
+    src/runner/entry/RunsOnRequest.cpp src/runner/entry/RunsOnRequest.h)
 target_link_libraries(ketplus_daemon_core PUBLIC
     ketplus_daemon_runner_sync ketplus_daemon_runner_link ketplus_daemon_runner_output)
 # Supported provider CLI versions (ADR 0015).

@@ -188,6 +188,7 @@ target_sources(ketplus_remote_jobs_service_tests PRIVATE cloud-privacy/MemoryCre
 ketplus_add_daemon_test(ketplus_remote_jobs_end_to_end_tests RemoteJobsEndToEndTest.cpp)
 ketplus_add_daemon_test(ketplus_remote_jobs_stop_tests RemoteJobsStopTest.cpp)
 ketplus_add_daemon_test(ketplus_remote_jobs_snapshot_tests RemoteJobsSnapshotTest.cpp)
+ketplus_add_daemon_test(ketplus_remote_job_entry_tests RemoteJobEntryTest.cpp)
 foreach(suite end_to_end stop snapshot)
     set(target ketplus_remote_jobs_${suite}_tests)
     target_sources(${target} PRIVATE RemoteJobsRunnerEnd.cpp RemoteJobsRunnerEnd.h)
