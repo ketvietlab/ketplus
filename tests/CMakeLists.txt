@@ -187,11 +187,19 @@ target_link_libraries(ketplus_team_page_language_tests PRIVATE Qt6::Test ketplus
 target_compile_definitions(ketplus_team_page_language_tests PRIVATE
     KETPLUS_TEAM_TS="${PROJECT_SOURCE_DIR}/modules/remote/translations/ketplus_teams_vi.ts")
 # Historical catalogs remain complete; new English UI text needs no Vietnamese translation.
-add_test(NAME ketplus_team_translation_catalog_tests
-    COMMAND Python3::Interpreter
-        "${PROJECT_SOURCE_DIR}/modules/remote/translations/update_team_translations.py"
-        --check-preserved "$<TARGET_FILE:Qt6::lupdate>" "${PROJECT_SOURCE_DIR}"
-        "${PROJECT_SOURCE_DIR}/modules/remote/translations/ketplus_teams_vi.ts")
+# Needs a real Python 3; Windows only has the Microsoft Store stub, so it is not registered there.
+if(NOT TARGET Python3::Interpreter AND NOT WIN32)
+    find_package(Python3 COMPONENTS Interpreter)
+endif()
+if(TARGET Python3::Interpreter)
+    add_test(NAME ketplus_team_translation_catalog_tests
+        COMMAND Python3::Interpreter
+            "${PROJECT_SOURCE_DIR}/modules/remote/translations/update_team_translations.py"
+            --check-preserved "$<TARGET_FILE:Qt6::lupdate>" "${PROJECT_SOURCE_DIR}"
+            "${PROJECT_SOURCE_DIR}/modules/remote/translations/ketplus_teams_vi.ts")
+else()
+    message(STATUS "ketplus_team_translation_catalog_tests: no Python 3 interpreter, not registered")
+endif()
 # ADR 0114 §10: the disk warning and the removal of a done task's worktree.
 ketplus_add_gui_test(ketplus_team_storage_page_tests TeamStoragePageTest.cpp)
 target_link_libraries(ketplus_team_storage_page_tests PRIVATE Qt6::Test ketplus_desktop_shell)
