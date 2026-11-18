@@ -105,7 +105,8 @@ still takes colours or metrics from that stylesheet or from `ThemePalette`:
   `ketplus_control_crypto` keys/credentials/sign-in target the daemon also links.
 - `modules/computer`: computer use settings and provider MCP launch.
 - `modules/runner`: runner job support; `src/snapshot` creates, packs and applies worktree
-  snapshots with the system git.
+  snapshots with the system git; `src/pairing` holds the pairing token, fingerprints,
+  confirmation code, signed payloads and pin records shared by the daemon and the runner.
 - `tests`: Pro and cross-boundary integration tests.
 - `modules/accounts` and `modules/router`: reserved; create each only with its
   first real implementation.
