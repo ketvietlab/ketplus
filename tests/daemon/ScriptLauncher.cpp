@@ -42,11 +42,17 @@ int wmain() {
     SetEnvironmentVariableW(L"PYTHONUTF8", L"1");
     SetEnvironmentVariableW(L"PYTHONIOENCODING", L"utf-8");
 
+    // The launcher joins the job first, so the interpreter is born inside it: a launcher that is
+    // killed at any moment takes its interpreter along (closing the job's last handle kills
+    // every member). Assigning the child afterwards left a window in which the launcher died
+    // first and the interpreter stayed behind, holding the caller's pipes open.
     HANDLE job = CreateJobObjectW(nullptr, nullptr);
     if (job) {
         JOBOBJECT_EXTENDED_LIMIT_INFORMATION limits{};
         limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
-        SetInformationJobObject(job, JobObjectExtendedLimitInformation, &limits, sizeof(limits));
+        if (SetInformationJobObject(job, JobObjectExtendedLimitInformation, &limits,
+                                    sizeof(limits)))
+            AssignProcessToJobObject(job, GetCurrentProcess());
     }
 
     STARTUPINFOW startup{};
@@ -56,12 +62,9 @@ int wmain() {
     startup.hStdOutput = GetStdHandle(STD_OUTPUT_HANDLE);
     startup.hStdError = GetStdHandle(STD_ERROR_HANDLE);
     PROCESS_INFORMATION child{};
-    if (!CreateProcessW(nullptr, commandLine.data(), nullptr, nullptr, TRUE, CREATE_SUSPENDED,
-                        nullptr, nullptr, &startup, &child))
+    if (!CreateProcessW(nullptr, commandLine.data(), nullptr, nullptr, TRUE, 0, nullptr, nullptr,
+                        &startup, &child))
         return 127;
-    if (job)
-        AssignProcessToJobObject(job, child.hProcess);
-    ResumeThread(child.hThread);
     WaitForSingleObject(child.hProcess, INFINITE);
     DWORD exitCode = 1;
     GetExitCodeProcess(child.hProcess, &exitCode);
