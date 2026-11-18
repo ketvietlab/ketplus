@@ -187,6 +187,10 @@ target_sources(ketplus_remote_jobs_end_to_end_tests PRIVATE
     RemoteJobsRunnerEnd.cpp RemoteJobsRunnerEnd.h)
 target_link_libraries(ketplus_remote_jobs_end_to_end_tests PRIVATE
     ketplus_runner_pairing ketplus_control_crypto_primitives)
+ketplus_add_daemon_test(ketplus_remote_jobs_stop_tests RemoteJobsStopTest.cpp)
+target_sources(ketplus_remote_jobs_stop_tests PRIVATE RemoteJobsRunnerEnd.cpp)
+target_link_libraries(ketplus_remote_jobs_stop_tests PRIVATE
+    ketplus_runner_pairing ketplus_control_crypto_primitives)
 qt_add_executable(ketplus_peer_output_tests PeerOutputTest.cpp)
 ketplus_enable_warnings(ketplus_peer_output_tests)
 target_link_libraries(ketplus_peer_output_tests PRIVATE Qt6::Test ketplus_daemon_runner_peer)

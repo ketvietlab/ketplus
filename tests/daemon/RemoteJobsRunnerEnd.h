@@ -121,7 +121,7 @@ struct EndToEnd {
     EndToEnd();
     // A task submitted from `repo/src`, its Relay submit answered queued as linkedJob; empty
     // on failure.
-    QString submit();
+    QString submit(qint64 timeoutMs = 60'000);
     // The Relay hints a change and answers that linkedRunner took the job.
     void assign();
     // A signed offer of linkedRunner on connection `n`, its channels opened and `hello` sent.

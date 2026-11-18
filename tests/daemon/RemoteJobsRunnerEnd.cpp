@@ -245,15 +245,15 @@ EndToEnd::EndToEnd() {
     };
 }
 
-QString EndToEnd::submit() {
-    const QString id = h.f.remoteTask();
+QString EndToEnd::submit(const qint64 timeoutMs) {
+    const QString id = h.f.remoteTask(linuxLabels, timeoutMs);
     if (id.isEmpty())
         return {};
     SubmitRequest request;
     request.spec.invocation.argv = QStringList{QStringLiteral("make")};
     request.spec.cwd = QDir(repo).filePath(QStringLiteral("src"));
     request.runsOn = linuxLabels;
-    request.timeoutMs = 60'000;
+    request.timeoutMs = timeoutMs;
     QString code = QStringLiteral("unanswered");
     h.jobs->submit(id, request, [&code](const QString& answer) { code = answer; });
     if (!code.isEmpty())
