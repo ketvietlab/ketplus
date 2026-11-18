@@ -16,4 +16,14 @@ qt_add_executable(ketplus_runner_protocol_tests
 ketplus_enable_warnings(ketplus_runner_protocol_tests)
 target_link_libraries(ketplus_runner_protocol_tests PRIVATE Qt6::Test ketplus_runner_protocol)
 add_test(NAME ketplus_runner_protocol_tests COMMAND ketplus_runner_protocol_tests)
+
+# ketplus-runner against an in-process Relay on loopback: state directory, registration,
+# pairing, access tokens and heartbeat. No network beyond 127.0.0.1.
+qt_add_executable(ketplus_runner_app_tests
+    FakeRelay.cpp FakeRelay.h RunnerAppPairingTest.cpp RunnerAppRunTest.cpp
+    RunnerAppSecretsTest.cpp RunnerAppStateTest.cpp RunnerAppTest.cpp RunnerAppTest.h)
+ketplus_enable_warnings(ketplus_runner_app_tests)
+target_link_libraries(ketplus_runner_app_tests PRIVATE
+    Qt6::Test Qt6::Network ketplus_runner_app OpenSSL::Crypto)
+add_test(NAME ketplus_runner_app_tests COMMAND ketplus_runner_app_tests)
 ketplus_tests_offscreen()

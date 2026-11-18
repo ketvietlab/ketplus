@@ -126,6 +126,7 @@ add_subdirectory(modules/computer)
 add_subdirectory(modules/remote)
 add_subdirectory(modules/runner)
 add_subdirectory(apps/daemon)
+add_subdirectory(apps/runner)
 
 if(KETPLUS_BUILD_DESKTOP)
     set(KETQT_BUILD_QUICK ON CACHE BOOL "Build Két QML components for Pro" FORCE)
