@@ -1,3 +1,15 @@
+# Windows builds only the snapshot library and its test: the rest of the runner is Linux-only
+# (apps/runner is not built there), and WorktreeSnapshotTest uses POSIX fixtures.
+if(WIN32)
+    qt_add_executable(ketplus_runner_snapshot_windows_tests WorktreeSnapshotWindowsTest.cpp)
+    ketplus_enable_warnings(ketplus_runner_snapshot_windows_tests)
+    target_link_libraries(ketplus_runner_snapshot_windows_tests PRIVATE Qt6::Test
+        ketplus_runner_snapshot)
+    add_test(NAME ketplus_runner_snapshot_windows_tests
+        COMMAND ketplus_runner_snapshot_windows_tests)
+    return()
+endif()
+
 # Runner worktree snapshots against the system git; temporary repositories only, no network.
 qt_add_executable(ketplus_runner_snapshot_tests WorktreeSnapshotTest.cpp)
 ketplus_enable_warnings(ketplus_runner_snapshot_tests)

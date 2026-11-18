@@ -63,7 +63,10 @@ the OpenSSH default shell must stay `cmd.exe` (the scripts use `cd /d` and
 `if not exist`); `git config --global core.autocrlf false` must be set, because
 the build clones dependencies and patches them with LF-only patterns, which a
 CRLF checkout breaks; and `qtwebview` is installed without a WebEngine, so
-check that a WebView backend plugin is present before relying on it:
+check that a WebView backend plugin is present before relying on it. The runner snapshot library
+(linked by the daemon) stages files with `git add` and `attr:` pathspecs, which Git for Windows
+2.38 rejects (`pathspec magic not supported by this command: 'attr'`) and 2.47 accepts, so the
+snapshot tests need a Git for Windows of the 2.47 series or newer first on `PATH`:
 
 ```sh
 export KETPLUS_WIN_HOST=user@host            # required

@@ -13,6 +13,16 @@ QString sealedHome() {
     return QDir::rootPath() + QStringLiteral("nonexistent/ketplus-runner-sealed-home");
 }
 
+// The file git reads as empty. QProcess::nullDevice() is "\\.\NUL" on Windows, which git
+// rejects as a config path; plain "NUL" is accepted there (and by hooksPath and the rule files).
+QString nullPath() {
+#if defined(Q_OS_WIN)
+    return QStringLiteral("NUL");
+#else
+    return QStringLiteral("/dev/null");
+#endif
+}
+
 QString describe(const QStringList& arguments) {
     // Leaves out the -c pairs every call shares.
     QStringList shown;
@@ -53,11 +63,11 @@ QStringList SealedGit::sealedOptions() {
     // Repository configuration is the store's or mirror's own (written only by this library),
     // so these mainly pin defaults a future store config or git release could change.
     const QStringList values{
-        QStringLiteral("core.hooksPath=/dev/null"),
+        QStringLiteral("core.hooksPath=") + nullPath(),
         QStringLiteral("core.fsmonitor=false"),
         QStringLiteral("core.untrackedCache=false"),
-        QStringLiteral("core.attributesFile=/dev/null"),
-        QStringLiteral("core.excludesFile=/dev/null"),
+        QStringLiteral("core.attributesFile=") + nullPath(),
+        QStringLiteral("core.excludesFile=") + nullPath(),
         QStringLiteral("core.splitIndex=false"),
         QStringLiteral("core.protectHFS=true"),
         QStringLiteral("core.protectNTFS=true"),
@@ -88,8 +98,8 @@ QProcessEnvironment SealedGit::environment() const {
     environment.insert(QStringLiteral("HOME"), sealedHome());
     environment.insert(QStringLiteral("XDG_CONFIG_HOME"), sealedHome());
     environment.insert(QStringLiteral("GIT_CONFIG_NOSYSTEM"), QStringLiteral("1"));
-    environment.insert(QStringLiteral("GIT_CONFIG_SYSTEM"), QStringLiteral("/dev/null"));
-    environment.insert(QStringLiteral("GIT_CONFIG_GLOBAL"), QStringLiteral("/dev/null"));
+    environment.insert(QStringLiteral("GIT_CONFIG_SYSTEM"), nullPath());
+    environment.insert(QStringLiteral("GIT_CONFIG_GLOBAL"), nullPath());
     environment.insert(QStringLiteral("GIT_ATTR_NOSYSTEM"), QStringLiteral("1"));
     environment.insert(QStringLiteral("GIT_TERMINAL_PROMPT"), QStringLiteral("0"));
     environment.insert(QStringLiteral("GIT_ASKPASS"), QStringLiteral("/bin/false"));
