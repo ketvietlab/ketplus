@@ -1,3 +1,15 @@
+# Windows builds only the snapshot library and its test: the rest of the runner is Linux-only
+# (apps/runner is not built there), and WorktreeSnapshotTest uses POSIX fixtures.
+if(WIN32)
+    qt_add_executable(ketplus_runner_snapshot_windows_tests WorktreeSnapshotWindowsTest.cpp)
+    ketplus_enable_warnings(ketplus_runner_snapshot_windows_tests)
+    target_link_libraries(ketplus_runner_snapshot_windows_tests PRIVATE Qt6::Test
+        ketplus_runner_snapshot)
+    add_test(NAME ketplus_runner_snapshot_windows_tests
+        COMMAND ketplus_runner_snapshot_windows_tests)
+    return()
+endif()
+
 # Runner worktree snapshots against the system git; temporary repositories only, no network.
 qt_add_executable(ketplus_runner_snapshot_tests WorktreeSnapshotTest.cpp)
 ketplus_enable_warnings(ketplus_runner_snapshot_tests)
@@ -24,12 +36,23 @@ add_test(NAME ketplus_runner_protocol_tests COMMAND ketplus_runner_protocol_test
 # ketplus-runner against an in-process Relay on loopback: state directory, registration,
 # pairing, access tokens, heartbeat and job calls. No network beyond 127.0.0.1.
 qt_add_executable(ketplus_runner_app_tests
-    FakeRelay.cpp FakeRelay.h FakeRelayJobs.cpp RunnerAppDeliveryFilesTest.cpp RunnerAppJobCallsTest.cpp RunnerAppPairingTest.cpp
+    FakeRelay.cpp FakeRelay.h FakeRelayJobs.cpp RunnerAppDeliveryFilesTest.cpp RunnerAppLoopHost.cpp RunnerAppJobCallsTest.cpp RunnerAppPairingTest.cpp
     RunnerAppRunTest.cpp RunnerAppSecretsTest.cpp RunnerAppStateTest.cpp RunnerAppTest.cpp RunnerAppTest.h)
 ketplus_enable_warnings(ketplus_runner_app_tests)
 target_link_libraries(ketplus_runner_app_tests PRIVATE
-    Qt6::Test Qt6::Network ketplus_runner_app OpenSSL::Crypto)
+    Qt6::Test Qt6::Network ketplus_runner_run OpenSSL::Crypto)
 add_test(NAME ketplus_runner_app_tests COMMAND ketplus_runner_app_tests)
+
+# `ketplus-runner run`: the run loop over a fake Relay, socket, peer transport, command
+# runner and clock, with the real job pieces, journal, accepted jobs and pins.
+qt_add_executable(ketplus_runner_run_tests
+    RunnerRunCleanupTest.cpp RunnerRunJobTest.cpp RunnerRunLoopbackTest.cpp RunnerRunSnapshotTest.cpp RunnerRunStartTest.cpp RunnerRunStopTest.cpp
+    RunnerRunTest.cpp RunnerRunTest.h)
+ketplus_enable_warnings(ketplus_runner_run_tests)
+target_link_libraries(ketplus_runner_run_tests PRIVATE
+    Qt6::Test ketplus_runner_run ketplus_runner_snapshot ketplus_control_crypto_primitives)
+add_test(NAME ketplus_runner_run_tests COMMAND ketplus_runner_run_tests)
+set_tests_properties(ketplus_runner_run_tests PROPERTIES TIMEOUT 180)
 
 # The runner's job session over fake channel, lease, snapshot receiver, command and clock.
 qt_add_executable(ketplus_runner_session_tests

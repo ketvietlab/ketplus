@@ -1,4 +1,5 @@
 #include "storage/BackgroundTaskLedger.h"
+#include "storage/RemoteJobRows.h"
 
 #include <QDateTime>
 #include <QJsonDocument>
@@ -37,7 +38,8 @@ QJsonObject BackgroundTaskLedger::claimNext() {
         "SELECT j.task_id,j.record,j.parked FROM managed_jobs j "
         "JOIN sessions s ON s.id=j.owner_session_id AND s.generation=j.owner_generation "
         "JOIN sessions r ON r.id=j.root_session_id AND r.generation=j.root_generation "
-        "WHERE ((j.state='queued' AND json_extract(j.record,'$.permission_approved')=1) "
+        "WHERE NOT EXISTS(SELECT 1 FROM remote_jobs x WHERE x.task_id=j.task_id) AND "
+        "((j.state='queued' AND json_extract(j.record,'$.permission_approved')=1) "
         "OR (j.parked=1 AND j.resume_ready=1 AND j.state='running')) AND "
         "json_extract(j.record,'$.created_at')+json_extract(j.record,'$.timeout_ms')>? AND "
         "(SELECT count(*) FROM managed_jobs active WHERE active.holds_slot=1 "
@@ -88,6 +90,9 @@ QJsonObject BackgroundTaskLedger::park(const QString& id, qint64 expectedRevisio
         database_.rollback();
         return failure(code, message);
     };
+    if (const auto refused = remote_job_rows::localExecutionRefusal(database_, id);
+        !refused.isEmpty())
+        return fail(refused, "A remote job never runs locally.");
     auto record = task(id);
     if (record.value("revision").toInteger() != expectedRevision)
         return fail("revision_conflict", "The task revision changed.");
@@ -118,6 +123,9 @@ QJsonObject BackgroundTaskLedger::readyToResume(const QString& id, qint64 expect
         database_.rollback();
         return failure(code, message);
     };
+    if (const auto refused = remote_job_rows::localExecutionRefusal(database_, id);
+        !refused.isEmpty())
+        return fail(refused, "A remote job never runs locally.");
     auto record = task(id);
     if (record.value("revision").toInteger() != expectedRevision)
         return fail("revision_conflict", "The task revision changed.");

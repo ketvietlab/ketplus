@@ -26,10 +26,26 @@ if(COMMAND ketplus_enable_warnings)
 endif()
 add_test(NAME ketplus_background_output_tests COMMAND ketplus_background_output_tests)
 
+add_executable(ketplus_background_output_gap_tests
+    ../BackgroundTaskOutputGapTest.cpp
+    "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/storage/BackgroundTaskOutput.cpp"
+)
+target_include_directories(ketplus_background_output_gap_tests PRIVATE
+    "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src"
+)
+target_link_libraries(ketplus_background_output_gap_tests PRIVATE Qt6::Core Qt6::Sql Qt6::Test)
+if(COMMAND ketplus_enable_warnings)
+    ketplus_enable_warnings(ketplus_background_output_gap_tests)
+endif()
+add_test(NAME ketplus_background_output_gap_tests COMMAND ketplus_background_output_gap_tests)
+
 add_executable(ketplus_background_ledger_tests
     ../BackgroundTaskLedgerTest.cpp
     "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/storage/BackgroundTaskLedger.cpp"
     "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/storage/BackgroundTaskTransitions.cpp"
+    "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/storage/BackgroundTaskEffects.cpp"
+    "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/storage/RemoteJobRows.cpp"
+    "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/runner/jobs/RemoteJobLabels.cpp"
     "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/storage/BackgroundTaskDelivery.cpp"
     "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/storage/BackgroundTaskWakeQueue.cpp"
     "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/storage/BackgroundTaskQuota.cpp"
@@ -85,6 +101,9 @@ if(APPLE)
         "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/runtime/executor/NativeProcessIdentity.cpp"
         "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/storage/BackgroundTaskLedger.cpp"
         "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/storage/BackgroundTaskTransitions.cpp"
+        "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/storage/BackgroundTaskEffects.cpp"
+        "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/storage/RemoteJobRows.cpp"
+        "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/runner/jobs/RemoteJobLabels.cpp"
         "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/storage/BackgroundTaskDelivery.cpp"
         "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/storage/BackgroundTaskWakeQueue.cpp"
         "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/storage/BackgroundTaskFingerprint.cpp"

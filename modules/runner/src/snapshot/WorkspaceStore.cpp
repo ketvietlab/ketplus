@@ -8,8 +8,12 @@
 #include <QFileInfo>
 #include <QProcess>
 
+#if defined(Q_OS_WIN)
+#include <qt_windows.h>
+#else
 #include <sys/stat.h>
 #include <unistd.h>
+#endif
 
 namespace ketplus::runner::snapshot {
 namespace {
@@ -22,6 +26,39 @@ bool hasMirror(const QString& mirror) {
 
 enum class Kind { Missing, Link, Directory, Other };
 
+#if defined(Q_OS_WIN)
+// A reparse point (symbolic link, junction) counts as a link, whether it names a file or a
+// directory, so it is never followed.
+Kind kindOf(const QString& path) {
+    const DWORD attributes =
+        ::GetFileAttributesW(reinterpret_cast<LPCWSTR>(QDir::toNativeSeparators(path).utf16()));
+    if (attributes == INVALID_FILE_ATTRIBUTES)
+        return Kind::Missing;
+    if (attributes & FILE_ATTRIBUTE_REPARSE_POINT)
+        return Kind::Link;
+    return (attributes & FILE_ATTRIBUTE_DIRECTORY) ? Kind::Directory : Kind::Other;
+}
+
+// A read-only attribute blocks deletion on Windows, which a POSIX unlink does not care about.
+bool unlinkPath(const QString& path) {
+    const auto native = QDir::toNativeSeparators(path);
+    const auto wide = reinterpret_cast<LPCWSTR>(native.utf16());
+    const DWORD attributes = ::GetFileAttributesW(wide);
+    if (attributes == INVALID_FILE_ATTRIBUTES)
+        return false;
+    if (attributes & FILE_ATTRIBUTE_READONLY)
+        ::SetFileAttributesW(wide, attributes & ~DWORD(FILE_ATTRIBUTE_READONLY));
+    // A link to a directory is removed as a directory entry; the target is left alone.
+    if ((attributes & FILE_ATTRIBUTE_DIRECTORY) && (attributes & FILE_ATTRIBUTE_REPARSE_POINT))
+        return ::RemoveDirectoryW(wide) != 0;
+    return ::DeleteFileW(wide) != 0;
+}
+
+bool removeEmptyDirectory(const QString& path) {
+    return ::RemoveDirectoryW(reinterpret_cast<LPCWSTR>(QDir::toNativeSeparators(path).utf16())) !=
+           0;
+}
+#else
 Kind kindOf(const QString& path) {
     struct stat status{};
     if (::lstat(QFile::encodeName(path).constData(), &status) != 0)
@@ -30,6 +67,13 @@ Kind kindOf(const QString& path) {
         return Kind::Link;
     return S_ISDIR(status.st_mode) ? Kind::Directory : Kind::Other;
 }
+
+bool unlinkPath(const QString& path) { return ::unlink(QFile::encodeName(path).constData()) == 0; }
+
+bool removeEmptyDirectory(const QString& path) {
+    return ::rmdir(QFile::encodeName(path).constData()) == 0;
+}
+#endif
 
 QStringList entriesOf(const QString& directory) {
     return QDir(directory).entryList(QDir::AllEntries | QDir::Hidden | QDir::System |
@@ -44,14 +88,14 @@ bool removeTree(const QString& path) {
         return true;
     case Kind::Link:
     case Kind::Other:
-        return ::unlink(QFile::encodeName(path).constData()) == 0;
+        return unlinkPath(path);
     case Kind::Directory:
         break;
     }
     bool ok = true;
     for (const QString& name : entriesOf(path))
         ok = removeTree(path + QLatin1Char('/') + name) && ok;
-    return ok && ::rmdir(QFile::encodeName(path).constData()) == 0;
+    return ok && removeEmptyDirectory(path);
 }
 
 // Removes `relative` below `root` unless one of its parent directories is a link.

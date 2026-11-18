@@ -171,11 +171,22 @@ ketplus_add_daemon_test(ketplus_remote_job_relay_tests RemoteJobRelayTest.cpp)
 target_sources(ketplus_remote_job_relay_tests PRIVATE cloud-privacy/MemoryCredentials.cpp)
 ketplus_add_daemon_test(ketplus_remote_job_record_tests RemoteJobRecordTest.cpp)
 ketplus_add_daemon_test(ketplus_remote_job_flow_tests RemoteJobFlowTest.cpp)
+ketplus_add_daemon_test(ketplus_remote_job_store_tests RemoteJobStoreTest.cpp)
+ketplus_add_daemon_test(ketplus_remote_job_adapters_tests RemoteJobAdaptersTest.cpp)
+target_sources(ketplus_remote_job_adapters_tests PRIVATE cloud-privacy/MemoryCredentials.cpp)
+ketplus_add_daemon_test(ketplus_remote_job_specs_tests RemoteJobSpecsTest.cpp)
+ketplus_add_daemon_test(ketplus_remote_job_ledger_tests RemoteJobLedgerTest.cpp)
+ketplus_add_daemon_test(ketplus_remote_job_steps_tests RemoteJobStepsTest.cpp)
 qt_add_executable(ketplus_peer_output_tests PeerOutputTest.cpp)
 ketplus_enable_warnings(ketplus_peer_output_tests)
 target_link_libraries(ketplus_peer_output_tests PRIVATE Qt6::Test ketplus_daemon_runner_peer)
 add_test(NAME ketplus_peer_output_tests COMMAND ketplus_peer_output_tests)
-foreach(suite Link Job Output Runner)
+# The Runner suite runs against the runner's own job session, which Windows does not build.
+set(KETPLUS_PEER_SESSION_SUITES Link Job Output)
+if(NOT WIN32)
+    list(APPEND KETPLUS_PEER_SESSION_SUITES Runner)
+endif()
+foreach(suite IN LISTS KETPLUS_PEER_SESSION_SUITES)
     string(TOLOWER ${suite} name)
     set(target ketplus_peer_session_${name}_tests)
     qt_add_executable(${target}
@@ -185,7 +196,9 @@ foreach(suite Link Job Output Runner)
     add_test(NAME ${target} COMMAND ${target})
 endforeach()
 # Against the runner's real job session.
-target_link_libraries(ketplus_peer_session_runner_tests PRIVATE ketplus_runner_session)
+if(NOT WIN32)
+    target_link_libraries(ketplus_peer_session_runner_tests PRIVATE ketplus_runner_session)
+endif()
 function(ketplus_add_runner_sync_test target source)
     qt_add_executable(${target} ${source})
     ketplus_enable_warnings(${target})
@@ -199,6 +212,12 @@ ketplus_add_runner_sync_test(ketplus_snapshot_retention_tests SnapshotRetentionT
 ketplus_add_runner_sync_test(ketplus_snapshot_sender_tests SnapshotSenderTest.cpp)
 ketplus_add_runner_sync_test(ketplus_snapshot_sync_integration_tests SnapshotSyncIntegrationTest.cpp)
 target_sources(ketplus_snapshot_keys_tests PRIVATE cloud-privacy/MemoryCredentials.cpp)
+qt_add_executable(ketplus_job_peer_clock_tests JobPeerClockTest.cpp)
+ketplus_enable_warnings(ketplus_job_peer_clock_tests)
+target_link_libraries(ketplus_job_peer_clock_tests PRIVATE Qt6::Test ketplus_daemon_runner_peer)
+add_test(NAME ketplus_job_peer_clock_tests COMMAND ketplus_job_peer_clock_tests)
+ketplus_add_daemon_test(ketplus_remote_output_spool_tests RemoteOutputSpoolTest.cpp)
+target_link_libraries(ketplus_remote_output_spool_tests PRIVATE ketplus_daemon_runner_output)
 # Signed builds may run PCRE2 without JIT; cloud projection must stay linear there too.
 set_tests_properties(ketplus_daemon_cloud_privacy_tests PROPERTIES ENVIRONMENT
     "KETPLUS_DISABLE_DAEMON_AUTOSTART=1;KETPLUS_BROWSER_TOOLS_CONFIG=${CMAKE_CURRENT_BINARY_DIR}/ketplus_daemon_cloud_privacy_tests-browser-tools.json;KETPLUS_COMPUTER_TOOLS_CONFIG=${CMAKE_CURRENT_BINARY_DIR}/ketplus_daemon_cloud_privacy_tests-computer-tools.json;KETPLUS_COMPUTER_DIR=${CMAKE_CURRENT_BINARY_DIR}/ketplus_daemon_cloud_privacy_tests-computer;QT_ENABLE_REGEXP_JIT=0")
@@ -348,6 +367,14 @@ ketplus_add_daemon_test(ketplus_daemon_journal_space_tests JournalSpaceTest.cpp)
 ketplus_add_daemon_test(ketplus_daemon_journal_startup_tests JournalStartupTest.cpp)
 ketplus_add_daemon_test(ketplus_daemon_journal_migration_recovery_tests
     JournalMigrationRecoveryTest.cpp)
+if(WIN32)
+    # It migrates the same 60k-row journal 13 times and reads it back after each. In a Debug
+    # build the SQLite driver of Qt's debug libraries is unoptimised (about 3.4x slower than
+    # Release: 228 s against 38 s), so the default 240 s CTest limit and 300 s QtTest function
+    # limit are too short there. The migration itself is not slower on NTFS.
+    set_tests_properties(ketplus_daemon_journal_migration_recovery_tests PROPERTIES TIMEOUT 900
+        ENVIRONMENT_MODIFICATION "QTEST_FUNCTION_TIMEOUT=set:900000")
+endif()
 ketplus_add_daemon_test(ketplus_daemon_schedule_storage_tests ScheduleStorageTest.cpp)
 ketplus_add_daemon_test(ketplus_daemon_schedule_host_tests ScheduleHostTest.cpp)
 # Reads SQLite's own statement counters through the driver's handle; needs the same SQLite.
@@ -478,6 +505,22 @@ ketplus_enable_warnings(ketplus_peer_link_tests)
 target_link_libraries(ketplus_peer_link_tests PRIVATE Qt6::Test ketplus_peer_link)
 add_test(NAME ketplus_peer_link_tests COMMAND ketplus_peer_link_tests)
 set_tests_properties(ketplus_peer_link_tests PROPERTIES TIMEOUT 90)
+# The desktop's runner peer links: fakes for every port, then the runner's connector against
+# them over real links on this machine.
+# The runner's connector lives in apps/runner, which Windows does not build, so these run on
+# Linux and macOS only.
+if(NOT WIN32)
+    qt_add_executable(ketplus_daemon_runner_link_tests
+        runner-link/RunnerLinkTest.cpp runner-link/RunnerLinkTest.h
+        runner-link/RunnerLinkOfferTest.cpp runner-link/RunnerLinkLifecycleTest.cpp
+        runner-link/RunnerLinkChannelsTest.cpp runner-link/RunnerLinkLoopbackTest.cpp)
+    ketplus_enable_warnings(ketplus_daemon_runner_link_tests)
+    target_link_libraries(ketplus_daemon_runner_link_tests PRIVATE
+        Qt6::Test ketplus_daemon_runner_link ketplus_runner_peer ketplus_runner_pairing
+        ketplus_control_crypto_primitives)
+    add_test(NAME ketplus_daemon_runner_link_tests COMMAND ketplus_daemon_runner_link_tests)
+    set_tests_properties(ketplus_daemon_runner_link_tests PROPERTIES TIMEOUT 180)
+endif()
 
 ketplus_add_daemon_test(ketplus_async_question_lifetime_tests AsyncQuestionLifetimeTest.cpp)
 

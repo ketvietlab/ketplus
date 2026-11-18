@@ -4,7 +4,9 @@
 #include "pairing/PairingIdentity.h"
 #include "pairing/PairingSignatures.h"
 
+#include <QElapsedTimer>
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QTest>
@@ -28,12 +30,7 @@ QString storedCredential(const TestHost& host) {
 }
 
 // Starts a run on `host` that stops after `sleeps` waits.
-int runFor(TestHost& host, const int sleeps) {
-    host.sleeps.clear();
-    host.stop = false;
-    host.stopAfterSleeps = sleeps;
-    return host.run({"run"});
-}
+int runFor(TestHost& host, const int sleeps) { return host.runLoop(sleeps); }
 
 FakeRelay::Reply refusal(const int status, const QString& code) {
     return {status, {{"code", code}, {"message", code}}, false};
@@ -53,7 +50,8 @@ void RunnerAppRunTest::heartbeatEveryThirtySeconds() {
             continue;
         QCOMPARE(request.body.keys(),
                  (QStringList{"capabilities", "currentJob", "labels", "runnerVersion", "state"}));
-        QCOMPARE(request.body.value("state").toString(), "idle");
+        // The production wiring takes no job yet: its command runner is never ready.
+        QCOMPARE(request.body.value("state").toString(), "draining");
         QCOMPARE(request.body.value("labels").toArray(), QJsonArray{"gpu"});
         QCOMPARE(request.body.value("capabilities").toArray(), QJsonArray{"runner.protocol/1"});
         QCOMPARE(request.body.value("runnerVersion").toString(), "0.1.0-test");
@@ -181,7 +179,8 @@ void RunnerAppRunTest::fatalRefusalsStopTheRun() {
     const QStringList files = host.stateFiles();
     QCOMPARE(runFor(host, 5), exit);
     QVERIFY(host.sleeps.isEmpty());
-    QCOMPARE(host.stateFiles(), files); // nothing deleted
+    for (const QString& file : files) // nothing deleted
+        QVERIFY2(host.stateFiles().contains(file), qPrintable(file));
 }
 
 void RunnerAppRunTest::retriedRefusalsBackOff_data() {
@@ -283,6 +282,35 @@ void RunnerAppRunTest::runFinishesPendingPairings() {
     QVERIFY(!QFile::exists(host.stateDir() + "/pins/desktop-2.json"));
     QCOMPARE(host.relay->count("POST", "/v2/runner/pairs/desktop-2/revoke"), 1);
     QCOMPARE(host.relay->count("POST", "/v2/runner/heartbeat"), 3);
+}
+
+// The command line with the real event loop and timers; each run ends well within 2 seconds.
+void RunnerAppRunTest::runCliExitsWhenTheRunnerIsRemoved() {
+    TestHost host;
+    host.registerRunner();
+    host.relay->intercept =
+        [](const FakeRelay::Request& request) -> std::optional<FakeRelay::Reply> {
+        if (request.path == "/v2/runner/heartbeat")
+            return refusal(403, "runner_removed");
+        return std::nullopt;
+    };
+    QElapsedTimer elapsed;
+    elapsed.start();
+    QCOMPARE(host.run({"run", "--work-dir", host.workDir()}), 8);
+    QVERIFY(elapsed.elapsed() < 2000);
+    QCOMPARE(host.relay->count("POST", "/v2/runner/heartbeat"), 1);
+}
+
+void RunnerAppRunTest::runCliStopsWhenAsked() {
+    TestHost host;
+    host.registerRunner();
+    host.stop = true;
+    QElapsedTimer elapsed;
+    elapsed.start();
+    QCOMPARE(host.run({"run", "--work-dir", host.workDir()}), 0);
+    QVERIFY(elapsed.elapsed() < 2000);
+    QVERIFY(host.output().contains("Stopped."));
+    QVERIFY(QFileInfo(host.workDir()).isDir());
 }
 
 void RunnerAppRunTest::unpairRemovesThePinFirst() {

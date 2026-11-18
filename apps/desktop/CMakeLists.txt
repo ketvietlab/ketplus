@@ -237,6 +237,23 @@ add_library(ketplus_desktop_shell STATIC
     src/app/SettingsStoragePage.h
     src/app/SettingsTeamsPage.cpp
     src/app/SettingsTeamsPage.h
+    src/runners/RunnerDialogText.cpp
+    src/runners/RunnerDialogText.h
+    src/runners/RunnerListModel.cpp
+    src/runners/RunnerListModel.h
+    src/runners/RunnerMessages.cpp
+    src/runners/RunnerMessages.h
+    src/runners/RunnerPairingDialog.cpp
+    src/runners/RunnerPairingDialog.h
+    src/runners/RunnerPairingModel.cpp
+    src/runners/RunnerPairingModel.h
+    src/runners/RunnerRowWidget.cpp
+    src/runners/RunnerRowWidget.h
+    src/runners/RunnersDaemonLink.cpp
+    src/runners/RunnersDaemonLink.h
+    src/runners/RunnersRequester.h
+    src/runners/SettingsRunnersPage.cpp
+    src/runners/SettingsRunnersPage.h
     src/app/ProviderSetupCard.cpp
     src/app/ProviderSetupCard.h
     src/app/SettingsProvidersPage.cpp

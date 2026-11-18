@@ -1191,6 +1191,36 @@ class DesktopDaemonClientTest final : public QObject {
         QVERIFY(client.isReady());
     }
 
+    void noticesReachTheirOwnSignal() {
+        QTemporaryDir directory;
+        FakeDaemon daemon(useFakeDaemon(directory));
+        const auto restore = qScopeGuard(stopUsingFakeDaemon);
+        QVERIFY(daemon.listening);
+        remote::DaemonClient client;
+        QTRY_VERIFY(client.isReady());
+        QSignalSpy notices(&client, &remote::DaemonClient::noticeReceived);
+        QSignalSpy sessions(&client, &remote::DaemonClient::eventReceived);
+        daemon.send({{"message_type", "tags.changed"},
+                     {"payload", QJsonObject{{"catalog", QJsonArray{}}}}});
+        daemon.send({{"message_type", "runner.pairing.changed"},
+                     {"payload", QJsonObject{{"ticket_id", "t1"}, {"state", "claimed"}}}});
+        // Not a notice: other pushes and answers keep their own way.
+        daemon.send({{"message_type", "runner.other"}, {"payload", QJsonObject{}}});
+        daemon.send({{"message_type", "runner.pairing.changed"},
+                     {"correlation_id", "not-a-call"},
+                     {"payload", QJsonObject{}}});
+        QTRY_COMPARE(notices.size(), 2);
+        QCOMPARE(notices.at(0).at(0).toString(), QStringLiteral("tags.changed"));
+        QCOMPARE(notices.at(1).at(0).toString(), QStringLiteral("runner.pairing.changed"));
+        const QJsonObject pairing = notices.at(1).at(1).toJsonObject();
+        QCOMPARE(pairing.value("ticket_id").toString(), QStringLiteral("t1"));
+        QCOMPARE(pairing.value("state").toString(), QStringLiteral("claimed"));
+        QTest::qWait(50);
+        QCOMPARE(notices.size(), 2);
+        QCOMPARE(sessions.size(), 0);
+        QVERIFY(client.isReady());
+    }
+
     void sentWritesAreFailedNotReplayedAfterDisconnect() {
         QTemporaryDir directory;
         FakeDaemon daemon(useFakeDaemon(directory));

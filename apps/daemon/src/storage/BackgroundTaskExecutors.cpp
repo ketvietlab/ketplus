@@ -1,4 +1,5 @@
 #include "storage/BackgroundTaskLedger.h"
+#include "storage/RemoteJobRows.h"
 
 #include <QDateTime>
 #include <QJsonArray>
@@ -47,7 +48,7 @@ QJsonObject BackgroundTaskLedger::retry(const BackgroundTaskIntent& intent) cons
     const auto requested = intent.requestPayload.isEmpty()
                                ? intent.specFingerprint
                                : backgroundTaskFingerprint(intent.requestPayload, defaults);
-    if (fingerprint != requested)
+    if (fingerprint != remote_job_rows::fingerprint(requested, intent.runsOn, intent.timeoutMs))
         return failure("idempotency_conflict",
                        "This request key was accepted with a different spec.");
     if (expired)
@@ -63,7 +64,9 @@ QJsonObject BackgroundTaskLedger::nonterminal() const {
     QSqlQuery query(database_);
     if (!query.exec(
             "SELECT task_id FROM managed_jobs WHERE state NOT IN "
-            "('completed','failed','cancelled','timed_out','interrupted') ORDER BY sequence"))
+            "('completed','failed','cancelled','timed_out','interrupted') AND NOT EXISTS(SELECT 1 "
+            "FROM remote_jobs x WHERE x.task_id=managed_jobs.task_id AND x.revision>0) "
+            "ORDER BY sequence"))
         return failure("storage_error", query.lastError().text());
     QStringList ids;
     while (query.next())
@@ -91,6 +94,9 @@ QJsonObject BackgroundTaskLedger::registerExecutor(const QString& id, qint64 exp
         database_.rollback();
         return failure(code, message);
     };
+    if (const auto refused = remote_job_rows::localExecutionRefusal(database_, id);
+        !refused.isEmpty())
+        return fail(refused, "A remote job never runs locally.");
     auto record = task(id);
     if (record.contains("error_code"))
         return fail(record.value("error_code").toString(),

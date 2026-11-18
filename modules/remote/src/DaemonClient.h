@@ -72,7 +72,8 @@ class DaemonClient final : public QObject {
     void teamEventReceived(const QString& type, const QJsonObject& payload);
     // ADR 0126: schedule.changed and schedule.run, sent without a session.
     void scheduleEventReceived(const QString& type, const QJsonObject& payload);
-    // A daemon push that is not a session event, such as `tags.changed` (#429).
+    // A daemon push that is not a session event: `tags.changed` (#429) and
+    // `runner.pairing.changed` ({ticket_id, state}).
     void noticeReceived(const QString& type, const QJsonObject& payload);
     void disconnected(const QString& reason);
     // The hello named `presented` instead of the trusted fingerprint (empty: it named none).

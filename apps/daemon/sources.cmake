@@ -34,6 +34,9 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/storage/BackgroundTaskRetention.cpp
     src/storage/BackgroundTaskExecutors.cpp
     src/storage/BackgroundTaskChildren.cpp
+    src/storage/BackgroundTaskEffects.cpp
+    src/storage/RemoteJobRows.cpp
+    src/storage/RemoteJobRows.h
     src/storage/LocalJournalManagedTasks.cpp
     src/runtime/executor/NativeJobClient.cpp
     src/runtime/executor/LinuxJobContainment.cpp
@@ -85,6 +88,12 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/runner/RunnerRelaySchema.h
     src/runner/RunnerService.cpp
     src/runner/RunnerService.h
+    src/runner/jobs/LedgerRecordStore.cpp
+    src/runner/jobs/LedgerRecordStore.h
+    src/runner/jobs/PinRunnerTrust.cpp
+    src/runner/jobs/PinRunnerTrust.h
+    src/runner/jobs/QtJobClock.cpp
+    src/runner/jobs/QtJobClock.h
     src/runner/jobs/RemoteJobCoordinator.cpp
     src/runner/jobs/RemoteJobCoordinator.h
     src/runner/jobs/RemoteJobLabels.cpp
@@ -93,10 +102,16 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/runner/jobs/RemoteJobPorts.h
     src/runner/jobs/RemoteJobRecord.cpp
     src/runner/jobs/RemoteJobRecord.h
+    src/runner/jobs/RemoteJobRecordJson.cpp
+    src/runner/jobs/RemoteJobRecordJson.h
     src/runner/jobs/RemoteJobRelay.cpp
     src/runner/jobs/RemoteJobRelay.h
     src/runner/jobs/RemoteJobSchema.cpp
     src/runner/jobs/RemoteJobSchema.h
+    src/runner/jobs/RemoteJobSpecs.cpp
+    src/runner/jobs/RemoteJobSpecs.h
+    src/runner/jobs/RemoteJobTransitions.cpp
+    src/runner/jobs/RemoteJobTransitions.h
     src/cloud/SessionCredentials.cpp
     src/cloud/CloudControlSignIn.cpp
     src/cloud/CloudControlBatching.h
