@@ -261,13 +261,13 @@ class ManagedTaskAttentionRecoveryTest final : public QObject {
             id = accepted.value("task").toObject().value("task_id").toString();
             QVERIFY(!id.isEmpty());
             QTRY_COMPARE_WITH_TIMEOUT(task(host, id, &latest).value("state"), "running", 6000);
-            QTRY_COMPARE_WITH_TIMEOUT(bytes(cwd + "/launch-marker"), QByteArray("X"), 3000);
             latest = task(host, id, &latest);
             const auto execution = latest.value("execution_identity").toObject();
             root = execution.value("root_identity").toObject();
             supervisor = execution.value("supervisor_identity").toObject();
             QVERIFY(!root.value("birth").toString().isEmpty());
             QVERIFY(!supervisor.value("birth").toString().isEmpty());
+            QTRY_COMPARE_WITH_TIMEOUT(bytes(cwd + "/launch-marker"), QByteArray("X"), 3000);
             QCOMPARE(stored(databasePath, id).value("holds_slot").toInt(-1), 1);
             phase = "supervisor-fault";
             QString error;
