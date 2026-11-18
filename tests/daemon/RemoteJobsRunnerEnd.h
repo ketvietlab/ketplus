@@ -147,7 +147,8 @@ struct EndToEnd {
     QStringList seenTypes;
     QByteArray pack;
     QString packSha;
-    bool ready = false; // the runner sent snapshot.ready
+    bool holdSpec = false; // job.spec is not answered
+    bool ready = false;    // the runner sent snapshot.ready
     bool started = false;
     bool resultAcked = false;
 };

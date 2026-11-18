@@ -329,7 +329,8 @@ bool EndToEnd::play(RunnerEnd& end, const std::function<bool()>& until, const bo
             seen.append(frame);
             seenTypes.append(QString(protocol::frameType(frame)));
             if (const auto* spec = std::get_if<protocol::JobSpec>(&frame)) {
-                end.send(protocol::JobAccepted{spec->jobId, spec->attempt});
+                if (!holdSpec)
+                    end.send(protocol::JobAccepted{spec->jobId, spec->attempt});
             } else if (std::holds_alternative<protocol::JobResume>(frame)) {
                 // As the runner does: where the job is on the new connection.
                 if (started)

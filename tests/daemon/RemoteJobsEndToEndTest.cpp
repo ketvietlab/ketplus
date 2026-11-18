@@ -11,6 +11,11 @@ using namespace remote_jobs_test;
 
 namespace {
 
+QStringList capturedLog;
+void captureLog(QtMsgType, const QMessageLogContext& context, const QString& message) {
+    capturedLog.append(QString::fromLatin1(context.category) + QLatin1Char(' ') + message);
+}
+
 int outboxOf(LedgerFixture& f, const QString& taskId) {
     return f.count("SELECT count(*) FROM managed_job_outbox WHERE task_id='" + taskId + "'");
 }
@@ -176,6 +181,80 @@ class RemoteJobsEndToEndTest final : public QObject {
         QCOMPARE(e.h.f.state(id), state::completed);
         QCOMPARE(ketplus::daemon::BackgroundTaskOutput(e.h.f.database).read(id).bytes,
                  QByteArrayLiteral("abcdef"));
+    }
+
+    // The snapshot goes only once the record durably took job.accepted.
+    void aFailedAcceptedWriteSendsNoSnapshot() {
+        EndToEnd e;
+        const QString id = e.submit();
+        QVERIFY(!id.isEmpty());
+        e.assign();
+        e.holdSpec = true;
+        RunnerEnd end = e.connect(1);
+        QVERIFY(e.play(end, [&] { return e.seenTypes.contains("job.spec"); }, false));
+        e.h.f.failRemoteWrites(true);
+        end.send(protocol::JobAccepted{linkedJob, 1});
+        int turns = 0;
+        QVERIFY(e.play(end, [&] { return ++turns > 50; }, false));
+        QVERIFY(framesOf<protocol::SnapshotOffer>(e.seen).isEmpty());
+        QCOMPARE(e.h.f.store->load().first().placement, placement::assigned);
+
+        e.h.f.failRemoteWrites(false);
+        e.h.run(SnapshotPorts::longestAcceptedRetryMs);
+        QVERIFY(e.play(end, [&] { return e.resultAcked; }));
+        QCOMPARE(framesOf<protocol::SnapshotOffer>(e.seen).size(), 1);
+        QCOMPARE(e.h.f.state(id), state::completed);
+    }
+
+    // A local task written through another registry instance on the same database meanwhile is
+    // left as it is.
+    void aLocalTaskBesideARemoteJobIsUntouched() {
+        EndToEnd e;
+        const QString id = e.submit();
+        QVERIFY(!id.isEmpty());
+        ketplus::daemon::BackgroundTaskLedger other(e.h.f.database);
+        const QString local =
+            taskIdOf(other.create(intentFor(QStringLiteral("local-request"), std::nullopt)));
+        QVERIFY(!local.isEmpty());
+        const QJsonObject before = other.runtimeTask(local);
+        e.assign();
+        RunnerEnd end = e.connect(1);
+        QVERIFY(e.play(end, [&] { return e.resultAcked; }));
+        QCOMPARE(e.h.f.state(id), state::completed);
+        QCOMPARE(other.runtimeTask(local), before);
+        QCOMPARE(outboxOf(e.h.f, local), 0);
+        QVERIFY(e.h.f.store->load().size() == 1);
+    }
+
+    // A whole job logs ids, sizes and codes only: no path of the worktree or the stores, no
+    // snapshot id, no SDP and no output.
+    void aWholeJobLogsNoPathSnapshotSdpOrOutput() {
+        capturedLog.clear();
+        QString repo;
+        QString state;
+        QString snapshotId;
+        const auto previous = qInstallMessageHandler(captureLog);
+        {
+            EndToEnd e;
+            repo = e.repo;
+            state = e.h.state.path();
+            e.output = QByteArrayLiteral("OUTPUT-MARKER\n");
+            const QString id = e.submit();
+            snapshotId = e.h.jobs->record(id)->snapshot->snapshotId;
+            e.assign();
+            RunnerEnd end = e.connect(1);
+            (void)e.play(end, [&] { return e.resultAcked; });
+        }
+        qInstallMessageHandler(previous);
+        QVERIFY(capturedLog.size() > 5);
+        for (const QString& line : std::as_const(capturedLog)) {
+            QVERIFY2(!line.contains(repo), qPrintable(line));
+            QVERIFY2(!line.contains(state), qPrintable(line));
+            QVERIFY2(!line.contains(snapshotId), qPrintable(line));
+            QVERIFY2(!line.contains(QStringLiteral("IN IP4")), qPrintable(line));
+            QVERIFY2(!line.contains(QStringLiteral("OUTPUT-MARKER")), qPrintable(line));
+            QVERIFY2(!line.contains(QStringLiteral("make")), qPrintable(line));
+        }
     }
 };
 
