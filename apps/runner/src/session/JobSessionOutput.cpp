@@ -14,18 +14,29 @@ void JobSession::commandOutput(const QByteArray& bytes) {
     sendOutput();
 }
 
+// Output the command wrote that was lost before it reached the session: it counts as written and
+// is reported as a gap.
+void JobSession::commandOutputLost(const qint64 bytes) {
+    if ((m_phase != Phase::Running && m_phase != Phase::Stopping) || bytes <= 0)
+        return;
+    m_output.skip(bytes);
+    sendOutput();
+}
+
 // Pages of at most 32 KiB from the first byte not yet sent on this connection, while `events`
 // takes them. When that byte is no longer held, one gap reports the bytes lost before the pages go
-// on from the first byte held. Sent bytes that leave the buffer make no gap.
+// on from the first byte held. Sent bytes that leave the buffer make no gap; bytes that never
+// reached it make one.
 void JobSession::sendOutput() {
     if (m_link != Link::Open || !m_streaming)
         return;
     const QString& jobId = m_job->assignment.jobId;
     while (m_sentUpTo < m_output.end() && m_ports.channel.eventsWritable()) {
-        if (m_sentUpTo < m_output.start()) {
-            if (!send(JobOutputGap{jobId, m_sentUpTo, m_output.start()}))
+        const qint64 held = m_output.heldFrom(m_sentUpTo);
+        if (m_sentUpTo < held) {
+            if (!send(JobOutputGap{jobId, m_sentUpTo, held}))
                 return;
-            m_sentUpTo = m_output.start();
+            m_sentUpTo = held;
             continue;
         }
         const QByteArray page = m_output.read(m_sentUpTo, limits::maxOutputBytes);

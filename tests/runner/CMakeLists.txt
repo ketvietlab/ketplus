@@ -33,7 +33,8 @@ add_test(NAME ketplus_runner_app_tests COMMAND ketplus_runner_app_tests)
 
 # The runner's job session over fake channel, lease, snapshot receiver, command and clock.
 qt_add_executable(ketplus_runner_session_tests
-    RunnerSessionDeliveryTest.cpp RunnerSessionHandshakeTest.cpp RunnerSessionOutputTest.cpp
+    RunnerSessionDeliveryTest.cpp RunnerSessionHandshakeTest.cpp
+    RunnerSessionLostOutputTest.cpp RunnerSessionOutputTest.cpp
     RunnerSessionSpecTest.cpp RunnerSessionStopTest.cpp RunnerSessionTest.cpp RunnerSessionTest.h)
 ketplus_enable_warnings(ketplus_runner_session_tests)
 target_link_libraries(ketplus_runner_session_tests PRIVATE Qt6::Test ketplus_runner_session
@@ -70,3 +71,30 @@ ketplus_enable_warnings(ketplus_runner_receiver_tests)
 target_link_libraries(ketplus_runner_receiver_tests PRIVATE
     Qt6::Test ketplus_runner_snapshot_receiver)
 add_test(NAME ketplus_runner_receiver_tests COMMAND ketplus_runner_receiver_tests)
+
+# The runner's command executor: launch plans, mounts, task ids and results as tables, job
+# directories in temporary directories, and the command runner over a fake executor.
+qt_add_executable(ketplus_runner_exec_plan_tests RunnerExecPlanTest.cpp)
+ketplus_enable_warnings(ketplus_runner_exec_plan_tests)
+target_link_libraries(ketplus_runner_exec_plan_tests PRIVATE Qt6::Test ketplus_runner_exec)
+add_test(NAME ketplus_runner_exec_plan_tests COMMAND ketplus_runner_exec_plan_tests)
+
+qt_add_executable(ketplus_runner_exec_tests
+    RunnerExecCleanupTest.cpp RunnerExecRunnerTest.cpp RunnerExecTest.cpp RunnerExecTest.h)
+ketplus_enable_warnings(ketplus_runner_exec_tests)
+target_link_libraries(ketplus_runner_exec_tests PRIVATE Qt6::Test ketplus_runner_exec)
+add_test(NAME ketplus_runner_exec_tests COMMAND ketplus_runner_exec_tests)
+
+# The command runner over the real job executor of this build, on macOS: environment, cwd,
+# output, kill and restart cleanup with real processes in temporary directories.
+if(APPLE AND TARGET ketplus_runner_exec_native)
+    qt_add_executable(ketplus_runner_exec_native_tests RunnerExecNativeTest.cpp)
+    ketplus_enable_warnings(ketplus_runner_exec_native_tests)
+    target_link_libraries(ketplus_runner_exec_native_tests PRIVATE
+        Qt6::Test ketplus_runner_exec_native)
+    target_compile_definitions(ketplus_runner_exec_native_tests PRIVATE
+        KETPLUS_JOB_EXECUTOR_PATH="$<TARGET_FILE:ketplus_job_executor>")
+    add_dependencies(ketplus_runner_exec_native_tests ketplus_job_executor)
+    add_test(NAME ketplus_runner_exec_native_tests COMMAND ketplus_runner_exec_native_tests)
+    set_tests_properties(ketplus_runner_exec_native_tests PROPERTIES TIMEOUT 300)
+endif()
