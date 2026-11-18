@@ -34,6 +34,9 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/storage/BackgroundTaskRetention.cpp
     src/storage/BackgroundTaskExecutors.cpp
     src/storage/BackgroundTaskChildren.cpp
+    src/storage/BackgroundTaskEffects.cpp
+    src/storage/RemoteJobRows.cpp
+    src/storage/RemoteJobRows.h
     src/storage/LocalJournalManagedTasks.cpp
     src/runtime/executor/NativeJobClient.cpp
     src/runtime/executor/LinuxJobContainment.cpp
