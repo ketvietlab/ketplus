@@ -67,6 +67,13 @@ target_link_libraries(ketplus_interface_font_tests PRIVATE
 ketplus_add_gui_test(ketplus_background_task_transport_tests AgentBackgroundTaskTransportTest.cpp)
 target_link_libraries(ketplus_background_task_transport_tests PRIVATE Qt6::Test ketplus_ai)
 
+if(APPLE OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    ketplus_add_gui_test(ketplus_managed_background_e2e_tests ManagedBackgroundEndToEndTest.cpp)
+    target_link_libraries(ketplus_managed_background_e2e_tests PRIVATE
+        Qt6::Test ketplus_ai ketplus_daemon_core)
+    add_dependencies(ketplus_managed_background_e2e_tests ketplus_job_executor)
+endif()
+
 ketplus_add_gui_test(ketplus_agent_tests
     AgentWorkspaceHistoryTest.cpp
     TranscriptInteractionTest.cpp

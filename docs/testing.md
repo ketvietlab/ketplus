@@ -1251,7 +1251,17 @@ cmake --build build/daemon-dev --target ketplus_managed_task_host_tests ketplus_
 ctest --test-dir build/daemon-dev -R 'ketplus_managed_task_(host|ipc)_tests' --output-on-failure
 ```
 
-These tests do not verify the shared UI, SDK native-background blocking or a
+The Pro `ketplus_managed_background_e2e_tests` fixture connects the real local IPC
+server and registry to the Desktop client and `AgentSessionManager`. A test-owned
+native process completes through FakeCodex, and the fixture checks the Desktop
+task state/output, durable owner wake, retry/deduplication, conversation switching
+and offline mutation refusal. It starts no installed daemon or live provider.
+On Linux this fixture requires `KETPLUS_RUN_LINUX_JOB_TESTS=1` in the exclusively
+owned delegated guest. The native QML task-bar states and controls remain covered
+separately by `ketplus_agent_tests`; protocol-peer paging and stale-response tests
+remain in `ketplus_background_task_transport_tests`.
+
+The Host/IPC fixtures alone do not verify the shared UI, SDK native-background blocking or a
 signed deployment bundle. On Linux, process tests require a non-root user with
 a working systemd user manager, delegated cgroup v2/`nsdelegate`, `cgroup.kill`,
 and permission to create isolated user/mount/PID/cgroup namespaces. Missing
