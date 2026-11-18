@@ -1,4 +1,5 @@
 #include "teams/Team.h"
+#include "teams/TeamCompletionPolicy.h"
 
 #include <QDateTime>
 
@@ -62,6 +63,7 @@ Task taskFromJson(const QJsonObject& json) {
         task.reviewFindings = unknown;
     }
     task.routingDecision = risk::fromJson(json.value(QStringLiteral("routing_decision")));
+    task.acceptance = completion::fromJson(json.value(QStringLiteral("completion_acceptance")));
     if (task.routingDecision && (task.routingDecision->taskId != task.id ||
                                  task.routingDecision->route == risk::Route::LeaderDirect))
         task.routingDecision.reset();
@@ -351,6 +353,8 @@ QJsonObject toJson(const Task& task, const bool withHistory) {
                      {QStringLiteral("changed_revision"), task.changedRevision}};
     if (task.routingDecision)
         json.insert(QStringLiteral("routing_decision"), risk::toJson(*task.routingDecision));
+    if (task.acceptance)
+        json.insert(QStringLiteral("completion_acceptance"), completion::toJson(*task.acceptance));
     if (task.arbitratedRound > 0) {
         json.insert(QStringLiteral("arbitrated_round"), task.arbitratedRound);
         json.insert(QStringLiteral("arbitration_head"), task.arbitrationHead);

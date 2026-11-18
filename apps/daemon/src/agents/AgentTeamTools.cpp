@@ -101,8 +101,10 @@ QJsonArray teamTools() {
                             "verification or developer_reviewer routing through daemon policy. "
                             "Advice needs no task or receipt. Changes require an existing task "
                             "and exact head; only host-issued evidence can establish low risk. "
-                            "Confidence is supplementary, never authority. A decision is an "
-                            "audit record, not approval, a reviewer verdict or a state change."),
+                            "Confidence is supplementary, never authority. A "
+                            "daemon-validated developer_leader pass moves to Ready at that head; "
+                            "developer_reviewer queues independent review. Neither grants user "
+                            "permission, fabricates a reviewer verdict or completes/merges work."),
              {{"task_id", taskId},
               {"expected_team_revision", number("Exact revision from team_get.", 0)},
               {"kind", QJsonObject{{"type", "string"},
@@ -230,13 +232,14 @@ QJsonArray teamTools() {
               {QStringLiteral("criteria"), list(QStringLiteral("The criteria, in order."))}},
              {QStringLiteral("task_id"), QStringLiteral("criteria")}),
         tool(QStringLiteral("team_task_close"),
-             QStringLiteral("Leader: mark a task done by hand, when its work is in with no pull "
-                            "request or the remote cannot be reached. A merged pull request "
-                            "closes its task by itself."),
+             QStringLiteral("Leader: request a trusted completion check for an accepted Ready "
+                            "task. Name its exact accepted head or recorded PR. A caller URL/hash "
+                            "is not merge proof; offline/unknown facts leave it unfinished. "
+                            "Required review cannot be bypassed. No user override is granted."),
              {{QStringLiteral("task_id"), taskId},
               {QStringLiteral("evidence"),
-               text(QStringLiteral("A pull request URL or the commit that contains the work."))},
-              {QStringLiteral("note"), text(QStringLiteral("Why the task is done."))}},
+               text(QStringLiteral("The exact accepted head or recorded PR to verify."))},
+              {QStringLiteral("note"), text(QStringLiteral("Why completion should be checked."))}},
              {QStringLiteral("task_id"), QStringLiteral("evidence"), QStringLiteral("note")}),
         tool(QStringLiteral("team_review_void"),
              QStringLiteral("Leader: void the last recorded review verdict of a task that should "

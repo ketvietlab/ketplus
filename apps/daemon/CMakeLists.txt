@@ -7,6 +7,7 @@ add_library(ketplus_daemon_core STATIC ${KETPLUS_DAEMON_CORE_SOURCES}
 target_sources(ketplus_daemon_core PRIVATE
     src/teams/TeamRiskPolicy.cpp src/teams/TeamRiskPolicy.h
     src/teams/TeamCoordinatorRiskPolicy.cpp
+    src/teams/TeamCompletionPolicy.cpp src/teams/TeamCompletionPolicy.h
     src/teams/TeamRoutingEvidence.cpp src/teams/TeamRoutingEvidence.h
     src/runtime/SessionHostTeamRouting.cpp)
 if(APPLE)

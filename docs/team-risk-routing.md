@@ -12,8 +12,12 @@ Existing clients keep their existing methods and reviewer behavior.
 `team_task_route_decide` takes the request below plus optional `task_id`. Only
 the authenticated same-team leader can decide. The result includes
 `routing_decision`, `conclusion_source: leader_policy`, `reviewer_verdict: false`
-and `authorization_granted: false`. Neither a route nor confidence completes a
-task, queues a reviewer, changes merge eligibility or grants user permission.
+and `authorization_granted: false`. A validated `developer_leader` decision now
+moves its exact head to Ready; `developer_reviewer` queues independent review.
+Neither route nor confidence completes/merges a task or grants user permission.
+Ready acceptance is daemon-issued, separate from the consumed receipt, and
+revalidated by completion guards. See [ADR 0134](decisions/0134-exact-head-task-completion.md)
+for the persisted acceptance, legacy behavior and distinct user override.
 Developers submit evidence once; the leader selects the route and records a
 concrete reason for requesting optional conservative review. Advice can be
 answered directly without any tool call, task, worktree or developer/reviewer turn.

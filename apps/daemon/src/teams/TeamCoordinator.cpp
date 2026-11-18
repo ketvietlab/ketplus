@@ -240,6 +240,9 @@ std::optional<TeamError> TeamCoordinator::commit(Team& team, const Team& before,
     team.revision = before.revision + 1;
     team.changedAt = nowIso();
     stampChanges(team, before);
+    QList<Update> committedUpdates = updates;
+    refreshAcceptances(team, committedUpdates);
+    stampChanges(team, before);
     QString error;
     if (!journal_->saveTeam(team.id, before.revision, toJson(team), team.memberSessions(),
                             &error)) {
@@ -252,7 +255,7 @@ std::optional<TeamError> TeamCoordinator::commit(Team& team, const Team& before,
     for (const QString& session : team.memberSessions())
         teamBySession_.insert(session, team.id);
     bool actionable = false;
-    for (const Update& update : updates) {
+    for (const Update& update : committedUpdates) {
         actionable = actionable || update.actionable;
         (void)journal_->appendTeamUpdate({.teamId = team.id,
                                           .at = team.changedAt,

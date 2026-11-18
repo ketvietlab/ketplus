@@ -57,7 +57,8 @@ class TeamStorageTest final : public QObject {
     qint64 team_{0};
     QString note_;
 
-    // A task of dev1's with its worktree on disk, closed by the leader unless `done` is false.
+    // A task of dev1's with its worktree on disk, intentionally completed by the user unless `done`
+    // is false.
     QString taskWithWorktree(const QString& title, const bool done = true) {
         QString id;
         (void)teams_->createTask(team_, {.title = title, .lane = "Web"}, "lead", &id);
@@ -67,7 +68,10 @@ class TeamStorageTest final : public QObject {
             QVERIFY(QDir().mkpath(get(id).worktree));
             QVERIFY(write(get(id).worktree + "/file.txt", QByteArray(8192, 'x')));
             if (done)
-                QVERIFY(teams_->closeTask(team_, id, evidence, "Merged.", "lead").ok());
+                QVERIFY(teams_
+                            ->moveTask(team_, id, state::done, "user",
+                                       "Intentional fixture completion", {}, true)
+                            .ok());
         }();
         return id;
     }
@@ -211,7 +215,10 @@ class TeamStorageTest final : public QObject {
         QVERIFY(teams_->moveTask(team_, id, state::inProgress, "dev1").ok());
         QVERIFY(QDir().mkpath(directory_.filePath("wt")));
         QVERIFY(QFile::link(team().repository, get(id).worktree));
-        QVERIFY(teams_->closeTask(team_, id, evidence, "Merged.", "lead").ok());
+        QVERIFY(teams_
+                    ->moveTask(team_, id, state::done, "user", "Intentional fixture completion", {},
+                               true)
+                    .ok());
         QVERIFY(QFileInfo(get(id).worktree).isDir());
         QVERIFY(storage().value("worktrees").toArray().isEmpty());
         const TeamResult refused = remove(id);

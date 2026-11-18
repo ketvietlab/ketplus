@@ -186,16 +186,16 @@ class TeamAttributionTest final : public QObject {
         QVERIFY(teams_->updateTask(team_, id, {{"pull_request", pullRequest}}, "dev1").ok());
         QVERIFY(teams_->moveTask(team_, id, state::inReview, "dev1").ok());
         finishReview(*teams_, "rev", "Verdict: no findings", true);
-        QCOMPARE(get(id).state, state::ready);
+        QCOMPARE(get(id).state, state::blocked);
         host_.merged.insert(id);
         teams_->checkMerged(team_);
-        QCOMPARE(get(id).state, state::ready);
+        QCOMPARE(get(id).state, state::blocked);
         QVERIFY(!historyKinds(id).contains(QStringLiteral("merged")));
         // Still not after the pull request is left out: git speaks only of the branch's own
         // commits.
         QVERIFY(teams_->updateTask(team_, id, {{"pull_request", QString{}}}, "lead").ok());
         teams_->checkMerged(team_);
-        QCOMPARE(get(id).state, state::ready);
+        QCOMPARE(get(id).state, state::blocked);
     }
 
     // Criterion 2: the team's and one task's allowed paths are not flagged; they are

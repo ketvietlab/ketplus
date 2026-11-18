@@ -1,4 +1,7 @@
 #include "runtime/SessionHost.h"
+#include "teams/TeamCompletionPolicy.h"
+#include <QProcess>
+#include <QProcessEnvironment>
 
 #include <QCryptographicHash>
 #include <QJsonDocument>
@@ -160,4 +163,27 @@ QJsonObject SessionHost::teamRoutingOperation(const QString& session, const QStr
             {"reviewer_verdict", false},
             {"authorization_granted", false}};
 }
+QString SessionHost::completionRepository(const teams::Team& team, const teams::Task& task) const {
+    const auto scope = teams::taskScope(team, task);
+    if (scope.repository.isEmpty())
+        return {};
+    QProcess process;
+    auto environment = QProcessEnvironment::systemEnvironment();
+    environment.insert(QStringLiteral("GIT_TERMINAL_PROMPT"), QStringLiteral("0"));
+    process.setProcessEnvironment(environment);
+    process.start(QStringLiteral("git"),
+                  {QStringLiteral("--no-replace-objects"), QStringLiteral("-C"), scope.repository,
+                   QStringLiteral("remote"), QStringLiteral("get-url"), QStringLiteral("origin")});
+    if (!process.waitForStarted(1000) || !process.waitForFinished(1000)) {
+        process.kill(); // Only this bounded, read-only child; never a runtime or peer.
+        process.waitForFinished(1000);
+        return {};
+    }
+    const QByteArray output = process.readAllStandardOutput();
+    if (process.exitStatus() != QProcess::NormalExit || process.exitCode() != 0 ||
+        output.size() > 4096)
+        return {};
+    return teams::completion::repositoryId(QString::fromUtf8(output).trimmed());
+}
+
 } // namespace ketplus::daemon

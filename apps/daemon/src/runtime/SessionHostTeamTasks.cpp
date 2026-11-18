@@ -427,7 +427,9 @@ QJsonObject SessionHost::teamTaskCommand(const QString& type, const QJsonObject&
     if (type == QStringLiteral("team.task.move"))
         return answer(teams_->moveTask(teamId, taskId,
                                        payload.value(QStringLiteral("state")).toString(), user,
-                                       payload.value(QStringLiteral("note")).toString()),
+                                       payload.value(QStringLiteral("note")).toString(), {},
+                                       payload.value(QStringLiteral("user_override")).isBool() &&
+                                           payload.value(QStringLiteral("user_override")).toBool()),
                       taskId);
     if (type == QStringLiteral("team.task.criteria.set"))
         return answer(teams_->setCriteria(teamId, taskId,

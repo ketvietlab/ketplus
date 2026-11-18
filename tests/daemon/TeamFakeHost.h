@@ -4,6 +4,7 @@
 // sends, all in memory (ADR 0114).
 #include "teams/TeamCoordinator.h"
 
+#include <QCryptographicHash>
 #include <QDir>
 #include <QHash>
 #include <QSet>
@@ -83,7 +84,19 @@ class FakeHost final : public TeamHostPort {
     }
     QHash<QString, risk::VerifiedEvidence> routingReceipts;
     QString taskCommit(const Team&, const Task& task) const override {
-        return heads.value(task.branch, task.branch + QStringLiteral("@head"));
+        return heads.value(
+            task.branch,
+            QString::fromLatin1(
+                QCryptographicHash::hash(task.branch.toUtf8(), QCryptographicHash::Sha1).toHex()));
+    }
+    bool completionOriginKnown{true};
+    QString completionRepository(const Team& team, const Task& task) const override {
+        if (!completionOriginKnown)
+            return {};
+        return QString::fromLatin1(
+            QCryptographicHash::hash(taskScope(team, task).repository.toUtf8(),
+                                     QCryptographicHash::Sha256)
+                .toHex());
     }
     std::optional<QString> ownHead(const Team& team, const Task& task) const override {
         if (unreadableHeads.contains(task.branch))

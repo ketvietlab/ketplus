@@ -138,7 +138,20 @@ class TeamAgentTasksTest final : public QObject {
         const QJsonObject closed = fixture.agents(
             team.leader, "agents.team_task_close",
             {{"task_id", "T-40"}, {"evidence", "abc1234def"}, {"note", "Not needed"}});
-        QVERIFY2(closed.value("ok").toBool(), qPrintable(text(closed)));
+        QCOMPARE(closed.value("error_code").toString(), QStringLiteral("review_required"));
+        const QString teamId = fixture.agents(team.leader, "agents.team_get")
+                                   .value("team")
+                                   .toObject()
+                                   .value("id")
+                                   .toString();
+        const auto userClosed = fixture.host->handleCommand(
+            request("team.task.move", {{"team_id", teamId},
+                                       {"task_id", "T-40"},
+                                       {"state", "done"},
+                                       {"user_override", true},
+                                       {"note", "User intentionally retires this task"}}),
+            "desktop-test");
+        QVERIFY2(userClosed.value("ok").toBool(), qPrintable(text(userClosed)));
         const QJsonArray open = fixture.agents(team.leader, "agents.team_tasks", {{"open", true}})
                                     .value("tasks")
                                     .toArray();

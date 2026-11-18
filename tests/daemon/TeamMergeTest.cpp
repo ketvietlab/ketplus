@@ -101,6 +101,8 @@ class TeamMergeTest final : public QObject {
         const QString repository = fixture.directory.filePath("shop");
         QVERIFY(QDir().mkpath(repository));
         git(repository, {"init", "-q", "-b", "integration"});
+        git(repository, {"config", "protocol.https.allow", "never"});
+        git(repository, {"remote", "add", "origin", "https://github.com/example/project.git"});
         git(repository, {"commit", "-q", "--allow-empty", "-m", "start"});
         const auto command = [&](const QString& type, const QJsonObject& payload) {
             return fixture.host->handleCommand(agent_test::request(type, payload), "desktop-test");
@@ -213,6 +215,9 @@ class TeamMergeTest final : public QObject {
             QVERIFY(teams_->update(team_, {{"merge_policy", policy}}, "user").ok());
             const QString first = task("Api");
             const QString second = task("Cart");
+            // The dependent review assesses the dependency's committed head;
+            // completion of that same head must only release the merge gate.
+            pass(first, "dev1");
             // The leader makes Cart depend on Api while Cart is already under way.
             QVERIFY(teams_->assignTask(team_, second, "dev2", "lead").ok());
             QVERIFY(teams_->moveTask(team_, second, state::inProgress, "dev2").ok());
@@ -222,8 +227,7 @@ class TeamMergeTest final : public QObject {
             finishReview(*teams_, "rev", "Verdict: no findings", true);
             QCOMPARE(get(second).state, state::ready);
             QVERIFY2(!get(second).mergeOffered, qPrintable(policy));
-            QCOMPARE(merges().size(), 0);
-            pass(first, "dev1");
+            QCOMPARE(merges().size(), policy == "user" ? 1 : 0);
             QVERIFY(get(first).mergeOffered);
             QVERIFY2(!get(second).mergeOffered, qPrintable(policy));
             host_.merged.insert(first);
@@ -297,10 +301,9 @@ class TeamMergeTest final : public QObject {
         host_.merged.remove(id);
         host_.answer();
         QCOMPARE(team().integrationBranch, QStringLiteral("release-other"));
-        QCOMPARE(get(id).state, state::ready);
-        QCOMPARE(host_.asked, asked + 1);
-        host_.answer();
-        QCOMPARE(get(id).state, state::ready);
+        QCOMPARE(get(id).state, state::blocked);
+        QCOMPARE(get(id).reviewBlock, QStringLiteral("acceptance_stale"));
+        QCOMPARE(host_.asked, asked);
         QVERIFY(!teams_->checksOpen());
     }
 
@@ -319,6 +322,30 @@ class TeamMergeTest final : public QObject {
         QVERIFY(!teams_->checksOpen());
     }
 
+    void mergedGitFactsRequireCurrentCheckoutAndKnownOrigin_data() {
+        QTest::addColumn<QString>("change");
+        for (const QString& change : {"missing_origin", "dirty_after_probe", "head_after_probe"})
+            QTest::newRow(qPrintable(change)) << change;
+    }
+    void mergedGitFactsRequireCurrentCheckoutAndKnownOrigin() {
+        QFETCH(QString, change);
+        if (change == "missing_origin")
+            host_.completionOriginKnown = false;
+        const QString id = task("Cart");
+        pass(id, "dev1");
+        host_.merged.insert(id);
+        host_.holdAnswers = true;
+        teams_->checkMerged(team_);
+        if (change == "dirty_after_probe")
+            host_.dirty.insert(get(id).worktree);
+        if (change == "head_after_probe")
+            host_.heads.insert(get(id).branch, QString(40, 'f'));
+        host_.answer();
+        QVERIFY(get(id).state != state::done);
+        QCOMPARE(get(id).state, state::blocked);
+        QVERIFY(!get(id).acceptance);
+    }
+
     void commitsAfterTheReviewSendAReadyTaskBackToReview() {
         QVERIFY(teams_->update(team_, {{"merge_policy", "user"}}, "user").ok());
         const QString id = task("Cart");
@@ -329,11 +356,12 @@ class TeamMergeTest final : public QObject {
         // Nothing moved: it stays ready.
         teams_->memberTurnEnded("dev1");
         QCOMPARE(get(id).state, state::ready);
-        host_.heads.insert(get(id).branch, "later");
+        const QString later(40, 'c');
+        host_.heads.insert(get(id).branch, later);
         teams_->memberTurnEnded("dev1");
         QCOMPARE(get(id).state, state::blocked);
         QCOMPARE(get(id).resumeState, state::inProgress);
-        QVERIFY(get(id).question.contains("later"));
+        QVERIFY(get(id).question.contains(later.left(12)));
         QVERIFY(!get(id).mergeOffered && !get(id).leaderMayMerge);
         QCOMPARE(merges().first()->state, QStringLiteral("withdrawn"));
         // Reviewed again at the new commit, it is offered again.
@@ -341,20 +369,21 @@ class TeamMergeTest final : public QObject {
         QVERIFY(teams_->moveTask(team_, id, state::inReview, "dev1").ok());
         finishReview(*teams_, "rev", "Verdict: no findings", true);
         QCOMPARE(get(id).state, state::ready);
-        QCOMPARE(get(id).headCommit, QStringLiteral("later"));
+        QCOMPARE(get(id).headCommit, later);
         QCOMPARE(merges().size(), 2);
         teams_->memberTurnEnded("dev1");
         QCOMPARE(get(id).state, state::ready);
     }
 
-    void aMergeWithCommitsAfterTheReviewIsDoneAndReported() {
+    void unreviewedMergedCommitsCannotCompleteATask() {
         const QString id = task("Cart");
         pass(id, "dev1");
-        host_.heads.insert(get(id).branch, "later");
+        host_.heads.insert(get(id).branch, QString(40, 'c'));
         host_.merged.insert(id);
         teams_->memberTurnEnded("lead");
-        QCOMPARE(get(id).state, state::done);
-        QCOMPARE(updates("merged_unreviewed"), 1);
+        QCOMPARE(get(id).state, state::blocked);
+        QVERIFY(!get(id).acceptance);
+        QCOMPARE(updates("merged_unreviewed"), 0);
     }
 
     void theAncestorCheckOnARealRepository() {

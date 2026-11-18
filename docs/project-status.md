@@ -1075,9 +1075,13 @@ Authenticated agent tools add host receipt verification and explicit leader rout
 decisions. The first independent semantic validator proves only mechanical plain
 prose reflow; unknown/code/material changes remain on the reviewer route. Receipts
 come from fixed host checks at the exact task revision, never caller risk/pass
-assertions. See [team-risk-routing.md](team-risk-routing.md). A route is an audit
-record, not a reviewer verdict, a user approval, completion or merge eligibility.
-Workflow consumption and general semantic verification remain separate work;
+assertions. See [team-risk-routing.md](team-risk-routing.md). The Ready/completion
+consumer is implemented under [ADR 0134](decisions/0134-exact-head-task-completion.md)
+and awaiting independent review: verified leader acceptance moves its exact
+head to Ready, while unsupported proof queues independent review. Durable daemon
+acceptance is separate from receipt lifetime and is revalidated against current
+policy and host merge facts. A route grants no user permission and cannot invent
+a reviewer verdict or complete a task by itself. General semantic verification remains separate work;
 there is no automatic cleanup capability.
 
 ## Bounded review lifecycle (pending review)

@@ -23,6 +23,13 @@ issue no receipt or low-risk route. A shared host header/build-wiring change als
 requires the full build and full Pro suite below; focused fixtures alone are not
 the complete matrix.
 
+Ready/completion consumption (ADR 0134) also runs the team task, merge and done
+suites. Cover actual host origin pinning, same-head/branch PRs in another
+repository, changed origins, fresh versus stale acceptance, generic state/hash
+assertions, legacy documents, intentional local-user override, and normal
+independent-review/finding-resolution acceptance. Preserve the pre-fix failures;
+a fake-host policy pass alone does not validate the runtime origin adapter.
+
 Every Pro/daemon ctest test runs with `QT_QPA_PLATFORM=offscreen`: `ketplus_tests_offscreen()`
 (`cmake/OffscreenTests.cmake`) sets it for each test in `tests/` and `tests/daemon/`, over the
 test's own environment and the shell's, so a test run never opens windows on the screen. A

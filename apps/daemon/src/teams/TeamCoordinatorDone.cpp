@@ -1,5 +1,6 @@
 // ADR 0118: a task is done when its pull request is merged on the remote, or when the leader
 // closes it by hand. Git's own rule (TeamCoordinatorMerges.cpp) stays for tasks merged locally.
+#include "teams/TeamCompletionPolicy.h"
 #include "teams/TeamCoordinator.h"
 
 #include <QDateTime>
@@ -122,6 +123,39 @@ void TeamCoordinator::applyPullRequestFacts(const qint64 teamId,
         if (task.state == state::done || fact == facts.cend())
             continue;
         if (fact->state == QStringLiteral("merged")) {
+            // Do not retain a Team copy across finishTask(): it shares tasks;
+            // a later mutable traversal would detach and strand the audit entry.
+            const QString integration = taskScope(*team, task).integrationBranch;
+            const bool accepted = completion::valid(*team, task);
+            const auto clean = accepted ? host_->hasUncommittedWork(task.worktree) : std::nullopt;
+            const QString liveHead =
+                accepted ? host_->taskCommit(taskScope(*team, task), task) : QString{};
+            const QString origin = accepted ? host_->completionRepository(*team, task) : QString{};
+            if (!accepted || !completion::canFinish(*team, task) ||
+                fact->headCommit != task.headCommit || fact->headBranch != task.branch ||
+                fact->baseBranch != integration || fact->url != task.pullRequest.trimmed() ||
+                !risk::evidenceId(task.acceptance->repositoryId) ||
+                fact->repositoryId != task.acceptance->repositoryId ||
+                origin != task.acceptance->repositoryId || !isCommit(fact->mergeCommit) ||
+                fact->mergeCommit.size() != 40 || liveHead != task.headCommit || !clean || *clean) {
+                const QString note = QStringLiteral("Merged PR is not verified completion at the "
+                                                    "accepted head, repository and integration; "
+                                                    "fresh review/proof or explicit user action "
+                                                    "is required.");
+                if (lastPullRequestNote(task) != note) {
+                    addHistory(
+                        task, QStringLiteral("daemon"), pullRequestKind, note,
+                        {{QStringLiteral("reason"), QStringLiteral("completion_unverified")}});
+                    updates.append({.kind = QStringLiteral("pull_request_unchecked"),
+                                    .text = note,
+                                    .taskId = task.id,
+                                    .actionable = true});
+                }
+                if (accepted && (liveHead != task.headCommit || !clean || *clean ||
+                                 origin != task.acceptance->repositoryId))
+                    invalidateAcceptance(*team, task, note, updates);
+                continue;
+            }
             const QString commit = fact->mergeCommit;
             finishTask(
                 *team, task, QStringLiteral("daemon"),
@@ -130,7 +164,12 @@ void TeamCoordinator::applyPullRequestFacts(const qint64 teamId,
                     : QStringLiteral("%1 is merged as %2").arg(task.pullRequest, commit.left(12)),
                 QStringLiteral("merged"),
                 {{QStringLiteral("pull_request"), task.pullRequest},
-                 {QStringLiteral("merge_commit"), commit}},
+                 {QStringLiteral("merge_commit"), commit},
+                 {QStringLiteral("accepted_head"), task.headCommit},
+                 {QStringLiteral("accepted_branch"), task.branch},
+                 {QStringLiteral("integration_branch"), integration},
+                 {QStringLiteral("repository_id"), task.acceptance->repositoryId},
+                 {QStringLiteral("acceptance_source"), task.acceptance->source}},
                 updates);
             finished = true;
             continue;
@@ -197,21 +236,33 @@ TeamResult TeamCoordinator::closeTask(const qint64 teamId, const QString& taskId
         return {.error = TeamError{QStringLiteral("invalid_payload"),
                                    QStringLiteral("Say in a note why the task is done.")},
                 .teamId = teamId};
+    if (!completion::canFinish(*team, *found))
+        return {.error = TeamError{QStringLiteral("review_required"),
+                                   QStringLiteral("Obtain exact-head acceptance before requesting "
+                                                  "verified completion.")},
+                .teamId = teamId};
+    const auto clean = host_->hasUncommittedWork(found->worktree);
+    if (!clean || *clean ||
+        host_->taskCommit(taskScope(*team, *found), *found) != found->headCommit ||
+        host_->completionRepository(*team, *found) != found->acceptance->repositoryId)
+        return {.error = TeamError{QStringLiteral("stale_revision"),
+                                   QStringLiteral("The accepted checkout or repository origin "
+                                                  "changed; obtain fresh proof or review.")},
+                .teamId = teamId};
+    if (proof != found->headCommit && proof != found->pullRequest.trimmed())
+        return {.error = TeamError{QStringLiteral("unverified_completion"),
+                                   QStringLiteral("A caller's URL or hash is not merge proof; "
+                                                  "name the accepted head or recorded PR.")},
+                .teamId = teamId};
     const Team before = *team;
     Task* task = team->task(taskId);
     QList<Update> updates;
-    const QString by = actorName(*team, actor);
-    finishTask(*team, *task, actor,
-               QStringLiteral("closed by %1 (%2): %3").arg(by, proof, note.trimmed()),
-               QStringLiteral("closed"),
-               {{QStringLiteral("by"), by},
-                {QStringLiteral("evidence"), proof},
-                {QStringLiteral("note"), note.trimmed()}},
-               updates);
-    offerMerges(*team, updates);
-    noteGoalReached(*team, updates);
+    addHistory(
+        *task, actor, QStringLiteral("completion_requested"), note.trimmed(),
+        {{QStringLiteral("requested_evidence"), proof}, {QStringLiteral("verified_merge"), false}});
     if (auto error = commit(*team, before, actor, updates))
         return {.error = error, .teamId = teamId};
+    QTimer::singleShot(0, this, [this, teamId] { checkMerged(teamId); });
     return {.error = std::nullopt, .teamId = teamId};
 }
 

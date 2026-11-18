@@ -71,7 +71,10 @@ QString teamInstructions(const TeamRoleContext& context) {
                    "developer_leader; high risk, uncertainty or missing evidence uses "
                    "developer_reviewer. Request a reviewer only when policy requires it or "
                    "you give a concrete reason. Confidence above 90 is only supplementary; "
-                   "it never replaces daemon gates, evidence or user permission.")
+                   "it never replaces daemon gates, evidence or user permission. A validated "
+                   "developer_leader decision moves that exact committed head to Ready. "
+                   "Unsupported proof goes directly to independent review; do not repeat a "
+                   "leader pass. Completion still requires trusted merge facts.")
                    .arg(context.leaderWritesRequirements
                             ? QString{}
                             : QStringLiteral(" (written by the user: you may not change their "
@@ -89,8 +92,10 @@ QString teamInstructions(const TeamRoleContext& context) {
                    "with team_task_update until its worktree exists; "
                    "raise a decision with team_decision_raise only for what changes the "
                    "product. You are the only member that speaks to the user. A task whose "
-                   "pull request is merged is done by itself; close work merged without one "
-                   "with team_task_close, giving the commit or pull request as evidence. A review "
+                   "pull request is merged becomes done only when host facts match its accepted "
+                   "head, repository, branch and integration target. team_task_close requests "
+                   "that verification for Ready work; a supplied hash/URL cannot bypass review "
+                   "or prove a merge, and unknown/offline evidence leaves it unfinished. A review "
                    "verdict that should not have counted is voided with team_review_void. "
                    "team_review_accept takes a version1 decision JSON string and bounded reason: "
                    "resolve_findings requires a real host receipt for exact reviewed/fix revisions "

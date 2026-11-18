@@ -224,8 +224,8 @@ class TeamRemoteTest final : public QObject {
         }
     }
 
-    // ADR 0118: a task the leader closes by hand reaches the phone with its new history
-    // entry, in the contract's shape; nobody but the leader may close one.
+    // ADR 0134: intentional user completion reaches the phone with its new history
+    // entry, in the contract's shape; an agent hash cannot fabricate completion.
     void aClosedTaskReachesThePhoneInItsHistory() {
         const QJsonObject fixtureJson = contract();
         Fixture fixture;
@@ -245,7 +245,15 @@ class TeamRemoteTest final : public QObject {
                          .toString(),
                      QStringLiteral("role_forbidden"));
         const QJsonObject closed = fixture.agents(team.leader, "agents.team_task_close", close);
-        QVERIFY2(closed.value("ok").toBool(), qPrintable(agent_test::text(closed)));
+        QCOMPARE(closed.value("error_code").toString(), QStringLiteral("review_required"));
+        const auto userClosed = fixture.host->handleCommand(
+            request("team.task.move", {{"team_id", team.id},
+                                       {"task_id", "T-1"},
+                                       {"state", "done"},
+                                       {"user_override", true},
+                                       {"note", "User intentionally retires this task"}}),
+            "desktop-test");
+        QVERIFY2(userClosed.value("ok").toBool(), qPrintable(agent_test::text(userClosed)));
         const QJsonObject detail =
             phone(fixture, "team.task.get", {{"team_id", team.id}, {"task_id", "T-1"}});
         sameShape(detail, fixtureJson.value("taskDetail").toObject().value("result"), "taskDetail");
@@ -254,9 +262,10 @@ class TeamRemoteTest final : public QObject {
         bool found = false;
         for (const QJsonValue& value : task.value("history").toArray()) {
             const QJsonObject entry = value.toObject();
-            found = found || (entry.value("kind").toString() == "closed" &&
-                              entry.value("text").toString().contains("0123456789abcdef") &&
-                              entry.value("actor").toObject().value("role") == "leader");
+            found =
+                found || (entry.value("kind").toString() == "user_completion_override" &&
+                          entry.value("text").toString().contains("User intentionally retires") &&
+                          entry.value("actor").toObject().value("role") == "user");
         }
         QVERIFY(found);
     }

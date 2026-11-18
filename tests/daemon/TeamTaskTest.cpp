@@ -225,8 +225,11 @@ class TeamTaskTest final : public QObject {
         QCOMPARE(
             teams_->moveTask(team_, id, state::inProgress, "dev1").error.value_or(TeamError{}).code,
             QStringLiteral("invalid_transition"));
-        QVERIFY(teams_->moveTask(team_, id, state::ready, "daemon").ok());
-        QVERIFY(teams_->moveTask(team_, id, state::done, "daemon").ok());
+        QVERIFY(teams_->moveTask(team_, id, state::ready, "daemon").error);
+        QVERIFY(teams_->moveTask(team_, id, state::done, "daemon").error);
+        QVERIFY(
+            teams_->moveTask(team_, id, state::done, "user", "Explicit fixture closure", {}, true)
+                .ok());
         QCOMPARE(teams_->moveTask(team_, id, state::todo, "lead").error.value_or(TeamError{}).code,
                  QStringLiteral("invalid_transition"));
         // The leader can take a task back to To do, which unassigns it.
@@ -239,7 +242,8 @@ class TeamTaskTest final : public QObject {
         int actionable = 0;
         for (const auto& update : journal_->teamUpdates(team_, true, 200))
             actionable += update.actionable ? 1 : 0;
-        QVERIFY(actionable >= 3);
+        QVERIFY(actionable >=
+                2); // Blocked + intentional user Done; a state assertion is not Ready.
     }
 
     void dependenciesMustBeDoneFirst() {
@@ -260,8 +264,10 @@ class TeamTaskTest final : public QObject {
         for (const QString& next : {state::inProgress})
             QVERIFY(teams_->moveTask(team_, first, next, "dev1").ok());
         QVERIFY(teams_->moveTask(team_, first, state::inReview, "dev1").ok());
-        QVERIFY(teams_->moveTask(team_, first, state::ready, "daemon").ok());
-        QVERIFY(teams_->moveTask(team_, first, state::done, "daemon").ok());
+        QVERIFY(
+            teams_
+                ->moveTask(team_, first, state::done, "user", "Explicit fixture closure", {}, true)
+                .ok());
         QVERIFY(teams_->moveTask(team_, second, state::inProgress, "dev2").ok());
     }
 
