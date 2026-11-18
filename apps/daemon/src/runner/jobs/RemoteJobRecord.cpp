@@ -24,6 +24,32 @@ const QSet<QString>& snapshotCodes() {
 
 const QString runnerUnavailable = QStringLiteral("runner_unavailable");
 
+// What the Relay answers when it refuses a job.submit.
+const QSet<QString>& relayRefusalReasons() {
+    static const QSet<QString> reasons{
+        QStringLiteral("no_matching_runner"),   QStringLiteral("entitlement_required"),
+        QStringLiteral("queue_full"),           QStringLiteral("invalid_labels"),
+        QStringLiteral("idempotency_conflict"), QStringLiteral("invalid_request")};
+    return reasons;
+}
+
+// Codes this desktop, its ledger or the Relay give a meaning of their own. A runner's
+// failed result that carries one ends like one whose reason is not a code.
+const QSet<QString>& reservedReasons() {
+    static const QSet<QString> reasons = [] {
+        QSet<QString> all{
+            QStringLiteral("permission_denied"),  QStringLiteral("cleanup_acknowledged"),
+            QStringLiteral("cleanup_unverified"), QStringLiteral("queue_expired"),
+            QStringLiteral("exit_code"),          QStringLiteral("user"),
+            QStringLiteral("deadline"),           QStringLiteral("session_closed"),
+            QStringLiteral("worker_restart")};
+        all.unite(relayFailedReasons());
+        all.unite(relayRefusalReasons());
+        return all;
+    }();
+    return reasons;
+}
+
 } // namespace
 
 bool isTerminalState(const QString& value) {
@@ -44,8 +70,13 @@ RemoteJobRecord applyResult(RemoteJobRecord record, const JobResult& result) {
         reason = clean ? QString() : QStringLiteral("exit_code");
     } else if (result.state == QStringLiteral("failed")) {
         terminal = state::failed;
-        reason = snapshotCodes().contains(result.reason) ? QStringLiteral("snapshot_failed")
-                                                         : QStringLiteral("spawn_failed");
+        // The runner's own code is kept; one that is not a code is never stored.
+        if (snapshotCodes().contains(result.reason))
+            reason = QStringLiteral("snapshot_failed");
+        else
+            reason = isReasonCode(result.reason) && !reservedReasons().contains(result.reason)
+                         ? result.reason
+                         : QStringLiteral("spawn_failed");
     } else if (result.state == QStringLiteral("cancelled")) {
         terminal = state::cancelled;
         reason = QStringLiteral("user");
@@ -121,13 +152,9 @@ std::optional<QString> submitRefusalReason(const QString& code) {
         QStringLiteral("invalid_response"), QStringLiteral("rate_limited"),
         QStringLiteral("not_enrolled"),     QStringLiteral("account_changed"),
         QStringLiteral("invalid_access"),   runnerUnavailable};
-    static const QSet<QString> ownReason{
-        QStringLiteral("no_matching_runner"),   QStringLiteral("entitlement_required"),
-        QStringLiteral("queue_full"),           QStringLiteral("invalid_labels"),
-        QStringLiteral("idempotency_conflict"), QStringLiteral("invalid_request")};
     if (retried.contains(code))
         return std::nullopt;
-    if (ownReason.contains(code))
+    if (relayRefusalReasons().contains(code))
         return code;
     return runnerUnavailable; // unsupported, route_refused
 }
