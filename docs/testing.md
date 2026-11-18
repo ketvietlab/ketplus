@@ -1312,7 +1312,21 @@ at the unbuilt runner target, so this is not a full packaging pass.
 One subsequent native short-command case control with bootstrap diagnostics passed
 all 12 iterations; each reached `ready` in 45–74 ms with a readable receipt. This
 does not identify or fix the original bootstrap failure, and native controls stop
-at that single run pending residual assessment.
+at that single run. The team leader accepted the separate native validation risk
+for integration, retaining the original failure as unclassified.
+
+One authorized serial A→B→C control then ran only the 17 originally failed rows
+from the other seven suites (15 methods, seven invocations). Every requested row
+passed, with no skips or unintended rows; binaries matched the original full-run
+hashes, and assertions, deadlines and fixed waits were unchanged. Mermaid measured
+baseline/worst/threshold values of 20/47/150 ms and 26/32/150 ms. Controls stopped
+after that single sequence; they do not replace the original full-run result or
+classify its failures. Cleanup sampling observed one reparented SDK helper after
+Attention, followed by empty inventories after Mermaid and on a later check.
+Its operation and cleanup timing were not captured, so this is not a claim that
+every intermediate inventory was empty. That observation and the remaining
+validation risk require review and explicit disposition; there is no all-T-5,
+release or full-packaging acceptance at this checkpoint.
 
 The opt-in `ketplus_linux_job_executor_tests` runs the real packaged helper and
 registry. It covers missing-manager admission, durable retry/output, double-fork/
