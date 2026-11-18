@@ -519,6 +519,27 @@ class TeamProtocolTest final : public QObject {
                  QStringLiteral("full"));
     }
 
+    void malformedMemberRoleDoesNotUseTheLegacyDefault() {
+        Fixture fixture;
+        QVERIFY(fixture.open());
+        const auto made = create(fixture);
+        QVERIFY2(made.value("ok").toBool(), qPrintable(text(made)));
+        const auto id = made.value("team").toObject().value("id");
+        const int before = sessions(fixture);
+        for (const QJsonValue& role :
+             {QJsonValue(QJsonValue::Null), QJsonValue(3), QJsonValue(true),
+              QJsonValue(QJsonArray{}), QJsonValue(QJsonObject{}), QJsonValue("leader"),
+              QJsonValue("Reviewer"), QJsonValue("")}) {
+            const auto result = command(fixture, "team.member.add",
+                                        {{"team_id", id},
+                                         {"name", "Refused member"},
+                                         {"provider", "claude"},
+                                         {"role", role}});
+            QCOMPARE(result.value("error_code").toString(), QString("invalid_payload"));
+            QCOMPARE(sessions(fixture), before);
+        }
+    }
+
     void refusedCreateLeavesNothingBehind() {
         Fixture fixture;
         QVERIFY(fixture.open());

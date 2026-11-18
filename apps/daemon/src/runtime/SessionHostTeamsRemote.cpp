@@ -52,9 +52,9 @@ const QHash<QString, QSet<QString>>& allowedFields() {
           QStringLiteral("risk_acknowledged"), QStringLiteral("plan"),
           QStringLiteral("turn_budget"), QStringLiteral("language")}},
         {QStringLiteral("team.member.add"),
-         {QStringLiteral("team_id"), QStringLiteral("name"), QStringLiteral("lane"),
-          QStringLiteral("paths"), QStringLiteral("provider"), QStringLiteral("model"),
-          QStringLiteral("effort"), QStringLiteral("expected_revision")}},
+         {QStringLiteral("team_id"), QStringLiteral("role"), QStringLiteral("name"),
+          QStringLiteral("lane"), QStringLiteral("paths"), QStringLiteral("provider"),
+          QStringLiteral("model"), QStringLiteral("effort"), QStringLiteral("expected_revision")}},
         {QStringLiteral("team.member.remove"),
          {QStringLiteral("team_id"), QStringLiteral("session_id"),
           QStringLiteral("expected_revision")}},
@@ -90,6 +90,13 @@ std::optional<QJsonObject> payloadRefusal(const QString& type, const QJsonObject
     if (!pageLimit(payload, QStringLiteral("limit")) ||
         !pageLimit(payload, QStringLiteral("history_limit")))
         return invalid(QStringLiteral("A page holds 1 to 50 entries."));
+    if (type == QStringLiteral("team.member.add") && payload.contains(QStringLiteral("role"))) {
+        const QJsonValue role = payload.value(QStringLiteral("role"));
+        if (!role.isString() ||
+            (role.toString() != teams::role::developer && role.toString() != teams::role::reviewer))
+            return invalid(
+                QStringLiteral("A member added to a team is a developer or a reviewer."));
+    }
     if (type == QStringLiteral("team.decision.answer")) {
         const bool choice = payload.contains(QStringLiteral("choice"));
         const QString text = payload.value(QStringLiteral("text")).toString();

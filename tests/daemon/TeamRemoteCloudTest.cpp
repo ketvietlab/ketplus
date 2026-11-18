@@ -238,7 +238,40 @@ class TeamRemoteCloudTest final : public QObject {
 
     // §5: a command outside this Mac's owner, capability or mailbox is refused, as is a
     // device that is not, or no longer, paired here.
+    void aReviewerRoleReachesTheAuthenticatedEncryptedReply() {
+        Relay relay;
+        QVERIFY(relay.open());
+        QVERIFY(relay.createTeam());
+        const auto result =
+            relay.run(relay.command("add-reviewer", "team.member.add", "teams.write"),
+                      {{"team_id", relay.team},
+                       {"role", "reviewer"},
+                       {"name", "Second reviewer"},
+                       {"provider", "claude"},
+                       {"expected_revision", relay.revision()}});
+        QVERIFY2(result.value("ok").toBool(), qPrintable(text(result)));
+        int matched = 0;
+        for (const auto& value : result.value("team").toObject().value("members").toArray()) {
+            const auto member = value.toObject();
+            if (member.value("name") == "Second reviewer") {
+                QCOMPARE(member.value("role").toString(), QString("reviewer"));
+                ++matched;
+            }
+        }
+        QCOMPARE(matched, 1);
+    }
+
+    void anOutOfScopeOrUnpairedDeviceIsRefused_data() {
+        QTest::addColumn<QString>("commandKind");
+        QTest::addColumn<QString>("memberRole");
+        QTest::newRow("settings") << QString("team.update") << QString{};
+        QTest::newRow("developer") << QString("team.member.add") << QString("developer");
+        QTest::newRow("reviewer") << QString("team.member.add") << QString("reviewer");
+    }
+
     void anOutOfScopeOrUnpairedDeviceIsRefused() {
+        QFETCH(QString, commandKind);
+        QFETCH(QString, memberRole);
         Relay relay;
         QVERIFY(relay.open());
         QVERIFY(relay.createTeam());
@@ -253,18 +286,42 @@ class TeamRemoteCloudTest final : public QObject {
         // The asynchronous pairing check may also finish a fake leader bootstrap.
         // Fence the settings mutation domain, rather than unrelated team lifecycle events.
         QVERIFY(before.value("settings_revision").toInteger() > 0);
+        const auto identities = [](const QJsonObject& team) {
+            QJsonArray result;
+            for (const auto& value : team.value("members").toArray()) {
+                const auto member = value.toObject();
+                result.append(QJsonArray{member.value("session_id"), member.value("role")});
+            }
+            return result;
+        };
+        const auto sessionCount = [&] {
+            return relay.fixture.host->handleCommand(request("session.list", {}), "desktop-test")
+                .value("sessions")
+                .toArray()
+                .size();
+        };
+        const int beforeSessions = sessionCount();
         const auto unchanged = [&] {
             const auto after = read();
+            QCOMPARE(identities(after), identities(before));
+            QCOMPARE(sessionCount(), beforeSessions);
             for (const QString& key : {QString("language"), QString("paused"), QString("goal"),
                                        QString("settings_revision")})
                 QCOMPARE(after.value(key), before.value(key));
         };
-        const QJsonObject payload{{"team_id", relay.team},
-                                  {"paused", true},
-                                  {"language", "vi"},
-                                  {"expected_revision", relay.revision()}};
+        const QJsonObject payload =
+            commandKind == "team.member.add"
+                ? QJsonObject{{"team_id", relay.team},
+                              {"role", memberRole},
+                              {"name", "Scoped member"},
+                              {"provider", memberRole == "reviewer" ? "claude" : "codex"},
+                              {"expected_revision", relay.revision()}}
+                : QJsonObject{{"team_id", relay.team},
+                              {"paused", true},
+                              {"language", "vi"},
+                              {"expected_revision", relay.revision()}};
         const auto code = [&](const QString& id, const std::function<void(QJsonObject&)>& change) {
-            QJsonObject command = relay.command(id, "team.update", "teams.write");
+            QJsonObject command = relay.command(id, commandKind, "teams.write");
             change(command);
             return relay.run(command, payload).value("error_code").toString();
         };
@@ -289,7 +346,7 @@ class TeamRemoteCloudTest final : public QObject {
         relay.transport.responseForPath.insert(
             "/v2/device-keys/team-phone/1",
             QJsonDocument(QJsonObject{{"keys", relay.phoneKeys}}).toJson());
-        QJsonObject unpaired = relay.command("unpaired-1", "team.update", "teams.write");
+        QJsonObject unpaired = relay.command("unpaired-1", commandKind, "teams.write");
         Access::execute(*relay.client, unpaired);
         QTRY_VERIFY([&] {
             const auto audit = relay.fixture.journal->remoteCommands("team-phone", 10);

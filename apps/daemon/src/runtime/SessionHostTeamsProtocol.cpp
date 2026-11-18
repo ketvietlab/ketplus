@@ -240,9 +240,11 @@ QJsonObject SessionHost::teamCommand(const QString& type, const QJsonObject& req
         if (!team)
             return failure(QStringLiteral("team_not_found"),
                            QStringLiteral("The team no longer exists."));
-        // T-23: "role" adds a developer (the default) or a team's second reviewer.
-        const QString role = payload.value(QStringLiteral("role")).toString(teams::role::developer);
-        if (role != teams::role::developer && role != teams::role::reviewer)
+        // Only omission selects the legacy developer default; malformed values are not roles.
+        const QJsonValue requestedRole = payload.value(QStringLiteral("role"));
+        const QString role = requestedRole.toString(teams::role::developer);
+        if ((!requestedRole.isUndefined() && !requestedRole.isString()) ||
+            (role != teams::role::developer && role != teams::role::reviewer))
             return failure(QStringLiteral("invalid_payload"),
                            QStringLiteral("A member added to a team is a developer or a "
                                           "reviewer."));
