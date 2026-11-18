@@ -176,7 +176,7 @@ class DaemonUpgradeTest final : public QObject {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
         QVERIFY(QDir().mkpath(directory.filePath(QStringLiteral("worktree"))));
-        const QString executable = directory.filePath(QStringLiteral("fake-codex"));
+        const QString executable = directory.filePath(fixtureName(QStringLiteral("fake-codex")));
         QVERIFY(writeFakeCodex(executable, directory.filePath(QStringLiteral("provider.log"))));
         LocalJournal journal(directory.filePath(QStringLiteral("journal.sqlite3")));
         CodexAdapter adapter(executable);

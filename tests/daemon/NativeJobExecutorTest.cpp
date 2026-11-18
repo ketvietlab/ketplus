@@ -2,6 +2,7 @@
 #include "runtime/executor/NativeJobControlAddress.h"
 #include "runtime/executor/NativeProcessIdentity.h"
 
+#include <QElapsedTimer>
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -29,6 +30,8 @@ class Executor final {
     QByteArray buffer;
     QList<QJsonObject> messages;
     bool doneReceived{false};
+    bool helperStarted{false};
+    QJsonObject startupDiagnostics;
 
     ~Executor() {
         if (helper.state() == QProcess::NotRunning)
@@ -69,17 +72,45 @@ class Executor final {
             return {};
         return QJsonDocument::fromJson(file.readAll()).object();
     }
+    QJsonObject diagnosticState() const {
+        const bool exited = helperStarted && helper.state() == QProcess::NotRunning;
+        return {{"process_state", int(helper.state())},
+                {"process_error", int(helper.error())},
+                {"exit_information_valid", exited},
+                {"exit_status", exited ? QJsonValue(int(helper.exitStatus())) : QJsonValue()},
+                {"exit_code", exited ? QJsonValue(helper.exitCode()) : QJsonValue()},
+                {"socket_state", int(socket.state())},
+                {"socket_error", int(socket.error())}};
+    }
     bool start() {
+        QElapsedTimer elapsed;
+        elapsed.start();
+        QString phase = "directory";
+        bool readyReceived = false;
+        const auto capture = qScopeGuard([&] {
+            startupDiagnostics = diagnosticState();
+            startupDiagnostics.insert("phase", phase);
+            startupDiagnostics.insert("elapsed_ms", elapsed.elapsed());
+            startupDiagnostics.insert("directory_valid", directory.isValid());
+            startupDiagnostics.insert("process_started", helperStarted);
+            startupDiagnostics.insert("ready_received", readyReceived);
+        });
         if (!directory.isValid())
             return false;
+        phase = "process_start";
         helper.start(QStringLiteral(KETPLUS_JOB_EXECUTOR_PATH), {path(), taskId, lease});
         if (!helper.waitForStarted())
             return false;
+        helperStarted = true;
         QElapsedTimer timer;
         timer.start();
         while (timer.elapsed() < 3000) {
-            if (reconnect())
-                return !receive("ready").isEmpty();
+            phase = "connect";
+            if (reconnect()) {
+                phase = "ready";
+                readyReceived = !receive("ready").isEmpty();
+                return readyReceived;
+            }
             QTest::qWait(20);
         }
         return false;
@@ -164,6 +195,27 @@ class NativeJobExecutorTest final : public QObject {
     void shortLivedCommandsHaveDurableBirthIdentityBeforeExec() {
         for (int index = 0; index < 12; ++index) {
             Executor executor;
+            const auto diagnostics = qScopeGuard([&] {
+                if (!QTest::currentTestFailed() &&
+                    !qEnvironmentVariableIsSet("KETPLUS_MANAGED_TASK_DIAGNOSTICS"))
+                    return;
+                // This guard runs before Executor's destructor can reconnect or stop it.
+                auto summary = executor.startupDiagnostics;
+                summary.insert("iteration", index + 1);
+                summary.insert("before_cleanup", executor.diagnosticState());
+                QFile metadata(executor.path() + "/executor.json");
+                bool readable = false;
+                if (metadata.open(QIODevice::ReadOnly)) {
+                    const auto bytes = metadata.read(128 * 1024);
+                    QJsonParseError error;
+                    const auto document = QJsonDocument::fromJson(bytes, &error);
+                    readable = metadata.atEnd() && error.error == QJsonParseError::NoError &&
+                               document.isObject();
+                }
+                summary.insert("receipt_readable", readable);
+                qWarning().noquote() << "Native helper bootstrap:"
+                                     << QJsonDocument(summary).toJson(QJsonDocument::Compact);
+            });
             QVERIFY(executor.start());
             executor.execute({"/usr/bin/true"});
             const auto done = executor.receive("done");

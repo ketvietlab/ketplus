@@ -79,7 +79,7 @@ class ClaudeAdapterTest final : public QObject {
   private slots:
     void remoteAccountUsageIsReadOnlyAndSessionFenced() {
         QTemporaryDir directory;
-        const auto fake = directory.filePath("fake-claude");
+        const auto fake = directory.filePath(fixtureName("fake-claude"));
         QVERIFY(writeFakeClaude(fake, directory.filePath("log")));
         LocalJournal journal(directory.filePath("journal.sqlite3"));
         CodexAdapter codex("/missing-codex");
@@ -130,7 +130,7 @@ class ClaudeAdapterTest final : public QObject {
     void startsClaudeTurnAndJournalsCanonicalEvents() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const QString claude = directory.filePath(QStringLiteral("fake-claude"));
+        const QString claude = directory.filePath(fixtureName(QStringLiteral("fake-claude")));
         const QString logPath = directory.filePath(QStringLiteral("claude.log"));
         QVERIFY(writeFakeClaude(claude, logPath));
 
@@ -261,7 +261,7 @@ class ClaudeAdapterTest final : public QObject {
         for (const QString decision : {QStringLiteral("accept"), QStringLiteral("decline")}) {
             QTemporaryDir directory;
             QVERIFY(directory.isValid());
-            const QString claude = directory.filePath(QStringLiteral("fake-claude"));
+            const QString claude = directory.filePath(fixtureName(QStringLiteral("fake-claude")));
             const QString logPath = directory.filePath(QStringLiteral("claude.log"));
             QVERIFY(writeFakeClaude(claude, logPath));
             LocalJournal journal(directory.filePath(QStringLiteral("journal.sqlite3")));
@@ -306,7 +306,7 @@ class ClaudeAdapterTest final : public QObject {
     void interruptBeforeThreadEndsTurn() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const QString claude = directory.filePath(QStringLiteral("fake-claude"));
+        const QString claude = directory.filePath(fixtureName(QStringLiteral("fake-claude")));
         const QString logPath = directory.filePath(QStringLiteral("claude.log"));
         QVERIFY(writeFakeClaude(claude, logPath));
         LocalJournal journal(directory.filePath(QStringLiteral("journal.sqlite3")));
@@ -362,7 +362,7 @@ class ClaudeAdapterTest final : public QObject {
     void steersRunningTurn() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const QString claude = directory.filePath(QStringLiteral("fake-claude"));
+        const QString claude = directory.filePath(fixtureName(QStringLiteral("fake-claude")));
         const QString logPath = directory.filePath(QStringLiteral("claude.log"));
         QVERIFY(writeFakeClaude(claude, logPath));
         LocalJournal journal(directory.filePath(QStringLiteral("journal.sqlite3")));
@@ -412,7 +412,7 @@ class ClaudeAdapterTest final : public QObject {
     void steerCarriesImagesToTheRunningTurn() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const QString claude = directory.filePath(QStringLiteral("fake-claude"));
+        const QString claude = directory.filePath(fixtureName(QStringLiteral("fake-claude")));
         const QString logPath = directory.filePath(QStringLiteral("claude.log"));
         QVERIFY(writeFakeClaude(claude, logPath));
         LocalJournal journal(directory.filePath(QStringLiteral("journal.sqlite3")));
@@ -490,7 +490,7 @@ class ClaudeAdapterTest final : public QObject {
     void phoneCannotNameMacFiles() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const QString claude = directory.filePath(QStringLiteral("fake-claude"));
+        const QString claude = directory.filePath(fixtureName(QStringLiteral("fake-claude")));
         const QString logPath = directory.filePath(QStringLiteral("claude.log"));
         QVERIFY(writeFakeClaude(claude, logPath));
         LocalJournal journal(directory.filePath(QStringLiteral("journal.sqlite3")));
@@ -537,7 +537,7 @@ class ClaudeAdapterTest final : public QObject {
     void deferredSteerAnswersWithTheProviderOutcome() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const QString claude = directory.filePath(QStringLiteral("fake-claude"));
+        const QString claude = directory.filePath(fixtureName(QStringLiteral("fake-claude")));
         const QString logPath = directory.filePath(QStringLiteral("claude.log"));
         QVERIFY(writeFakeClaude(claude, logPath));
         LocalJournal journal(directory.filePath(QStringLiteral("journal.sqlite3")));
@@ -615,10 +615,10 @@ class ClaudeAdapterTest final : public QObject {
         QFETCH(bool, restart);
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const QString claude = directory.filePath(QStringLiteral("fake-claude"));
+        const QString claude = directory.filePath(fixtureName(QStringLiteral("fake-claude")));
         const QString claudeLog = directory.filePath(QStringLiteral("claude.log"));
         QVERIFY(writeFakeClaude(claude, claudeLog));
-        const QString codexPath = directory.filePath(QStringLiteral("fake-codex"));
+        const QString codexPath = directory.filePath(fixtureName(QStringLiteral("fake-codex")));
         const QString codexLog = directory.filePath(QStringLiteral("codex.log"));
         QVERIFY(writeFakeCodex(codexPath, codexLog));
         LocalJournal journal(directory.filePath(QStringLiteral("journal.sqlite3")));
@@ -742,7 +742,7 @@ class ClaudeAdapterTest final : public QObject {
         // pointed at the handoff transcript.
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const QString codexPath = directory.filePath(QStringLiteral("fake-codex"));
+        const QString codexPath = directory.filePath(fixtureName(QStringLiteral("fake-codex")));
         const QString codexLog = directory.filePath(QStringLiteral("codex.log"));
         QVERIFY(writeFakeCodex(codexPath, codexLog));
         LocalJournal journal(directory.filePath(QStringLiteral("journal.sqlite3")));
@@ -815,7 +815,7 @@ class ClaudeAdapterTest final : public QObject {
     void reportsAndControlsBackgroundTasksAcrossRestarts() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const QString claude = directory.filePath(QStringLiteral("fake-claude"));
+        const QString claude = directory.filePath(fixtureName(QStringLiteral("fake-claude")));
         const QString logPath = directory.filePath(QStringLiteral("claude.log"));
         QVERIFY(writeFakeClaude(claude, logPath));
         LocalJournal journal(directory.filePath(QStringLiteral("journal.sqlite3")));

@@ -2,6 +2,7 @@
 
 // A fake runtime for the team coordinator: conversations, worktrees and the messages a team
 // sends, all in memory (ADR 0114).
+#include "TestPaths.h"
 #include "teams/TeamCoordinator.h"
 
 #include <QDir>
@@ -272,7 +273,7 @@ class FakeHost final : public TeamHostPort {
     // Where the worktrees it makes are; a test that needs them on disk points it at a folder.
     QString worktreeRoot = QStringLiteral("/wt/");
     // The repository its conversations are in.
-    QString repository = QStringLiteral("/repo");
+    QString repository = absoluteTestPath(QStringLiteral("repo"));
     QHash<QString, std::optional<QString>> sidebarPlacements;
     // T-90: the repository each worktree was made in, the repositories checked, and the
     // ones refused with the reason.
@@ -312,7 +313,7 @@ inline void finishReview(TeamCoordinator& teams, const QString& session, const Q
 
 inline Team standardTeam() {
     Team team;
-    team.repository = QStringLiteral("/repo");
+    team.repository = absoluteTestPath(QStringLiteral("repo"));
     team.name = QStringLiteral("Checkout");
     team.integrationBranch = QStringLiteral("integration");
     // The first plan is approved unless a test is about it (ADR 0114, open point 5).

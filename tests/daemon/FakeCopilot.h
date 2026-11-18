@@ -1,4 +1,6 @@
 #pragma once
+#include "ScriptFixture.h"
+
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -87,6 +89,5 @@ for line in sys.stdin:
 )PY")
                    .arg(quoted(log), quoted(mode))
                    .toUtf8());
-    file.close();
-    return file.setPermissions(QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
+    return finalizeScriptFixture(file);
 }

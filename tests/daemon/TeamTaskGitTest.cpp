@@ -4,6 +4,7 @@
 // No real provider is started.
 #include "AgentTestFixture.h"
 #include "TeamFakeHost.h"
+#include "TestPaths.h"
 
 #include <QDir>
 #include <QProcess>
@@ -304,6 +305,8 @@ class TeamTaskGitProtocolTest final : public QObject {
     void initTestCase() { QStandardPaths::setTestModeEnabled(true); }
 
     void theEventLoopRunsWhileGitWorksForATaskCommand() {
+        KETPLUS_SKIP_ON_WINDOWS(
+            "the fixture is a POSIX shell script (fake git/gh) that Windows cannot run");
         agent_test::Fixture fixture;
         QVERIFY(fixture.open());
         const QString repository = fixture.directory.filePath("shop");
@@ -418,6 +421,8 @@ class TeamTaskGitProtocolTest final : public QObject {
     // A repository the daemon has not seen is asked about off the event loop before the
     // command that names it runs; a known one is answered inside the call.
     void aFirstSeenRepositoryIsLearnedBeforeTheCommandRuns() {
+        KETPLUS_SKIP_ON_WINDOWS(
+            "the fixture is a POSIX shell script (fake git/gh) that Windows cannot run");
         agent_test::Fixture fixture;
         QVERIFY(fixture.open());
         const QString repository = fixture.directory.filePath("shop");

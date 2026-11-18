@@ -3,6 +3,7 @@
 // it, in order, once, also across a restart. Git here is a wrapper that takes 2 s a call.
 #include "AgentTestFixture.h"
 #include "TeamReplyDiagnostics.h"
+#include "TestPaths.h"
 #include "storage/LocalJournal.h"
 
 #include <QDir>
@@ -276,6 +277,8 @@ class TeamReplyTest final : public QObject {
     // Criteria 2 and 3: Start is answered at once, with the decision answered in the reply;
     // the assignments follow in their order.
     void startIsAnsweredBeforeTheAssignmentsAreSent() {
+        KETPLUS_SKIP_ON_WINDOWS(
+            "the fixture is a POSIX shell script (fake git/gh) that Windows cannot run");
         const QString plan = openDecision("first_plan");
         const QString gitStarted = fixture_->directory.filePath("start-git-started");
         const SlowGit slow(fixture_->directory.filePath("bin"), "2", gitStarted);
@@ -336,6 +339,8 @@ class TeamReplyTest final : public QObject {
     // Criterion 5: a pause sent while the assignments are still out is answered at once; what
     // Start released before it is still sent, and refusals are decided before the reply.
     void aSecondCommandIsAnsweredWithoutWaiting() {
+        KETPLUS_SKIP_ON_WINDOWS(
+            "the fixture is a POSIX shell script (fake git/gh) that Windows cannot run");
         const QString plan = openDecision("first_plan");
         const QString gitStarted = fixture_->directory.filePath("second-command-git-started");
         const SlowGit slow(fixture_->directory.filePath("bin"), "2", gitStarted);
@@ -539,6 +544,8 @@ class TeamReplyTest final : public QObject {
 
     // A message held while the team was paused is released by resume after the reply.
     void resumeIsAnsweredBeforeTheHeldMessagesAreSent() {
+        KETPLUS_SKIP_ON_WINDOWS(
+            "the fixture is a POSIX shell script (fake git/gh) that Windows cannot run");
         qint64 elapsed = -1;
         QVERIFY(timed("team.decision.answer",
                       {{"team_id", teamId_},

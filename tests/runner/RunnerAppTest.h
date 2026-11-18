@@ -28,6 +28,11 @@ class TestHost {
     [[nodiscard]] QString writeFile(const QString& name, const QByteArray& content) const;
     // A runner registered and paired with "desktop-1"; returns its id.
     QString registerRunner(const QStringList& extra = {});
+    // `run` through its production wiring, over a clock that follows `clock` and a Relay socket
+    // that is ready at once; every heartbeat wait is recorded in `sleeps`, and the run is asked
+    // to stop after `sleeps` waits.
+    int runLoop(int sleeps);
+    [[nodiscard]] QString workDir() const { return directory.path() + QStringLiteral("/work"); }
 
     QTemporaryDir directory;
     QDateTime clock;
@@ -105,6 +110,8 @@ class RunnerAppRunTest : public QObject {
     void statusShowsNoSecret();
     void secretsNeverLeave();
     void helpListsEveryExitCode();
+    void runCliExitsWhenTheRunnerIsRemoved();
+    void runCliStopsWhenAsked();
 };
 
 class RunnerAppDeliveryFilesTest : public QObject {

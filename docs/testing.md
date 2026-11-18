@@ -194,16 +194,18 @@ and local/archive includes with cycles, escapes and the 16-level boundary.
 | Desktop snapshot sync | `ketplus_runner_snapshot_store_tests`, `ketplus_snapshot_keys_tests`, `ketplus_snapshot_preparation_tests`, `ketplus_snapshot_retention_tests`, `ketplus_snapshot_sender_tests`, `ketplus_snapshot_sync_integration_tests` | Store refs and pruning with the user's repository unchanged, source `HEAD` read from files, workspace keys against fixed vectors, preparing a job's snapshot, the pack cache's restart, age and size limits, the sender's offer, chunk, ack, error and ready rules over fake ports, and a real snapshot sent, released and applied into a workspace |
 | Runner pairing | `ketplus_runner_pairing_tests` | Fixed vectors computed with Python's standard library and the OpenSSL command line: pairing token encode and parse (each malformed, missing, mistyped and oversized case refused, the token never in QDebug output or error codes), runner and desktop fingerprints, pairing digest and confirmation code, each digest input changing the code, the desktop key check, canonical bytes and Ed25519 signatures of each signed payload with every field, key, key version and issuedAt window failure, pin records round trip and corrupt records refused; builds in the `daemon-dev` preset too |
 | Runner peer protocol frames | `ketplus_runner_protocol_tests` | `ketplus_runner_protocol` only, no network: round trip of every frame including optional and null fields, exact-limit and limit-plus-one values for every frame size and field limit, malformed JSON, invalid UTF-8, wrong field types, unknown fields and types, channel and direction routing, error code strings |
-| Runner process | `ketplus_runner_app_tests` | `ketplus-runner` against an in-process Relay on 127.0.0.1 with a fake clock: state directory mode, owner, lock, atomic writes and corrupt files; register and pair until the pin is active (token from argument, stdin and file), local refusals with no Relay call, desktop key mismatch, approvals that do not verify, ended pairings and lost answers; access token challenge signature, refresh credential rotation, lost answers and stops between rotation and store; each Relay refusal (exit code or backoff capped at 60 seconds), the 30-second heartbeat, unpair, deregister, status, every exit code in `--help`, and no secret in output, logs or the state directory |
+| Runner process | `ketplus_runner_app_tests` | `ketplus-runner` against an in-process Relay on 127.0.0.1 with a fake clock: state directory mode, owner, lock, atomic writes and corrupt files; register and pair until the pin is active (token from argument, stdin and file), local refusals with no Relay call, desktop key mismatch, approvals that do not verify, ended pairings and lost answers; access token challenge signature, refresh credential rotation, lost answers and stops between rotation and store; each Relay refusal (exit code or backoff capped at 60 seconds), the 30-second heartbeat through the production `run` wiring (which reports `draining` while no command runner is ready), `run` from the command line with the real event loop (removed runner, stop), unpair, deregister, status, every exit code in `--help`, and no secret in output, logs or the state directory |
+| Runner run loop | `ketplus_runner_run_tests` | `ketplus-runner run` over a fake Relay, socket, peer transport, command runner and clock, with the real job pieces, journal, accepted-jobs file and pins: start-up clean-up before the journal and any acquire (bounded at 90 seconds), `draining` until started and while the command runner is not ready or a record cannot be read, acquire only on `pending` or `job.available` with every condition holding and once per answer, a heartbeat 2 seconds after a state change, a lease without spec given back while draining, restart from a journal step, Relay calls never nested (a nested event loop counts the depth), at most one waiting heartbeat, `job.cancel` renewing once, whole jobs, refusals, reconnection, cancel and timeout, stop signals (idle, acquire in flight, with a job, second signal and the restart after it), fatal refusals during a job, no secret in logs; then one job with a real git snapshot through the snapshot receiver, and one over a real WebRTC connection on this machine |
 | Runner job session | `ketplus_runner_session_tests` | `ketplus_runner_session` over fake channel, lease, snapshot receiver, command runner and clock: handshake, broken frames, spec refusals, start/accepted/started order, at-most-once launch, output paging, acknowledgement, resume and the 16 MiB ring, cancel, deadline, lost connection and lease, result delivery and finish. |
 | Runner command executor | `ketplus_runner_exec_plan_tests`, `ketplus_runner_exec_tests`, `ketplus_runner_exec_native_tests` (macOS) | Launch, mount, task id and result tables; job directories (mode, identity, refused and unidentified ones); the command runner over a fake executor and policy: readiness states, the closed policy, launch refusals, the busy refusal, the backstop, 32-page output pacing, lost bytes, draining before the end, one end per command, kill and its 60-second wait, unverified ends, restart cleanup, and no command data in logs; then the real job executor: the request's environment only, cwd, exit codes, a 6 MiB binary and UTF-8 output by digest, kill of a group ignoring SIGTERM, and a job left by a runner that went away |
 | Runner snapshot receiver | `ketplus_runner_receiver_tests` | `ketplus_runner_snapshot_receiver` with real packs from the snapshot library and the system git: key checks, have/need and resume after restart, chunk pairing, ordering, repeats and corruption, error codes leaving the workspace unchanged, incremental apply and clean, base_missing, disk_full, foreign owners, cancel at each step, partial pack expiry, budget eviction and the held list. |
 | Runner Relay socket and peer connection | `ketplus_runner_peer_tests` | `ketplus_runner_peer` over fake socket, token source, clock, transports, signer and pins, then real links on 127.0.0.1: ready and role, 401 renew once, 403 and unknown refusals with backoff, close codes 4001, 4003 and others, the wake-up table, signed offer bytes against the pairing vector, every answer and `signal.error` failure, desktop `signal.end` reasons, candidate limits and order, the 20-second deadline, retry delays and start spacing, open and lost reported once, frame and transfer limits on the three channels, a 4 MiB transfer and four interleaved ones, a desktop `WebRtcPeerLink` answerer through an in-process Relay, a tampered answer that never opens, the Relay socket adapter against local WebSocket and HTTP servers, and no token, TURN credential, SDP, candidate or signature in any log line; builds in the `daemon-dev` preset too |
 | Runner job delivery | `ketplus_runner_delivery_tests` | `ketplus_runner_delivery` over fake Relay calls, session, journal, pins and clock: acquire triggers, acquireId journaled first and repeated after a lost answer, each acquire refusal, `runner_busy`, requester pin and label checks, 60-second renewal and each renewal answer, start, finish and release repeated unchanged, journal steps before their effects and failed writes, restart from each journal step, draining and heartbeat fields. The job calls, the journal and accepted-jobs files and pin trust run against the in-process Relay in `ketplus_runner_app_tests`. |
 | Desktop runner pairing | `ketplus_runner_relay_tests`, `ketplus_runner_pairing_daemon_tests` | The daemon's Control v2 client against a fake Relay on a loopback port, with time driven by the test and in-memory credentials: only runner routes accepted by the route seam, each desktop runner operation with its route, body and refusal codes, the runner.relay/1 capability gate, schema checks, runner pins (format, corrupt and other-version records, removal on sign-out and re-enrollment), the pairing flow from ticket to pin with claim signature, claim time window, changed claims, wrong codes, polling backoff and expiry, remove and unpair dropping the pin first, and no token, ticket secret or machine credential in logs, events, replies or stored credentials. `ketplus_headless_daemon_tests` runs the `ketplusctl runner` commands against a fixture daemon |
+| Desktop runner peer links | `ketplus_daemon_runner_link_tests` | `ketplus_daemon_runner_link` over fake clock, transports, machine key, pins and signaling, then the runner's `ketplus_runner_peer` connector and channels against it through an in-process Relay with real DTLS on 127.0.0.1: every offer refusal in its order (unreadable and replayed ids dropped, `invalid_offer`, `not_paired`, `invalid_signature`, `offer_expired`, `peer_limit`, the job side's code), used ids taken only after the signature, the signed answer against a fixed vector, candidate limits both ways, the 20-second deadline, newest offer and newest connection replacing the old ones, the 64-attempt and 64-connection limits, frames and channel violations, transfers of exactly 4 MiB and four in a row, the bulk buffer limit, writable once, a 4 MiB transfer to the runner, an offer changed after signing that is never answered, and no SDP, candidate, TURN credential, signature or frame content in any log line |
 | Desktop remote job records | `ketplus_remote_job_relay_tests`, `ketplus_remote_job_record_tests`, `ketplus_remote_job_flow_tests` | The daemon's job calls (`job.submit`, `job.get`, `job.cancel`) against a fake Relay on a loopback port: routes, bodies, refusal codes, network and 5xx failures, schema checks and the route seam; the `runs_on` label rule; the remote job record on in-memory ports with time driven by the test: placements, terminal mapping, Stop, peer loss and the 20-minute window, the ways out of `needs_attention`, runner removal, at-most-once dispatch, submit retries, restart recovery, the 64-job limit and store failures |
 | Desktop remote job registry | `ketplus_remote_job_store_tests`, `ketplus_remote_job_adapters_tests`, `ketplus_remote_job_specs_tests`, `ketplus_remote_job_ledger_tests`, `ketplus_remote_job_steps_tests` | One record store contract run on the in-memory store and on the store kept in the background task registry (SQLite in a temporary directory): revisions, the first record needing an approved queued reservation with the same `runs_on` and timeout, the stored form reading back and malformed forms listed as unreadable; the event-loop job clock and pin-backed runner trust; job specs held in memory only and never written to disk; a remote task reserved at creation, never claimed, parked, given an executor or child, and refused by the registry's own change once started; every allowed record step from queued to an ended state through the coordinator, with its outbox event in the local shape, and steps outside the table, a write failing midway, the acknowledgement held for leaving `needs_attention`, prune, upgrade of an existing database and restart for each kind of record; a local task still refused the steps it was refused before |
-| Desktop job peer sessions | `ketplus_peer_output_tests`, `ketplus_peer_session_link_tests`, `ketplus_peer_session_job_tests`, `ketplus_peer_session_output_tests`, `ketplus_peer_session_runner_tests` | The desktop's peer session of a remote job on fake ports with time driven by the test: offers, the 10-second `hello`, label and capability checks, connection replacement and epochs, spec, spec again before `job.accepted` and `job.resume`, the runner's answers, the snapshot port and desktop snapshot failures, output into the spool with acks, resumes, gaps and spool failures, durable results, cancel, untrusted frames and log contents; and the same session against the runner's real job session over in-memory channels |
+| Desktop job peer sessions | `ketplus_peer_output_tests`, `ketplus_peer_session_link_tests`, `ketplus_peer_session_job_tests`, `ketplus_peer_session_output_tests`, `ketplus_peer_session_runner_tests`, `ketplus_job_peer_clock_tests`, `ketplus_remote_output_spool_tests`, `ketplus_background_output_gap_tests` | The desktop's peer session of a remote job on fake ports with time driven by the test: offers, the 10-second `hello`, label and capability checks, connection replacement and epochs, spec, spec again before `job.accepted` and `job.resume`, the runner's answers, the snapshot port and desktop snapshot failures, output into the spool with acks, resumes, gaps and spool failures, durable results, cancel, untrusted frames and log contents; and the same session against the runner's real job session over in-memory channels |
 | Scheme consumer adapters | `ketplus_scheme_consumer_tests` (Lite) | Lexilla role/font style mapping, editor state parity and buffer/selection/undo preservation, terminal ANSI replacement and screen/selection preservation |
 | Theme selection store | `ketplus_theme_selection_tests` (Lite) | One-time migration, revisioned atomic commits, cross-process directory watcher updates, lock and config failure recovery |
 | Color scheme contract | `ketplus_color_scheme_tests` (Lite) | RGBA parsing, sparse/unknown-data round trips, structured diagnostics, embedded palette parity, deterministic resolution and locked atomic catalog lifecycle/fallback |
@@ -1259,13 +1261,237 @@ cmake --build build/daemon-dev --target ketplus_managed_task_host_tests ketplus_
 ctest --test-dir build/daemon-dev -R 'ketplus_managed_task_(host|ipc)_tests' --output-on-failure
 ```
 
-These tests do not verify the shared UI, SDK native-background blocking or a
+The Pro `ketplus_managed_background_e2e_tests` fixture connects the real local IPC
+server and registry to the Desktop client and `AgentSessionManager`. A test-owned
+native process completes through FakeCodex, and the fixture checks the Desktop
+task state/output, durable owner wake, retry/deduplication, conversation switching
+and offline mutation refusal. It starts no installed daemon or live provider.
+On Linux this fixture requires `KETPLUS_RUN_LINUX_JOB_TESTS=1` in the exclusively
+owned delegated guest. The native QML task-bar states and controls remain covered
+separately by `ketplus_agent_tests`; protocol-peer paging and stale-response tests
+remain in `ketplus_background_task_transport_tests`.
+
+Additional portable background-task builds and tests run over SSH in a task-owned
+Linux workspace. Git and source edits stay on the Mac. Export tracked working-tree
+source on the Mac (stage new source files there first), mirror that export with a
+named one-way Mutagen session, and exclude Git metadata, builds, caches, local
+authentication state and evidence. Keep remote build outputs and evidence outside
+the source mirror. Flush synchronization and compare the complete file/mode/SHA256
+manifest before testing; record the Mac commit and any uncommitted source hashes.
+Do not edit source or perform Git writes on Linux, and do not rerun passed checks
+merely to move them to the new host.
+
+The native macOS identity/audit-token executor checks and macOS renderer-specific
+Mermaid responsiveness classification require the Mac. Model-only Desktop,
+Discovery and Attention checks are portable, as are runtime, storage, IPC and fake
+provider checks. Select a Qt 6.11 toolchain explicitly on Linux; desktop/model
+targets also require its WebView module. Missing toolchain components are a setup
+blocker, not a reason to move portable work back to the Mac. Dependency preparation
+must respect the same source-sync and no-remote-Git-write boundary.
+
+The Host/IPC fixtures alone do not verify the shared UI, SDK native-background blocking or a
 signed deployment bundle. On Linux, process tests require a non-root user with
 a working systemd user manager, delegated cgroup v2/`nsdelegate`, `cgroup.kill`,
 and permission to create isolated user/mount/PID/cgroup namespaces. Missing
 capabilities reject start with `containment_unavailable`; do not lower host
 policy to make the suite pass. A read-only cgroup mount alone, PGID cleanup or
 same-UID delegation is not migration-containment evidence.
+
+The owner-Stop and concurrent-fork timeout cases retain bounded state/timing
+diagnostics on failure. Set `KETPLUS_MANAGED_TASK_DIAGNOSTICS=1` to include those
+diagnostics in a passing control too. They report lifecycle milestones, the
+terminal state and cleanup result without command arguments or credentials.
+The fork case keeps the exact count bytes used by the assertion (at most 64
+bytes as hex), parse status and an independent boundary snapshot before that
+assertion. The owner-Stop case includes bounded executor metadata flags; the
+executor currently records no actual launch, root-exit or timeout timestamps,
+so registry milestone times must not be treated as those execution times.
+Preserve the original failing run and binary identity before a
+control; a passing control alone does not classify an earlier failure. Do not
+relax the assertions or deadlines to obtain a passing result.
+
+The native short-command fixture also reports its iteration and bootstrap phase
+(`directory`, `process_start`, `connect`, `ready`), elapsed time, process/socket
+state and error enums, valid exit information and bounded receipt readability
+before destructor cleanup. The same diagnostic opt-in includes passing iterations.
+It retains the 12 iterations and existing deadlines, and logs no protocol bodies,
+lease values or command arguments.
+
+Integration acceptance at `cc914a05` ([PR #763](https://github.com/ketvietlab/ketplus/pull/763))
+ran the fresh serialized Pro matrix: 242 passed, one skipped and eight failed
+out of 251 suites. Failures were in ChatMermaid, DaemonLifecycle, SessionFork,
+AgentMessaging, DesktopDaemonClient, ConversationAttentionDaemon,
+DesktopSessionDiscovery and NativeJobExecutor; the native failure refused
+`Executor::start()` in an iteration before its short-command identity assertions. TeamReply
+passed 11/11 in this run, which does not resolve its historical failure recorded
+in the provider refresh evidence. The original Linux matrix passed five of seven
+suites; owner-Stop expected `completed` but observed `timed_out`, and concurrent
+forks failed the count predicate before the cleanup assertions. Isolated and
+predecessor-order controls passed. After the Mac matrix ended, one final serial
+run of the two Linux cases with exact-count/boundary diagnostics also passed;
+the fork sample was 71 with successful parsing, a removed boundary and verified
+cleanup. These controls do not classify the original failures. The team leader
+accepted this Linux validation risk for integration after independent evidence
+verification; this does not accept all T-5 checks, release or packaging. The Mac
+failures remain pending classification and explicit disposition. No assertion or deadline
+was relaxed and no full matrix was retried. CMake-installed daemon/helper staging
+passed the runtime and capability checks; the whole-tree Runtime install stopped
+at the unbuilt runner target, so this is not a full packaging pass.
+One subsequent native short-command case control with bootstrap diagnostics passed
+all 12 iterations; each reached `ready` in 45–74 ms with a readable receipt. This
+does not identify or fix the original bootstrap failure, and native controls stop
+at that single run. The team leader accepted the separate native validation risk
+for integration, retaining the original failure as unclassified.
+
+One authorized serial A→B→C control then ran only the 17 originally failed rows
+from the other seven suites (15 methods, seven invocations). Every requested row
+passed, with no skips or unintended rows; binaries matched the original full-run
+hashes, and assertions, deadlines and fixed waits were unchanged. Mermaid measured
+baseline/worst/threshold values of 20/47/150 ms and 26/32/150 ms. Controls stopped
+after that single sequence; they do not replace the original full-run result or
+classify its failures. Cleanup sampling observed one reparented SDK helper after
+Attention, followed by empty inventories after Mermaid and on a later check.
+Its operation and cleanup timing were not captured, so this is not a claim that
+every intermediate inventory was empty. After independent verification of the
+append-only summary correction, the team leader accepted the seven-suite validation
+residual for integration, including these cleanup attribution limits. Original
+failures remain unclassified; this is not all-T-5, release or full-packaging acceptance.
+
+The seven-suite summary has an append-only evidence correction: version 2
+supersedes only the original blanket cleanup sentence. The original summary,
+its hash, the 30-file manifest and raw samples remain unchanged. The corrected
+summary explicitly retains the Attention helper observation and the later empty
+samples; neither establishes closure before that fixture ended or identifies the
+helper's birth, launch, request or managed-job ownership. D1 owns correlation and
+closure follow-up at a future assigned verification; no new run is authorized to
+reconstruct missing historical data.
+
+#### Integration review coverage and remaining gates
+
+The following maps T-5's six criteria to the retained evidence. Coverage is not
+formal acceptance; the original full-matrix failures and their separate residual
+decisions remain part of the review.
+
+| Criterion | Direct coverage | Remaining gate or limit |
+| --- | --- | --- |
+| 1. Fake-provider start, UI state, one owner wake and output | `ManagedBackgroundEndToEndTest::registryEventsReachDesktopAndWakeOnlyTheirOwner`; actual socket RED → GREEN and fresh full-matrix pass; native Agent UI suite and four-provider transport checks | Model/socket and synthetic native UI coverage; no live-provider inference claim |
+| 2. Crash, restart, owner lifetime, races, descendants and held wake | `ManagedTaskRuntimeTest` restart/close/commit-failure cases; `ManagedTaskHostTest` provider exit, busy/permission/Stop and nested-child cases; Linux executor daemon/supervisor death and Stop/complete race | Original Linux owner-Stop and fork-count failures remain unclassified under the leader's integration-only residual decision; formal review pending |
+| 3. Wake/auth fences, complete registry and platform assurance | Ledger atomic-outbox/dedup/generation/quota/pagination cases; IPC owner/grant checks; `ManagedTaskOriginHostTest` review/delayed-origin cases; Linux real-helper boundary tests; native birth/audit-token checks | Native bootstrap original remains unclassified under its separate integration-only residual decision; seven-suite integration-only residual retains the intermediate SDK-helper attribution limits; no absolute macOS containment claim |
+| 4. Build/matrix, honest limits, no quota or app replacement | Fresh Pro build and 251-suite run; offline SDK/contract/public-tree checks; Linux acceptance and CMake-installed daemon/helper staging; source/binary/hash records | Full Mac remains 242 pass / 1 skip / 8 failed suites; whole-tree Runtime install stopped at an unbuilt runner; no full packaging, release or installed-app validation |
+| 5. Reviewed PR into integration and cross-lane resolution | PR #763 contains the minimal deferred IPC routing fix and socket regressions; provider/UI dependencies are merged | Formal PR approval and integration acceptance remain outstanding; evidence-only residual reviews do not substitute for that approval |
+| 6. Native faults, attention, slots, durable owner fences and user-only resolution | Original native detached-descendant, supervisor-death, reconnect and lease-loss cases; ledger/IPC/UI attention, slot and user-only CAS/audit cases; the targeted real-native attention follow-up below carries one incident through file-backed reopen and each distinct owner-close/generation-change path | Reviewer confirmed this criterion has sufficient evidence in the agreed scope at runtime `0eba074c` / review `ce4d31d0`. The unrelated SDK-helper sample remains unattributed; no absolute native containment or full packaging claim |
+
+Portable follow-up work uses the verified SSH/Mutagen workflow above. Mac-only
+identity and renderer checks stay on macOS. This mapping authorizes no additional
+control, provider invocation, toolchain change or production fix.
+
+#### Attention incident lifecycle follow-up (targeted runtime reviewed)
+
+`ketplus_managed_attention_recovery_tests` adds the `owner-close` and
+`generation-change` rows of `attentionSurvivesOwnerLifecycle`. It uses a file-backed
+`LocalJournal`, real `SessionHost`/runtime and scripted FakeCodex. On macOS only,
+the row launches a harmless marker/output/sleep process through the managed API,
+captures its supervisor/root identities, faults the supervisor with the production
+identity-bound signal, and requires `needs_attention`/`unverified` with the known
+executor stopped. On Linux, it injects an executor result without an execution
+identity: that branch checks portable persistence, Host lifecycle and CAS/audit
+plumbing and makes no claim about native faults, birth identity or containment.
+
+Each row closes and reopens both journal and Host/runtime, retains the incident,
+output and root result, checks slot release without terminalizing the incident,
+and tests two distinct invalidation paths. The owner-close row deletes through
+the Host. The generation-change row closes the Host, verifies no tombstone or owner
+fence exists, then replaces the generation directly through the journal and reopens
+the Host without deleting first. A fresh owner-invalid fence must be observed;
+close/recreate must not mask generation mismatch. Local administration must retain
+access to the old owner's incident. Pruning, automatic
+wake/relaunch/reassignment/resolution, agent acknowledgement and stale revision
+acknowledgement are fenced. A current-revision local user acknowledgement must
+create exactly one durable audit row and retain `unverified`/suppressed completion
+after the final reopen. Before the native fault, the output API must already
+return the exact bytes with a captured cursor and size; later reads check
+preservation of this sample. Reconciliation waits for publication of this task and
+generation, with a newer native revision; the portable no-identity path instead
+requires publication of its unchanged incident. Native scope cleanup retains access
+to the live Host/journal and validates the task's own receipt, including failures
+before `running` or local identity capture. Stop/reconcile and birth-bound signals
+must reach bounded closure before fixture deletion. Signal/Stop errors or unproven
+closure fail the test and retain the private directory. Diagnostics whitelist
+bounded fields, never lease values, protocol bodies or command arguments.
+
+The Linux-only `acceptedIntentWithoutCallerIdIsRecoverable` regression persists an
+intent in a file-backed journal, closes it without retaining a caller task ID, and
+recovers the ID through the same read-only tuple lookup used by native fixture
+cleanup. It distinguishes an absent generation from a database lookup error and
+launches no executor. Cleanup never searches the API projection for request keys.
+The macOS target still executes only the two native lifecycle rows.
+
+Before executing this follow-up, submit the exact source/configuration and commands
+for offline review. On the verified Linux source mirror, use a separate build tree
+and a Qt prefix with the headless daemon dependencies; Desktop/WebView is not part
+of this target:
+
+```sh
+cmake -S "$TASK_SOURCE" -B "$TASK_BUILD" -G Ninja \
+  -DKETPLUS_EDITION=pro -DKETPLUS_BUILD_DESKTOP=OFF \
+  -DKETPLUS_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Debug \
+  -DCMAKE_PREFIX_PATH="$QT_ROOT" -DFETCHCONTENT_FULLY_DISCONNECTED=ON \
+  -DFETCHCONTENT_SOURCE_DIR_KETPLUS_LIBDATACHANNEL="$TASK_DATACHANNEL_SOURCE"
+cmake --build "$TASK_BUILD" --target ketplus_managed_attention_recovery_tests -j8
+ctest --test-dir "$TASK_BUILD" -R '^ketplus_managed_attention_recovery_tests$' -j1 -V
+```
+
+`TASK_DATACHANNEL_SOURCE` must be a separately hashed/synced source-only export of
+the libdatachannel commit and its dependency pins recorded in `cmake/WebRtc.cmake`,
+including the patched libjuice pin. Prepare it on the Mac, without Git metadata,
+build output, cache or credentials. The source override and disconnected mode
+prevent CMake's normal Git clone/update/patch path from writing Git state on Linux.
+Do not run configure until this dependency export is verified too.
+
+Only the real macOS fault/recovery chain may use the existing Mac build, after
+source/binary/config identity and test-owned process inventories are recorded:
+
+```sh
+cmake --preset dev
+cmake --build --preset dev --target ketplus_managed_attention_recovery_tests -j1
+ctest --test-dir build/dev -R '^ketplus_managed_attention_recovery_tests$' -j1 -V
+```
+
+The targeted verification ran once on source `0eba074c`: Linux matched exactly
+three cases (the lookup regression and two injected lifecycle rows), all passed
+without skips in 3.625 seconds. Only after Linux finished, the Mac target and its
+required helper were built; exactly two real-native lifecycle rows passed without
+skips in 41.637 seconds. These elapsed times include the run harness; the raw QtTest
+logs separately record row timings. No old controls or full matrix were repeated.
+The Linux build had already completed with `-j1` when the instruction to use `-j8`
+arrived; it was not rebuilt. The command above records the new concurrency for
+future necessary Linux builds; test concurrency remains serial.
+
+Both native rows captured persisted API output (17 bytes and its cursor/size)
+before supervisor fault, retained the recorded identities and root-result field
+through reopen, observed fresh recovery/owner fences and retained attention without
+pruning or slot ownership. User-only current-revision acknowledgement created one
+durable audit, with final `interrupted`/`unverified` and suppressed completion;
+the no-wake assertions passed. The native recorded exit-code field was `-1`, not
+an observed successful root exit, and executor-event timestamps remain unavailable.
+Both native cleanup guards reported closure, no signal/Stop errors and no retained
+fixture; the scoped post-run process inventory was empty. These checks cover known
+identities and preserve the native best-effort limit.
+
+Append-only runtime evidence v11 retains source/binary/helper/config hashes,
+platform/resource snapshots, exact selector listings, raw logs and JUnit outside
+generated cleanup. Read-only review verified 43/43 manifest files, five exact source
+snapshots and all 13 prior v10 artifacts, and found no remaining issue in this
+runtime packet. Criterion 6 has sufficient evidence in the agreed scope; formal
+whole-T-5 review remains outstanding. The original Mac 242/1/8 and Linux
+5/2 failures remain unclassified under their integration-only residual decisions.
+This follow-up does not complete formal T-5 acceptance, packaging or release.
+
+Do not run unrelated suites, repeat passed controls, change deadlines or provision
+shared toolchains. A source-only
+Linux mirror has no Git metadata; retain the independently verified Mac source
+manifest as provenance rather than claiming the generated `unknown` revision is a
+commit identity. This disposition authorizes no additional verification run.
 
 The opt-in `ketplus_linux_job_executor_tests` runs the real packaged helper and
 registry. It covers missing-manager admission, durable retry/output, double-fork/
@@ -1911,21 +2137,76 @@ processes through the Job Object), `ketplus_windows_script_launch_tests` (`cmd.e
 id checks), a pipe-server user check in `ketplus_windows_platform_tests`, and `HeadlessDaemonTest::windowsPipe...` (daemon and
 `ketplusctl` over the named pipe, a wrong credential refused, clean exit on `CTRL_BREAK`).
 
-Disabled on Windows (built, label `windows-script-fixture`), because their provider fixtures are
-`#!/usr/bin/env python3` scripts launched by path, or JavaScript that assumes POSIX paths. They
-still run on macOS and Linux; a follow-up runs the fixtures through explicit `python.exe` /
-`node.exe`:
+Provider fixtures are Python scripts written as `<name>.py`. On macOS and Linux the script
+itself is the executable (`#!/usr/bin/env python3`). On Windows `tests/daemon/ScriptFixture.h`
+copies `ketplus_script_launcher` (`ScriptLauncher.cpp`) to `<name>.exe`; the launcher starts the
+configured `python.exe` on `<name>.exe.py` with the same arguments and stdio, sets
+`PYTHONUTF8=1`, and ends the interpreter when the launcher is killed (Job Object). A fixture name
+therefore goes through `fixtureName()`, and a test that needs an absolute path that does not exist
+uses `absoluteTestPath()` (`"/repo"` is not absolute on Windows). Fixture logs written by Python
+carry `\r\n` on Windows; a test that matches a whole line normalises it first.
 
-`ketplus_context_harness_tests`, `ketplus_provider_deletion_tests`, `ketplus_daemon_worktree_context_tests`, `ketplus_daemon_claude_worktree_tests`, `ketplus_daemon_lifecycle_tests`, `ketplus_turn_acceptance_tests`, `ketplus_daemon_claude_adapter_tests`, `ketplus_computer_tool_launch_tests`, `ketplus_computer_provider_integration_tests`, `ketplus_daemon_cursor_adapter_tests`, `ketplus_daemon_session_fork_tests`, `ketplus_agent_messaging_tests`, `ketplus_agent_urgent_delivery_tests`, `ketplus_team_routing_tools_tests`, `ketplus_team_finding_routing_tests`, `ketplus_team_task_tests`, `ketplus_team_task_git_tests`, `ketplus_team_agent_tools_tests`, `ketplus_team_flow_tests`, `ketplus_team_title_tests`, `ketplus_team_reply_tests`, `ketplus_team_review_tests`, `ketplus_team_lane_tests`, `ketplus_team_budget_tests`, `ketplus_team_merge_tests`, `ketplus_team_done_tests`, `ketplus_team_storage_tests`, `ketplus_work_report_tests`, `ketplus_awaiting_reply_tests`, `ketplus_turn_review_tests`, `ketplus_provider_compatibility_tests`, `ketplus_daemon_schedule_host_tests`, `ketplus_claude_credentials_tests`, `ketplus_daemon_upgrade_tests`, `ketplus_async_question_lifetime_tests`, `ketplus_relay_attachment_host_tests`, `ketplus_session_preparation_host_tests`, `ketplus_relay_preparation_host_tests`, `ketplus_codex_session_isolation_tests`, `ketplus_acp_session_isolation_tests`, and `ketplus_claude_sidecar_tests`.
+The tests that use these fixtures carry the label `windows-script-fixture`, so
+`ctest --preset daemon-dev -L windows-script-fixture` runs them. They were disabled on Windows
+before; they now run. Last full Windows run (`ctest --preset daemon-dev -j4 --timeout 240`):
+163 tests, 156 pass, 7 do not (see below); the 40 fixture tests plus `ketplus_claude_sidecar_tests`
+were all disabled before. macOS and Linux are unchanged.
+
+Not passing in that run:
+
+- `ketplus_daemon_journal_migration_recovery_tests` migrates and reads back the same journal 13
+  times. In a Debug build on Windows it takes about 230 s, because the SQLite driver of Qt's debug
+  libraries is unoptimised (every step is about 3.4x slower than on a Linux machine with release
+  Qt); a Release build takes about 38 s and the migration itself 1.8 s, so NTFS and Defender are not
+  the cause. The test sets its own CTest limit (900 s) and QtTest function limit on Windows.
+- `ketplus_peer_session_runner_tests` and the four `ketplus_snapshot_*` tests do not build on
+  Windows yet (runner snapshot code).
+- `ketplus_claude_sidecar_posix_tests` is disabled: it holds the Claude sidecar JavaScript tests
+  that hang or fail under `node --test` on Windows (transcript, permissions, agent-tools, usage,
+  compact-window, steer, fork, background-tasks, managed-background, model-catalog, review-guard
+  and review-profile). The other sidecar files run in `ketplus_claude_sidecar_tests`.
+
+Skipped inside a test on Windows with `KETPLUS_SKIP_ON_WINDOWS(reason)`; the reason prints in the
+test output.
+
+- The fixture is a POSIX shell script (a fake `git` or `gh`) that Windows cannot run:
+  `TeamReplyTest` (three tests), `TeamTaskGitTest` (two) and `TeamDoneTest` (two).
+- By design: `ComputerProviderIntegrationTest::frontFollowsSettingsForEachProvider` (macOS app
+  bundle path), `ProviderCompatibilityTest::prefersHomebrewUpdateForHomebrewInstalls`
+  (Homebrew), `SessionForkTest::forkRequiresMediaOwnershipBeforeJournalCommit` row
+  `source-unreadable` (POSIX mode) and `JournalStartupTest::startupBacklogCharacterization`
+  (a 250 ms startup budget; SQLite commits are several times slower on NTFS).
+- `CodexSessionIsolationTest::twoSessionsKeepHistoryWhileOnlyOneProcessRefreshes` and
+  `AcpSessionIsolationTest::twoSessionsKeepHistoryAndIndependentProcesses`: the fixture records its
+  exit from a SIGTERM handler, which Windows' forced process termination never runs.
+- Under investigation, each prints its symptom:
+  - `DaemonWorktreeContextTest`, four tests: the provider log has no `provider-input`,
+    `steer-input` or `model-list` line, or the pending question is not found.
+  - `AgentMessagingTest::agentConnectionsOnlyReachAgentOperations`: a `daemon.hello` with an
+    agent token is not reported as an agent connection.
+  - `CursorAdapterTest::findsTheCliInstalledAfterStartup`: no executable is found after the
+    installer moves the CLI.
+  - `ProviderCompatibilityTest::probeCachesUntilTheExecutableChanges`: the probe reports a
+    status other than supported.
+  - `SessionForkTest::destinationCreatedWhileProviderForkIsPendingIsPreserved`: the destination
+    marker is not preserved.
+  - `TeamReviewTest` and `TurnReviewTest`: the Codex review checks and four review-turn tests.
+  - `TeamStorageTest::theMainCheckoutIsRefused`: the task worktree is not created.
+  - `TeamRoutingToolsTest::authenticatedToolsUseRealProducerThenHostLookupThenPolicy`, rows
+    `ordinary-prose`, `concurrent-only`, `ignored-gitlink` and `replaced-base-tree`: the git
+    evidence reports a stale revision.
+  - `TeamFindingRoutingTest::authenticatedClosureUsesRealProducerStoreAndReviewedRecord`: the
+    remote branch cannot be read and the test then crashes.
+  - `TeamAgentToolsTest::theLeadersFirstTurnCarriesTheGoalAndItsInstructions`: hangs.
 
 Skipped inside tests on Windows, each with its reason in the test source: fixtures that need POSIX
 symbolic links (`QFile::link` makes a `.lnk` shortcut), file-mode assertions (access is an ACL, see
 `ketplus_windows_platform_tests`), permission-denial fixtures, FIFOs and resource limits, the
 Linux/macOS user-unit socket probe, the uncheckpointed-WAL fixture (the only `python3` on `PATH` is
 the Microsoft Store alias), and producer-flood timing (QProcess drains the pipe in a thread).
-`ketplus_daemon_journal_migration_recovery_tests` and `ketplus_daemon_usage_retention_tests` pass
-but take 4-6 minutes on NTFS. Fixtures that write exact byte counts switch stdout to binary mode
-(`BinaryStdio.h`), because the C runtime would otherwise add `\r`.
+`ketplus_daemon_usage_retention_tests` passes but takes several minutes in a Debug build on
+Windows; its cause has not been measured. Fixtures that write exact byte counts switch stdout to
+binary mode (`BinaryStdio.h`), because the C runtime would otherwise add `\r`.
 
 ## English chrome and multilingual team content (T30)
 

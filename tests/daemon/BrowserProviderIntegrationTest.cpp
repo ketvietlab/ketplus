@@ -54,7 +54,7 @@ class BrowserProviderIntegrationTest final : public QObject {
     void codexPolicyUsesCapturedLaunch() {
         QFETCH(bool, direct);
         QTemporaryDir root;
-        const QString provider = root.filePath("provider");
+        const QString provider = root.filePath(fixtureName("provider"));
         const QString log = root.filePath("provider.log");
         QVERIFY(writeFakeCodex(provider, log));
         const auto exercise = [&](auto& adapter, bool available) {
@@ -139,7 +139,7 @@ class BrowserProviderIntegrationTest final : public QObject {
         settings.allowedOrigins = QStringLiteral("http://127.0.0.1:3456");
         QVERIFY(browser::saveSettings(settings, config));
 
-        const QString provider = root.filePath(QStringLiteral("provider"));
+        const QString provider = root.filePath(fixtureName(QStringLiteral("provider")));
         const QString log = root.filePath(QStringLiteral("provider.log"));
         QVERIFY(claude ? writeFakeClaude(provider, log) : writeFakeCursor(provider, log));
         ClaudeAdapter claudeAdapter(provider);
