@@ -64,9 +64,8 @@ the OpenSSH default shell must stay `cmd.exe` (the scripts use `cd /d` and
 the build clones dependencies and patches them with LF-only patterns, which a
 CRLF checkout breaks; and `qtwebview` is installed without a WebEngine, so
 check that a WebView backend plugin is present before relying on it. Install Git for Windows
-2.47 or newer (the build machine has 2.56.1, installed over the old one with
-`Git-<version>-64-bit.exe /VERYSILENT /NORESTART`, which keeps `C:\Program Files\Git\cmd` on
-`PATH`). The runner snapshot library (linked by the daemon) stages files with `git add` and
+2.47 or newer (the installer upgrades in place: `Git-<version>-64-bit.exe /VERYSILENT
+/NORESTART` keeps `C:\Program Files\Git\cmd` on `PATH`). The runner snapshot library (linked by the daemon) stages files with `git add` and
 `attr:` pathspecs, which Git for Windows 2.38 rejects (`pathspec magic not supported by this
 command: 'attr'`) and 2.47 accepts; `SealedGit::checkVersion` runs that command once and reports
 `GitTooOld` when git refuses it, so an older Git fails with that message instead of in the middle

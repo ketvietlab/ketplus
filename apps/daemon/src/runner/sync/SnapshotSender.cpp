@@ -44,6 +44,9 @@ void SnapshotSender::reuseOrBuild() {
         return;
     }
     phase_ = Phase::Verifying;
+    // The job holds its pack while it is hashed, so a release that arrives meanwhile is the only
+    // thing that makes the worker delete the file once it has closed it.
+    retention_.keepPack(job_.jobId, job_.runnerId, *kept);
     const quint64 generation = ++generation_;
     const std::weak_ptr<int> alive = alive_;
     work_.hashPack(*kept, [this, alive, generation, pack = *kept](const QString& sha256) {
