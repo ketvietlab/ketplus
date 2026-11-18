@@ -85,6 +85,10 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/runner/RunnerRelaySchema.h
     src/runner/RunnerService.cpp
     src/runner/RunnerService.h
+    src/runner/jobs/PinRunnerTrust.cpp
+    src/runner/jobs/PinRunnerTrust.h
+    src/runner/jobs/QtJobClock.cpp
+    src/runner/jobs/QtJobClock.h
     src/runner/jobs/RemoteJobCoordinator.cpp
     src/runner/jobs/RemoteJobCoordinator.h
     src/runner/jobs/RemoteJobLabels.cpp
