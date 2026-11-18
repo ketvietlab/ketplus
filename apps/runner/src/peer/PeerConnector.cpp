@@ -27,6 +27,17 @@ QString knownSignalError(const QString& code) {
     return QStringLiteral("signal_error");
 }
 
+// The reason of a desktop's signal.end, when it is at most 64 printable ASCII characters.
+QString loggableCode(const QJsonValue& value) {
+    const QString code = value.toString();
+    if (code.isEmpty() || code.size() > 64)
+        return QStringLiteral("unknown");
+    for (const QChar c : code)
+        if (c.unicode() < 0x21 || c.unicode() > 0x7e)
+            return QStringLiteral("unknown");
+    return code;
+}
+
 } // namespace
 
 PeerConnector::PeerConnector(SignalSender& sender, PeerClock& clock,
@@ -126,8 +137,8 @@ void PeerConnector::sendStart() {
     m_clock.arm(PeerTimer::AttemptDeadline, attemptDeadlineMs);
 }
 
-void PeerConnector::endAttempt(const QString& reason, const bool retry) {
-    if (!m_context.connectionId.isEmpty())
+void PeerConnector::endAttempt(const QString& reason, const bool retry, const bool tellRelay) {
+    if (tellRelay && !m_context.connectionId.isEmpty())
         m_sender.sendSignal({{QStringLiteral("type"), QStringLiteral("signal.end")},
                              {QStringLiteral("connectionId"), m_context.connectionId},
                              {QStringLiteral("reason"), reason}});
@@ -195,7 +206,18 @@ void PeerConnector::signal(const QJsonObject& message) {
     else if (type == QLatin1StringView("signal.candidate"))
         remoteCandidate(message);
     else if (type == QLatin1StringView("signal.end"))
-        endAttempt(QStringLiteral("remote_ended"), true);
+        remoteEnd(message);
+}
+
+void PeerConnector::remoteEnd(const QJsonObject& message) {
+    const QString code = loggableCode(message.value(QStringLiteral("reason")));
+    qCInfo(lcRunnerPeer) << "peer attempt ended by the desktop:" << code;
+    if (code == QLatin1StringView("already_dispatched") || code == QLatin1StringView("not_paired"))
+        endAttempt(code, false, false);
+    else if (code == QLatin1StringView("job_mismatch"))
+        endAttempt(code, true, false);
+    else
+        endAttempt(QStringLiteral("remote_ended"), true, false);
 }
 
 void PeerConnector::signalError(const QJsonObject& message) {

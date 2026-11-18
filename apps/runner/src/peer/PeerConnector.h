@@ -102,8 +102,9 @@ class PeerConnector final : public PeerTransportEvents {
     void answer(const QJsonObject& message);
     void remoteCandidate(const QJsonObject& message);
     void signalError(const QJsonObject& message);
+    void remoteEnd(const QJsonObject& message);
     bool sendLocalCandidate(const QString& candidate, const QString& mid);
-    void endAttempt(const QString& reason, bool retry);
+    void endAttempt(const QString& reason, bool retry, bool tellRelay = true);
     void dropTransport();
     [[nodiscard]] bool attempting() const;
     [[nodiscard]] qint64 nowMs() const;

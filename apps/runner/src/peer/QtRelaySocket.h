@@ -24,7 +24,7 @@ class QtRelaySocket final : public RelaySocket {
     bool send(const QJsonObject& message) override;
     void close() override;
 
-    // The HTTP status a refused upgrade names in the socket's error text, or 0.
+    // The HTTP status of a refused upgrade, read from the socket's error text, or 0.
     [[nodiscard]] static int refusedStatus(const QString& errorText);
     [[nodiscard]] static QUrl relayUrl(const QUrl& controlBaseUrl);
 

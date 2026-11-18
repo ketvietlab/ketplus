@@ -29,6 +29,9 @@ QUrl QtRelaySocket::relayUrl(const QUrl& controlBaseUrl) {
 }
 
 int QtRelaySocket::refusedStatus(const QString& errorText) {
+    // Qt names no status for a 401; it reports the authentication challenge it cannot answer.
+    if (errorText.contains(QLatin1StringView("WWW-Authenticate"), Qt::CaseInsensitive))
+        return 401;
     static const QRegularExpression pattern(QStringLiteral("http status code: (\\d{3})\\b"),
                                             QRegularExpression::CaseInsensitiveOption);
     const auto match = pattern.match(errorText);
@@ -95,7 +98,10 @@ void QtRelaySocket::ended(QWebSocket* socket) {
     if (socket != m_socket)
         return;
     const bool wasConnected = std::exchange(m_connected, false);
-    const int code = socket->closeCode();
+    // A connection that ended without a close frame reports a socket error; Qt still names 1000.
+    const int code = socket->error() == QAbstractSocket::UnknownSocketError
+                         ? int(socket->closeCode())
+                         : int(QWebSocketProtocol::CloseCodeAbnormalDisconnection);
     const int status = refusedStatus(socket->errorString());
     m_ping.stop();
     m_socket.clear();
