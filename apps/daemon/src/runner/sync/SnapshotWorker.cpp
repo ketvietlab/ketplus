@@ -44,7 +44,14 @@ void SnapshotWorker::buildPack(const QString& jobId, const QString& snapshotId,
                                   packs_.pathFor(jobId, snapshotId, baseId)};
     const QString directory = QFileInfo(request.outputPath).path();
     QObject* context = context_.get();
-    store_.start([request, directory, tool = tool_, context, callback = std::move(callback)] {
+    packs_.setInFlight(jobId, true);
+    // A job released while its pack was being built leaves no file behind.
+    auto deliver = [&packs = packs_, jobId, callback = std::move(callback)](PackOutcome outcome) {
+        if (outcome.pack && !packs.inFlight(jobId))
+            QFile::remove(outcome.pack->path);
+        callback(outcome);
+    };
+    store_.start([request, directory, tool = tool_, context, deliver = std::move(deliver)] {
         PackOutcome outcome;
         if (!QDir().mkpath(directory)) {
             outcome.code = code::snapshotBuildFailed;
@@ -58,7 +65,7 @@ void SnapshotWorker::buildPack(const QString& jobId, const QString& snapshotId,
             QFile::remove(request.outputPath);
             outcome.code = code::snapshotBuildFailed;
         }
-        answerOn(context, [callback, outcome] { callback(outcome); });
+        answerOn(context, [deliver, outcome] { deliver(outcome); });
     });
 }
 

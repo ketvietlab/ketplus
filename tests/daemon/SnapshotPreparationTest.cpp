@@ -2,8 +2,11 @@
 
 #include "snapshot/SnapshotStore.h"
 
+#include <QCryptographicHash>
 #include <QDir>
+#include <QDirIterator>
 #include <QFile>
+#include <QMap>
 #include <QProcess>
 #include <QTemporaryDir>
 #include <QTest>
@@ -47,6 +50,26 @@ void write(const QString& path, const QByteArray& content) {
 }
 
 QString canonical(const QString& path) { return QFileInfo(path).canonicalFilePath(); }
+
+// Every file below `root` with its size, mtime and content digest.
+QMap<QString, QString> fingerprint(const QString& root) {
+    QMap<QString, QString> files;
+    QDirIterator it(root, QDir::Files | QDir::Hidden | QDir::System, QDirIterator::Subdirectories);
+    while (it.hasNext()) {
+        const QString path = it.next();
+        QFile file(path);
+        const bool opened = file.open(QIODevice::ReadOnly);
+        const QFileInfo info(path);
+        files.insert(
+            path,
+            QString::number(opened) + QLatin1Char(' ') + QString::number(info.size()) +
+                QLatin1Char(' ') + QString::number(info.lastModified().toMSecsSinceEpoch()) +
+                QLatin1Char(' ') +
+                QString::fromLatin1(
+                    QCryptographicHash::hash(file.readAll(), QCryptographicHash::Sha256).toHex()));
+    }
+    return files;
+}
 
 } // namespace
 
@@ -125,6 +148,17 @@ class SnapshotPreparationTest : public QObject {
         const auto refs = snapshot::listRefs(prepared.storePath);
         QVERIFY(refs);
         QCOMPARE(refs.value().value(QStringLiteral("inflight/job-1")), prepared.snapshotId);
+    }
+
+    void leavesTheUsersRepositoryUnchanged() {
+        write(repo_ + QStringLiteral("/src/new.c"), "int added;\n");
+        write(repo_ + QStringLiteral("/src/main.c"), "int main() { return 2; }\n");
+        const auto before = fingerprint(repo_);
+        QTest::qWait(20);
+        const auto outcome = prepareSnapshot(request(repo_ + QStringLiteral("/src")));
+        QVERIFY2(outcome.prepared, qPrintable(outcome.code));
+        QCOMPARE(fingerprint(repo_), before);
+        QVERIFY(!outcome.prepared->storePath.startsWith(repo_));
     }
 
     void reportsWarningsWithoutPaths() {

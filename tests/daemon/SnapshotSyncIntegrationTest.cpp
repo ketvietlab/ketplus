@@ -14,6 +14,7 @@
 #include <QTemporaryDir>
 #include <QTest>
 
+#include <atomic>
 #include <memory>
 
 using namespace snapshot_sync_test;
@@ -128,6 +129,137 @@ class SnapshotSyncIntegrationTest : public QObject {
                  readAll(repo_ + QStringLiteral("/README")));
     }
 
+    void theNextJobOnTheWorkspaceSendsAnIncrementalPack() {
+        PackCache packs(root_ + QStringLiteral("/packs"));
+        const auto first = prepareJob(QStringLiteral("job-1"));
+        QVERIFY(first);
+        StoreRetention retention(first->storePath, packs);
+        QVERIFY(retention.load());
+        SnapshotWorker worker(first->storePath, packs);
+        FakeLink link;
+        FakeEvents events;
+        qint64 fullBytes = 0;
+        QByteArray firstPack;
+        {
+            JobSyncWork work(worker, QStringLiteral("job-1"));
+            SnapshotSender sender(
+                SyncJob{QStringLiteral("job-1"), runnerId, key, first->snapshotId, {}}, link, work,
+                retention, events);
+            sender.start({});
+            QTRY_COMPARE(link.of<protocol::SnapshotOffer>().size(), 1);
+            fullBytes = link.of<protocol::SnapshotOffer>().last().packBytes;
+            firstPack = sendAll(sender, link, first->snapshotId);
+            QCOMPARE(firstPack.size(), fullBytes);
+            sender.receive(protocol::SnapshotReady{first->snapshotId});
+        }
+        write(repo_ + QStringLiteral("/src/main.c"), "int main() { return 1; }\n");
+        const auto second = prepareJob(QStringLiteral("job-2"));
+        QVERIFY(second);
+        QVERIFY(second->snapshotId != first->snapshotId);
+        QByteArray secondPack;
+        {
+            JobSyncWork work(worker, QStringLiteral("job-2"));
+            SnapshotSender sender(
+                SyncJob{QStringLiteral("job-2"), runnerId, key, second->snapshotId, {}}, link, work,
+                retention, events);
+            sender.start({{key, first->snapshotId}});
+            QTRY_COMPARE(link.of<protocol::SnapshotOffer>().size(), 2);
+            const auto offer = link.of<protocol::SnapshotOffer>().last();
+            QCOMPARE(offer.baseId, std::optional<QString>(first->snapshotId));
+            QVERIFY(offer.packBytes < fullBytes);
+            secondPack = sendAll(sender, link, second->snapshotId);
+            sender.receive(protocol::SnapshotReady{second->snapshotId});
+        }
+        QCOMPARE(events.ready, (QStringList{QStringLiteral("job-1"), QStringLiteral("job-2")}));
+        QCOMPARE(retention.confirmed(runnerId, key), second->snapshotId);
+
+        const QString mirror = root_ + QStringLiteral("/mirror.git");
+        const QString workspace = root_ + QStringLiteral("/workspace");
+        for (const auto& [bytes, snap] :
+             {std::pair{firstPack, first->snapshotId}, std::pair{secondPack, second->snapshotId}}) {
+            const QString path = root_ + QStringLiteral("/in.pack");
+            write(path, bytes);
+            const auto applied = snapshot::applySnapshot(
+                {mirror, workspace, path, sha256(bytes).toLatin1(), snap, {}});
+            QVERIFY2(applied, qPrintable(applied ? QString{} : applied.error().message));
+        }
+        QCOMPARE(readAll(workspace + QStringLiteral("/src/main.c")),
+                 QByteArray("int main() { return 1; }\n"));
+        QVERIFY(packFiles().isEmpty());
+    }
+
+    void cancellingWhilePackingLeavesNoRefOrFile() {
+        const auto prepared = prepareJob(QStringLiteral("job-c"));
+        QVERIFY(prepared);
+        PackCache packs(root_ + QStringLiteral("/packs"));
+        StoreRetention retention(prepared->storePath, packs);
+        QVERIFY(retention.load());
+        SnapshotWorker worker(prepared->storePath, packs);
+        JobSyncWork work(worker, QStringLiteral("job-c"));
+        FakeLink link;
+        FakeEvents events;
+        SnapshotSender sender(
+            SyncJob{QStringLiteral("job-c"), runnerId, key, prepared->snapshotId, {}}, link, work,
+            retention, events);
+        sender.start({});
+        sender.cancel();
+        drain(worker);
+        QVERIFY(link.frames.isEmpty());
+        QVERIFY(events.ready.isEmpty() && events.failed.isEmpty());
+        QVERIFY(packFiles().isEmpty());
+        QVERIFY(snapshot::listRefs(prepared->storePath).value().isEmpty());
+    }
+
+    void cancellingWhileSendingOrAwaitingReadyLeavesNoRefOrFile() {
+        for (const bool allSent : {false, true}) {
+            const QString jobId = allSent ? QStringLiteral("job-r") : QStringLiteral("job-s");
+            const auto prepared = prepareJob(jobId);
+            QVERIFY(prepared);
+            PackCache packs(root_ + QStringLiteral("/packs"));
+            StoreRetention retention(prepared->storePath, packs);
+            QVERIFY(retention.load());
+            SnapshotWorker worker(prepared->storePath, packs);
+            JobSyncWork work(worker, jobId);
+            FakeLink link;
+            FakeEvents events;
+            SnapshotSender sender(SyncJob{jobId, runnerId, key, prepared->snapshotId, {}}, link,
+                                  work, retention, events);
+            sender.start({});
+            QTRY_COMPARE(link.of<protocol::SnapshotOffer>().size(), 1);
+            if (allSent) {
+                QVERIFY(!sendAll(sender, link, prepared->snapshotId).isEmpty());
+            } else {
+                sender.receive(
+                    protocol::SnapshotWant{prepared->snapshotId, QStringLiteral("need"), 0});
+            }
+            sender.cancel();
+            drain(worker);
+            sender.receive(protocol::SnapshotReady{prepared->snapshotId});
+            QVERIFY(events.ready.isEmpty() && events.failed.isEmpty());
+            QVERIFY(!retention.confirmed(runnerId, key));
+            QVERIFY(packFiles().isEmpty());
+            QVERIFY(snapshot::listRefs(prepared->storePath).value().isEmpty());
+        }
+    }
+
+    void cancellingWhilePreparingDropsTheSnapshot() {
+        PackCache packs(root_ + QStringLiteral("/packs"));
+        const QString store =
+            storePathFor(root_ + QStringLiteral("/stores"),
+                         QFileInfo(repo_ + QStringLiteral("/.git")).canonicalFilePath());
+        SnapshotWorker worker(store, packs);
+        auto prepared = std::make_shared<std::optional<Prepared>>();
+        worker.runOnStore([this, prepared] { *prepared = prepareJob(QStringLiteral("job-p")); });
+        // The cancel arrives while the snapshot is being built; the drop runs after it.
+        worker.runOnStore(
+            [store, &packs] { dropJobSnapshot(store, packs, QStringLiteral("job-p")); });
+        drain(worker);
+        QVERIFY(prepared->has_value());
+        QCOMPARE((*prepared)->storePath, store);
+        QVERIFY(snapshot::listRefs(store).value().isEmpty());
+        QVERIFY(packFiles().isEmpty());
+    }
+
     void destroyingTheWorkerDropsLateAnswers() {
         const QString jobId = QStringLiteral("job-late");
         PrepareRequest request;
@@ -180,6 +312,45 @@ class SnapshotSyncIntegrationTest : public QObject {
     }
 
   private:
+    std::optional<Prepared> prepareJob(const QString& jobId) {
+        PrepareRequest request;
+        request.cwd = repo_;
+        request.storesRoot = root_ + QStringLiteral("/stores");
+        request.inFlightRef = StoreRetention::inFlightRef(jobId);
+        request.userGitSources = snapshot::UserGitSources{home_, home_ + QStringLiteral("/.c"), {}};
+        const auto prepared = prepareSnapshot(request);
+        if (!prepared.prepared)
+            qWarning() << "prepare failed" << prepared.code;
+        return prepared.prepared;
+    }
+
+    // Waits until the store queue ran everything queued so far and its answers arrived.
+    static void drain(SnapshotWorker& worker) {
+        auto done = std::make_shared<std::atomic_bool>(false);
+        worker.runOnStore([done] { done->store(true); });
+        QTRY_VERIFY(done->load());
+        QCoreApplication::processEvents();
+        QCoreApplication::processEvents();
+    }
+
+    // Sends the whole pack of the sender's offer and returns its bytes.
+    static QByteArray sendAll(SnapshotSender& sender, FakeLink& link, const QString& snap) {
+        const auto offer = link.of<protocol::SnapshotOffer>().last();
+        link.bulk.clear();
+        sender.receive(protocol::SnapshotWant{snap, QStringLiteral("need"), 0});
+        QByteArray bytes;
+        if (!QTest::qWaitFor([&] { return sender.sent() == offer.packBytes; }, 10'000))
+            return bytes;
+        for (const auto& transfer : link.bulk)
+            bytes.append(transfer.second);
+        sender.receive(protocol::SnapshotAck{snap, offer.packBytes});
+        return bytes;
+    }
+
+    QStringList packFiles() const {
+        return QDir(root_ + QStringLiteral("/packs")).entryList(QDir::Files | QDir::Hidden);
+    }
+
     std::unique_ptr<QTemporaryDir> dir_;
     QString root_;
     QString home_;

@@ -23,7 +23,8 @@ class SnapshotWorker {
     SnapshotWorker(const SnapshotWorker&) = delete;
     SnapshotWorker& operator=(const SnapshotWorker&) = delete;
 
-    // Writes the job's pack into the cache; on the store queue.
+    // Writes the job's pack into the cache on the store queue and marks the job in flight; the
+    // pack is deleted on arrival when the job was released meanwhile.
     void buildPack(const QString& jobId, const QString& snapshotId, const QString& baseId,
                    SyncWork::PackCallback callback);
     void readChunk(const PackFile& pack, qint64 offset, qint64 length,
