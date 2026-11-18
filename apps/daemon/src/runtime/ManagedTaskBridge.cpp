@@ -1,5 +1,6 @@
 #include "runtime/ManagedTaskBridge.h"
 #include "providers/ProviderAdapter.h"
+#include "runner/entry/RunsOnRequest.h"
 #include "runtime/ManagedTaskSpec.h"
 #include "runtime/SessionHost.h"
 
@@ -152,13 +153,14 @@ void ManagedTaskBridge::command(const QJsonObject& request, const QString& clien
 
 void ManagedTaskBridge::start(const QJsonObject& request, const BackgroundTaskOwner& owner,
                               Done done, std::optional<AgentMutationGrant> origin) {
-    const auto payload = request.value("payload").toObject();
+    const auto payload = runner::entry::normalizedRequest(request.value("payload").toObject());
     BackgroundTaskIntent retryIntent;
     retryIntent.owner = owner;
     retryIntent.requestPayload = payload;
     retryIntent.clientRequestId = payload.value("client_request_id").toString();
     retryIntent.specFingerprint = QCryptographicHash::hash(
         QJsonDocument(payload).toJson(QJsonDocument::Compact), QCryptographicHash::Sha256);
+    runner::entry::prepareRetry(retryIntent);
     const auto retry = ledger_.retry(retryIntent);
     if (!retry.value("ok").toBool() || !retry.value("task").isNull()) {
         auto reply = retry;
