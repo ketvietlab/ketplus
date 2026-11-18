@@ -1,5 +1,6 @@
 #include "runner/remote/RemoteJobs.h"
 
+#include "runner/jobs/RemoteJobLabels.h"
 #include "runner/sync/StoreRetention.h"
 #include "storage/BackgroundTaskLedger.h"
 #include "storage/BackgroundTaskOutput.h"
@@ -88,6 +89,7 @@ void RemoteJobs::submit(const QString& taskId, SubmitRequest request, Callback c
         callback(runnerUnavailable);
         return;
     }
+    request.runsOn = jobs::normalizedRunsOn(request.runsOn);
     submitting_.insert(taskId, true);
     sync::PrepareRequest prepare;
     prepare.cwd = request.spec.cwd;

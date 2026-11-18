@@ -1,6 +1,7 @@
 // Submitting through RemoteJobs: the checks before the worktree is frozen, what a failed or
 // refused submit leaves behind, and a runner the user removed.
 #include "RemoteJobsHarness.h"
+#include "runner/jobs/RemoteJobLabels.h"
 #include "runner/sync/StoreRetention.h"
 
 #include <QSqlQuery>
@@ -55,6 +56,36 @@ class RemoteJobsSubmitTest final : public QObject {
         QCOMPARE(record->snapshot->snapshotId, preparedIn(h).prepared->snapshotId);
         QCOMPARE(h.relay.pending(QStringLiteral("submit")), 1);
         QCOMPARE(h.f.store->load().first().snapshot, record->snapshot);
+    }
+
+    // The same labels in another order: the same task and job, not an idempotency conflict.
+    void theSameLabelsInAnotherOrderAreTheSameJob() {
+        RemoteHarness h;
+        h.prepare = [&](const sync::PrepareRequest&) { return preparedIn(h); };
+        const QStringList one = {QStringLiteral("os:linux"), QStringLiteral("arch:x86_64"),
+                                 QStringLiteral("gpu")};
+        const QStringList other = {QStringLiteral("gpu"), QStringLiteral("os:linux"),
+                                   QStringLiteral("arch:x86_64")};
+        const QString id =
+            taskIdOf(h.f.ledger->create(intentFor(QStringLiteral("same"), normalizedRunsOn(one))));
+        QVERIFY(!id.isEmpty());
+        QCOMPARE(taskIdOf(h.f.ledger->create(
+                     intentFor(QStringLiteral("same"), normalizedRunsOn(other)))),
+                 id);
+        // Unnormalized, the other order is another spec.
+        QCOMPARE(h.f.ledger->create(intentFor(QStringLiteral("same"), other))
+                     .value("error_code")
+                     .toString(),
+                 QStringLiteral("idempotency_conflict"));
+        QVERIFY(h.f.approve(id));
+
+        SubmitRequest submit = request();
+        submit.runsOn = other;
+        QString code = QStringLiteral("unanswered");
+        h.jobs->submit(id, submit, [&](const QString& answer) { code = answer; });
+        QCOMPARE(code, QString());
+        QCOMPARE(h.jobs->record(id)->runsOn, normalizedRunsOn(one));
+        QCOMPARE(h.relay.calls.last().runsOn, normalizedRunsOn(one));
     }
 
     // Logs name tasks and jobs only: no worktree, repository or store path, no snapshot id.

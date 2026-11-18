@@ -33,7 +33,7 @@ namespace ketplus::daemon::runner::remote {
 // A request of the layer above for a task created with runs_on and approved.
 struct SubmitRequest {
     peer::protocol::JobSpec spec; // `cwd` absolute; snapshot fields are filled here
-    QStringList runsOn;
+    QStringList runsOn; // any order; the task was created with jobs::normalizedRunsOn of it
     qint64 timeoutMs = 0;
 };
 
