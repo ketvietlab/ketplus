@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QJsonArray>
+#include <QJsonObject>
 #include <QPointer>
 #include <QString>
 #include <QWidget>
@@ -77,6 +78,8 @@ class TeamTaskDialog final : public QWidget {
     // History entries [historyStart_, historyStart_ + history_.size()) of historyTotal_. The
     // history only grows, so a newer page joins the entries read before.
     QJsonArray history_;
+    // Read-only details are fetched separately from compact paired task summaries.
+    QJsonObject auditDetails_;
     qsizetype historyStart_{0};
     qsizetype historyTotal_{0};
     bool historyRead_{false};

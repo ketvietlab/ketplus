@@ -61,6 +61,49 @@ QJsonObject actor(const QJsonObject& team, const QString& id) {
             {QStringLiteral("session_id"), id}};
 }
 
+// Audit actors may have left the team. Unknown identities are not attributed to the daemon
+// and their unrecognized strings (which may be legacy paths) do not cross the projection.
+QJsonObject auditActor(const QJsonObject& team, const QString& id) {
+    if (id == QStringLiteral("daemon") || id == QStringLiteral("user") ||
+        !member(team, id).isEmpty())
+        return actor(team, id);
+    return {{QStringLiteral("role"), QStringLiteral("unknown")}};
+}
+
+QJsonObject reviewMetadata(const QJsonObject& entry) {
+    const QString kind = entry.value(QStringLiteral("kind")).toString();
+    const QJsonObject data = entry.value(QStringLiteral("data")).toObject();
+    QJsonObject result;
+    if (kind == QStringLiteral("review") || kind == QStringLiteral("verdict") ||
+        kind == QStringLiteral("review_interrupted") || kind == QStringLiteral("review_tampered")) {
+        const auto round = data.value(QStringLiteral("round"));
+        if (round.isDouble() && round.toInt(-1) >= 1 && round.toInt() <= 1000000 &&
+            round.toDouble() == round.toInt())
+            result.insert(QStringLiteral("round"), round);
+    }
+    if (kind == QStringLiteral("review_interrupted") || kind == QStringLiteral("review_tampered")) {
+        if (data.value(QStringLiteral("content_round_counted")).isBool())
+            result.insert(QStringLiteral("content_round_counted"),
+                          data.value(QStringLiteral("content_round_counted")));
+        // Expose the availability classification, never paths or source snapshots.
+        for (const auto& value : data.value(QStringLiteral("changes")).toArray()) {
+            const auto change = value.toObject();
+            if (change.value(QStringLiteral("field")) == QStringLiteral("worktree") &&
+                (change.value(QStringLiteral("before")) == QStringLiteral("unreadable") ||
+                 change.value(QStringLiteral("after")) == QStringLiteral("unreadable")))
+                result.insert(QStringLiteral("source_unavailable"), true);
+        }
+    }
+    if (kind == QStringLiteral("state")) {
+        const QSet<QString> states{state::todo,  state::inProgress, state::inReview,
+                                   state::ready, state::blocked,    state::done};
+        for (const auto& key : {QStringLiteral("from"), QStringLiteral("to")})
+            if (states.contains(data.value(key).toString()))
+                result.insert(key, data.value(key));
+    }
+    return result;
+}
+
 QString memberState(const QJsonObject& entry, const QJsonObject& team) {
     if (!entry.value(QStringLiteral("idle")).toBool(true))
         return QStringLiteral("working");
@@ -119,7 +162,8 @@ QString openDecisionOf(const QJsonObject& team, const QString& taskId) {
     return {};
 }
 
-QJsonObject phoneTask(const QJsonObject& local, const QJsonObject& team, const Ids& ids) {
+QJsonObject phoneTask(const QJsonObject& local, const QJsonObject& team, const Ids& ids,
+                      const bool detail = false) {
     const QString worktree = local.value(QStringLiteral("worktree")).toString();
     const QJsonArray outside = local.value(QStringLiteral("outside_lane")).toArray();
     QJsonObject result{
@@ -151,6 +195,62 @@ QJsonObject phoneTask(const QJsonObject& local, const QJsonObject& team, const I
         result.insert(QStringLiteral("routing_decision"), risk::toJson(*decision));
         result.insert(QStringLiteral("conclusion_source"), QStringLiteral("leader_policy"));
         result.insert(QStringLiteral("routing_status"), QStringLiteral("historical"));
+    }
+    // Optional read-only audit details. Legacy records keep their existing shape.
+    const QString reviewer = local.value(QStringLiteral("reviewer")).toString();
+    if (!reviewer.isEmpty() && !member(team, reviewer).isEmpty())
+        result.insert(QStringLiteral("reviewer"), reviewer);
+    const QString head = local.value(QStringLiteral("head_commit")).toString();
+    if (review_policy::revision(head))
+        result.insert(QStringLiteral("head_commit"), head);
+    const QString block = local.value(QStringLiteral("review_block")).toString();
+    if (block == QStringLiteral("review_interrupted") ||
+        block == QStringLiteral("review_tampered") || block == QStringLiteral("round_limit") ||
+        block == QStringLiteral("no_verdict"))
+        result.insert(QStringLiteral("review_block"), block);
+    const auto limit = local.value(QStringLiteral("round_limit"));
+    if (limit.isDouble() && limit.toInt(-1) > 0 && limit.toInt() <= 1000000 &&
+        limit.toDouble() == limit.toInt())
+        result.insert(QStringLiteral("round_limit"), limit);
+    if (const auto findings =
+            review_policy::fromJson(local.value(QStringLiteral("review_findings")))) {
+        auto record = review_policy::toJson(*findings);
+        record.insert(QStringLiteral("reviewer"), auditActor(team, findings->reviewer));
+        if (!detail) {
+            // Findings can contain bounded but substantial evidence/closure text. Keep the
+            // directory-sized summary compact; the task sheet fetches the validated record.
+            record.remove(QStringLiteral("findings"));
+            record.insert(QStringLiteral("summary_only"), true);
+            record.insert(QStringLiteral("finding_total"), qsizetype(findings->findings.size()));
+            result.insert(QStringLiteral("review_findings"), record);
+            return result;
+        }
+        QJsonArray rows;
+        for (const auto& value : record.value(QStringLiteral("findings")).toArray()) {
+            auto row = value.toObject();
+            if (!row.value(QStringLiteral("actor")).toString().isEmpty())
+                row.insert(QStringLiteral("actor"),
+                           auditActor(team, row.value(QStringLiteral("actor")).toString()));
+            const QString owner = row.value(QStringLiteral("owner")).toString();
+            if (!owner.isEmpty() && !review_policy::code(owner) && member(team, owner).isEmpty())
+                row.insert(QStringLiteral("owner"),
+                           QJsonObject{{QStringLiteral("role"), QStringLiteral("unknown")}});
+            rows.append(row);
+        }
+        record.insert(QStringLiteral("findings"), rows);
+        result.insert(QStringLiteral("review_findings"), record);
+    } else if (local.contains(QStringLiteral("review_findings"))) {
+        // An unknown record is visibly unresolved, not silently treated as no findings.
+        result.insert(
+            QStringLiteral("review_findings"),
+            QJsonObject{
+                {QStringLiteral("version"), 1},
+                {QStringLiteral("legacy"), true},
+                {QStringLiteral("revision"), QString{}},
+                {QStringLiteral("reviewer"),
+                 QJsonObject{{QStringLiteral("role"), QStringLiteral("unknown")}}},
+                {QStringLiteral("round"), qMax(1, local.value(QStringLiteral("round")).toInt())},
+                {QStringLiteral("findings"), QJsonArray{}}});
     }
     return result;
 }
@@ -281,6 +381,16 @@ QJsonObject directoryEntry(const QJsonObject& team, const Ids& ids) {
 
 QJsonObject summary(const QJsonObject& team, const Ids& ids) {
     QJsonObject json = directoryEntry(team, ids);
+    if (const auto decision = risk::fromJson(team.value(QStringLiteral("last_routing_decision")))) {
+        auto record = risk::toJson(*decision);
+        if (member(team, decision->actor).isEmpty() && !review_policy::code(decision->actor))
+            record.insert(QStringLiteral("actor"), QStringLiteral("unknown"));
+        for (const auto& key :
+             {QStringLiteral("scope_evidence"), QStringLiteral("rollback_evidence")})
+            if (!risk::evidenceId(record.value(key).toString()))
+                record.insert(key, QString{});
+        json.insert(QStringLiteral("last_routing_decision"), record);
+    }
     json.remove(QStringLiteral("members"));
     const int budget = team.value(QStringLiteral("turn_budget")).toInt();
     const int used = team.value(QStringLiteral("automatic_turns")).toInt();
@@ -398,7 +508,7 @@ QJsonArray decisions(const QJsonArray& local, const QJsonObject& team) {
 }
 
 QJsonObject taskDetail(const QJsonObject& local, const QJsonObject& team, const Ids& ids) {
-    QJsonObject json = phoneTask(local, team, ids);
+    QJsonObject json = phoneTask(local, team, ids, true);
     json.insert(QStringLiteral("description"),
                 cutBytes(local.value(QStringLiteral("description")).toString(), 16 * 1024));
     QJsonArray criteria;
@@ -431,11 +541,15 @@ QJsonObject taskDetail(const QJsonObject& local, const QJsonObject& team, const 
                            .arg(entry.value(QStringLiteral("at")).toString(),
                                 entry.value(QStringLiteral("text")).toString()),
                        500);
-        history.append(QJsonObject{
+        QJsonObject projected{
             {QStringLiteral("at"), entry.value(QStringLiteral("at"))},
             {QStringLiteral("actor"), actor(team, entry.value(QStringLiteral("actor")).toString())},
             {QStringLiteral("kind"), entry.value(QStringLiteral("kind"))},
-            {QStringLiteral("text"), cut(entry.value(QStringLiteral("text")).toString(), 2000)}});
+            {QStringLiteral("text"), cut(entry.value(QStringLiteral("text")).toString(), 2000)}};
+        const auto metadata = reviewMetadata(entry);
+        if (!metadata.isEmpty())
+            projected.insert(QStringLiteral("data"), metadata);
+        history.append(projected);
     }
     if (local.contains(QStringLiteral("criteria_note")))
         note = local.value(QStringLiteral("criteria_note")).toString();

@@ -10,6 +10,7 @@
 #include "KetSelect.h"
 #include "KetTextField.h"
 #include "KetTokens.h"
+#include "teams/TeamDecisionView.h"
 #include "teams/TeamDirectory.h"
 #include "teams/TeamMenus.h"
 #include "teams/TeamPageParts.h"
@@ -208,6 +209,7 @@ TeamTaskDialog::TeamTaskDialog(TeamDirectory* teams, const QString& teamId, cons
     fields->addWidget(error_);
 
     connect(teams_, &TeamDirectory::changed, this, [this] {
+        auditDetails_ = {};
         rebuild();
         readHistory();
     });
@@ -230,7 +232,16 @@ void TeamTaskDialog::rebuild() {
     column->setContentsMargins(0, 0, px(14), 0);
     column->setSpacing(px(14));
     const auto team = teams_->team(teamId_);
-    const QJsonObject task = team ? taskOf(*team, taskId_) : QJsonObject{};
+    QJsonObject task = team ? taskOf(*team, taskId_) : QJsonObject{};
+    if (!task.isEmpty() &&
+        auditDetails_.value(QStringLiteral("id")) == task.value(QStringLiteral("id")) &&
+        auditDetails_.value(QStringLiteral("changed_revision")) ==
+            task.value(QStringLiteral("changed_revision")) &&
+        auditDetails_.value(QStringLiteral("head_commit")) ==
+            task.value(QStringLiteral("head_commit")) &&
+        auditDetails_.contains(QStringLiteral("review_findings")))
+        task.insert(QStringLiteral("review_findings"),
+                    auditDetails_.value(QStringLiteral("review_findings")));
     ownerSession_.clear();
     canHandOver_ = false;
     if (task.isEmpty()) {
@@ -279,9 +290,18 @@ void TeamTaskDialog::rebuild() {
     for (const auto& value : task.value(QStringLiteral("depends_on")).toArray())
         depends.append(value.toString());
     QString reviewer;
-    for (const auto& value : team->value(QStringLiteral("members")).toArray())
-        if (value.toObject().value(QStringLiteral("role")).toString() == QStringLiteral("reviewer"))
-            reviewer = value.toObject().value(QStringLiteral("name")).toString();
+    if (const QString assigned = task.value(QStringLiteral("reviewer")).toString();
+        !assigned.isEmpty()) {
+        reviewer = TeamDecisionView::actorName(*team, assigned);
+    } else {
+        QStringList reviewers;
+        for (const auto& value : team->value(QStringLiteral("members")).toArray())
+            if (value.toObject().value(QStringLiteral("role")).toString() ==
+                QStringLiteral("reviewer"))
+                reviewers.append(value.toObject().value(QStringLiteral("name")).toString());
+        if (reviewers.size() == 1)
+            reviewer = reviewers.first(); // Legacy single-reviewer teams.
+    }
     const QJsonObject ownerMember = TeamDirectory::member(*team, ownerSession_);
     const QString ownerName = ownerSession_.isEmpty() ? tr("Unassigned")
                               : ownerMember.isEmpty()
@@ -340,6 +360,14 @@ void TeamTaskDialog::rebuild() {
         grid->addLayout(cell, index / 2, index % 2);
     }
     column->addLayout(grid);
+
+    if (TeamDecisionView::hasDetails(task)) {
+        column->addWidget(new Rule(details_));
+        auto audit = task;
+        if (historyRead_)
+            audit.insert(QStringLiteral("history"), history_);
+        column->addWidget(new TeamDecisionView(*team, audit, details_));
+    }
 
     // What the leader wrote for the owner, as Markdown.
     if (const QString description = task.value(QStringLiteral("description")).toString();
@@ -424,8 +452,6 @@ void TeamTaskDialog::rebuild() {
         historyRead_ ? history_ : task.value(QStringLiteral("history")).toArray();
     for (const auto& value : history) {
         const QJsonObject entry = value.toObject();
-        const QString actor = entry.value(QStringLiteral("actor")).toString();
-        const QJsonObject who = TeamDirectory::member(*team, actor);
         const QDateTime at =
             QDateTime::fromString(entry.value(QStringLiteral("at")).toString(), Qt::ISODateWithMs)
                 .toLocalTime();
@@ -439,13 +465,10 @@ void TeamTaskDialog::rebuild() {
         time->setType(12);
         time->setFixedWidth(px(96));
         line->addWidget(time, 0, Qt::AlignTop);
-        auto* text = new Text(QStringLiteral("%1 · %2").arg(
-                                  actor == QStringLiteral("user")     ? tr("You")
-                                  : actor == QStringLiteral("daemon") ? tr("ketPlus")
-                                  : who.isEmpty() ? actor
-                                                  : who.value(QStringLiteral("name")).toString(),
-                                  entry.value(QStringLiteral("text")).toString()),
-                              details_);
+        auto* text = new Text(
+            QStringLiteral("%1 · %2").arg(TeamDecisionView::actorName(*team, entry.value("actor")),
+                                          TeamDecisionView::eventText(entry)),
+            details_);
         text->setObjectName(QStringLiteral("teamTaskHistory"));
         text->setTone(QStringLiteral("text-secondary"));
         line->addWidget(text, 1);

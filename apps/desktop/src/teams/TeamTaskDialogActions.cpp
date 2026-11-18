@@ -53,7 +53,13 @@ void TeamTaskDialog::readHistory(const bool earlier) {
                 return;
             alive->historyPending_ = false;
             const QJsonObject task = result.value(QStringLiteral("task")).toObject();
-            if (error.isEmpty() && task.contains(QStringLiteral("history_total"))) {
+            // A team update while this read was in flight requires a new read. Never let
+            // the old reply repaint findings (or queue history) onto the newer task.
+            const bool current = error.isEmpty() && !alive->historyAgain_ &&
+                                 task.value(QStringLiteral("id")).toString() == alive->taskId_;
+            if (current)
+                alive->auditDetails_ = task;
+            if (current && task.contains(QStringLiteral("history_total"))) {
                 const QJsonArray page = task.value(QStringLiteral("history")).toArray();
                 const qsizetype start = task.value(QStringLiteral("history_start")).toInteger();
                 const qsizetype shownEnd = alive->historyStart_ + alive->history_.size();
@@ -78,8 +84,9 @@ void TeamTaskDialog::readHistory(const bool earlier) {
                 alive->history_ = joined;
                 alive->historyTotal_ = task.value(QStringLiteral("history_total")).toInteger();
                 alive->historyRead_ = true;
-                alive->rebuild();
             }
+            if (current)
+                alive->rebuild();
             if (std::exchange(alive->historyAgain_, false))
                 alive->readHistory();
         });

@@ -334,6 +334,12 @@ refusal.
   - `branch` and `worktree_id` (opaque).
   - `assignment_held`, `outside_lane_total`, `decision_id` (the open decision that
     blocks it) and `changed_revision`.
+  - Optional read-only audit metadata: validated version-1 `routing_decision`
+    (historical, never authorization), `head_commit`, known `reviewer`, `review_block`
+    and `round_limit`. `review_findings` is compact in summaries: version, revision,
+    reviewer actor, round, legacy marker, `summary_only: true` and `finding_total`;
+    no finding rows. Unknown formats remain visibly unresolved legacy records.
+    The optional team `last_routing_decision` is also historical audit metadata.
 
   A summary task carries no description, no criterion text and no history. Those come
   from `team.task.get`.
@@ -365,6 +371,8 @@ refusal.
 **Task detail**: what `team.task.get` returns.
 
 - The summary fields.
+- Full validated `review_findings` rows, when available, replace the compact summary.
+  Reviewer/actor identities use the public actor shape; evidence stays opaque.
 - `description`, up to 16 KiB.
 - `criteria`: at most 20, each `{text, met}`.
 - `outside_lane`: at most 20 entries `{path, lane, owner_number}`. `path` is relative to
@@ -374,7 +382,11 @@ refusal.
 - `criteria_note`: up to 500 characters, the daemon's text of the newest change to the
   criteria (when, what, and who was told), or `""` when they never changed.
 - `history`: one page of at most 50 entries `{at, actor, kind, text}`, each text up to
-  2,000 characters.
+  2,000 characters. Optional `data` is whitelisted by event kind: bounded review
+  `round`, explicit `content_round_counted`, derived `source_unavailable`, or known
+  state `from`/`to`. Source snapshots, commands, output and unrelated metadata are
+  excluded. These additions are read-only; old clients may ignore them and commands
+  do not acquire authority by echoing them.
 
 **Bounds of a result.**
 

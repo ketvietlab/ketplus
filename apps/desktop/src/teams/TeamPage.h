@@ -90,6 +90,7 @@ class TeamPage final : public QWidget {
     void buildHeading(const QJsonObject& team);
     void buildBanners(const QJsonObject& team);
     void buildDecisions(const QJsonObject& team);
+    void buildDecisionTrail(const QJsonObject& team);
     // T-55 (TeamDecisionOther.cpp): a decision's last choice, "Other…", and the field it opens.
     [[nodiscard]] QWidget* decisionOther(QWidget* card, const QString& id, const QString& what,
                                          bool sentences);

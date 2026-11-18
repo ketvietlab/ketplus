@@ -202,6 +202,137 @@ class TeamRemoteTest final : public QObject {
         QCOMPARE(created.value("team").toObject().value("language").toString(), QString("auto"));
     }
 
+    void decisionAuditProjectsOnlyValidatedReadOnlyMetadata() {
+        using namespace ketplus::daemon::teams;
+        QJsonObject team{
+            {"id", "7"},
+            {"members",
+             QJsonArray{
+                 QJsonObject{{"session_id", "lead"}, {"role", "leader"}, {"number", "1"}},
+                 QJsonObject{{"session_id", "rev"}, {"role", "reviewer"}, {"number", "2"}}}}};
+        risk::Decision advisory{.teamId = 7,
+                                .route = risk::Route::LeaderDirect,
+                                .risk = "advisory",
+                                .kind = "explanation",
+                                .gateReason = "advisory",
+                                .reason = "answer_directly",
+                                .actor = "lead",
+                                .revision = "team:7:4",
+                                .teamRevision = 5,
+                                .at = "2026-11-17T10:00:00.000Z",
+                                .followUp = "answer_only"};
+        team.insert("last_routing_decision", risk::toJson(advisory));
+        const auto projectedTeam = remote::summary(team, ids);
+        QCOMPARE(projectedTeam.value("last_routing_decision").toObject().value("route"),
+                 QJsonValue("leader_direct"));
+        QVERIFY(!projectedTeam.contains("authorization_granted"));
+
+        review_policy::Record record{.revision = QString(40, 'a'),
+                                     .reviewer = "rev",
+                                     .round = 1,
+                                     .findings = {{.id = "matrix",
+                                                   .severity = "p2",
+                                                   .impact = "required_check",
+                                                   .scope = "task",
+                                                   .evidence = QString(64, 'e'),
+                                                   .closeWhen = "matrix_passes"}}};
+        QJsonObject local{
+            {"id", "T-1"},
+            {"round", 1},
+            {"round_limit", 2},
+            {"reviewer", "rev"},
+            {"head_commit", QString(40, 'a')},
+            {"review_block", "review_interrupted"},
+            {"review_findings", review_policy::toJson(record)},
+            {"history",
+             QJsonArray{QJsonObject{
+                 {"kind", "review_interrupted"},
+                 {"data",
+                  QJsonObject{{"round", 1},
+                              {"content_round_counted", false},
+                              {"command", "private command"},
+                              {"output", "private output"},
+                              {"changes", QJsonArray{QJsonObject{
+                                              {"field", "worktree"},
+                                              {"before", "unreadable"},
+                                              {"after", "/private/synthetic/source"}}}}}}}}}};
+        const auto projected = remote::taskDetail(local, team, ids);
+        QCOMPARE(projected.value("round_limit"), QJsonValue(2));
+        QCOMPARE(projected.value("head_commit"), QJsonValue(QString(40, 'a')));
+        QCOMPARE(projected.value("reviewer"), QJsonValue("rev"));
+        const auto findingRecord = projected.value("review_findings").toObject();
+        QCOMPARE(findingRecord.value("reviewer").toObject().value("number"), QJsonValue("2"));
+        QCOMPARE(findingRecord.value("findings").toArray().size(), 1);
+        const auto metadata =
+            projected.value("history").toArray().first().toObject().value("data").toObject();
+        QCOMPARE(metadata, (QJsonObject{{"round", 1},
+                                        {"content_round_counted", false},
+                                        {"source_unavailable", true}}));
+        const auto serialized = QJsonDocument(projected).toJson();
+        QVERIFY(!serialized.contains("private command"));
+        QVERIFY(!serialized.contains("private output"));
+        QVERIFY(!serialized.contains("/private/"));
+    }
+
+    void findingsStayCompactAcrossTwoHundredSummaryTasks() {
+        using namespace ketplus::daemon::teams;
+        review_policy::Record record{.revision = QString(40, 'a'), .reviewer = "rev", .round = 1};
+        for (int index = 0; index < 32; ++index)
+            record.findings.append({.id = QStringLiteral("finding_%1").arg(index),
+                                    .severity = "p2",
+                                    .impact = "required_check",
+                                    .scope = "task",
+                                    .evidence = QString(64, 'e'),
+                                    .closeWhen = "matrix_passes"});
+        QVERIFY(review_policy::fromJson(review_policy::toJson(record)));
+        QJsonArray tasks;
+        for (int index = 0; index < 200; ++index)
+            tasks.append(QJsonObject{{"id", QStringLiteral("T-%1").arg(index)},
+                                     {"state", "in_progress"},
+                                     {"title", QString(200, 't')},
+                                     {"review_findings", review_policy::toJson(record)}});
+        QJsonObject team{{"id", "7"}, {"tasks", tasks}};
+        const auto summary = remote::summary(team, ids);
+        QCOMPARE(summary.value("tasks").toArray().size(), 200);
+        QVERIFY(QJsonDocument(summary).toJson(QJsonDocument::Compact).size() <
+                remote::maximumResultBytes);
+        const auto compact =
+            summary.value("tasks").toArray().first().toObject().value("review_findings").toObject();
+        QVERIFY(compact.value("summary_only").toBool());
+        QCOMPARE(compact.value("finding_total"), QJsonValue(32));
+        QVERIFY(!compact.contains("findings"));
+        const auto full = remote::taskDetail(tasks.first().toObject(), team, ids)
+                              .value("review_findings")
+                              .toObject();
+        QCOMPARE(full.value("findings").toArray().size(), 32);
+        QVERIFY(!full.contains("summary_only"));
+    }
+
+    void unknownAuditRecordsAndUnrelatedHistoryCannotImplyClearFindings() {
+        QJsonObject team{{"id", "7"}, {"members", QJsonArray{}}};
+        QJsonObject local{
+            {"id", "T-1"},
+            {"review_findings", QJsonObject{{"version", 99}, {"private", "/private/payload"}}},
+            {"head_commit", "/private/head"},
+            {"round_limit", "2"},
+            {"review_block", "/private/block"},
+            {"history",
+             QJsonArray{QJsonObject{{"kind", "note"},
+                                    {"data", QJsonObject{{"round", 2},
+                                                         {"content_round_counted", false},
+                                                         {"output", "/private/output"}}}}}}};
+        const auto projected = remote::taskDetail(local, team, ids);
+        QVERIFY(projected.value("review_findings").toObject().value("legacy").toBool());
+        QVERIFY(!projected.contains("head_commit"));
+        QVERIFY(!projected.contains("round_limit"));
+        QVERIFY(!projected.contains("review_block"));
+        QVERIFY(!projected.value("history").toArray().first().toObject().contains("data"));
+        QVERIFY(!QJsonDocument(projected).toJson().contains("/private/"));
+        local.remove("review_findings");
+        QVERIFY(!remote::taskDetail(local, team, ids).contains("review_findings"));
+        QVERIFY(!remote::summary(team, ids).contains("last_routing_decision"));
+    }
+
     // §6: each read answers with the fields of the contract's fixture, and no local path.
     void contentLanguageSurvivesPairedProjectionWithoutTranslatingContent() {
         Fixture fixture;
