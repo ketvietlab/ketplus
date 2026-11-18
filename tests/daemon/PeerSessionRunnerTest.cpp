@@ -56,8 +56,9 @@ class Lease final : public runner::JobLease {
 class Receiver final : public runner::SnapshotReceiver {
   public:
     [[nodiscard]] QMap<QString, QString> heldSnapshots(const QString&) const override { return {}; }
-    void begin(const protocol::JobSpec&, Send) override { ++begins; }
+    void begin(const protocol::JobSpec&, const QString&, Send) override { ++begins; }
     void receive(const protocol::Frame&) override {}
+    void receivePayload(const QString&, const QByteArray&) override {}
     void cancel() override {}
     int begins = 0;
 };
