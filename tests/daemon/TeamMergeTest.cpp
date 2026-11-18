@@ -101,6 +101,8 @@ class TeamMergeTest final : public QObject {
         const QString repository = fixture.directory.filePath("shop");
         QVERIFY(QDir().mkpath(repository));
         git(repository, {"init", "-q", "-b", "integration"});
+        git(repository, {"config", "protocol.https.allow", "never"});
+        git(repository, {"remote", "add", "origin", "https://github.com/example/project.git"});
         git(repository, {"commit", "-q", "--allow-empty", "-m", "start"});
         const auto command = [&](const QString& type, const QJsonObject& payload) {
             return fixture.host->handleCommand(agent_test::request(type, payload), "desktop-test");
@@ -318,6 +320,30 @@ class TeamMergeTest final : public QObject {
         host_.answer();
         QVERIFY(!teams_->team(team_));
         QVERIFY(!teams_->checksOpen());
+    }
+
+    void mergedGitFactsRequireCurrentCheckoutAndKnownOrigin_data() {
+        QTest::addColumn<QString>("change");
+        for (const QString& change : {"missing_origin", "dirty_after_probe", "head_after_probe"})
+            QTest::newRow(qPrintable(change)) << change;
+    }
+    void mergedGitFactsRequireCurrentCheckoutAndKnownOrigin() {
+        QFETCH(QString, change);
+        if (change == "missing_origin")
+            host_.completionOriginKnown = false;
+        const QString id = task("Cart");
+        pass(id, "dev1");
+        host_.merged.insert(id);
+        host_.holdAnswers = true;
+        teams_->checkMerged(team_);
+        if (change == "dirty_after_probe")
+            host_.dirty.insert(get(id).worktree);
+        if (change == "head_after_probe")
+            host_.heads.insert(get(id).branch, QString(40, 'f'));
+        host_.answer();
+        QVERIFY(get(id).state != state::done);
+        QCOMPARE(get(id).state, state::blocked);
+        QVERIFY(!get(id).acceptance);
     }
 
     void commitsAfterTheReviewSendAReadyTaskBackToReview() {

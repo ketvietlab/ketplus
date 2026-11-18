@@ -40,8 +40,10 @@ to require every criterion and dependency before Ready.
 
 Automatic completion requires current acceptance and independent host facts:
 
-- Git-only completion must contain the same accepted branch head. A later head
-  is never finished merely because it was already merged.
+- Git-only completion must contain the same accepted branch head, with a known
+  pinned origin and a currently readable, clean checkout. Recheck those live
+  facts when applying the asynchronous merge answer. A later head is never
+  finished merely because an older probe said it was already merged.
 - PR completion must match the accepted head, branch, repository identity and
   configured integration target. The host reads PR facts, the clean current
   checkout and the repository origin. Squash/rebase merge commits remain distinct

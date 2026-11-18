@@ -129,6 +129,19 @@ void TeamCoordinator::applyMergeFacts(const qint64 teamId, const QList<Task>& as
             scopeChanged.insert(task->id);
             continue;
         }
+        if (fact->merged && *fact->merged && !recordsPullRequest(*task)) {
+            const auto dirty = host_->hasUncommittedWork(task->worktree);
+            const QString currentHead = host_->taskCommit(taskScope(*team, *task), *task);
+            if (!risk::evidenceId(task->acceptance->repositoryId) || !dirty || *dirty ||
+                currentHead.isEmpty()) {
+                scopeChanged.insert(task->id);
+                continue;
+            }
+            if (currentHead != task->headCommit) {
+                moved.insert(task->id, currentHead);
+                continue;
+            }
+        }
         // T-38: git speaks only of a branch with commits of its own, handed to review at one
         // of them. A branch still at its base is contained in any branch it was cut from: its
         // work is elsewhere, as in another repository's pull request (ADR 0118).
@@ -150,10 +163,11 @@ void TeamCoordinator::applyMergeFacts(const qint64 teamId, const QList<Task>& as
     const Team before = *team;
     QList<Update> updates;
     for (const QString& id : scopeChanged)
-        invalidateAcceptance(*team, *team->task(id),
-                             QStringLiteral("The execution repository origin changed after "
-                                            "acceptance; obtain fresh proof or review."),
-                             updates);
+        invalidateAcceptance(
+            *team, *team->task(id),
+            QStringLiteral("The accepted checkout or repository origin is "
+                           "unavailable or changed; obtain fresh proof or review."),
+            updates);
     const auto withdrawMerge = [&](const QString& id, const QString& reason) {
         // A merge decision nobody needs any more, as when the user merged by hand.
         for (Decision& decision : team->decisions)

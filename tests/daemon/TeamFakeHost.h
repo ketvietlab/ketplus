@@ -89,7 +89,10 @@ class FakeHost final : public TeamHostPort {
             QString::fromLatin1(
                 QCryptographicHash::hash(task.branch.toUtf8(), QCryptographicHash::Sha1).toHex()));
     }
+    bool completionOriginKnown{true};
     QString completionRepository(const Team& team, const Task& task) const override {
+        if (!completionOriginKnown)
+            return {};
         return QString::fromLatin1(
             QCryptographicHash::hash(taskScope(team, task).repository.toUtf8(),
                                      QCryptographicHash::Sha256)

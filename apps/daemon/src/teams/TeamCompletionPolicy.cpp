@@ -129,7 +129,7 @@ bool valid(const Team& team, const Task& task) {
 }
 
 bool canFinish(const Team& team, const Task& task) {
-    return valid(team, task) &&
+    return valid(team, task) && risk::evidenceId(task.acceptance->repositoryId) &&
            std::all_of(task.dependsOn.cbegin(), task.dependsOn.cend(), [&](const QString& id) {
                const Task* dependency = team.task(id);
                return dependency && dependency->state == state::done;
