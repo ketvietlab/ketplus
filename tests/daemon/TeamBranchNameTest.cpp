@@ -5,6 +5,7 @@
 // scripted fake providers. No network, no real provider and no real team.
 #include "AgentTestFixture.h"
 #include "TeamFakeHost.h"
+#include "TestPaths.h"
 #include "runtime/TeamGit.h"
 #include "runtime/TeamWorktreeRemoval.h"
 #include "storage/LocalJournal.h"
@@ -205,7 +206,7 @@ class TeamBranchNameTest final : public QObject {
 
     // Criterion 3: a name git or another task already has is refused.
     void aTakenNameIsRefused() {
-        host_.takenBranches.insert("/repo|fix/login-t1");
+        host_.takenBranches.insert(absoluteTestPath("repo") + "|fix/login-t1");
         TeamResult result;
         create({.title = "Fix login"}, &result);
         QVERIFY(!result.ok());
@@ -224,14 +225,14 @@ class TeamBranchNameTest final : public QObject {
         QVERIFY(create({.title = "Fix login", .branchSlug = "login-mobile"}, &result, second,
                        "lead2") == QStringLiteral("T-1"));
         // Another repository's branches are its own.
-        host_.takenBranches.insert("/elsewhere|feat/cart-t2");
+        host_.takenBranches.insert(absoluteTestPath("elsewhere") + "|feat/cart-t2");
         QCOMPARE(planned(create({.title = "Cart"})), QStringLiteral("feat/cart-t2"));
     }
 
     // Review L1: before the repository's branches are listed, the name is accepted and the
     // history says it was not checked against them yet.
     void aNameNotYetCheckedSaysSo() {
-        host_.unlistedRepositories.insert("/repo");
+        host_.unlistedRepositories.insert(absoluteTestPath("repo"));
         const QString id = create({.title = "Fix login"});
         QCOMPARE(planned(id), QStringLiteral("fix/login-t1"));
         QVERIFY(get(id).history.first().text.contains("not listed yet"));

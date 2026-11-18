@@ -1135,7 +1135,7 @@ class ProviderTranscriptTest : public QObject {
     void assistantAsyncQuestionsSteerTheirOwningTurn() {
         QFETCH(bool, finishBeforeDispatch);
         QTemporaryDir dir;
-        const auto exe = dir.filePath("codex");
+        const auto exe = dir.filePath(fixtureName("codex"));
         QVERIFY(writeFakeCodex(exe, dir.filePath("log")));
         LocalJournal journal(dir.filePath("journal.sqlite3"));
         CodexAdapter adapter(exe);

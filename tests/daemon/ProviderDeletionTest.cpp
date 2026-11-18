@@ -795,7 +795,7 @@ class ProviderDeletionTest final : public QObject {
     }
     void purgeIsDurableAndScopedToUnsharedProviderThreads() {
         QTemporaryDir directory;
-        const auto executable = directory.filePath("codex");
+        const auto executable = directory.filePath(fixtureName("codex"));
         const auto log = directory.filePath("codex.log");
         QVERIFY(writeFakeCodex(executable, log));
         LocalJournal journal(directory.filePath("journal.sqlite"));
@@ -857,7 +857,7 @@ class ProviderDeletionTest final : public QObject {
     }
     void unavailableProviderCleanupRunsAfterRestart() {
         QTemporaryDir directory;
-        const auto executable = directory.filePath("codex");
+        const auto executable = directory.filePath(fixtureName("codex"));
         const auto log = directory.filePath("codex.log");
         const auto database = directory.filePath("journal.sqlite");
         {
@@ -1037,7 +1037,7 @@ class ProviderDeletionTest final : public QObject {
         QFETCH(QString, malformed);
         QTemporaryDir dir;
         const auto path = dir.filePath("journal.sqlite");
-        const auto executable = dir.filePath("codex");
+        const auto executable = dir.filePath(fixtureName("codex"));
         const auto log = dir.filePath("codex.log");
         QVERIFY(writeFakeCodex(executable, log));
         LocalJournal journal(path);

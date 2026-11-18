@@ -30,9 +30,15 @@ target_link_libraries(ketplus_acp_session_isolation_tests PRIVATE Qt6::Core Qt6:
 add_test(NAME ketplus_acp_session_isolation_tests COMMAND ketplus_acp_session_isolation_tests)
 set_tests_properties(ketplus_acp_session_isolation_tests PROPERTIES ENVIRONMENT
     "QT_QPA_PLATFORM=offscreen;KETPLUS_BROWSER_TOOLS_CONFIG=${CMAKE_CURRENT_BINARY_DIR}/disabled-browser.json;KETPLUS_COMPUTER_TOOLS_CONFIG=${CMAKE_CURRENT_BINARY_DIR}/disabled-computer.json;KETPLUS_COMPUTER_DIR=${CMAKE_CURRENT_BINARY_DIR}/computer")
-# Its fixture provider is a script, which Windows cannot start directly (see
-# KETPLUS_WINDOWS_SCRIPT_FIXTURE_TESTS in tests/daemon/CMakeLists.txt).
+# Its fixture provider is a Python script; on Windows the script launcher turns it into an
+# executable (see tests/daemon/ScriptFixture.h), which the parent directory defines.
 if(WIN32)
-    set_tests_properties(ketplus_acp_session_isolation_tests PROPERTIES DISABLED TRUE
-        LABELS "windows-script-fixture")
+    if(TARGET ketplus_script_launcher)
+        add_dependencies(ketplus_acp_session_isolation_tests ketplus_script_launcher)
+        set_tests_properties(ketplus_acp_session_isolation_tests PROPERTIES
+            LABELS "windows-script-fixture")
+    else()
+        set_tests_properties(ketplus_acp_session_isolation_tests PROPERTIES DISABLED TRUE
+            LABELS "windows-script-fixture")
+    endif()
 endif()

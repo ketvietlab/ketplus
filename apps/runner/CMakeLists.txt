@@ -14,7 +14,6 @@ add_library(ketplus_runner_app STATIC
     src/RunnerRules.cpp
     src/RunnerRules.h
     src/SystemEnvironment.cpp
-    src/commands/Cli.cpp
     src/commands/CommandSupport.cpp
     src/commands/CommandSupport.h
     src/commands/Commands.h
@@ -31,8 +30,6 @@ add_library(ketplus_runner_app STATIC
     src/relay/RelayLeaseCalls.h
     src/run/AccessTokens.cpp
     src/run/AccessTokens.h
-    src/run/RunLoop.cpp
-    src/run/RunLoop.h
     src/state/AcceptedJobsFile.cpp
     src/state/AcceptedJobsFile.h
     src/state/JobJournalFile.cpp
@@ -145,9 +142,70 @@ target_include_directories(ketplus_runner_delivery PUBLIC
 )
 ketplus_enable_warnings(ketplus_runner_delivery)
 
+# Running a job's command under the job executor: launch plan, output, end, readiness and the
+# cleanup of what a restart left, over interfaces; the executor's own client is the adapter below.
+add_library(ketplus_runner_exec STATIC
+    src/exec/ExecLog.cpp
+    src/exec/ExecLog.h
+    src/exec/ExecPorts.h
+    src/exec/ExecutionPlan.cpp
+    src/exec/ExecutionPlan.h
+    src/exec/ExecutorCommandRunner.cpp
+    src/exec/ExecutorCommandRunner.h
+    src/exec/ExecutorDirectories.cpp
+    src/exec/ExecutorDirectories.h
+    src/exec/ExecutorReadiness.cpp
+    src/exec/Readiness.h
+)
+target_link_libraries(ketplus_runner_exec PUBLIC Qt6::Core ketplus_runner_session)
+target_include_directories(ketplus_runner_exec PUBLIC
+    "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>"
+)
+ketplus_enable_warnings(ketplus_runner_exec)
+
+if(TARGET ketplus_job_client)
+    add_library(ketplus_runner_exec_native STATIC
+        src/exec/NativeExecutor.cpp
+        src/exec/NativeExecutor.h
+    )
+    target_link_libraries(ketplus_runner_exec_native PUBLIC ketplus_runner_exec
+        PRIVATE ketplus_job_client)
+    ketplus_enable_warnings(ketplus_runner_exec_native)
+endif()
+
+# `run`: the pieces wired into one event loop, and the command line that starts it.
+add_library(ketplus_runner_run STATIC
+    src/commands/Cli.cpp
+    src/run/ClientRelayPort.cpp
+    src/run/ClientRelayPort.h
+    src/run/ExecutorCommandHost.cpp
+    src/run/ExecutorCommandHost.h
+    src/run/RelayQueue.cpp
+    src/run/RelayQueue.h
+    src/run/RunClocks.cpp
+    src/run/RunClocks.h
+    src/run/RunIdentity.cpp
+    src/run/RunIdentity.h
+    src/run/RunJobs.cpp
+    src/run/RunJobs.h
+    src/run/RunPorts.h
+    src/run/RunnerAssembly.cpp
+    src/run/RunnerAssembly.h
+    src/run/RunnerLoop.cpp
+    src/run/RunnerLoop.h
+    src/run/RunnerLoopEvents.cpp
+    src/run/WorkDirectory.cpp
+    src/run/WorkDirectory.h
+)
+target_link_libraries(ketplus_runner_run
+    PUBLIC Qt6::Core ketplus_runner_app ketplus_runner_delivery ketplus_runner_exec
+    ketplus_runner_exec_native ketplus_runner_peer ketplus_runner_session
+    ketplus_runner_snapshot_receiver
+    PRIVATE ketplus_runner_pairing)
+ketplus_enable_warnings(ketplus_runner_run)
+
 add_executable(ketplus-runner src/main.cpp)
-# The receiver brings ketplus_runner_app (with the delivery) and ketplus_runner_session.
-target_link_libraries(ketplus-runner PRIVATE ketplus_runner_snapshot_receiver)
+target_link_libraries(ketplus-runner PRIVATE ketplus_runner_run)
 ketplus_enable_warnings(ketplus-runner)
 
 # Runners are Linux nodes; the macOS build exists for tests only and ships no runner.

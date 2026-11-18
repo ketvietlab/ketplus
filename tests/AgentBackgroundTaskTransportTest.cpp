@@ -103,7 +103,7 @@ class AgentBackgroundTaskTransportTest final : public QObject {
     void initTestCase() { QStandardPaths::setTestModeEnabled(true); }
     void completeRegistryUsesOpaquePagesAndRefetchesConflicts_data() {
         QTest::addColumn<QString>("provider");
-        for (const auto& provider : {"codex", "claude", "cursor"})
+        for (const auto& provider : {"codex", "claude", "cursor", "copilot"})
             QTest::newRow(provider) << QString(provider);
     }
     void completeRegistryUsesOpaquePagesAndRefetchesConflicts() {
@@ -218,8 +218,15 @@ class AgentBackgroundTaskTransportTest final : public QObject {
         QVERIFY(!offlineError.isEmpty());
     }
 
+    void controlPermissionAndPayloadAreProviderIndependent_data() {
+        QTest::addColumn<QString>("provider");
+        for (const auto& provider : {"codex", "claude", "cursor", "copilot"})
+            QTest::newRow(provider) << QString(provider);
+    }
     void controlPermissionAndPayloadAreProviderIndependent() {
+        QFETCH(QString, provider);
         TaskPeer peer;
+        peer.provider = provider;
         peer.control = false;
         peer.respond = [&](const QJsonObject& request) {
             return request.value("message_type") == "session.list"

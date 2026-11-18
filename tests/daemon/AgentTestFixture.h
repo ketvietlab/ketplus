@@ -65,14 +65,14 @@ struct Fixture final {
         codexLog = directory.filePath("codex.log");
         claudeLog = directory.filePath("claude.log");
         cursorLog = directory.filePath("cursor.log");
-        if (!writeFakeCodex(directory.filePath("fake-codex"), codexLog) ||
-            !writeFakeClaude(directory.filePath("fake-claude"), claudeLog) ||
-            !writeFakeCursor(directory.filePath("fake-cursor"), cursorLog))
+        if (!writeFakeCodex(directory.filePath(fixtureName("fake-codex")), codexLog) ||
+            !writeFakeClaude(directory.filePath(fixtureName("fake-claude")), claudeLog) ||
+            !writeFakeCursor(directory.filePath(fixtureName("fake-cursor")), cursorLog))
             return false;
         journal = std::make_unique<LocalJournal>(directory.filePath("journal.sqlite3"));
-        codex = std::make_unique<CodexAdapter>(directory.filePath("fake-codex"));
-        claude = std::make_unique<ClaudeAdapter>(directory.filePath("fake-claude"));
-        cursor = std::make_unique<CursorAdapter>(directory.filePath("fake-cursor"));
+        codex = std::make_unique<CodexAdapter>(directory.filePath(fixtureName("fake-codex")));
+        claude = std::make_unique<ClaudeAdapter>(directory.filePath(fixtureName("fake-claude")));
+        cursor = std::make_unique<CursorAdapter>(directory.filePath(fixtureName("fake-cursor")));
         restart(endpoint);
         return journal->isOpen();
     }

@@ -85,6 +85,8 @@ class JobSession {
     void snapshotFailed(const QString& code);
 
     void commandOutput(const QByteArray& bytes);
+    // `bytes` of output were lost before they reached the session.
+    void commandOutputLost(qint64 bytes);
     void commandFinished(const CommandExit& exit);
 
     void timerFired(SessionTimer timer);

@@ -39,7 +39,7 @@ struct Fixture {
             return false;
         a = QFileInfo(a).canonicalFilePath();
         b = QFileInfo(b).canonicalFilePath();
-        const auto executable = directory.filePath("fake-claude");
+        const auto executable = directory.filePath(fixtureName("fake-claude"));
         if (!writeFakeClaude(executable, log))
             return false;
         journal = std::make_unique<LocalJournal>(directory.filePath("journal.sqlite"));

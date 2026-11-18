@@ -124,6 +124,9 @@ void JobSession::snapshotFailed(const QString& code) {
 LaunchRequest JobSession::launchRequest(const QString& workspace) const {
     const JobSpec& spec = *m_job->spec;
     LaunchRequest request;
+    request.jobId = spec.jobId;
+    request.attempt = spec.attempt;
+    request.timeoutMs = spec.timeoutMs;
     request.invocation = spec.invocation;
     request.workspace = workspace;
     request.cwd = spec.cwd;
