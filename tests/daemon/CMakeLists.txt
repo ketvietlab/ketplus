@@ -43,8 +43,7 @@ set(KETPLUS_WINDOWS_SCRIPT_FIXTURE_TESTS
     ketplus_relay_attachment_host_tests
     ketplus_session_preparation_host_tests
     ketplus_relay_preparation_host_tests
-    ketplus_codex_session_isolation_tests
-    ketplus_acp_session_isolation_tests)
+    ketplus_codex_session_isolation_tests)
 
 function(ketplus_add_daemon_test target source)
     qt_add_executable(${target} ${source})
