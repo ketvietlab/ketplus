@@ -145,6 +145,37 @@ target_include_directories(ketplus_runner_delivery PUBLIC
 )
 ketplus_enable_warnings(ketplus_runner_delivery)
 
+# Running a job's command under the job executor: launch plan, output, end, readiness and the
+# cleanup of what a restart left, over interfaces; the executor's own client is the adapter below.
+add_library(ketplus_runner_exec STATIC
+    src/exec/ExecLog.cpp
+    src/exec/ExecLog.h
+    src/exec/ExecPorts.h
+    src/exec/ExecutionPlan.cpp
+    src/exec/ExecutionPlan.h
+    src/exec/ExecutorCommandRunner.cpp
+    src/exec/ExecutorCommandRunner.h
+    src/exec/ExecutorDirectories.cpp
+    src/exec/ExecutorDirectories.h
+    src/exec/ExecutorReadiness.cpp
+    src/exec/Readiness.h
+)
+target_link_libraries(ketplus_runner_exec PUBLIC Qt6::Core ketplus_runner_session)
+target_include_directories(ketplus_runner_exec PUBLIC
+    "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>"
+)
+ketplus_enable_warnings(ketplus_runner_exec)
+
+if(TARGET ketplus_job_client)
+    add_library(ketplus_runner_exec_native STATIC
+        src/exec/NativeExecutor.cpp
+        src/exec/NativeExecutor.h
+    )
+    target_link_libraries(ketplus_runner_exec_native PUBLIC ketplus_runner_exec
+        PRIVATE ketplus_job_client)
+    ketplus_enable_warnings(ketplus_runner_exec_native)
+endif()
+
 add_executable(ketplus-runner src/main.cpp)
 # The receiver brings ketplus_runner_app (with the delivery) and ketplus_runner_session.
 target_link_libraries(ketplus-runner PRIVATE ketplus_runner_snapshot_receiver)
