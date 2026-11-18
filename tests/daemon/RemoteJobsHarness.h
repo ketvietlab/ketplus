@@ -36,6 +36,8 @@ struct RemoteHarness {
     QList<sync::PrepareRequest> prepared; // requests whose answer the test holds
     QList<std::function<void(sync::PreparedOutcome)>> preparing;
     QString scope = QStringLiteral("account-1");
+    // Changes the ports before each build, as for real links or spools.
+    std::function<void(RemoteJobsPorts&)> adjust;
     std::unique_ptr<RemoteJobs> jobs;
 
     RemoteHarness() { build(); }
@@ -72,6 +74,8 @@ struct RemoteHarness {
         ports.defer = [this](const qint64 delayMs, std::function<void()> work) {
             deferred.append({delayMs, std::move(work)});
         };
+        if (adjust)
+            adjust(ports);
         jobs = std::make_unique<RemoteJobs>(std::move(ports));
     }
 
