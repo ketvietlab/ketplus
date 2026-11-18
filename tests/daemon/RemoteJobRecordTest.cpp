@@ -160,6 +160,15 @@ class RemoteJobRecordTest final : public QObject {
               "exit_status_unknown", "a_code_not_yet_known"})
             QTest::addRow("failed %s", code)
                 << "failed" << -1LL << -1LL << code << "failed" << code;
+        // A code this desktop, its ledger or the Relay gives a meaning of its own is not kept.
+        for (const char* code :
+             {"permission_denied", "cleanup_acknowledged", "cleanup_unverified",
+              "delivery_exhausted", "not_paired", "runner_removed", "entitlement_required",
+              "runner_unavailable", "no_matching_runner", "queue_full", "invalid_labels",
+              "idempotency_conflict", "invalid_request", "queue_expired", "expired", "exit_code",
+              "user", "deadline"})
+            QTest::addRow("failed reserved %s", code)
+                << "failed" << -1LL << -1LL << code << "failed" << "spawn_failed";
         // A reason that is not a code is never kept.
         const QString tooLong = QString(65, QLatin1Char('a'));
         const QStringList malformed = {QString(),

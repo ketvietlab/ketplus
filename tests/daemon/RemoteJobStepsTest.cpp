@@ -196,6 +196,15 @@ class RemoteJobStepsTest final : public QObject {
                   "exit_status_unknown", "a_code_not_yet_known"})
                 QTest::addRow("%s %s", from, code)
                     << from << QString::fromLatin1(code) << QString::fromLatin1(code);
+            // A code with a meaning of its own here ends the job like a malformed one.
+            for (const char* code :
+                 {"permission_denied", "cleanup_acknowledged", "cleanup_unverified",
+                  "delivery_exhausted", "not_paired", "runner_removed", "entitlement_required",
+                  "runner_unavailable", "no_matching_runner", "queue_full", "invalid_labels",
+                  "idempotency_conflict", "invalid_request", "queue_expired", "expired",
+                  "exit_code", "user", "deadline"})
+                QTest::addRow("%s reserved %s", from, code)
+                    << from << QString::fromLatin1(code) << "spawn_failed";
             QTest::addRow("%s snapshot code", from) << from << "disk_full" << "snapshot_failed";
             QTest::addRow("%s empty", from) << from << "" << "spawn_failed";
             QTest::addRow("%s capitals", from) << from << "Marker_Reason" << "spawn_failed";
@@ -235,8 +244,12 @@ class RemoteJobStepsTest final : public QObject {
         QCOMPARE(completion.value("status").toString(), QStringLiteral("pending"));
         QCOMPARE(completion.value("payload").toObject().value("state").toString(),
                  QStringLiteral("failed"));
+        QVERIFY(completion.value("reason").isNull()); // not suppressed
         if (reason == kept || reason.isEmpty() || kept == "snapshot_failed")
             return;
+        QVERIFY(row.value("reason").toString() != reason);
+        if (isReasonCode(reason))
+            return; // a reserved code may be logged; it is never the reason
         // The malformed string itself went nowhere.
         QVERIFY(!QJsonDocument(row).toJson().contains(reason.toUtf8()));
         QVERIFY(!QJsonDocument(completion).toJson().contains(reason.toUtf8()));
