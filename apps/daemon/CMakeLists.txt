@@ -42,10 +42,12 @@ target_include_directories(ketplus_daemon_runner_peer PUBLIC
 ketplus_enable_warnings(ketplus_daemon_runner_peer)
 # Runner snapshot sync on the desktop: keys, preparation and the sender, on abstract ports.
 add_library(ketplus_daemon_runner_sync STATIC
+    src/runner/sync/PackCache.cpp src/runner/sync/PackCache.h
     src/runner/sync/SnapshotKeys.cpp src/runner/sync/SnapshotKeys.h
     src/runner/sync/SnapshotPreparation.cpp src/runner/sync/SnapshotPreparation.h
     src/runner/sync/SnapshotSender.cpp src/runner/sync/SnapshotSender.h
-    src/runner/sync/SnapshotSyncPorts.h)
+    src/runner/sync/SnapshotSyncPorts.h
+    src/runner/sync/StoreRetention.cpp src/runner/sync/StoreRetention.h)
 target_link_libraries(ketplus_daemon_runner_sync PUBLIC
     Qt6::Core OpenSSL::Crypto ketplus_control_crypto ketplus_control_crypto_primitives
     ketplus_runner_protocol ketplus_runner_snapshot)

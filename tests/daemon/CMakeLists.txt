@@ -130,6 +130,7 @@ function(ketplus_add_runner_sync_test target source)
 endfunction()
 ketplus_add_runner_sync_test(ketplus_snapshot_keys_tests SnapshotKeysTest.cpp)
 ketplus_add_runner_sync_test(ketplus_snapshot_preparation_tests SnapshotPreparationTest.cpp)
+ketplus_add_runner_sync_test(ketplus_snapshot_retention_tests SnapshotRetentionTest.cpp)
 ketplus_add_runner_sync_test(ketplus_snapshot_sender_tests SnapshotSenderTest.cpp)
 target_sources(ketplus_snapshot_keys_tests PRIVATE cloud-privacy/MemoryCredentials.cpp)
 # Signed builds may run PCRE2 without JIT; cloud projection must stay linear there too.
