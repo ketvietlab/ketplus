@@ -1269,6 +1269,38 @@ capabilities reject start with `containment_unavailable`; do not lower host
 policy to make the suite pass. A read-only cgroup mount alone, PGID cleanup or
 same-UID delegation is not migration-containment evidence.
 
+The owner-Stop and concurrent-fork timeout cases retain bounded state/timing
+diagnostics on failure. Set `KETPLUS_MANAGED_TASK_DIAGNOSTICS=1` to include those
+diagnostics in a passing control too. They report lifecycle milestones, the
+terminal state and cleanup result without command arguments or credentials.
+The fork case keeps the exact count bytes used by the assertion (at most 64
+bytes as hex), parse status and an independent boundary snapshot before that
+assertion. The owner-Stop case includes bounded executor metadata flags; the
+executor currently records no actual launch, root-exit or timeout timestamps,
+so registry milestone times must not be treated as those execution times.
+Preserve the original failing run and binary identity before a
+control; a passing control alone does not classify an earlier failure. Do not
+relax the assertions or deadlines to obtain a passing result.
+
+Integration acceptance at `cc914a05` ([PR #763](https://github.com/ketvietlab/ketplus/pull/763))
+ran the fresh serialized Pro matrix: 242 passed, one skipped and eight failed
+out of 251 suites. Failures were in ChatMermaid, DaemonLifecycle, SessionFork,
+AgentMessaging, DesktopDaemonClient, ConversationAttentionDaemon,
+DesktopSessionDiscovery and NativeJobExecutor; the native failure refused
+`Executor::start()` in an iteration before its short-command identity assertions. TeamReply
+passed 11/11 in this run, which does not resolve its historical failure recorded
+in the provider refresh evidence. The original Linux matrix passed five of seven
+suites; owner-Stop expected `completed` but observed `timed_out`, and concurrent
+forks failed the count predicate before the cleanup assertions. Isolated and
+predecessor-order controls passed. After the Mac matrix ended, one final serial
+run of the two Linux cases with exact-count/boundary diagnostics also passed;
+the fork sample was 71 with successful parsing, a removed boundary and verified
+cleanup. These controls do not classify the original failures, and acceptance
+remains pending their review and explicit disposition. No assertion or deadline
+was relaxed and no full matrix was retried. CMake-installed daemon/helper staging
+passed the runtime and capability checks; the whole-tree Runtime install stopped
+at the unbuilt runner target, so this is not a full packaging pass.
+
 The opt-in `ketplus_linux_job_executor_tests` runs the real packaged helper and
 registry. It covers missing-manager admission, durable retry/output, double-fork/
 setsid descendants and migration attempts, timeout during forks, supervisor

@@ -5,6 +5,7 @@
 #include "storage/LocalJournal.h"
 
 #include <QJsonArray>
+#include <QJsonDocument>
 #include <QProcess>
 #include <QScopeGuard>
 #include <QTemporaryDir>
@@ -291,16 +292,60 @@ class ManagedTaskHostTest final : public QObject {
         CodexAdapter adapter(directory.filePath("fake-codex"));
         SessionHost host(&journal, &adapter);
         const auto cleanup = qScopeGuard([&] { adapter.stop(); });
+        QElapsedTimer elapsed;
+        elapsed.start();
+        QJsonObject milestones;
+        QString id;
+        const auto diagnostics = qScopeGuard([&] {
+            if (!QTest::currentTestFailed() &&
+                !qEnvironmentVariableIsSet("KETPLUS_MANAGED_TASK_DIAGNOSTICS"))
+                return;
+            const auto record =
+                journal.backgroundTasks().get(id, {"owner", 1, {}}).value("task").toObject();
+            QJsonObject summary{{"elapsed_ms", elapsed.elapsed()}, {"milestones", milestones}};
+            for (const auto* key : {"state", "reason", "created_at", "updated_at", "finished_at",
+                                    "timeout_ms", "exit_code", "cleanup_status"})
+                summary.insert(key, record.value(key));
+            const auto executorDirectory =
+                record.value("execution_identity").toObject().value("directory").toString();
+            QFile executorMetadata(executorDirectory + "/executor.json");
+            QJsonObject executorSummary{{"event_timestamps", "not_recorded_by_executor"}};
+            if (!executorDirectory.isEmpty() && executorMetadata.open(QIODevice::ReadOnly)) {
+                const auto bytes = executorMetadata.read(128 * 1024);
+                QJsonParseError parseError;
+                const auto document = QJsonDocument::fromJson(bytes, &parseError);
+                const bool readable = executorMetadata.atEnd() &&
+                                      parseError.error == QJsonParseError::NoError &&
+                                      document.isObject();
+                executorSummary.insert("metadata_read_ok", readable);
+                if (readable) {
+                    const auto metadata = document.object();
+                    for (const auto* key :
+                         {"launch_attempted", "root_started", "root_exited", "exit_code", "state",
+                          "stop_reason", "cleanup_status", "executor_stopped"})
+                        executorSummary.insert(key, metadata.value(key));
+                }
+            } else {
+                executorSummary.insert("metadata_read_ok", false);
+            }
+            summary.insert("executor", executorSummary);
+            qWarning().noquote() << "Managed owner Stop timing:"
+                                 << QJsonDocument(summary).toJson(QJsonDocument::Compact);
+        });
         QVERIFY(command(host, "session.start_turn", {{"prompt", "hang"}}).value("ok").toBool());
         QTRY_COMPARE(turns(log), 1);
+        milestones.insert("before_task_start", elapsed.elapsed());
         const auto start = command(host, "session.task.start", process(cwd, {"/bin/sleep", "2"}));
-        const auto id = start.value("task").toObject().value("task_id").toString();
+        id = start.value("task").toObject().value("task_id").toString();
+        milestones.insert("accepted", elapsed.elapsed());
         QTRY_COMPARE_WITH_TIMEOUT(task(host, id).value("state"), "running", 4000);
+        milestones.insert("running", elapsed.elapsed());
         StoredSession active;
         for (const auto& session : journal.sessions())
             if (session.id == "owner")
                 active = session;
         QVERIFY(command(host, "session.interrupt").value("ok").toBool());
+        milestones.insert("interrupt_returned", elapsed.elapsed());
         // FakeCodex acknowledges interrupts but deliberately leaves completion
         // notifications to the test, matching the existing lifecycle fixtures.
         emit adapter.notificationReceived(
@@ -308,6 +353,7 @@ class ManagedTaskHostTest final : public QObject {
             {{"threadId", active.threadId},
              {"turn", QJsonObject{{"id", active.turnId}, {"status", "interrupted"}}}});
         QTRY_COMPARE_WITH_TIMEOUT(task(host, id).value("state"), "completed", 6000);
+        milestones.insert("completed", elapsed.elapsed());
         QTest::qWait(1200);
         QCOMPARE(turns(log), 1);
         QCOMPARE(task(host, id).value("completion").toObject().value("status"), "pending");

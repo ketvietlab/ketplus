@@ -264,6 +264,25 @@ print(json.dumps(attempts), flush=True)
         Fixture fixture(directory.path());
         QString error;
         QVERIFY(fixture.initialize(&error));
+        QElapsedTimer elapsed;
+        elapsed.start();
+        QJsonObject milestones;
+        QJsonObject countSample{{"sampled", false}};
+        QString id;
+        const auto diagnostics = qScopeGuard([&] {
+            if (!QTest::currentTestFailed() &&
+                !qEnvironmentVariableIsSet("KETPLUS_MANAGED_TASK_DIAGNOSTICS"))
+                return;
+            const auto record = fixture.task(id);
+            QJsonObject summary{{"elapsed_ms", elapsed.elapsed()},
+                                {"milestones", milestones},
+                                {"count_assertion_sample", countSample}};
+            for (const auto* key : {"state", "reason", "created_at", "updated_at", "finished_at",
+                                    "timeout_ms", "exit_code", "cleanup_status"})
+                summary.insert(key, record.value(key));
+            qWarning().noquote() << "Managed fork timeout timing:"
+                                 << QJsonDocument(summary).toJson(QJsonDocument::Compact);
+        });
         QVERIFY(write(directory.filePath("fork.py"), R"PY(import os, time, signal
 signal.signal(signal.SIGTERM, signal.SIG_IGN)
 for index in range(300):
@@ -274,13 +293,34 @@ for index in range(300):
     time.sleep(.02)
 while True: time.sleep(.1)
 )PY"));
-        const auto id = idOf(
+        milestones.insert("before_task_start", elapsed.elapsed());
+        id = idOf(
             fixture.start(fixture.intent("timeout", 2500),
                           fixture.execution({"/usr/bin/python3", directory.filePath("fork.py")})));
+        milestones.insert("accepted", elapsed.elapsed());
         QVERIFY(!id.isEmpty());
         QTRY_VERIFY_WITH_TIMEOUT(!read(directory.filePath("fork-count")).isEmpty(), 6000);
+        milestones.insert("first_fork_marker", elapsed.elapsed());
         QTRY_COMPARE_WITH_TIMEOUT(fixture.task(id).value("state"), "timed_out", 12000);
-        const auto count = read(directory.filePath("fork-count")).toInt();
+        milestones.insert("timed_out", elapsed.elapsed());
+        const auto countBytes = read(directory.filePath("fork-count"));
+        bool countParsed = false;
+        const auto count = countBytes.toInt(&countParsed);
+        const auto recordAtCount = fixture.task(id);
+        const auto boundaryAtCount =
+            recordAtCount.value("execution_identity").toObject().value("linux_boundary").toObject();
+        countSample = {
+            {"sampled", true},
+            {"elapsed_ms", elapsed.elapsed()},
+            {"count", count},
+            {"parse_ok", countParsed},
+            {"byte_size", countBytes.size()},
+            {"bytes_hex", QString::fromLatin1(countBytes.left(64).toHex())},
+            {"boundary_present", !boundaryAtCount.isEmpty()},
+            {"boundary_empty", executor::linuxBoundaryEmpty(boundaryAtCount)},
+            {"boundary_path_absent", !boundaryAtCount.isEmpty() &&
+                                         !QFile::exists(boundaryAtCount.value("path").toString())},
+            {"cleanup_status", recordAtCount.value("cleanup_status")}};
         QVERIFY(count > 1 && count < 300);
         QVERIFY(gone(fixture.task(id)));
         QCOMPARE(fixture.task(id).value("cleanup_status"), "verified");
