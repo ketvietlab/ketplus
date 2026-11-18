@@ -115,10 +115,15 @@ void FakeTokens::take(const QString& call, Answer answer) {
 void FakeTokens::answer(const Outcome outcome) {
     if (pending.isEmpty())
         return;
+    // As the real source: current() hands out the held token, renew() a new one.
+    const bool renewal = calls.at(calls.size() - pending.size()) == QLatin1StringView("renew");
     const Answer next = pending.takeFirst();
     Token token{outcome, {}};
-    if (outcome == Outcome::Ok)
-        token.value = QStringLiteral("%1-%2").arg(QLatin1StringView(tokenMarker)).arg(++issued);
+    if (outcome == Outcome::Ok) {
+        if (renewal || issued == 0)
+            ++issued;
+        token.value = QStringLiteral("%1-%2").arg(QLatin1StringView(tokenMarker)).arg(issued);
+    }
     next(token);
 }
 

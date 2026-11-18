@@ -2,6 +2,7 @@
 #include "RunnerPeerTest.h"
 
 #include <QJsonDocument>
+#include <QSet>
 #include <QtTest>
 
 namespace runner_peer_test {
@@ -93,17 +94,40 @@ void RunnerRelayLinkTest::unauthorizedRenewsOnceThenBacksOff() {
     QCOMPARE(h.tokens.calls, (QStringList{QStringLiteral("current"), QStringLiteral("renew")}));
     QCOMPARE(h.socket.tokens.size(), 2);
     QVERIFY(!h.clock.armed(PeerTimer::RelayRetry));
+    // Three more 401s for three new tokens: each reopen waits for the backoff and renews first.
+    for (int refusal = 0; refusal < 3; ++refusal) {
+        h.serverRefuse(401);
+        QCOMPARE(h.socket.tokens.size(), 2 + refusal);
+        QVERIFY(h.clock.armed(PeerTimer::RelayRetry));
+        h.clock.advance(h.clock.remaining(PeerTimer::RelayRetry));
+        QCOMPARE(h.tokens.calls.last(), QStringLiteral("renew"));
+        QCOMPARE(h.socket.tokens.size(), 3 + refusal);
+    }
+    QCOMPARE(h.tokens.calls.count(QStringLiteral("renew")), 4);
+    QCOMPARE(h.tokens.calls.count(QStringLiteral("current")), 1);
+    QCOMPARE(QSet<QString>(h.socket.tokens.cbegin(), h.socket.tokens.cend()).size(),
+             h.socket.tokens.size());
+    QCOMPARE(h.socket.openedWhileLive, 0);
+
+    // A renewal that fails on the network keeps the backoff and renews again next time.
     h.serverRefuse(401);
-    QCOMPARE(h.socket.tokens.size(), 2);
+    h.tokens.autoAnswer = false;
+    h.clock.advance(h.clock.remaining(PeerTimer::RelayRetry));
+    QCOMPARE(h.tokens.calls.last(), QStringLiteral("renew"));
+    h.tokens.answer(TokenSource::Outcome::Retry);
     QVERIFY(h.clock.armed(PeerTimer::RelayRetry));
+    h.tokens.autoAnswer = true;
+    const qsizetype opened = h.socket.tokens.size();
+    h.clock.advance(h.clock.remaining(PeerTimer::RelayRetry));
+    QCOMPARE(h.tokens.calls.last(), QStringLiteral("renew"));
+    QCOMPARE(h.socket.tokens.size(), opened + 1);
+
+    // A ready socket ends it: the next reconnect takes the held token.
+    h.becomeReady();
+    h.serverClose(1006);
     h.clock.advance(h.clock.remaining(PeerTimer::RelayRetry));
     QCOMPARE(h.tokens.calls.last(), QStringLiteral("current"));
-    QCOMPARE(h.socket.tokens.size(), 3);
-    // Still refused: still on the backoff, never at once.
-    h.serverRefuse(401);
-    QCOMPARE(h.socket.tokens.size(), 3);
-    QVERIFY(h.clock.armed(PeerTimer::RelayRetry));
-    QCOMPARE(h.socket.openedWhileLive, 0);
+    QCOMPARE(h.socket.tokens.last(), h.socket.tokens.at(h.socket.tokens.size() - 2));
 }
 
 void RunnerRelayLinkTest::forbiddenAndUnknownRefusalsBackOff() {

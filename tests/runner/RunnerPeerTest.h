@@ -260,7 +260,8 @@ class RunnerPeerConnectorTest : public QObject {
     void answerFailures();
     void aReplayedAnswerIsRefused();
     void anAnswerBeforeTheOfferEndsTheAttempt();
-    void noActivePinAtStartedStops();
+    void noActivePinStopsBeforeAnyStart();
+    void aPinRemovedDuringAnAttemptStopsTheRetry();
     void theFingerprintComesFromTheSignedAnswer();
     void localCandidatesFollowTheOffer();
     void remoteCandidatesWaitForTheCheckedAnswer();

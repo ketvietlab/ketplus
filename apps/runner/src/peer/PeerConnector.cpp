@@ -27,6 +27,8 @@ QString knownSignalError(const QString& code) {
     return QStringLiteral("signal_error");
 }
 
+constexpr const char* relayLostReason = "relay_lost";
+
 // The reason of a desktop's signal.end, when it is at most 64 printable ASCII characters.
 QString loggableCode(const QJsonValue& value) {
     const QString code = value.toString();
@@ -125,6 +127,11 @@ void PeerConnector::sendStart() {
     m_remoteCount = 0;
     m_localCount = 0;
     m_remoteComplete = false;
+    // No attempt starts for a desktop this runner does not hold an active pin of.
+    if (!m_pins.activePin(m_request->machineId)) {
+        endAttempt(answerErrorCode(AnswerError::NotPinned), false);
+        return;
+    }
     if (!m_sender.relayReady() ||
         !m_sender.sendSignal({{QStringLiteral("type"), QStringLiteral("signal.start")},
                               {QStringLiteral("jobId"), m_request->jobId},
@@ -154,7 +161,9 @@ void PeerConnector::endAttempt(const QString& reason, const bool retry, const bo
         return;
     }
     const qint64 delay = m_retryDelayMs;
-    m_retryDelayMs = std::min(m_retryDelayMs * 2, attemptRetryCapMs);
+    // A lost Relay socket says nothing about the desktop: the delay step stays where it was.
+    if (reason != QLatin1StringView(relayLostReason))
+        m_retryDelayMs = std::min(m_retryDelayMs * 2, attemptRetryCapMs);
     scheduleStart(delay);
     m_events.attemptFailed(reason);
 }
@@ -173,7 +182,7 @@ void PeerConnector::relayReady() {
 
 void PeerConnector::relayLost() {
     if (attempting())
-        endAttempt(QStringLiteral("relay_lost"), true);
+        endAttempt(QString::fromLatin1(relayLostReason), true);
 }
 
 void PeerConnector::runnerRemoved() {
@@ -268,7 +277,7 @@ void PeerConnector::localDescription(const QString& sdp) {
     }
     m_offerSdp = sdp;
     if (!m_sender.sendSignal(*offer)) {
-        endAttempt(QStringLiteral("relay_lost"), true);
+        endAttempt(QString::fromLatin1(relayLostReason), true);
         return;
     }
     m_offerSent = true;

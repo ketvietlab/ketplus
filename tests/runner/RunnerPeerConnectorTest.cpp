@@ -319,7 +319,7 @@ void RunnerPeerConnectorTest::anAnswerBeforeTheOfferEndsTheAttempt() {
     QVERIFY(h.sender.ofType(QStringLiteral("signal.offer")).isEmpty());
 }
 
-void RunnerPeerConnectorTest::noActivePinAtStartedStops() {
+void RunnerPeerConnectorTest::noActivePinStopsBeforeAnyStart() {
     for (const bool pending : {false, true}) {
         PeerHarness h;
         if (pending)
@@ -327,14 +327,46 @@ void RunnerPeerConnectorTest::noActivePinAtStartedStops() {
         else
             h.pins.pin.reset();
         h.request();
-        h.started();
         QCOMPARE(h.listener.events, QStringList{QStringLiteral("gaveUp not_paired")});
-        QCOMPARE(endReasons(h.sender), QStringList{QStringLiteral("not_paired")});
+        QVERIFY(h.sender.sent.isEmpty());
         QVERIFY(h.transports.records.isEmpty());
         QVERIFY(h.clock.due.isEmpty());
         h.clock.advance(600'000);
-        QCOMPARE(h.sender.ofType(QStringLiteral("signal.start")).size(), 1);
+        QVERIFY(h.sender.sent.isEmpty());
+        QCOMPARE(h.listener.events.size(), 1);
     }
+
+    // A pin that goes away between signal.start and signal.started stops there as well.
+    PeerHarness late;
+    late.request();
+    late.pins.pin.reset();
+    late.started();
+    QCOMPARE(late.listener.events, QStringList{QStringLiteral("gaveUp not_paired")});
+    QCOMPARE(endReasons(late.sender), QStringList{QStringLiteral("not_paired")});
+    QVERIFY(late.transports.records.isEmpty());
+    QVERIFY(late.clock.due.isEmpty());
+}
+
+void RunnerPeerConnectorTest::aPinRemovedDuringAnAttemptStopsTheRetry() {
+    PeerHarness h;
+    h.request();
+    h.started();
+    h.describe();
+    h.pins.pin.reset();
+    h.answer();
+    // The answer fails its check and the attempt ends as any failed answer does.
+    QCOMPARE(h.listener.events, QStringList{QStringLiteral("failed not_paired")});
+    QVERIFY(h.transports.last().answers.isEmpty());
+    QCOMPARE(h.clock.remaining(PeerTimer::AttemptRetry), attemptRetryBaseMs);
+    // The one retry finds no pin: no signal.start, and the request stops once.
+    h.clock.advance(attemptRetryBaseMs);
+    QCOMPARE(h.listener.events, (QStringList{QStringLiteral("failed not_paired"),
+                                             QStringLiteral("gaveUp not_paired")}));
+    QCOMPARE(h.sender.ofType(QStringLiteral("signal.start")).size(), 1);
+    QVERIFY(h.clock.due.isEmpty());
+    h.clock.advance(600'000);
+    QCOMPARE(h.sender.ofType(QStringLiteral("signal.start")).size(), 1);
+    QCOMPARE(h.listener.events.size(), 2);
 }
 
 void RunnerPeerConnectorTest::theFingerprintComesFromTheSignedAnswer() {
@@ -532,21 +564,50 @@ void RunnerPeerConnectorTest::relayLossDuringAnAttemptWaitsForReady() {
     QCOMPARE(h.sender.ofType(QStringLiteral("signal.start")).size(), 2);
     QCOMPARE(h.clock.remaining(PeerTimer::AttemptDeadline), attemptDeadlineMs);
 
-    // A Relay that is back at once gets the next start after the 2.5-second spacing only; the
-    // retry delay does not apply to a Relay loss.
+    // The retry delay does not grow with a Relay loss; only the 2.5-second spacing between two
+    // signal.start applies. Ready after 1 second: the next start is at 2.5 seconds exactly.
     PeerHarness quick;
     quick.request();
     quick.started();
     quick.describe();
-    quick.clock.advance(1'000);
     quick.sender.ready = false;
     quick.connector.relayLost();
+    quick.clock.advance(1'000);
     quick.sender.ready = true;
     quick.connector.relayReady();
-    QCOMPARE(quick.sender.ofType(QStringLiteral("signal.start")).size(), 1);
     QCOMPARE(quick.clock.remaining(PeerTimer::AttemptRetry), startSpacingMs - 1'000);
-    quick.clock.advance(startSpacingMs - 1'000);
+    quick.clock.advance(startSpacingMs - 1'000 - 1);
+    QCOMPARE(quick.sender.ofType(QStringLiteral("signal.start")).size(), 1);
+    quick.clock.advance(1);
     QCOMPARE(quick.sender.ofType(QStringLiteral("signal.start")).size(), 2);
+
+    // Ready after 10 seconds: the next start goes at once.
+    PeerHarness slow;
+    slow.request();
+    slow.started();
+    slow.describe();
+    slow.sender.ready = false;
+    slow.connector.relayLost();
+    slow.clock.advance(10'000);
+    QCOMPARE(slow.sender.ofType(QStringLiteral("signal.start")).size(), 1);
+    slow.sender.ready = true;
+    slow.connector.relayReady();
+    QCOMPARE(slow.sender.ofType(QStringLiteral("signal.start")).size(), 2);
+    QVERIFY(!slow.clock.armed(PeerTimer::AttemptRetry));
+    // The loss did not move the delay step: a failure after it takes the first retry delay,
+    // and one more loss keeps the step where that failure left it.
+    slow.connector.signal(error(QStringLiteral("host_offline")));
+    QCOMPARE(slow.clock.remaining(PeerTimer::AttemptRetry), attemptRetryBaseMs);
+    slow.clock.advance(attemptRetryBaseMs);
+    slow.started(QStringLiteral("pc_cccccccccccccccccccccccc"));
+    slow.sender.ready = false;
+    slow.connector.relayLost();
+    slow.clock.advance(10'000);
+    slow.sender.ready = true;
+    slow.connector.relayReady();
+    QCOMPARE(slow.sender.ofType(QStringLiteral("signal.start")).size(), 4);
+    slow.connector.signal(error(QStringLiteral("host_offline")));
+    QCOMPARE(slow.clock.remaining(PeerTimer::AttemptRetry), 2 * attemptRetryBaseMs);
 }
 
 void RunnerPeerConnectorTest::relayLossLeavesAnOpenConnection() {

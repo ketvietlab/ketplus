@@ -93,7 +93,8 @@ void RelayLink::tokenAnswered(const quint64 generation, const TokenSource::Token
         m_listener.runnerRemoved();
         return;
     }
-    retryOnBackoff(false);
+    // While the last open was refused with 401, the next one asks for a new token again.
+    retryOnBackoff(m_last401);
 }
 
 void RelayLink::retryAfter(const qint64 delayMs, const bool renew) {
@@ -198,7 +199,8 @@ void RelayLink::socketRefused(const int status) {
     const bool firstFailure = m_failures == 0;
     if (status != statusUnauthorized)
         m_last401 = false;
-    retryOnBackoff(status == 0 && firstFailure);
+    // A token refused once is never offered again: each retry after a 401 renews first.
+    retryOnBackoff(m_last401 || (status == 0 && firstFailure));
 }
 
 } // namespace ketplus::runner::peer
