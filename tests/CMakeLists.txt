@@ -1,5 +1,17 @@
 include("${CMAKE_CURRENT_LIST_DIR}/daemon/credential-store/FixtureDaemon.cmake")
 
+# Provider fixtures written as Python scripts run on Windows through ketplus_script_launcher
+# (daemon/ScriptFixture.h). Tests outside tests/daemon need the launcher path too; the launcher
+# target itself is defined in tests/daemon.
+if(WIN32)
+    find_package(Python3 COMPONENTS Interpreter)
+    if(Python3_Interpreter_FOUND)
+        add_compile_definitions(KETPLUS_SCRIPT_LAUNCHER="$<TARGET_FILE:ketplus_script_launcher>")
+    else()
+        add_compile_definitions(KETPLUS_SCRIPT_LAUNCHER="") # no interpreter: those tests are disabled
+    endif()
+endif()
+
 if(APPLE)
     find_package(Python3 REQUIRED COMPONENTS Interpreter)
     add_test(NAME ketplus_macos_signing_cli_tests

@@ -1,4 +1,5 @@
 #include "KetSidebarTree.h"
+#include "daemon/ScriptFixture.h"
 #include "agent/AgentSessionManager.h"
 #include "agent/CodexAppServer.h"
 #include "app/WaitingBadge.h"
@@ -6,6 +7,7 @@
 #include "workspace/ActivityBar.h"
 #include "workspace/SymbolIcons.h"
 
+#include <QScopeGuard>
 #include <QApplication>
 #include <QFile>
 #include <QFileInfo>
@@ -36,7 +38,7 @@ class ConversationAttentionTest final : public QObject {
         QFETCH(bool, approval);
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const QString executable = directory.filePath("fake-codex");
+        const QString executable = fixtureName(directory.filePath("fake-codex"));
         QFile file(executable);
         QVERIFY(file.open(QIODevice::WriteOnly));
         file.write(R"PY(#!/usr/bin/python3
@@ -56,10 +58,11 @@ for line in sys.stdin:
         send({"method":"item/completed","params":{"threadId":"attention-thread","turnId":"attention-turn","item":item}})
 )PY");
         file.close();
-        QVERIFY(file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner |
-                                    QFileDevice::ExeOwner));
+        QVERIFY(finalizeScriptFixture(file));
         CodexAppServer server(executable);
         AgentSessionManager manager(&server);
+        // Stop the server first: pending replies still call back into the manager on shutdown.
+        const auto stopServer = qScopeGuard([&] { server.stop(); });
         ActivityBar bar;
         bar.show();
         const QString path = QFileInfo(directory.path()).canonicalFilePath();
@@ -140,7 +143,7 @@ for line in sys.stdin:
     void awaitingReplyFromCompletedTurn() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const QString executable = directory.filePath("fake-codex");
+        const QString executable = fixtureName(directory.filePath("fake-codex"));
         QFile file(executable);
         QVERIFY(file.open(QIODevice::WriteOnly));
         file.write(R"PY(#!/usr/bin/python3
@@ -159,10 +162,11 @@ for line in sys.stdin:
         send({"method":"item/completed","params":{"threadId":"waiting-thread","turnId":"waiting-turn","item":item}})
 )PY");
         file.close();
-        QVERIFY(file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner |
-                                    QFileDevice::ExeOwner));
+        QVERIFY(finalizeScriptFixture(file));
         CodexAppServer server(executable);
         AgentSessionManager manager(&server);
+        // Stop the server first: pending replies still call back into the manager on shutdown.
+        const auto stopServer = qScopeGuard([&] { server.stop(); });
         ActivityBar bar;
         const QString path = QFileInfo(directory.path()).canonicalFilePath();
         connect(&manager, &AgentSessionManager::conversationsChanged, &bar,

@@ -1,7 +1,9 @@
 #include "agent/AgentSessionManager.h"
+#include "daemon/ScriptFixture.h"
 #include "agent/CodexAppServer.h"
 #include "agent/ReasoningHeading.h"
 
+#include <QScopeGuard>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
@@ -57,7 +59,7 @@ class WorkingLineTest final : public QObject {
         QVERIFY(directory.isValid());
         const QString worktree = directory.filePath("worktree");
         QVERIFY(QDir().mkpath(worktree));
-        const QString serverPath = directory.filePath("fake-codex");
+        const QString serverPath = fixtureName(directory.filePath("fake-codex"));
         QFile server(serverPath);
         QVERIFY(server.open(QIODevice::WriteOnly));
         const QByteArray source = R"PY(#!/usr/bin/python3
@@ -89,11 +91,12 @@ for line in sys.stdin:
 )PY";
         QCOMPARE(server.write(source), source.size());
         server.close();
-        QVERIFY(QFile::setPermissions(serverPath, QFileDevice::ReadOwner | QFileDevice::WriteOwner |
-                                                      QFileDevice::ExeOwner));
+        QVERIFY(finalizeScriptFixture(server));
 
         ketplus::CodexAppServer appServer(serverPath);
         ketplus::AgentSessionManager manager(&appServer);
+        // Stop the server first: pending replies still call back into the manager on shutdown.
+        const auto stopServer = qScopeGuard([&] { appServer.stop(); });
         QSignalSpy details(&manager, &ketplus::AgentSessionManager::workingDetailChanged);
         manager.submitPrompt(worktree, QStringLiteral("Profile it"));
         QTRY_COMPARE_WITH_TIMEOUT(manager.workingDetail(worktree),
@@ -114,7 +117,7 @@ for line in sys.stdin:
         QVERIFY(directory.isValid());
         const QString worktree = directory.filePath("worktree");
         QVERIFY(QDir().mkpath(worktree));
-        const QString serverPath = directory.filePath("fake-codex");
+        const QString serverPath = fixtureName(directory.filePath("fake-codex"));
         QFile server(serverPath);
         QVERIFY(server.open(QIODevice::WriteOnly));
         const QByteArray source = R"PY(#!/usr/bin/python3
@@ -156,11 +159,12 @@ for line in sys.stdin:
 )PY";
         QCOMPARE(server.write(source), source.size());
         server.close();
-        QVERIFY(QFile::setPermissions(serverPath, QFileDevice::ReadOwner | QFileDevice::WriteOwner |
-                                                      QFileDevice::ExeOwner));
+        QVERIFY(finalizeScriptFixture(server));
 
         ketplus::CodexAppServer appServer(serverPath);
         ketplus::AgentSessionManager manager(&appServer);
+        // Stop the server first: pending replies still call back into the manager on shutdown.
+        const auto stopServer = qScopeGuard([&] { appServer.stop(); });
         manager.submitPrompt(worktree, QStringLiteral("First"));
         QTRY_COMPARE_WITH_TIMEOUT(manager.workingDetail(worktree),
                                   QStringLiteral("profiling the first"), 3000);

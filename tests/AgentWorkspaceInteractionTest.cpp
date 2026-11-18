@@ -1,4 +1,5 @@
 #include "AgentWorkspaceViewTest.h"
+#include "daemon/ScriptFixture.h"
 #include "CodexBrowserTools.h"
 #include "KetAppearance.h"
 #include "KetRecipes.h"
@@ -45,7 +46,7 @@ using namespace agent_workspace_test;
 void AgentWorkspaceViewTest::compactionLifecycleAndCommand() {
     QTemporaryDir directory;
     QVERIFY(directory.isValid());
-    const auto serverPath = directory.filePath("fake-codex");
+    const auto serverPath = fixtureName(directory.filePath("fake-codex"));
     QFile server(serverPath);
     QVERIFY(server.open(QIODevice::WriteOnly));
     const QByteArray source = R"PY(#!/usr/bin/python3
@@ -81,8 +82,7 @@ for line in sys.stdin:
 )PY";
     QCOMPARE(server.write(source), source.size());
     server.close();
-    QVERIFY(QFile::setPermissions(serverPath, QFileDevice::ReadOwner | QFileDevice::WriteOwner |
-                                                  QFileDevice::ExeOwner));
+    QVERIFY(finalizeScriptFixture(server));
     ketplus::CodexAppServer appServer(serverPath);
     ketplus::AgentSessionManager manager(&appServer);
     QSignalSpy errors(&manager, &ketplus::AgentSessionManager::errorOccurred);
@@ -205,7 +205,7 @@ for line in sys.stdin:
 void AgentWorkspaceViewTest::directModeAutoApprovesOnlyInjectedBrowserTools() {
     QTemporaryDir directory;
     QVERIFY(directory.isValid());
-    const QString serverPath = directory.filePath("fake-codex-elicitation");
+    const QString serverPath = fixtureName(directory.filePath("fake-codex-elicitation"));
     const QString logPath = directory.filePath("responses.log");
     QFile server(serverPath);
     QVERIFY(server.open(QIODevice::WriteOnly));
@@ -241,8 +241,7 @@ for line in sys.stdin:
         QJsonDocument(QJsonArray{logPath}).toJson(QJsonDocument::Compact).mid(1).chopped(1));
     server.write(source);
     server.close();
-    QVERIFY(QFile::setPermissions(serverPath, QFileDevice::ReadOwner | QFileDevice::WriteOwner |
-                                                  QFileDevice::ExeOwner));
+    QVERIFY(finalizeScriptFixture(server));
     const auto logText = [&logPath] {
         QFile log(logPath);
         return log.open(QIODevice::ReadOnly) ? log.readAll() : QByteArray();
@@ -277,7 +276,7 @@ void AgentWorkspaceViewTest::answersAgentQuestionsSequentially() {
     ket::Appearance::instance().setMode(ket::Appearance::Mode::Dark);
     QTemporaryDir directory;
     QVERIFY(directory.isValid());
-    const auto serverPath = directory.filePath("fake-codex-question");
+    const auto serverPath = fixtureName(directory.filePath("fake-codex-question"));
     QFile server(serverPath);
     QVERIFY(server.open(QIODevice::WriteOnly));
     const QByteArray source = R"PY(#!/usr/bin/python3
@@ -332,8 +331,7 @@ for line in sys.stdin:
 )PY";
     QCOMPARE(server.write(source), source.size());
     server.close();
-    QVERIFY(QFile::setPermissions(serverPath, QFileDevice::ReadOwner | QFileDevice::WriteOwner |
-                                                  QFileDevice::ExeOwner));
+    QVERIFY(finalizeScriptFixture(server));
 
     ketplus::CodexAppServer appServer(serverPath);
     ketplus::AgentSessionManager manager(&appServer);

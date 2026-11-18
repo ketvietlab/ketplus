@@ -1,4 +1,5 @@
 #include "agent/CodexRateLimits.h"
+#include "daemon/ScriptFixture.h"
 #include "agent/CodexAppServer.h"
 #include <QDateTime>
 #include <QFile>
@@ -18,7 +19,7 @@ private slots:
     void readsThroughExistingServer() {
         QTemporaryDir dir;
         QVERIFY(dir.isValid());
-        QFile script(dir.filePath("codex"));
+        QFile script(fixtureName(dir.filePath("codex")));
         QVERIFY(script.open(QIODevice::WriteOnly));
         script.write(R"PY(#!/usr/bin/env python3
 import json, sys, time
@@ -36,7 +37,7 @@ for line in sys.stdin:
             print(json.dumps({'id': msg['id'], 'error': {'code': -1, 'message': 'unavailable'}}), flush=True)
 )PY");
         script.close();
-        QVERIFY(script.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner));
+        QVERIFY(finalizeScriptFixture(script));
         CodexAppServer server(script.fileName());
         CodexRateLimits limits(&server);
         limits.refresh();
