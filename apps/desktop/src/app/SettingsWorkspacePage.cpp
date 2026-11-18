@@ -54,7 +54,8 @@ SettingsWorkspacePage::SettingsWorkspacePage(SettingsDialog* dialog,
                                              QWidget* parent,
                                              SettingsClaudeCredentials::Requester credentials,
                                              SettingsStoragePage::Requester storageRequester,
-                                             SettingsTeamsPage::Requester teamsRequester)
+                                             SettingsTeamsPage::Requester teamsRequester,
+                                             runners::Requester runnersRequester)
     : SettingsWorkspace(dialog, QStringLiteral("⌘ ,"), InterfaceUiFont::settingsLabel(), parent) {
     addConversationWidth();
     account_ = new SettingsAccountPage({}, this);
@@ -69,6 +70,11 @@ SettingsWorkspacePage::SettingsWorkspacePage(SettingsDialog* dialog,
     // apply to it.
     addSection(tr("Teams"), QStringLiteral("teams"),
                new SettingsTeamsPage(std::move(teamsRequester), this), false);
+    // Runners live in the account; nothing here is a local setting to restore.
+    runners_ = new SettingsRunnersPage(std::move(runnersRequester), this);
+    connect(runners_, &SettingsRunnersPage::accountRequested, this,
+            [this] { showSection(QStringLiteral("account-devices")); });
+    addSection(tr("Runners"), QStringLiteral("runners"), runners_, false);
     addSection(tr("Browser"), QStringLiteral("browser"),
                new SettingsBrowserPage({}, {}, browser_tools::systemProbes(), this));
     if (computer_tools::isSupportedOnThisPlatform()) {
