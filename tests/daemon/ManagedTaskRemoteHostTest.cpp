@@ -393,8 +393,8 @@ class ManagedTaskRemoteHostTest final : public QObject {
         QCOMPARE(h.port.stops, QStringList{id});
         QCOMPARE(h.task(id).value("state"), "queued"); // the record carries the stop
         h.port.cleanupCode = "invalid_state";
-        const auto cleanup =
-            h.run("session.task.resolve_cleanup", {{"task_id", id}, {"revision", 1}});
+        const auto cleanup = h.run("session.task.resolve_cleanup",
+                                   {{"task_id", id}, {"revision", h.task(id).value("revision")}});
         QCOMPARE(cleanup.value("error_code"), "invalid_state");
         QCOMPARE(h.port.cleanups, QStringList{id});
     }

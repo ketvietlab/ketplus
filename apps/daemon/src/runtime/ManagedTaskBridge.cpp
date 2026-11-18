@@ -1,5 +1,6 @@
 #include "runtime/ManagedTaskBridge.h"
 #include "providers/ProviderAdapter.h"
+#include "runner/entry/RemoteCleanup.h"
 #include "runner/entry/RemoteJobPort.h"
 #include "runner/entry/RunsOnRequest.h"
 #include "runtime/ManagedTaskSpec.h"
@@ -170,7 +171,8 @@ void ManagedTaskBridge::command(const QJsonObject& request, const QString& clien
     else if (type == "session.task.output")
         done(runtime_->output(id, owner, payload.value("cursor").toString(), localAdministration));
     else if (const auto code = type == "session.task.resolve_cleanup" && remoteJobs_
-                                   ? remoteJobs_->resolveCleanup(id, clientId)
+                                   ? runner::entry::resolveRemoteCleanup(*remoteJobs_, id, payload,
+                                                                         authorized, clientId)
                                    : std::nullopt)
         remote(code);
     else if (type == "session.task.resolve_cleanup")
