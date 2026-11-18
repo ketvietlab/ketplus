@@ -79,8 +79,13 @@ version for the same reason. No job in the matrix uses provider quota.
 `tools/windows/win-run.sh` (see `docs/development.md`, Windows) runs the Lite
 suite on a Windows build machine with MSVC 2022 and Qt 6.11:
 `cmake --preset lite-dev`, `cmake --build --preset lite-dev`, then
-`ctest --preset lite-dev -j4 --timeout 120`. All 27 Lite tests pass; none is
-skipped for the platform. On macOS all 28 Lite tests (one more than on Windows) pass with
+`ctest --preset lite-dev -j4 --timeout 120`. All 27 Lite tests pass. Two cases
+inside `ketplus_preview_tests` are skipped on Windows (QTest `SKIP`, which CTest
+does not list): `discoversMmdcInstalledByNvm` (the nvm layout and `HOME` are POSIX
+only) and `rendersMermaidAndOpensThePopup` (its fake `mmdc` is a `/bin/sh`
+script). Windows `mmdc` discovery and rendering are covered by the Mermaid task;
+that test must then set `USERPROFILE`, which `QDir::homePath()` reads on Windows,
+alongside `HOME`. On macOS all 28 Lite tests (one more than on Windows) pass with
 `QT_QPA_PLATFORM=offscreen ctest --preset lite-dev -j4`.
 Open, edit and save, Git status and the Markdown preview are covered by
 automated offscreen tests that ran on Windows: `ketplus_lite_window_tests`
