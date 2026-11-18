@@ -134,6 +134,7 @@ add_library(ketplus_runner_delivery STATIC
     src/delivery/DeliveryRecords.cpp
     src/delivery/DeliveryRecords.h
     src/delivery/JobDelivery.h
+    src/delivery/GuardedAcceptedJobs.h
     src/delivery/JobSessionLink.cpp
     src/delivery/JobSessionLink.h
 )

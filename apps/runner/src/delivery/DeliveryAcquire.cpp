@@ -131,16 +131,13 @@ void JobDelivery::onAcquire(const CallResult& result) {
     endLease();
 }
 
-// The Relay says a lease is held already. Without its requester it cannot be checked, so
-// unless the journal knows it, it is given back.
+// The Relay says a lease is held already. Without its requester it cannot be checked, so it
+// is given back. (An acquire starts only from a journal without a lease, so the journal never
+// knows the requester here.)
 void JobDelivery::onBusy(const CallResult& result) {
     const std::optional<HeldLease> busy = busyLeaseFromRefusal(result.body);
     if (!busy) {
         retryLater();
-        return;
-    }
-    if (m_record.lease.leaseId == busy->leaseId && !m_record.lease.machineId.isEmpty()) {
-        takeLease(m_record.lease);
         return;
     }
     m_record.lease = *busy;
@@ -224,6 +221,7 @@ void JobDelivery::restore(const std::optional<JournalRecord>& record) {
         m_lastPhase =
             record->startedAt.isEmpty() ? QStringLiteral("assigned") : QStringLiteral("running");
         m_renewing = true;
+        m_startUnknown = record->lease.machineId.isEmpty(); // learned through runner_busy
         const RestartPolicy::Finish finish = m_ports.restart.afterRestart(*record);
         close(finish.release, finish.outcome, finish.reason);
         renew();

@@ -194,6 +194,7 @@ class RunnerDeliveryRestartTest : public QObject {
     void restartWhileAcquiring();
     void restartWithALeaseAndNoSpec();
     void restartWithAnUntrustedLease();
+    void restartWhileReleasingABusyLease();
     void restartAfterTheSpec_data();
     void restartAfterTheSpec();
     void restartPolicyIsReplaceable();

@@ -29,8 +29,8 @@ add_test(NAME ketplus_runner_app_tests COMMAND ketplus_runner_app_tests)
 
 # The runner's job session over fake channel, lease, snapshot receiver, command and clock.
 qt_add_executable(ketplus_runner_session_tests
-    RunnerSessionHandshakeTest.cpp RunnerSessionOutputTest.cpp RunnerSessionSpecTest.cpp
-    RunnerSessionStopTest.cpp RunnerSessionTest.cpp RunnerSessionTest.h)
+    RunnerSessionDeliveryTest.cpp RunnerSessionHandshakeTest.cpp RunnerSessionOutputTest.cpp
+    RunnerSessionSpecTest.cpp RunnerSessionStopTest.cpp RunnerSessionTest.cpp RunnerSessionTest.h)
 ketplus_enable_warnings(ketplus_runner_session_tests)
 target_link_libraries(ketplus_runner_session_tests PRIVATE Qt6::Test ketplus_runner_session
     ketplus_runner_app)

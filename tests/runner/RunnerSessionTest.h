@@ -111,8 +111,10 @@ class FakeAccepted final : public session::AcceptedJobs {
 };
 
 struct Host {
-    // `acceptedJobs` replaces the in-memory record, such as with the one on disk.
-    explicit Host(session::AcceptedJobs* acceptedJobs = nullptr);
+    // `acceptedJobs` replaces the in-memory record, such as with the one on disk; `jobLease`
+    // replaces the fake lease, such as with a JobDelivery's.
+    explicit Host(session::AcceptedJobs* acceptedJobs = nullptr,
+                  session::JobLease* jobLease = nullptr);
 
     // Moves the clock, firing every timer that comes due on the way, earliest first.
     void advance(qint64 milliseconds);
@@ -198,6 +200,14 @@ class RunnerSessionOutputTest : public QObject {
     void blockedEventsReportOneGap();
     void resultWaitsForBlockedOutput();
     void outputBytesCountsEverything();
+};
+
+// A session over a JobDelivery's lease.
+class RunnerSessionDeliveryTest : public QObject {
+    Q_OBJECT
+  private slots:
+    void unrecordedSpecStopsTakingJobs();
+    void sessionPhasesReachTheHeartbeat();
 };
 
 class RunnerSessionStopTest : public QObject {

@@ -167,6 +167,32 @@ void RunnerDeliveryRestartTest::restartWithAnUntrustedLease() {
     QCOMPARE(host.relay.calls.first().reason, QStringLiteral("untrusted_requester"));
 }
 
+// A lease learned through runner_busy was being released when the runner stopped; the Relay
+// then says the job had started.
+void RunnerDeliveryRestartTest::restartWhileReleasingABusyLease() {
+    JournalRecord closing = record(Step::Leased);
+    closing.lease.machineId.clear();
+    closing.lease.workspaceId.clear();
+    closing.step = Step::Closing;
+    closing.release = true;
+    closing.reason = QStringLiteral("untrusted_requester");
+    const std::optional<JournalRecord> stored = journalFromJson(journalToJson(closing));
+    QVERIFY(stored);
+
+    Host host;
+    host.delivery->restore(*stored);
+    QVERIFY(host.session.opened.isEmpty());
+    QCOMPARE(host.callKinds(), (QStringList{"release", "renew"}));
+    host.delivery->answered(host.relay.calls.first(),
+                            {CallResult::Kind::Refused, QStringLiteral("job_started"), {}});
+    QCOMPARE(host.callKinds(), (QStringList{"release", "renew", "finish"}));
+    QCOMPARE(host.last().outcome, QStringLiteral("interrupted"));
+    QCOMPARE(host.last().reason, QStringLiteral("runner_restarted"));
+    host.answerOk({});
+    QCOMPARE(host.delivery->state(), JobDelivery::State::Idle);
+    QCOMPARE(host.callKinds().count(QStringLiteral("finish")), 1);
+}
+
 void RunnerDeliveryRestartTest::restartAfterTheSpec_data() {
     QTest::addColumn<int>("step");
     QTest::addColumn<QString>("outcome");
