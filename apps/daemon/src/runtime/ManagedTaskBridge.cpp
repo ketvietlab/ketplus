@@ -135,8 +135,9 @@ void ManagedTaskBridge::command(const QJsonObject& request, const QString& clien
         return;
     }
     if (type == "session.task.list") {
-        done(ledger_.list(owner, payload.value("cursor").toString(),
-                          payload.value("limit").toInt(50), localAdministration));
+        const auto listed = ledger_.list(owner, payload.value("cursor").toString(),
+                                         payload.value("limit").toInt(50), localAdministration);
+        done(remoteJobs_ ? remoteJobs_->withPlacement(listed) : listed);
         return;
     }
     const auto id = payload.value("task_id").toString();
@@ -155,12 +156,23 @@ void ManagedTaskBridge::command(const QJsonObject& request, const QString& clien
         done(authorized);
         return;
     }
+    const auto remote = [&](const std::optional<QString>& code) {
+        done(code->isEmpty() ? ledger_.get(id, owner, localAdministration)
+                             : failure(*code, "The remote job cannot take this change now."));
+    };
     if (type == "session.task.get")
-        done(authorized);
+        done(remoteJobs_ ? remoteJobs_->withPlacement(authorized) : authorized);
+    else if (const auto code =
+                 type == "session.task.stop" && remoteJobs_ ? remoteJobs_->stop(id) : std::nullopt)
+        remote(code);
     else if (type == "session.task.stop")
         done(runtime_->stop(id, owner, localAdministration));
     else if (type == "session.task.output")
         done(runtime_->output(id, owner, payload.value("cursor").toString(), localAdministration));
+    else if (const auto code = type == "session.task.resolve_cleanup" && remoteJobs_
+                                   ? remoteJobs_->resolveCleanup(id, clientId)
+                                   : std::nullopt)
+        remote(code);
     else if (type == "session.task.resolve_cleanup")
         done(runtime_->resolveCleanup(id, payload.value("revision").toInteger(-1), clientId));
     else
