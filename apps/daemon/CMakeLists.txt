@@ -36,7 +36,8 @@ add_library(ketplus_daemon_runner_peer STATIC
     src/runner/peer/JobPeerSessionLink.cpp src/runner/peer/JobPeerSessionOutput.cpp
     src/runner/peer/OutputIntake.cpp src/runner/peer/OutputIntake.h
     src/runner/peer/PeerLog.cpp src/runner/peer/PeerLog.h src/runner/peer/PeerPorts.h
-    src/runner/peer/RemotePeerSessions.cpp src/runner/peer/RemotePeerSessions.h)
+    src/runner/peer/RemotePeerSessions.cpp src/runner/peer/RemotePeerSessions.h
+    src/runner/peer/QtJobPeerClock.cpp src/runner/peer/QtJobPeerClock.h)
 target_link_libraries(ketplus_daemon_runner_peer PUBLIC Qt6::Core ketplus_runner_protocol)
 target_include_directories(ketplus_daemon_runner_peer PUBLIC
     "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>")
@@ -56,6 +57,13 @@ target_link_libraries(ketplus_daemon_runner_sync PUBLIC
 target_include_directories(ketplus_daemon_runner_sync PUBLIC
     "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>")
 ketplus_enable_warnings(ketplus_daemon_runner_sync)
+# The output spool of remote jobs, on the task output store of ketplus_daemon_core.
+add_library(ketplus_daemon_runner_output STATIC
+    src/runner/output/TaskOutputSpool.cpp src/runner/output/TaskOutputSpool.h)
+target_link_libraries(ketplus_daemon_runner_output
+    PUBLIC Qt6::Core Qt6::Sql ketplus_daemon_runner_peer
+    PRIVATE ketplus_daemon_core)
+ketplus_enable_warnings(ketplus_daemon_runner_output)
 target_include_directories(ketplus_daemon_core PUBLIC
     "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>"
     "$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/modules/atlas/src>"

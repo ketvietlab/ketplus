@@ -61,6 +61,27 @@ bool BackgroundTaskOutput::initialize(QString* error) {
 
 bool BackgroundTaskOutput::append(const QString& taskId, const QByteArray& bytes, QString* error,
                                   qint64 producerRevision) {
+    return write(taskId, bytes, std::nullopt, producerRevision, error);
+}
+
+bool BackgroundTaskOutput::appendAt(const QString& taskId, const qint64 expectedOffset,
+                                    const QByteArray& bytes, QString* error) {
+    if (!bytes.isEmpty())
+        return write(taskId, bytes, expectedOffset, 0, error);
+    const auto current = total(taskId, error);
+    if (!current)
+        return false;
+    if (*current != expectedOffset) {
+        if (error)
+            *error = QStringLiteral("Output offset mismatch.");
+        return false;
+    }
+    return true;
+}
+
+bool BackgroundTaskOutput::write(const QString& taskId, const QByteArray& bytes,
+                                 const std::optional<qint64> expected, qint64 producerRevision,
+                                 QString* error) {
     if (error)
         error->clear();
     if (taskId.isEmpty()) {
@@ -100,6 +121,8 @@ bool BackgroundTaskOutput::append(const QString& taskId, const QByteArray& bytes
         return fail(query.lastError().text());
     const qint64 previous = query.next() ? query.value(0).toLongLong() : 0;
     query.finish();
+    if (expected && *expected != previous)
+        return fail(QStringLiteral("Output offset mismatch."));
     if (previous > std::numeric_limits<qint64>::max() - bytes.size())
         return fail(QStringLiteral("Output byte counter exhausted."));
     const qint64 total = previous + bytes.size();
@@ -169,6 +192,88 @@ bool BackgroundTaskOutput::append(const QString& taskId, const QByteArray& bytes
     return true;
 }
 
+std::optional<qint64> BackgroundTaskOutput::total(const QString& taskId, QString* error) const {
+    if (error)
+        error->clear();
+    if (taskId.isEmpty()) {
+        if (error)
+            *error = QStringLiteral("Missing task identity.");
+        return std::nullopt;
+    }
+    QSqlQuery query(database_);
+    query.prepare("SELECT total_bytes FROM job_output_heads WHERE task_id=?");
+    query.addBindValue(taskId);
+    if (!query.exec()) {
+        if (error)
+            *error = query.lastError().text();
+        return std::nullopt;
+    }
+    return query.next() ? query.value(0).toLongLong() : 0;
+}
+
+bool BackgroundTaskOutput::markGap(const QString& taskId, const qint64 expectedOffset,
+                                   const qint64 toOffset, QString* error) {
+    if (error)
+        error->clear();
+    if (taskId.isEmpty()) {
+        if (error)
+            *error = QStringLiteral("Missing task identity.");
+        return false;
+    }
+    if (!database_.transaction()) {
+        if (error)
+            *error = database_.lastError().text();
+        return false;
+    }
+    const auto fail = [&](const QString& message) {
+        database_.rollback();
+        if (error)
+            *error = message;
+        return false;
+    };
+    QSqlQuery query(database_);
+    query.prepare("SELECT total_bytes FROM job_output_heads WHERE task_id=?");
+    query.addBindValue(taskId);
+    if (!query.exec())
+        return fail(query.lastError().text());
+    const qint64 previous = query.next() ? query.value(0).toLongLong() : 0;
+    query.finish();
+    if (previous != expectedOffset)
+        return fail(QStringLiteral("Output offset mismatch."));
+    if (toOffset < previous)
+        return fail(QStringLiteral("Output gap ends before the stream."));
+    if (toOffset == previous) {
+        query.finish();
+        database_.rollback();
+        return true;
+    }
+    // The retained tail follows the logical offset: drop or cut what falls below its floor.
+    const qint64 floor = qMax(qint64(0), toOffset - maximumBytes);
+    query.prepare("DELETE FROM job_output_chunks WHERE task_id=? AND position+length(bytes)<=?");
+    query.addBindValue(taskId);
+    query.addBindValue(floor);
+    if (!query.exec())
+        return fail(query.lastError().text());
+    query.prepare("UPDATE job_output_chunks SET bytes=substr(bytes,?-position+1),position=? "
+                  "WHERE task_id=? AND position<? AND position+length(bytes)>?");
+    query.addBindValue(floor);
+    query.addBindValue(floor);
+    query.addBindValue(taskId);
+    query.addBindValue(floor);
+    query.addBindValue(floor);
+    if (!query.exec())
+        return fail(query.lastError().text());
+    query.prepare("INSERT INTO job_output_heads(task_id,total_bytes) VALUES(?,?) "
+                  "ON CONFLICT(task_id) DO UPDATE SET total_bytes=excluded.total_bytes");
+    query.addBindValue(taskId);
+    query.addBindValue(toOffset);
+    if (!query.exec())
+        return fail(query.lastError().text());
+    if (!database_.commit())
+        return fail(database_.lastError().text());
+    return true;
+}
+
 BackgroundOutputPage BackgroundTaskOutput::read(const QString& taskId, const QString& cursor,
                                                 int limit, bool textBoundary,
                                                 bool flushTrailing) const {
@@ -185,6 +290,7 @@ BackgroundOutputPage BackgroundTaskOutput::read(const QString& taskId, const QSt
                   "LEFT JOIN job_output_chunks c ON c.task_id=h.task_id AND "
                   "c.position+length(c.bytes)>max(?,h.total_bytes-?) "
                   "WHERE h.task_id=? ORDER BY c.position LIMIT 3");
+    // Three rows fill a page: only the first and the last chunk of a run are short.
     query.addBindValue(requested);
     query.addBindValue(maximumBytes);
     query.addBindValue(taskId);
@@ -192,9 +298,14 @@ BackgroundOutputPage BackgroundTaskOutput::read(const QString& taskId, const QSt
         page.error = query.lastError().text();
         return page;
     }
+    constexpr int rowLimit = 3;
     bool first = true;
     qint64 position = requested;
+    int rows = 0;
+    bool full = false;
+    bool atGap = false; // the page ends where a gap starts
     while (query.next()) {
+        ++rows;
         if (first) {
             first = false;
             page.totalBytes = query.value(0).toLongLong();
@@ -210,27 +321,49 @@ BackgroundOutputPage BackgroundTaskOutput::read(const QString& taskId, const QSt
             continue;
         const qint64 chunkPosition = query.value(1).toLongLong();
         const QByteArray chunk = query.value(2).toByteArray();
+        if (chunkPosition > position) {
+            // A gap: never join the bytes on both sides of it.
+            if (!page.bytes.isEmpty()) {
+                atGap = true;
+                break;
+            }
+            position = chunkPosition;
+            page.truncated = true;
+        }
         const QByteArray fragment = chunk.mid(position - chunkPosition, limit - page.bytes.size());
         page.bytes.append(fragment);
         position += fragment.size();
-        if (page.bytes.size() >= limit)
+        if (page.bytes.size() >= limit) {
+            full = true;
             break;
+        }
     }
     if (first && requested != 0) {
         page.error = QStringLiteral("Output cursor is beyond the byte stream.");
         return page;
     }
-    if (textBoundary && !page.bytes.isEmpty() && (!flushTrailing || position < page.totalBytes)) {
+    if (!first && !full && !atGap && rows < rowLimit && position < page.totalBytes) {
+        // No stored byte up to the end: the stream ends in a gap.
+        if (page.bytes.isEmpty()) {
+            position = page.totalBytes;
+            page.truncated = true;
+        } else {
+            atGap = true;
+        }
+    }
+    if (textBoundary && !atGap && !page.bytes.isEmpty() &&
+        (!flushTrailing || position < page.totalBytes)) {
         // Keep a valid partial UTF-8 sequence for the next byte page. Invalid
         // binary data still decodes with replacement; byte cursors remain exact.
+        // Before a gap the sequence can never complete, so it is returned as it is.
         qsizetype start = page.bytes.size() - 1;
         while (start > 0 && (static_cast<uchar>(page.bytes[start]) & 0xc0) == 0x80)
             --start;
-        const auto first = static_cast<uchar>(page.bytes[start]);
-        const int expected = first >= 0xc2 && first <= 0xdf   ? 2
-                             : first >= 0xe0 && first <= 0xef ? 3
-                             : first >= 0xf0 && first <= 0xf4 ? 4
-                                                              : 0;
+        const auto lead = static_cast<uchar>(page.bytes[start]);
+        const int expected = lead >= 0xc2 && lead <= 0xdf   ? 2
+                             : lead >= 0xe0 && lead <= 0xef ? 3
+                             : lead >= 0xf0 && lead <= 0xf4 ? 4
+                                                            : 0;
         const auto trailing = page.bytes.size() - start;
         if (expected && trailing < expected) {
             position -= trailing;
