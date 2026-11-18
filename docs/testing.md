@@ -1346,6 +1346,34 @@ every intermediate inventory was empty. That observation and the remaining
 validation risk require review and explicit disposition; there is no all-T-5,
 release or full-packaging acceptance at this checkpoint.
 
+The seven-suite summary has an append-only evidence correction: version 2
+supersedes only the original blanket cleanup sentence. The original summary,
+its hash, the 30-file manifest and raw samples remain unchanged. The corrected
+summary explicitly retains the Attention helper observation and the later empty
+samples; neither establishes closure before that fixture ended or identifies the
+helper's birth, launch, request or managed-job ownership. D1 owns correlation and
+closure follow-up at a future assigned verification; no new run is authorized to
+reconstruct missing historical data.
+
+#### Integration review coverage and remaining gates
+
+The following maps T-5's six criteria to the retained evidence. Coverage is not
+formal acceptance; the original full-matrix failures and their separate residual
+decisions remain part of the review.
+
+| Criterion | Direct coverage | Remaining gate or limit |
+| --- | --- | --- |
+| 1. Fake-provider start, UI state, one owner wake and output | `ManagedBackgroundEndToEndTest::registryEventsReachDesktopAndWakeOnlyTheirOwner`; actual socket RED → GREEN and fresh full-matrix pass; native Agent UI suite and four-provider transport checks | Model/socket and synthetic native UI coverage; no live-provider inference claim |
+| 2. Crash, restart, owner lifetime, races, descendants and held wake | `ManagedTaskRuntimeTest` restart/close/commit-failure cases; `ManagedTaskHostTest` provider exit, busy/permission/Stop and nested-child cases; Linux executor daemon/supervisor death and Stop/complete race | Original Linux owner-Stop and fork-count failures remain unclassified under the leader's integration-only residual decision; formal review pending |
+| 3. Wake/auth fences, complete registry and platform assurance | Ledger atomic-outbox/dedup/generation/quota/pagination cases; IPC owner/grant checks; `ManagedTaskOriginHostTest` review/delayed-origin cases; Linux real-helper boundary tests; native birth/audit-token checks | Native bootstrap original remains unclassified under its separate integration-only residual decision; seven-suite residual and intermediate SDK-helper attribution require explicit disposition; no absolute macOS containment claim |
+| 4. Build/matrix, honest limits, no quota or app replacement | Fresh Pro build and 251-suite run; offline SDK/contract/public-tree checks; Linux acceptance and CMake-installed daemon/helper staging; source/binary/hash records | Full Mac remains 242 pass / 1 skip / 8 failed suites; whole-tree Runtime install stopped at an unbuilt runner; no full packaging, release or installed-app validation |
+| 5. Reviewed PR into integration and cross-lane resolution | PR #763 contains the minimal deferred IPC routing fix and socket regressions; provider/UI dependencies are merged | Formal PR approval and integration acceptance remain outstanding; evidence-only residual reviews do not substitute for that approval |
+| 6. Native faults, attention, slots, durable owner fences and user-only resolution | Native detached-descendant timeout, supervisor death, reconnect and lease-loss cases passed within the original suite; ledger attention/slot/audit/rollback cases and IPC/UI user-only confirmation cases passed | These are layered fixtures: a single real native attention incident carried through database reopen plus generation/session close is not directly demonstrated by the retained cases. The SDK-helper sample is not that managed-job fault evidence; reviewer/leader must disposition this coverage boundary before closing the criterion |
+
+Portable follow-up work uses the verified SSH/Mutagen workflow above. Mac-only
+identity and renderer checks stay on macOS. This mapping authorizes no additional
+control, provider invocation, toolchain change or production fix.
+
 The opt-in `ketplus_linux_job_executor_tests` runs the real packaged helper and
 registry. It covers missing-manager admission, durable retry/output, double-fork/
 setsid descendants and migration attempts, timeout during forks, supervisor
