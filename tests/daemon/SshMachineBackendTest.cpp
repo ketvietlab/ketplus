@@ -166,9 +166,11 @@ class SshMachineBackendTest final : public QObject {
         QVERIFY(file.open(QIODevice::ReadOnly));
         const QByteArray saved = file.readAll();
         QVERIFY(!saved.contains(token));
+#if !defined(Q_OS_WIN) // Windows access is an ACL, not mode bits: see WindowsPlatformTest.
         QCOMPARE(QFileInfo(fixture.storePath()).permissions() &
                      (QFileDevice::ReadGroup | QFileDevice::ReadOther),
                  QFileDevice::Permissions{});
+#endif
         SshMachineStore reloaded(fixture.storePath());
         QCOMPARE(reloaded.machines().size(), 1);
         QCOMPARE(reloaded.machineId(sshTargetKey(fixture.target)), QStringLiteral("daemon-key-A"));

@@ -669,6 +669,10 @@ class DaemonProtocolTest final : public QObject {
 
     void mediaPublicationRequiresStoredOwnership() {
         QFETCH(QString, fault);
+#if defined(Q_OS_WIN)
+        if (fault == "unreadable")
+            QSKIP("This permission-denial fixture requires POSIX file modes.");
+#endif
         QFETCH(QString, entry);
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
@@ -784,8 +788,10 @@ class DaemonProtocolTest final : public QObject {
         QCOMPARE(hashes.size(), 2); // repeated/inline-duplicate publication does not grow metadata
         QVERIFY(hashes.contains(oldHash));
         QVERIFY(hashes.contains(newHash));
+#if !defined(Q_OS_WIN) // Windows access is an ACL, not mode bits: see WindowsPlatformTest.
         QVERIFY(!(saved.permissions() & (QFileDevice::ReadGroup | QFileDevice::WriteGroup |
                                          QFileDevice::ReadOther | QFileDevice::WriteOther)));
+#endif
         saved.close();
         QFile outside(foreign);
         QVERIFY(outside.open(QIODevice::ReadOnly));
@@ -813,6 +819,10 @@ class DaemonProtocolTest final : public QObject {
 
     void mediaDedupRequiresVerifiedStoredBytes() {
         QFETCH(QString, fault);
+#if defined(Q_OS_WIN)
+        if (fault == "unreadable")
+            QSKIP("This permission-denial fixture requires POSIX file modes.");
+#endif
         QFETCH(bool, inlineItem);
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
@@ -901,8 +911,10 @@ class DaemonProtocolTest final : public QObject {
         QFile retained(path);
         QVERIFY(retained.open(QIODevice::ReadOnly));
         QCOMPARE(retained.readAll(), png);
+#if !defined(Q_OS_WIN) // Windows access is an ACL, not mode bits: see WindowsPlatformTest.
         QVERIFY(!(retained.permissions() & (QFileDevice::ReadGroup | QFileDevice::WriteGroup |
                                             QFileDevice::ReadOther | QFileDevice::WriteOther)));
+#endif
         QFile preserved(foreign);
         QVERIFY(preserved.open(QIODevice::ReadOnly));
         QCOMPARE(preserved.readAll(), png);
@@ -959,12 +971,14 @@ class DaemonProtocolTest final : public QObject {
         QVERIFY(QFileInfo::exists(file));
         QCOMPARE(QFileInfo(file).size(), png.size());
         QCOMPARE(QDir(mediaDirectory).entryList({"*.png"}, QDir::Files).size(), 1); // deduped
-        const auto groupOrOther = QFileDevice::ReadGroup | QFileDevice::WriteGroup |
-                                  QFileDevice::ExeGroup | QFileDevice::ReadOther |
-                                  QFileDevice::WriteOther | QFileDevice::ExeOther;
+        [[maybe_unused]] const auto groupOrOther =
+            QFileDevice::ReadGroup | QFileDevice::WriteGroup | QFileDevice::ExeGroup |
+            QFileDevice::ReadOther | QFileDevice::WriteOther | QFileDevice::ExeOther;
+#if !defined(Q_OS_WIN) // Windows access is an ACL, not mode bits: see WindowsPlatformTest.
         QCOMPARE(QFile::permissions(file) & groupOrOther, QFileDevice::Permissions{});
         QCOMPARE(QFile::permissions(mediaDirectory) & groupOrOther, QFileDevice::Permissions{});
         QVERIFY(QFile::permissions(file).testFlag(QFileDevice::ReadOwner));
+#endif
 
         // Session deletion prunes media no other session references.
         QVERIFY(store.externalizeItem(item, "session-b").contains("result"));

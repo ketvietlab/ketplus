@@ -94,6 +94,9 @@ class SshTunnelTest : public QObject {
     }
 
     void socketProbeResolvesLikeTheUserUnit() {
+#if defined(Q_OS_WIN)
+        QSKIP("Resolves the POSIX user-unit socket path of a Linux/macOS host.");
+#endif
         QTemporaryDir dir(QDir::tempPath() + "/kp-probe-XXXXXX");
         QDir().mkpath(dir.filePath("run"));
         QDir().mkpath(dir.filePath(".config/ketplus"));

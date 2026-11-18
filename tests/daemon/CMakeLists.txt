@@ -1,10 +1,58 @@
 include("${CMAKE_CURRENT_LIST_DIR}/credential-store/FixtureDaemon.cmake")
 
+# Tests whose provider fixtures are `#!/usr/bin/env python3` scripts launched by path
+# (FakeCodex.h, FakeClaude.h, FakeCursor.h, FakeCopilot*.h). Windows cannot execute those
+# directly, so they are built but disabled there; they stay covered on macOS/Linux. A launcher
+# that gives each fake an .exe on Windows would lift this.
+set(KETPLUS_WINDOWS_SCRIPT_FIXTURE_TESTS
+    ketplus_context_harness_tests
+    ketplus_provider_deletion_tests
+    ketplus_daemon_worktree_context_tests
+    ketplus_daemon_claude_worktree_tests
+    ketplus_daemon_lifecycle_tests
+    ketplus_turn_acceptance_tests
+    ketplus_daemon_claude_adapter_tests
+    ketplus_computer_tool_launch_tests
+    ketplus_computer_provider_integration_tests
+    ketplus_daemon_cursor_adapter_tests
+    ketplus_daemon_session_fork_tests
+    ketplus_agent_messaging_tests
+    ketplus_agent_urgent_delivery_tests
+    ketplus_team_routing_tools_tests
+    ketplus_team_finding_routing_tests
+    ketplus_team_task_tests
+    ketplus_team_task_git_tests
+    ketplus_team_agent_tools_tests
+    ketplus_team_flow_tests
+    ketplus_team_title_tests
+    ketplus_team_reply_tests
+    ketplus_team_review_tests
+    ketplus_team_lane_tests
+    ketplus_team_budget_tests
+    ketplus_team_merge_tests
+    ketplus_team_done_tests
+    ketplus_team_storage_tests
+    ketplus_work_report_tests
+    ketplus_awaiting_reply_tests
+    ketplus_turn_review_tests
+    ketplus_provider_compatibility_tests
+    ketplus_daemon_schedule_host_tests
+    ketplus_claude_credentials_tests
+    ketplus_daemon_upgrade_tests
+    ketplus_async_question_lifetime_tests
+    ketplus_relay_attachment_host_tests
+    ketplus_session_preparation_host_tests
+    ketplus_relay_preparation_host_tests)
+
 function(ketplus_add_daemon_test target source)
     qt_add_executable(${target} ${source})
     ketplus_enable_warnings(${target})
     target_link_libraries(${target} PRIVATE Qt6::Test ketplus_daemon_core)
     add_test(NAME ${target} COMMAND ${target})
+    if(WIN32 AND target IN_LIST KETPLUS_WINDOWS_SCRIPT_FIXTURE_TESTS)
+        set_tests_properties(${target} PROPERTIES DISABLED TRUE
+            LABELS "windows-script-fixture")
+    endif()
     set_tests_properties(${target} PROPERTIES ENVIRONMENT
         "KETPLUS_DISABLE_DAEMON_AUTOSTART=1;KETPLUS_BROWSER_TOOLS_CONFIG=${CMAKE_CURRENT_BINARY_DIR}/${target}-browser-tools.json;KETPLUS_COMPUTER_TOOLS_CONFIG=${CMAKE_CURRENT_BINARY_DIR}/${target}-computer-tools.json;KETPLUS_COMPUTER_DIR=${CMAKE_CURRENT_BINARY_DIR}/${target}-computer")
 endfunction()
@@ -193,6 +241,8 @@ ketplus_add_daemon_test(ketplus_provider_compatibility_tests ProviderCompatibili
 ketplus_add_daemon_test(ketplus_provider_readiness_tests ProviderReadinessTest.cpp)
 ketplus_add_daemon_test(ketplus_provider_response_id_tests ProviderResponseIdTest.cpp)
 ketplus_add_daemon_test(ketplus_provider_version_probe_tests ProviderVersionProbeTest.cpp)
+ketplus_add_daemon_test(ketplus_windows_script_launch_tests WindowsScriptLaunchTest.cpp)
+ketplus_add_daemon_test(ketplus_windows_platform_tests WindowsPlatformTest.cpp)
 ketplus_add_daemon_test(ketplus_provider_framing_tests ProviderFramingTest.cpp)
 ketplus_add_daemon_test(ketplus_provider_malformed_frame_tests ProviderMalformedFrameTest.cpp)
 ketplus_add_daemon_test(ketplus_provider_stderr_flood_tests ProviderStderrFloodTest.cpp)
@@ -218,6 +268,9 @@ target_sources(ketplus_daemon_machine_challenge_tests PRIVATE cloud-privacy/Memo
 target_compile_definitions(ketplus_daemon_machine_challenge_tests PRIVATE
     KETPLUS_CHALLENGE_FIXTURE="${CMAKE_CURRENT_SOURCE_DIR}/fixtures/daemon-challenge-v2.json")
 ketplus_add_daemon_test(ketplus_daemon_usage_retention_tests JournalUsageRetentionTest.cpp)
+if(WIN32) # Passes in about 6 minutes there (SQLite commits are slow on NTFS).
+    set_tests_properties(ketplus_daemon_usage_retention_tests PROPERTIES TIMEOUT 900)
+endif()
 ketplus_add_daemon_test(ketplus_daemon_garbage_collection_tests JournalGarbageCollectionTest.cpp)
 ketplus_add_daemon_test(ketplus_daemon_metadata_retention_tests JournalMetadataRetentionTest.cpp)
 ketplus_add_daemon_test(ketplus_daemon_cloud_cache_retention_tests JournalCloudCacheRetentionTest.cpp)
@@ -288,6 +341,12 @@ if(KETPLUS_SIDECAR_TEST_NODE)
         "${PROJECT_SOURCE_DIR}/apps/daemon/providers/claude-sidecar/test/review-profile.test.mjs")
     add_test(NAME ketplus_codex_contract_tests COMMAND "${KETPLUS_SIDECAR_TEST_NODE}" --test
         "${CMAKE_CURRENT_SOURCE_DIR}/../providers/codex/contract.test.mjs")
+    if(WIN32)
+        # review-guard/review-profile hang or fail on Windows (they assume POSIX paths and
+        # shells); not yet ported. They are covered on macOS/Linux.
+        set_tests_properties(ketplus_claude_sidecar_tests PROPERTIES DISABLED TRUE
+            LABELS "windows-script-fixture")
+    endif()
 endif()
 if(KETPLUS_BUILD_DESKTOP)
     ketplus_add_daemon_test(ketplus_provider_transcript_tests ProviderTranscriptTest.cpp)

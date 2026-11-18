@@ -1,3 +1,4 @@
+#include "BinaryStdio.h"
 #include "providers/ClaudeAdapter.h"
 #include "providers/CursorAdapter.h"
 
@@ -15,6 +16,7 @@ namespace {
 constexpr qsizetype limit = 16 * 1024 * 1024;
 
 bool emitFixture(const QString& shape) {
+    makeStdioBinary();
     QFile output;
     if (!output.open(stdout, QIODevice::WriteOnly, QFile::DontCloseHandle))
         return false;

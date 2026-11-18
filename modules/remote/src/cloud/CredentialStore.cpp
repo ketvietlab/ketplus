@@ -119,6 +119,20 @@ bool readLegacy(const QString& path, QByteArray* bytes, QString* error) {
     if (file.error() != QFileDevice::NoError || bytes->size() > maximumRecordBytes)
         return fail(error, QStringLiteral("Unable to read the legacy credential file."));
     return true;
+#elif defined(Q_OS_WIN)
+    // No owner/mode to compare: the credential directory carries an owner-only access list.
+    // A link is refused, as on POSIX, and the size is bounded before anything is read.
+    const QFileInfo info(path);
+    QFile file(path);
+    if (info.isSymLink() || !info.isFile() || info.size() > maximumRecordBytes ||
+        !file.open(QIODevice::ReadOnly))
+        return fail(error,
+                    QStringLiteral(
+                        "The legacy credential file has unsafe ownership, permissions or size."));
+    *bytes = file.read(maximumRecordBytes + 1);
+    if (file.error() != QFileDevice::NoError || bytes->size() > maximumRecordBytes)
+        return fail(error, QStringLiteral("Unable to read the legacy credential file."));
+    return true;
 #else
     Q_UNUSED(path);
     Q_UNUSED(bytes);

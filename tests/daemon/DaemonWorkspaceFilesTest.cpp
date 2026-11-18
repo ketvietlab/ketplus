@@ -1,11 +1,11 @@
 #include "workspace/ReadOnlyWorkspaceFiles.h"
 
+#include <QDateTime>
 #include <QDir>
 #include <QElapsedTimer>
 #include <QFile>
 #include <QJsonArray>
 #include <QProcess>
-#include <QDateTime>
 #include <QTemporaryDir>
 #include <QThread>
 #include <QThreadPool>
@@ -72,9 +72,9 @@ class DaemonWorkspaceFilesTest final : public QObject {
 
 namespace {
 WorkspaceFileScope scopeFor(const QString& root) {
-    return {QStringLiteral("owner-1"),      QStringLiteral("workspace-1"),
-            QStringLiteral("machine-1"),    QStringLiteral("repository-1"),
-            QStringLiteral("worktree-1"),   root};
+    return {QStringLiteral("owner-1"),    QStringLiteral("workspace-1"),
+            QStringLiteral("machine-1"),  QStringLiteral("repository-1"),
+            QStringLiteral("worktree-1"), root};
 }
 
 void initRepository(const QString& root) {
@@ -148,9 +148,8 @@ void DaemonWorkspaceFilesTest::gitInvocationsIgnoreRepositoryFsmonitor() {
 
     // Control: an unhardened status does run the hook, so the assertion above is meaningful.
     QProcess plain;
-    plain.start(QStringLiteral("git"),
-                {QStringLiteral("-C"), root.path(), QStringLiteral("status"),
-                 QStringLiteral("--porcelain")});
+    plain.start(QStringLiteral("git"), {QStringLiteral("-C"), root.path(), QStringLiteral("status"),
+                                        QStringLiteral("--porcelain")});
     QVERIFY(plain.waitForFinished());
     if (!QFile::exists(marker))
         QWARN("This git build did not invoke core.fsmonitor; control check inconclusive.");
@@ -396,14 +395,13 @@ void DaemonWorkspaceFilesTest::revisionAsyncDeliversOnContextThread() {
     QVERIFY(!expected.isEmpty());
     QObject context;
     bool delivered = false;
-    ReadOnlyWorkspaceFiles::revisionAsync(
-        scopeFor(root.path()), &context,
-        [&](const QString& revision, const QString& error) {
-            QCOMPARE(QThread::currentThread(), context.thread());
-            QVERIFY(error.isEmpty());
-            QCOMPARE(revision, expected);
-            delivered = true;
-        });
+    ReadOnlyWorkspaceFiles::revisionAsync(scopeFor(root.path()), &context,
+                                          [&](const QString& revision, const QString& error) {
+                                              QCOMPARE(QThread::currentThread(), context.thread());
+                                              QVERIFY(error.isEmpty());
+                                              QCOMPARE(revision, expected);
+                                              delivered = true;
+                                          });
     QVERIFY(!delivered);
     QTRY_VERIFY_WITH_TIMEOUT(delivered, 10'000);
 
@@ -411,10 +409,9 @@ void DaemonWorkspaceFilesTest::revisionAsyncDeliversOnContextThread() {
     bool dropped = true;
     {
         QObject shortLived;
-        ReadOnlyWorkspaceFiles::revisionAsync(scopeFor(root.path()), &shortLived,
-                                              [&](const QString&, const QString&) {
-                                                  dropped = false;
-                                              });
+        ReadOnlyWorkspaceFiles::revisionAsync(
+            scopeFor(root.path()), &shortLived,
+            [&](const QString&, const QString&) { dropped = false; });
     }
     QTest::qWait(500);
     QThreadPool::globalInstance()->waitForDone(10'000);
@@ -546,8 +543,10 @@ void DaemonWorkspaceFilesTest::rejectsScopeTraversalSymlinkBinaryOversizedAndSta
     writeFile(root.filePath(QStringLiteral("large.txt")),
               QByteArray(ReadOnlyWorkspaceFiles::maximumFileBytes + 1, 'x'));
     writeFile(outside.filePath(QStringLiteral("secret.txt")), "secret\n");
+#if !defined(Q_OS_WIN) // QFile::link makes a .lnk shortcut here, not a symlink.
     QVERIFY(QFile::link(outside.filePath(QStringLiteral("secret.txt")),
                         root.filePath(QStringLiteral("link.txt"))));
+#endif
 
     ReadOnlyWorkspaceFiles files({QStringLiteral("owner-1"), QStringLiteral("workspace-1"),
                                   QStringLiteral("machine-1"), QStringLiteral("repository-1"),
@@ -565,21 +564,26 @@ void DaemonWorkspaceFilesTest::rejectsScopeTraversalSymlinkBinaryOversizedAndSta
                  .value(QStringLiteral("error_code"))
                  .toString(),
              QStringLiteral("invalid_path"));
+#if !defined(Q_OS_WIN)
     QCOMPARE(files.file(request(revision, QStringLiteral("link.txt")))
                  .value(QStringLiteral("error_code"))
                  .toString(),
              QStringLiteral("symlink_unsupported"));
+#endif
     // Case-insensitive file systems resolve these to the repository's .git directory.
     for (const QString& gitPath : {QStringLiteral(".GIT/config"), QStringLiteral(".Git/HEAD")}) {
-        QCOMPARE(files.file(request(revision, gitPath)).value(QStringLiteral("error_code")).toString(),
-                 QStringLiteral("invalid_path"));
+        QCOMPARE(
+            files.file(request(revision, gitPath)).value(QStringLiteral("error_code")).toString(),
+            QStringLiteral("invalid_path"));
     }
+#if !defined(Q_OS_WIN) // QFile::link makes a .lnk shortcut, not a symlink.
     // A linked directory in the middle of the path must not be followed out of the worktree.
     QVERIFY(QFile::link(outside.path(), root.filePath(QStringLiteral("linkdir"))));
     QCOMPARE(files.file(request(files.revision(), QStringLiteral("linkdir/secret.txt")))
                  .value(QStringLiteral("error_code"))
                  .toString(),
              QStringLiteral("symlink_unsupported"));
+#endif
 #if defined(Q_OS_UNIX)
     // Opening a FIFO must fail immediately instead of blocking the daemon thread.
     const QByteArray fifo = QFile::encodeName(root.filePath(QStringLiteral("pipe")));
@@ -593,7 +597,9 @@ void DaemonWorkspaceFilesTest::rejectsScopeTraversalSymlinkBinaryOversizedAndSta
     QVERIFY(fifoTimer.elapsed() < 5'000);
     QVERIFY(QFile::remove(root.filePath(QStringLiteral("pipe"))));
 #endif
+#if !defined(Q_OS_WIN)
     QVERIFY(QFile::remove(root.filePath(QStringLiteral("linkdir"))));
+#endif
     QCOMPARE(files.file(request(revision, QStringLiteral("binary.bin")))
                  .value(QStringLiteral("error_code"))
                  .toString(),

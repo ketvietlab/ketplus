@@ -1,5 +1,6 @@
 #include "storage/JournalStorageReader.h"
 
+#include "OwnerOnlyAccess.h"
 #include <QDateTime>
 #include <QDir>
 #include <QFile>
@@ -51,11 +52,17 @@ class Reader final {
 // Sets owner-only permissions and confirms they took, so a file system that ignores them
 // fails the export rather than leaving transcripts readable by others.
 bool ownerOnly(const QString& path, const QFileDevice::Permissions permissions) {
+#if defined(Q_OS_WIN)
+    // Mode bits are not enforced here; the access list is what keeps others out.
+    Q_UNUSED(permissions);
+    return remote::restrictToCurrentUser(path, QFileInfo(path).isDir());
+#else
     constexpr auto others = QFileDevice::ReadGroup | QFileDevice::WriteGroup |
                             QFileDevice::ExeGroup | QFileDevice::ReadOther |
                             QFileDevice::WriteOther | QFileDevice::ExeOther;
     return QFile::setPermissions(path, permissions) &&
            (QFile::permissions(path) & others) == QFileDevice::Permissions{};
+#endif
 }
 
 bool scalar(QSqlDatabase database, const QString& sql, qint64* value, QString* error) {
@@ -414,7 +421,12 @@ std::optional<QJsonObject> exportConversations(const QString& databasePath,
         }
         events.finish();
         file.write("]}\n");
+#if defined(Q_OS_WIN)
+        // The folder's access list, applied above, is inherited; ownerOnly() below confirms it.
+        if (false) {
+#else
         if (!file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner)) {
+#endif
             file.cancelWriting();
             *error = QStringLiteral("Could not make %1 private to you.").arg(path);
             return std::nullopt;

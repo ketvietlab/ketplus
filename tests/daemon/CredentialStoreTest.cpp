@@ -89,9 +89,11 @@ class CredentialStoreTest final : public QObject {
         QCOMPARE(f.store.read("private-key"), binary);
         QCOMPARE(CredentialStore("test", f.backend, f.path).read("private-key"), binary);
         QVERIFY(!QFile::exists(f.path));
+#if !defined(Q_OS_WIN) // Windows access is an ACL, not mode bits: see WindowsPlatformTest.
         QCOMPARE(QFileInfo(f.directory.path()).permissions() &
                      (QFile::ReadOther | QFile::WriteOther),
                  QFile::Permissions{});
+#endif
     }
     void migrationIsVerifiedThenRemoved() {
         Fixture f;
@@ -142,6 +144,9 @@ class CredentialStoreTest final : public QObject {
         QCOMPARE(f.backend->writes, 1);
     }
     void cleanupFailureRetriesTheCommittedMigration() {
+#if defined(Q_OS_WIN)
+        QSKIP("The failure is induced with POSIX directory permissions.");
+#endif
         Fixture f;
         f.legacy();
         const auto restore = qScopeGuard([&] {
@@ -197,6 +202,10 @@ class CredentialStoreTest final : public QObject {
     }
     void rejectsUnsafeOrCorruptLegacy() {
         QFETCH(QString, kind);
+#if defined(Q_OS_WIN)
+        if (kind == "permissions" || kind == "symlink")
+            QSKIP("Mode bits and symbolic links are POSIX; Windows uses ACLs and .lnk shortcuts.");
+#endif
         Fixture f;
         f.legacy();
         if (kind == "permissions")

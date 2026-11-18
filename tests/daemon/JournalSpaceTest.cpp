@@ -531,6 +531,10 @@ class JournalSpaceTest final : public QObject {
         QFETCH(bool, compaction);
         QTemporaryDir directory;
         const QString path = directory.filePath(QStringLiteral("journal.sqlite3"));
+#if defined(Q_OS_WIN)
+        // The only python3 on PATH is the Microsoft Store alias, which is not a real interpreter.
+        QSKIP("The uncheckpointed-WAL fixture needs a real python3 interpreter.");
+#endif
         const QString python = QStandardPaths::findExecutable(QStringLiteral("python3"));
         if (python.isEmpty())
             QSKIP("python3 writes the uncheckpointed fixture");

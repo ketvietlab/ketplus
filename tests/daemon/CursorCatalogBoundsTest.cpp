@@ -1,3 +1,4 @@
+#include "BinaryStdio.h"
 #include "providers/CursorAdapter.h"
 
 #include <QCoreApplication>
@@ -16,6 +17,7 @@ constexpr qsizetype outputLimit = 1024 * 1024;
 const QByteArray validCatalog = "fixture-model - Fixture Model\n";
 
 int emitCatalog(const QString& shape) {
+    makeStdioBinary();
     QFile output;
     QFile error;
     if (!output.open(stdout, QIODevice::WriteOnly, QFile::DontCloseHandle) ||
@@ -90,8 +92,10 @@ class CursorCatalogBoundsTest final : public QObject {
             ++calls;
         });
         QTRY_COMPARE_WITH_TIMEOUT(calls, 1, 10000);
+#if !defined(Q_OS_WIN) // QProcess drains the pipe in a thread, so a producer finishes first.
         if (shape.startsWith("flood-"))
             QVERIFY2(!QFile::exists(completed), "The producer completed its unbounded flood");
+#endif
         const QJsonArray expected =
             accepted ? CursorAdapter::parseModelList(QString::fromUtf8(validCatalog))
                      : CursorAdapter::modelCatalog();

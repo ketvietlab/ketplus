@@ -41,8 +41,10 @@ class KnownHostsFileTest : public QObject {
                                     "other ssh-ed25519 AAAAother\n"));
         QVERIFY(!hasKnownHost(file_, QStringLiteral("build-node-02")));
         QVERIFY(hasKnownHost(file_, QStringLiteral("[build-node-02]:2222")));
+#if !defined(Q_OS_WIN) // Windows access is an ACL, not mode bits: see WindowsPlatformTest.
         QCOMPARE(QFile::permissions(file_) & (QFile::ReadGroup | QFile::ReadOther),
                  QFileDevice::Permissions{});
+#endif
     }
 
     void keepsOtherNamesOnTheSameLine() {

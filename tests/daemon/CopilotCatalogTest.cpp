@@ -1,3 +1,4 @@
+#include "BinaryStdio.h"
 #include "CodexBrowserTools.h"
 #include "FakeCopilotModels.h"
 #include "providers/CodexAdapter.h"
@@ -339,8 +340,10 @@ class CopilotCatalogTest final : public QObject {
 int main(int argc, char** argv) {
     QStandardPaths::setTestModeEnabled(true);
     QCoreApplication app(argc, argv);
-    if (app.arguments().contains("--acp"))
+    if (app.arguments().contains("--acp")) {
+        makeStdioBinary();
         return runFakeCopilotModels();
+    }
     CopilotCatalogTest test;
     return QTest::qExec(&test, argc, argv);
 }

@@ -36,6 +36,9 @@ class ManagedTaskSpecTest final : public QObject {
     Q_OBJECT
   private slots:
     void retryFingerprintKeepsAcceptedCwdAfterSymlinkRetarget() {
+#if defined(Q_OS_WIN)
+        QSKIP("Needs POSIX symbolic links; QFile::link makes a .lnk shortcut on Windows.");
+#endif
         QTemporaryDir directory;
         const auto cwd = QFileInfo(directory.path()).canonicalFilePath();
         QVERIFY(QDir(cwd).mkdir("first"));

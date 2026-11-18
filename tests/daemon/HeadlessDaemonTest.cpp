@@ -269,7 +269,9 @@ class HeadlessDaemonTest final : public QObject {
         QCOMPARE(repositoryOf.value(linked), main);
         QCOMPARE(repositoryOf.value(broken), broken);
 
+#if !defined(Q_OS_WIN)
         // A main checkout remembered through a symlink names its canonical repository too.
+        // (Skipped on Windows: QFile::link makes a .lnk shortcut, not a symbolic link.)
         QVERIFY(QFile::link(main, directory.filePath("app-link")));
         const auto linkPath = QDir(directory.path()).filePath("app-link");
         QVERIFY(journal.rememberWorktree(linkPath));
@@ -277,6 +279,7 @@ class HeadlessDaemonTest final : public QObject {
              host.handleCommand(command("workspace.list"), "admin").value("workspaces").toArray())
             if (value.toObject().value("path").toString() == linkPath)
                 QCOMPARE(value.toObject().value("repository_path").toString(), main);
+#endif
     }
     void workspaceEnrollmentRequiresALocalAdministratorAndARealCheckout() {
         QTemporaryDir directory;

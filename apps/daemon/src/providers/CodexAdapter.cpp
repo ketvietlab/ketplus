@@ -4,6 +4,7 @@
 #include "providers/ProviderFrameValidation.h"
 #include "providers/ProviderResponseEnvelope.h"
 #include "providers/ProviderResponseId.h"
+#include "providers/WindowsScriptLaunch.h"
 
 #include "CodexBrowserTools.h"
 #include "CodexLaunchReloader.h"
@@ -47,8 +48,16 @@ CodexAdapter::CodexAdapter(const QString& executable, QObject* parent)
                     {QStringLiteral("id"), QStringLiteral("method"),
                      QStringLiteral("params.threadId"), QStringLiteral("params.turnId"),
                      QStringLiteral("params.turn.id")}),
-      restartTimer_(new QTimer(this)), versionProbe_(new compat::ProviderVersionProbe(
-                                           compat::policy(QStringLiteral("codex")), {}, this)) {
+      restartTimer_(new QTimer(this)),
+      versionProbe_(new compat::ProviderVersionProbe(
+          compat::policy(QStringLiteral("codex")),
+          [](const QString& executable) {
+              const ScriptLaunch launch =
+                  scriptLaunchForHost(executable, {QStringLiteral("--version")});
+              return compat::ProviderVersionProbe::Invocation{launch.program, launch.arguments,
+                                                              launch.nativeArguments};
+          },
+          this)) {
     attachProcessTree(process_);
     restartTimer_->setSingleShot(true);
     reloader_ = new browser_tools::CodexLaunchReloader(
@@ -321,15 +330,25 @@ void CodexAdapter::ensureStarted() {
     starting_ = true;
     stdoutReader_.clear();
     stderrBuffer_.clear();
-    process_->setProgram(executable_.path());
     // Browser tools (ADR 0008) are read from the shared settings file on every start; a later
     // settings change restarts an idle provider through reloader_.
     launchedBrowserArguments_ = browserArguments();
     const QStringList& browserArguments = launchedBrowserArguments_;
-    process_->setArguments(
+    const ScriptLaunch launch = scriptLaunchForHost(
+        executable_.path(),
         QStringList{QStringLiteral("app-server"), QStringLiteral("--stdio"), QStringLiteral("-c"),
                     QStringLiteral("features.default_mode_request_user_input=true")} +
-        browserArguments);
+            browserArguments);
+    if (!launch.error.isEmpty()) {
+        starting_ = false;
+        failPending(launch.error);
+        return;
+    }
+    process_->setProgram(launch.program);
+    process_->setArguments(launch.arguments);
+#if defined(Q_OS_WIN)
+    process_->setNativeArguments(launch.nativeArguments);
+#endif
     reloader_->launched(browserArguments);
     process_->start();
 }
