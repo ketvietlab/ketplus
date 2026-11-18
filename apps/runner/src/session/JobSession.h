@@ -63,6 +63,9 @@ class JobSession {
 
     // A new lease. False while another job is held.
     bool assign(const JobAssignment& job);
+    // Drops the job while no spec has come: closes its connection and goes idle, calling nothing
+    // on the lease. False once a spec was taken; the job then runs to its end.
+    [[nodiscard]] bool withdraw();
 
     void channelOpened(const QString& connectionId);
     void channelLost();

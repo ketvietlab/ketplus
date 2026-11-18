@@ -27,10 +27,18 @@ add_library(ketplus_runner_app STATIC
     src/flow/PendingPins.h
     src/relay/RelayClient.cpp
     src/relay/RelayClient.h
+    src/relay/RelayLeaseCalls.cpp
+    src/relay/RelayLeaseCalls.h
     src/run/AccessTokens.cpp
     src/run/AccessTokens.h
     src/run/RunLoop.cpp
     src/run/RunLoop.h
+    src/state/AcceptedJobsFile.cpp
+    src/state/AcceptedJobsFile.h
+    src/state/JobJournalFile.cpp
+    src/state/JobJournalFile.h
+    src/state/PinTrust.cpp
+    src/state/PinTrust.h
     src/state/RunnerState.cpp
     src/state/RunnerState.h
     src/state/StateDirectory.cpp
@@ -38,7 +46,7 @@ add_library(ketplus_runner_app STATIC
 )
 target_link_libraries(ketplus_runner_app
     PUBLIC Qt6::Core Qt6::Network ketplus_runner_backoff ketplus_runner_pairing
-    ketplus_runner_protocol ketplus_control_crypto_primitives
+    ketplus_runner_protocol ketplus_runner_delivery ketplus_control_crypto_primitives
     PRIVATE ketplus_product_version OpenSSL::Crypto)
 target_include_directories(ketplus_runner_app PUBLIC
     "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>"
@@ -117,8 +125,28 @@ target_include_directories(ketplus_runner_peer PUBLIC
 )
 ketplus_enable_warnings(ketplus_runner_peer)
 
+# Job delivery: acquire, lease, renewal and journal, as a state machine over interfaces like
+# the session.
+add_library(ketplus_runner_delivery STATIC
+    src/delivery/DeliveryAcquire.cpp
+    src/delivery/DeliveryLease.cpp
+    src/delivery/DeliveryPorts.h
+    src/delivery/DeliveryRecords.cpp
+    src/delivery/DeliveryRecords.h
+    src/delivery/JobDelivery.h
+    src/delivery/GuardedAcceptedJobs.h
+    src/delivery/JobSessionLink.cpp
+    src/delivery/JobSessionLink.h
+)
+target_link_libraries(ketplus_runner_delivery
+    PUBLIC Qt6::Core ketplus_runner_backoff ketplus_runner_session)
+target_include_directories(ketplus_runner_delivery PUBLIC
+    "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>"
+)
+ketplus_enable_warnings(ketplus_runner_delivery)
+
 add_executable(ketplus-runner src/main.cpp)
-# The receiver brings ketplus_runner_app and ketplus_runner_session with it.
+# The receiver brings ketplus_runner_app (with the delivery) and ketplus_runner_session.
 target_link_libraries(ketplus-runner PRIVATE ketplus_runner_snapshot_receiver)
 ketplus_enable_warnings(ketplus-runner)
 

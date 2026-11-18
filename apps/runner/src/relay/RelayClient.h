@@ -13,7 +13,7 @@ namespace ketplus::runner::app {
 struct RelayResult {
     enum class Kind {
         Ok,
-        Refused,     // a 4xx with its refusal code ("unknown" when the body has none)
+        Refused,     // a 4xx with its refusal code ("unknown" when the body has none) and body
         Network,     // no HTTP answer: connection, timeout or TLS failure
         ServerError, // a 5xx, whatever its body: the request may or may not have taken effect
         BadReply,    // a success whose body is not what the contract says
@@ -50,6 +50,17 @@ class RelayClient {
     [[nodiscard]] RelayResult heartbeat(const QJsonObject& body, const QString& accessToken);
     [[nodiscard]] RelayResult revokePair(const QString& machineId, const QString& accessToken);
     [[nodiscard]] RelayResult deregister(const QString& accessToken);
+
+    // Jobs. `jobId` of acquire is empty for the next matching job.
+    [[nodiscard]] RelayResult acquireJob(const QString& acquireId, const QString& jobId,
+                                         const QString& accessToken);
+    [[nodiscard]] RelayResult renewLease(const QString& leaseId, const QString& phase,
+                                         const QString& accessToken);
+    [[nodiscard]] RelayResult startJob(const QString& leaseId, const QString& accessToken);
+    [[nodiscard]] RelayResult finishJob(const QString& leaseId, const QString& outcome,
+                                        const QString& reason, const QString& accessToken);
+    [[nodiscard]] RelayResult releaseLease(const QString& leaseId, const QString& reason,
+                                           const QString& accessToken);
 
   private:
     [[nodiscard]] RelayResult send(const QByteArray& method, const QString& path,

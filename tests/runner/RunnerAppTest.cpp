@@ -99,5 +99,13 @@ int main(int argc, char* argv[]) {
         runner_app_test::RunnerAppRunTest test;
         failures += QTest::qExec(&test, argc, argv);
     }
+    {
+        runner_app_test::RunnerAppDeliveryFilesTest test;
+        failures += QTest::qExec(&test, argc, argv);
+    }
+    {
+        runner_app_test::RunnerAppJobCallsTest test;
+        failures += QTest::qExec(&test, argc, argv);
+    }
     return failures == 0 ? 0 : 1;
 }

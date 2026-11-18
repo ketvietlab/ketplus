@@ -363,4 +363,40 @@ void RunnerSessionStopTest::finishReasons() {
     QCOMPARE(host.lease.calls, (QStringList{"start", finish}));
 }
 
+void RunnerSessionStopTest::withdrawOnlyBeforeTheSpec() {
+    { // Assigned and connected: the connection closes, nothing reaches the lease.
+        Host host;
+        host.connect();
+        QVERIFY(host.session->withdraw());
+        QCOMPARE(host.channel.closes, QStringList{"draining"});
+        QVERIFY(host.lease.calls.isEmpty());
+        QCOMPARE(host.session->phase(), Phase::Idle);
+        QVERIFY(host.clock.deadlines.isEmpty());
+        QVERIFY(host.session->assign(assignment(QStringLiteral("job-2")))); // ready for the next
+    }
+    { // Assigned, no connection yet.
+        Host host;
+        QVERIFY(host.session->assign(assignment()));
+        QVERIFY(host.session->withdraw());
+        QVERIFY(host.channel.closes.isEmpty());
+        QCOMPARE(host.session->phase(), Phase::Idle);
+    }
+    { // Once the spec came, the job stays.
+        Host host;
+        host.connect();
+        host.deliver(makeSpec());
+        QVERIFY(!host.session->withdraw());
+        QCOMPARE(host.session->phase(), Phase::Starting);
+        host.session->leaseStarted(startedAt);
+        host.session->snapshotReady(QStringLiteral("/work/ws"), {});
+        QVERIFY(!host.session->withdraw());
+        QCOMPARE(host.command.launches.size(), 1);
+        QCOMPARE(host.lease.calls, QStringList{"start"});
+    }
+    { // Idle: nothing to withdraw.
+        Host host;
+        QVERIFY(!host.session->withdraw());
+    }
+}
+
 } // namespace runner_session_test

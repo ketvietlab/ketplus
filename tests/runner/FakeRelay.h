@@ -65,6 +65,28 @@ class FakeRelay {
         QString approvalSignature;
         int polls = 0;
     };
+    // A queued job and the lease a runner holds on it.
+    struct Job {
+        QString id;
+        QString machineId = QStringLiteral("desktop-1");
+        QString workspaceId = QStringLiteral("ws-1");
+        QStringList runsOn{QStringLiteral("os:linux")};
+        QString state = QStringLiteral("queued");
+        QString reason; // when the Relay ended it
+        int attempt = 0;
+    };
+    struct Lease {
+        QString id;
+        QString jobId;
+        QString runnerId;
+        QString acquireId;
+        QDateTime expiresAt;
+        QString startedAt;       // empty before job.start
+        QString recordedOutcome; // finish outcome, or "released"
+        QString recordedReason;
+        bool requeued = false;
+        [[nodiscard]] bool open() const { return recordedOutcome.isEmpty(); }
+    };
     struct Runner {
         QString id;
         QByteArray publicKey;
@@ -90,6 +112,8 @@ class FakeRelay {
     int approveAfterPolls = 0;
     bool disabled = false;
     QList<Request> requests;
+    QList<Job> jobs;
+    QMap<QString, Lease> leases;
     QString lastRunnerId;
     QMap<QString, Ticket> tickets;
     QMap<QString, Runner> runners;
@@ -110,6 +134,13 @@ class FakeRelay {
     [[nodiscard]] Reply state(const QString& runnerId, const QString& ticketId);
     [[nodiscard]] Reply heartbeat(const QString& runnerId);
     [[nodiscard]] Reply revoke(const QString& runnerId, const QString& machineId);
+    // FakeRelayJobs.cpp.
+    [[nodiscard]] std::optional<Reply> handleJobs(const QString& runnerId, const Request& request);
+    [[nodiscard]] Reply acquire(const QString& runnerId, const QJsonObject& body);
+    [[nodiscard]] Reply onLease(const QString& runnerId, const QString& leaseId,
+                                const QString& action, const QJsonObject& body);
+    [[nodiscard]] QJsonObject leaseJson(const Lease& lease) const;
+    [[nodiscard]] Job* jobOf(const QString& jobId);
     [[nodiscard]] QJsonObject desktopKeys(const QString& machineId) const;
     // The ticket's pairing digest from the runner's key, as the desktop computes it.
     void claimTicket(Ticket& ticket, const Runner& runner);

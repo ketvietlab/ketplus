@@ -99,6 +99,41 @@ RelayResult RelayClient::deregister(const QString& accessToken) {
     return send("POST", QStringLiteral("/v2/runner:deregister"), nullptr, accessToken, 204);
 }
 
+RelayResult RelayClient::acquireJob(const QString& acquireId, const QString& jobId,
+                                    const QString& accessToken) {
+    QJsonObject body{{QStringLiteral("acquireId"), acquireId}};
+    if (!jobId.isEmpty())
+        body.insert(QStringLiteral("jobId"), jobId);
+    return send("POST", QStringLiteral("/v2/runner/jobs:acquire"), &body, accessToken, 200);
+}
+
+RelayResult RelayClient::renewLease(const QString& leaseId, const QString& phase,
+                                    const QString& accessToken) {
+    const QJsonObject body{{QStringLiteral("phase"), phase}};
+    return send("POST", QStringLiteral("/v2/runner/leases/%1/renew").arg(segment(leaseId)), &body,
+                accessToken, 200);
+}
+
+RelayResult RelayClient::startJob(const QString& leaseId, const QString& accessToken) {
+    return send("POST", QStringLiteral("/v2/runner/leases/%1/start").arg(segment(leaseId)), nullptr,
+                accessToken, 200);
+}
+
+RelayResult RelayClient::finishJob(const QString& leaseId, const QString& outcome,
+                                   const QString& reason, const QString& accessToken) {
+    const QJsonObject body{{QStringLiteral("outcome"), outcome},
+                           {QStringLiteral("reason"), reason}};
+    return send("POST", QStringLiteral("/v2/runner/leases/%1/finish").arg(segment(leaseId)), &body,
+                accessToken, 200);
+}
+
+RelayResult RelayClient::releaseLease(const QString& leaseId, const QString& reason,
+                                      const QString& accessToken) {
+    const QJsonObject body{{QStringLiteral("reason"), reason}};
+    return send("POST", QStringLiteral("/v2/runner/leases/%1/release").arg(segment(leaseId)), &body,
+                accessToken, 200);
+}
+
 RelayResult RelayClient::send(const QByteArray& method, const QString& path,
                               const QJsonObject* body, const QString& accessToken,
                               const int successStatus) {
@@ -158,6 +193,7 @@ RelayResult RelayClient::send(const QByteArray& method, const QString& path,
     }
     result.kind = RelayResult::Kind::Refused;
     result.code = refusalCode(answer);
+    result.body = QJsonDocument::fromJson(answer).object(); // `lease`, `recorded` or `job`
     return result;
 }
 

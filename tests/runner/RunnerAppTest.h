@@ -107,4 +107,32 @@ class RunnerAppRunTest : public QObject {
     void helpListsEveryExitCode();
 };
 
+class RunnerAppDeliveryFilesTest : public QObject {
+    Q_OBJECT
+  private slots:
+    void acceptedJobsSurviveARestart();
+    void acceptedJobsExpireAfterSevenDays();
+    void corruptAcceptedJobsAreReported_data();
+    void corruptAcceptedJobsAreReported();
+    void failedAcceptedWriteKeepsNothing();
+    void journalFileHoldsTheRecordOnly();
+    void corruptJournalIsReported();
+    void activePinsAreTrusted();
+};
+
+class RunnerAppJobCallsTest : public QObject {
+    Q_OBJECT
+  private slots:
+    void acquireReturnsTheLease();
+    void acquireRefusals_data();
+    void acquireRefusals();
+    void leaseCalls();
+    void releaseBeforeStart();
+    void relayEndedTheJob();
+    void lostAnswers_data();
+    void lostAnswers();
+    void invalidAccessRenewsTheTokenOnce();
+    void deliveryCallsMapTheAnswers();
+};
+
 } // namespace runner_app_test

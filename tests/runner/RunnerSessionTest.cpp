@@ -22,7 +22,7 @@ qint64 FakeClock::remaining(const SessionTimer timer) const {
     return deadlines.contains(timer) ? time.msecsTo(deadlines.value(timer)) : -1;
 }
 
-Host::Host() {
+Host::Host(session::AcceptedJobs* acceptedJobs, session::JobLease* jobLease) {
     clock.time = QDateTime(QDate(2026, 11, 18), QTime(9, 0), QTimeZone::UTC);
     session::RunnerInfo runner;
     runner.runnerId = QStringLiteral("runner-1");
@@ -34,7 +34,9 @@ Host::Host() {
                               {QStringLiteral("HOME"), QStringLiteral("/home/runner")},
                               {QStringLiteral("LANG"), QStringLiteral("C.UTF-8")}};
     session = std::make_unique<session::JobSession>(
-        runner, session::SessionPorts{channel, lease, snapshots, command, clock, accepted});
+        runner,
+        session::SessionPorts{channel, jobLease != nullptr ? *jobLease : lease, snapshots, command,
+                              clock, acceptedJobs != nullptr ? *acceptedJobs : accepted});
 }
 
 void Host::advance(const qint64 milliseconds) {
@@ -135,6 +137,10 @@ int main(int argc, char* argv[]) {
     }
     {
         runner_session_test::RunnerSessionOutputTest test;
+        failures += QTest::qExec(&test, argc, argv);
+    }
+    {
+        runner_session_test::RunnerSessionDeliveryTest test;
         failures += QTest::qExec(&test, argc, argv);
     }
     {

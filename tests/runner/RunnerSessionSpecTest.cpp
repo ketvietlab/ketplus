@@ -1,8 +1,12 @@
 #include "RunnerSessionTest.h"
 
 #include "protocol/FrameLimits.h"
+#include "state/AcceptedJobsFile.h"
+#include "state/StateDirectory.h"
 
+#include <QTemporaryDir>
 #include <QTest>
+#include <QTimeZone>
 
 namespace runner_session_test {
 
@@ -228,6 +232,48 @@ void RunnerSessionSpecTest::nextJobAfterTheResult() {
     host.clearSent();
     host.deliver(makeSpec());
     QCOMPARE(host.sentOf<JobRejected>().first().code, QStringLiteral("runner_busy"));
+}
+
+void RunnerSessionSpecTest::unrecordedSpecIsRefused() {
+    Host host;
+    host.accepted.failAdd = true; // the record cannot reach the disk
+    host.connect();
+    host.clearSent();
+    host.deliver(makeSpec());
+    QCOMPARE(host.sentOf<JobRejected>().first().code, QStringLiteral("runner_unavailable"));
+    QCOMPARE(host.lease.calls, QStringList{"finish rejected runner_unavailable"});
+    QVERIFY(host.command.launches.isEmpty());
+    QCOMPARE(host.session->phase(), session::JobSession::Phase::Idle);
+}
+
+void RunnerSessionSpecTest::specAcceptedBeforeARestartIsRefused() {
+    QTemporaryDir root;
+    QString error;
+    std::optional<app::StateDirectory> directory =
+        app::StateDirectory::open(root.path() + QStringLiteral("/state"), &error);
+    QVERIFY2(directory, qPrintable(error));
+    const QDateTime now(QDate(2026, 11, 18), QTime(9, 0), QTimeZone::UTC);
+    const auto clock = [&] { return now; };
+    {
+        std::optional<app::AcceptedJobsFile> accepted =
+            app::AcceptedJobsFile::load(*directory, clock, &error);
+        QVERIFY2(accepted, qPrintable(error));
+        Host host(&*accepted);
+        host.launch(makeSpec());
+        QCOMPARE(host.command.launches.size(), 1);
+    }
+    // A new process, the same job and attempt delivered again.
+    std::optional<app::AcceptedJobsFile> accepted =
+        app::AcceptedJobsFile::load(*directory, clock, &error);
+    QVERIFY2(accepted, qPrintable(error));
+    Host host(&*accepted);
+    host.connect();
+    host.clearSent();
+    host.deliver(makeSpec());
+    QCOMPARE(host.sentTypes(), QStringList{"job.rejected"});
+    QCOMPARE(host.sentOf<JobRejected>().first().code, QStringLiteral("job_mismatch"));
+    QVERIFY(host.command.launches.isEmpty());
+    QVERIFY(host.lease.calls.isEmpty()); // never started on the Relay
 }
 
 } // namespace runner_session_test
