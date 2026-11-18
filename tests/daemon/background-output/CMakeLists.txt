@@ -30,6 +30,7 @@ add_executable(ketplus_background_ledger_tests
     ../BackgroundTaskLedgerTest.cpp
     "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/storage/BackgroundTaskLedger.cpp"
     "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/storage/BackgroundTaskTransitions.cpp"
+    "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/storage/BackgroundTaskEffects.cpp"
     "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/storage/BackgroundTaskDelivery.cpp"
     "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/storage/BackgroundTaskWakeQueue.cpp"
     "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/storage/BackgroundTaskQuota.cpp"
@@ -85,6 +86,7 @@ if(APPLE)
         "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/runtime/executor/NativeProcessIdentity.cpp"
         "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/storage/BackgroundTaskLedger.cpp"
         "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/storage/BackgroundTaskTransitions.cpp"
+        "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/storage/BackgroundTaskEffects.cpp"
         "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/storage/BackgroundTaskDelivery.cpp"
         "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/storage/BackgroundTaskWakeQueue.cpp"
         "${KETPLUS_BACKGROUND_OUTPUT_ROOT}/apps/daemon/src/storage/BackgroundTaskFingerprint.cpp"

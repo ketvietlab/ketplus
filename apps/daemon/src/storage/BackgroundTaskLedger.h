@@ -49,6 +49,16 @@ struct BackgroundTaskChange final {
     std::optional<bool> outputTruncated;
 };
 
+// What a transition's effects need besides the change: given by the caller, never read from the
+// task's record.
+struct BackgroundTaskEffects final {
+    bool native{false};                  // the task's containment is native best effort
+    std::optional<bool> executorStopped; // the executor's state before; nullopt: not tracked
+    bool userAcknowledgement{false};     // a cleanup acknowledgement, audited with:
+    QString auditSource{"user"};
+    QString auditClientId;
+};
+
 // Transactional persistence and slot admission. Permission and executor evidence
 // come from the session runtime. This class never launches a process or inference.
 class BackgroundTaskLedger final {
@@ -93,6 +103,12 @@ class BackgroundTaskLedger final {
     QJsonObject deferWake(const QString& eventId);
     QJsonObject prune(qint64 nowMs);
     bool outputRemoved(const QString& taskId);
+    // Writes an allowed change of `record` (the task as read, at `revision`) with the effects of
+    // `change`: record, slot, cleanup audit, completion outbox. Runs inside the caller's open
+    // transaction and never begins, commits or rolls one back.
+    QJsonObject applyTransition(const QString& taskId, QJsonObject record, qint64 revision,
+                                const BackgroundTaskChange& change,
+                                const BackgroundTaskEffects& effects);
     [[nodiscard]] bool wakeDispatchAllowed(const QString& eventId,
                                            const BackgroundTaskOwner& owner) const;
 
