@@ -3,6 +3,7 @@
 #include "runner/RunnerRelayPort.h"
 #include "runner/RunnerRelaySchema.h"
 
+#include <QSet>
 #include <QString>
 
 #include <functional>
@@ -18,6 +19,11 @@ struct RunnerFailure {
 };
 
 [[nodiscard]] RunnerFailure runnerFailure(const QString& code);
+
+// The failure of a reply that did not answer `expected`, or nullopt when it did. A 4xx code maps
+// to itself when it is a common runner code or one of `operationCodes`, to relay_error otherwise.
+[[nodiscard]] std::optional<RunnerFailure> refusal(const RelayReply& reply, int expected,
+                                                   const QSet<QString>& operationCodes);
 
 template <typename T> struct RunnerOutcome {
     std::optional<T> value;
