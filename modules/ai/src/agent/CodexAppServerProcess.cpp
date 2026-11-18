@@ -1,5 +1,5 @@
-#include "agent/CodexAppServer.h"
 #include "BrowserAgentInstructions.h"
+#include "agent/CodexAppServer.h"
 
 #include "agent/DaemonTranscriptProjection.h"
 #include <algorithm>
@@ -324,11 +324,19 @@ QString CodexAppServer::findCodexExecutable() {
     if (!fromPath.isEmpty()) {
         return fromPath;
     }
+#if defined(Q_OS_WIN)
+    // npm's global bin directory is on PATH only after a new login; `codex.cmd` is its shim.
+    const QStringList candidates{
+        QDir(qEnvironmentVariable("APPDATA")).filePath(QStringLiteral("npm/codex.cmd")),
+        QDir::home().filePath(QStringLiteral(".local/bin/codex.exe")),
+    };
+#else
     const QStringList candidates{
         QDir::home().filePath(QStringLiteral(".local/bin/codex")),
         QStringLiteral("/opt/homebrew/bin/codex"),
         QStringLiteral("/usr/local/bin/codex"),
     };
+#endif
     for (const QString& candidate : candidates) {
         const QFileInfo info(candidate);
         if (info.isFile() && info.isExecutable()) {

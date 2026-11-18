@@ -99,7 +99,12 @@ QString AtlasProcess::cliPath() {
 QStringList AtlasProcess::toolSearchPaths() {
     auto paths = QProcessEnvironment::systemEnvironment().value("PATH").split(QDir::listSeparator(),
                                                                               Qt::SkipEmptyParts);
+#if defined(Q_OS_WIN)
+    if (const auto appData = qEnvironmentVariable("APPDATA"); !appData.isEmpty())
+        paths << QDir(appData).filePath("npm");
+#else
     paths << "/opt/homebrew/bin" << "/usr/local/bin";
+#endif
     const QDir nvm(QDir::homePath() + "/.nvm/versions/node");
     auto versions = nvm.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name);
     // By number, so v26.12.1 comes before v26.7.0 and v24 before v9.

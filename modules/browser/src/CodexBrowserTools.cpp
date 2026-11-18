@@ -153,6 +153,11 @@ QString prerequisiteCacheKey(const Settings& settings, const QString& searchStar
     if (playwright.isEmpty())
 #if defined(Q_OS_MACOS)
         playwright = QDir::home().filePath(QStringLiteral("Library/Caches/ms-playwright"));
+#elif defined(Q_OS_WIN)
+        playwright =
+            QDir(qEnvironmentVariable("LOCALAPPDATA",
+                                      QDir::home().filePath(QStringLiteral("AppData/Local"))))
+                .filePath(QStringLiteral("ms-playwright"));
 #else
         playwright = QDir::home().filePath(QStringLiteral(".cache/ms-playwright"));
 #endif
