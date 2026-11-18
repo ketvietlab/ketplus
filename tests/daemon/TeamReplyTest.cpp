@@ -2,6 +2,7 @@
 // before the reply; pointing members at their worktrees and sending their messages follow
 // it, in order, once, also across a restart. Git here is a wrapper that takes 2 s a call.
 #include "AgentTestFixture.h"
+#include "TeamReplyDiagnostics.h"
 #include "storage/LocalJournal.h"
 
 #include <QDir>
@@ -129,6 +130,31 @@ class TeamReplyTest final : public QObject {
 
     QJsonObject team() {
         return command("team.get", {{"team_id", teamId_}}).value("team").toObject();
+    }
+
+    QByteArray failureMetadata(const QString& phase) {
+        QJsonArray owners;
+        if (const auto stored = fixture_->journal->readSessions())
+            for (const auto& session : *stored) {
+                if (!developers_.contains(session.id))
+                    continue;
+                auto row = fixture_->host->handleCommand(
+                    agent_test::request("session.pending_approvals", {}, session.id,
+                                        session.generation),
+                    "desktop-test");
+                row.insert("id", session.id);
+                row.insert("state", session.state);
+                row.insert("adapter", session.adapter);
+                row.insert("worktree", session.worktreePath);
+                row.insert("generation", session.generation);
+                row.insert("context_revision", session.contextRevision);
+                row.insert("turn_sequence", session.currentTurnSequence);
+                row.insert("completed_turns", fixture_->count(session.id, "turn.completed"));
+                owners.append(row);
+            }
+        return QJsonDocument(team_reply_test::failureMetadata(phase, team(), owners,
+                                                              fixture_->directory.path()))
+            .toJson(QJsonDocument::Compact);
     }
 
     // T-32: Start, then the first developer's conversation stands in T-1's worktree with its
@@ -424,7 +450,7 @@ class TeamReplyTest final : public QObject {
                         QFileInfo(task.value("worktree").toString()).canonicalFilePath())
                     ++pointed;
         }
-        QVERIFY2(pointed == 2, QJsonDocument(team.value("tasks").toArray()).toJson().constData());
+        QVERIFY2(pointed == 2, failureMetadata("outbox-owner-worktrees").constData());
         QTest::qWait(500);
         QCOMPARE(count("assignment"), 2);
     }
@@ -539,8 +565,49 @@ class TeamReplyTest final : public QObject {
         QCOMPARE(assignmentsAtReply, 2);
         QVERIFY2(!gitStartedAtReply, "Deferred Git ran before the resume reply.");
         QVERIFY(!resumed.value("team").toObject().value("paused").toBool());
-        QTRY_VERIFY_WITH_TIMEOUT(QFileInfo::exists(gitStarted), 30000);
+        QTRY_VERIFY2_WITH_TIMEOUT(QFileInfo::exists(gitStarted),
+                                  failureMetadata("resume-git-start").constData(), 30000);
         QTRY_COMPARE_WITH_TIMEOUT(count("assignment"), 3, 30000);
+    }
+
+    void diagnosticsExcludeInputsAndBoundHistory() {
+        const QString sentinel = "synthetic-sensitive-input";
+        QJsonArray history;
+        for (int index = 0; index < 20; ++index)
+            history.append(QJsonObject{
+                {"kind", "worktree"}, {"text", "synthetic switch refused"}, {"token", sentinel}});
+        const QJsonObject task{{"id", "T-1"},
+                               {"owner", "fixture-owner"},
+                               {"history", history},
+                               {"description", sentinel}};
+        const QJsonObject approval{{"kind", "permission"},
+                                   {"method", "fixture-method"},
+                                   {"arguments", sentinel},
+                                   {"token", sentinel}};
+        const QJsonObject owner{{"id", "fixture-owner"},
+                                {"state", "starting"},
+                                {"pending_approvals", QJsonArray{approval}},
+                                {"auth", sentinel}};
+        const auto metadata =
+            team_reply_test::failureMetadata("fixture-control", {{"tasks", QJsonArray{task}}},
+                                             QJsonArray{owner}, fixture_->directory.path());
+        const auto encoded = QJsonDocument(metadata).toJson(QJsonDocument::Compact);
+        QVERIFY(!encoded.contains(sentinel.toUtf8()));
+        const auto projected = metadata.value("tasks").toArray().first().toObject();
+        QCOMPARE(projected.value("history_total"), 20);
+        QCOMPARE(projected.value("history").toArray().size(), 6);
+        QVERIFY(encoded.contains("synthetic switch refused"));
+        QCOMPARE(metadata.value("owners").toArray().first().toObject().value("state"), "starting");
+        QVERIFY(encoded.size() < 4096);
+        // Exercise the actual read-only collector too: an unread approval page must
+        // not masquerade as an empty one in a failure diagnostic.
+        const auto live = QJsonDocument::fromJson(failureMetadata("collector-control")).object();
+        QCOMPARE(live.value("owners").toArray().size(), developers_.size());
+        for (const auto& value : live.value("owners").toArray()) {
+            const auto row = value.toObject();
+            QVERIFY(!row.value("state").toString().isEmpty());
+            QVERIFY(row.value("pending_approvals_read_ok").toBool());
+        }
     }
 };
 

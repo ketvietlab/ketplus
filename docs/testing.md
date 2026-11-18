@@ -294,6 +294,19 @@ Fake-host receipt tests establish consumer gates; the finding routing suite chec
 actual three-revision Git proofs, authenticated host receipt closure and attacks
 using ignored gitlinks/replacement trees. Required full Pro checks still apply.
 
+Team reply/worktree diagnostics use `ketplus_team_reply_tests`. Its existing
+owner-worktree and resume-Git assertions retain their conditions and timeouts;
+on failure they report bounded synthetic task-history/worktree-error metadata,
+owner state/context/turn counters and pending approval kinds. Approval arguments,
+prompts and auth fields are excluded; a failed approval-page read is distinguished
+from an empty page. `diagnosticsExcludeInputsAndBoundHistory` checks the projection
+and actual read-only collector. For order-sensitive failures, preserve the failed
+log and run a bounded sequence of relevant predecessors (`team_flow`, `team_goal`,
+`team_title`, then `team_reply`) sequentially, recording source/binary identity and
+resource/concurrency metadata. A passing isolated run does not classify an earlier
+failure. Pair a reproduced failure with the integration baseline under the same
+conditions; do not relax assertions/timeouts or loop the full suite blindly.
+
 A team reviewer's verify turn writes only in its scratch directory (ADR 0067). Build there:
 `cmake -B <scratch>/build`, `xcodebuild -derivedDataPath <scratch>/DerivedData
 -clonedSourcePackagesDirPath <scratch>/SourcePackages`, and run a script that writes into

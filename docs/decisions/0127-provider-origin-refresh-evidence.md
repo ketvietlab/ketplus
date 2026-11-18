@@ -1257,3 +1257,28 @@ baseline. The observed failures did not reproduce in the serialized control;
 their cause remains unclassified pending leader/reviewer assessment, including
 whether a focused baseline control is needed before merge. This resolution does
 not inherit acceptance from the previously reviewed source revision.
+
+The follow-up diagnostic fixture adds failure-only, bounded projections at the
+two TeamReply assertions without changing their conditions, timeouts or fake IDs.
+It retains task history and worktree-switch errors, owner state/context/turn
+counters and pending approval kinds while excluding prompts, auth and tool inputs.
+A metadata regression checks excluded synthetic fields and bounded history; an
+approval-page read failure is explicitly distinguished from an empty page.
+
+One bounded order attempt (A1) ran the original Pro `team_flow`, `team_goal` and
+`team_title` predecessor executables, then the headless Debug TeamReply binary
+with the diagnostic overlay. All four phases passed (6.227, 0.398, 12.935 and
+27.261 seconds respectively; TeamReply had ten passing QtTest entries). The
+manifest preserves executable hashes and load/disk/process metadata before and
+after each phase. This was not a bit-identical Pro diagnostic binary or a replay
+of every earlier Pro test. Historical resource pressure and concurrent process
+scheduling were not captured completely in the failed run, so exact matching
+conditions remain unavailable. A1 did not reproduce a failure; no new paired
+baseline build or blind retry was justified. The reviewer's earlier serialized
+head/baseline controls remain supporting passing controls, not evidence that the
+failure belongs to the baseline. The original validation blocker remains open
+pending leader/reviewer assessment of the diagnostic checkpoint and these gaps.
+The final approval-read status/collector additions were then validated by a
+targeted rebuild and the projection/collector case alone (three passing QtTest
+entries, 1.205 seconds). Public-tree hygiene passed four tests; formatting and
+diff checks passed. No extra reproduction attempt or full Pro rerun followed A1.
