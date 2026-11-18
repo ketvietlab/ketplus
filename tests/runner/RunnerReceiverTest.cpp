@@ -11,6 +11,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QProcess>
+#include <QRandomGenerator>
 #include <QTest>
 #include <QTimeZone>
 
@@ -55,6 +56,7 @@ void ReceiverTest::init() {
     QVERIFY2(m_state.has_value(), qPrintable(error));
     m_nowMs = QDateTime(QDate(2026, 11, 18), QTime(9, 0), QTimeZone::UTC).toMSecsSinceEpoch();
     m_diskFull = false;
+    m_limits.reset();
     m_holdAt = -1;
     m_reached.tryAcquire(m_reached.available());
     m_released.tryAcquire(m_released.available());
@@ -114,6 +116,8 @@ void ReceiverTest::makeReceiver(const qint64 budget) {
     m_receiver.reset();
     receiver::ReceiverOptions options;
     options.budgetBytes = budget;
+    if (m_limits)
+        options.limits = *m_limits;
     options.now = [this] { return QDateTime::fromMSecsSinceEpoch(m_nowMs, QTimeZone::UTC); };
     options.writer = [this](const QString& file, const qint64 offset, const QByteArray& data) {
         return m_diskFull ? receiver::WriteStatus::DiskFull
@@ -193,13 +197,11 @@ void ReceiverTest::chunk(const Packed& packed, const qint64 offset, const qint64
         m_receiver->receivePayload(frame.transferId, data);
 }
 
-bool ReceiverTest::sendPack(const Packed& packed, const qint64 from, qint64 size) {
+bool ReceiverTest::sendPack(const Packed& packed, const qint64 from) {
     const qint64 total = packed.bytes.size();
-    if (size <= 0)
-        size = total / 3 + 1;
     const qsizetype answers = m_answers.size();
-    for (qint64 offset = from; offset < total; offset += size) {
-        const qint64 bytes = qMin(size, total - offset);
+    for (qint64 offset = from; offset < total; offset += protocol::limits::chunkBytes) {
+        const qint64 bytes = qMin(protocol::limits::chunkBytes, total - offset);
         chunk(packed, offset, bytes);
         if (!QTest::qWaitFor(
                 [&] { return lastAck() == offset + bytes || m_answers.size() > answers; },
@@ -208,6 +210,24 @@ bool ReceiverTest::sendPack(const Packed& packed, const qint64 from, qint64 size
             return false;
     }
     return true;
+}
+
+void ReceiverTest::frameOnly(const Packed& packed, const qint64 offset) {
+    protocol::SnapshotChunk frame;
+    frame.epoch = 1;
+    frame.snapshotId = packed.commit;
+    frame.offset = offset;
+    frame.bytes = protocol::limits::chunkBytes;
+    frame.sha256 = QString(64, QLatin1Char('0'));
+    frame.transferId = QStringLiteral("%1").arg(++m_transfer, 16, 16, QLatin1Char('0'));
+    m_receiver->receive(frame);
+}
+
+bool ReceiverTest::writeBigFile() {
+    QByteArray data(2 * protocol::limits::chunkBytes + 512 * 1024, Qt::Uninitialized);
+    QRandomGenerator generator(19);
+    generator.fillRange(reinterpret_cast<quint32*>(data.data()), data.size() / 4);
+    return writeFile(m_repo + QStringLiteral("/big.bin"), data);
 }
 
 QString ReceiverTest::deliver(const Packed& packed, const std::optional<QString>& base,
@@ -366,40 +386,41 @@ void ReceiverTest::haveRestoresTheSnapshotFromTheMirror() {
 }
 
 void ReceiverTest::needResumesAfterARestart() {
-    QVERIFY(writeFile(m_repo + QStringLiteral("/a.txt"), QByteArray(4096, 'a')));
+    QVERIFY(writeBigFile());
     QVERIFY(writeFile(m_repo + QStringLiteral("/b.txt"), "beta"));
     const Packed packed = pack(snapshot());
-    const qint64 half = packed.bytes.size() / 2;
+    const qint64 chunkBytes = protocol::limits::chunkBytes;
+    QVERIFY(packed.bytes.size() > 2 * chunkBytes);
     begin(packed.commit);
     offer(packed);
     QVERIFY(nextWant());
-    chunk(packed, 0, half);
-    QTRY_COMPARE(lastAck(), std::optional<qint64>(half));
+    chunk(packed, 0, chunkBytes);
+    QTRY_COMPARE(lastAck(), std::optional<qint64>(chunkBytes));
     makeReceiver();
     begin(packed.commit);
     offer(packed);
     const auto want = nextWant();
     QVERIFY(want);
-    QCOMPARE(*want, (SnapshotWant{packed.commit, QStringLiteral("need"), half}));
-    QVERIFY(sendPack(packed, half, packed.bytes.size()));
+    QCOMPARE(*want, (SnapshotWant{packed.commit, QStringLiteral("need"), chunkBytes}));
+    QVERIFY(sendPack(packed, chunkBytes));
     QVERIFY(waitAnswer());
     QCOMPARE(lastAnswer(), QStringLiteral("ready"));
     QCOMPARE(readFile(workspace() + QStringLiteral("/b.txt")), QByteArray("beta"));
 }
 
 void ReceiverTest::sameOfferResumesAndAnotherPackStartsOver() {
-    QVERIFY(writeFile(m_repo + QStringLiteral("/a.txt"), "alpha"));
+    QVERIFY(writeBigFile());
     const Packed first = pack(snapshot());
-    const qint64 half = first.bytes.size() / 2;
+    const qint64 chunkBytes = protocol::limits::chunkBytes;
     begin(first.commit);
     offer(first);
     QVERIFY(nextWant());
-    chunk(first, 0, half);
-    QTRY_COMPARE(lastAck(), std::optional<qint64>(half));
+    chunk(first, 0, chunkBytes);
+    QTRY_COMPARE(lastAck(), std::optional<qint64>(chunkBytes));
     offer(first);
     auto want = nextWant();
     QVERIFY(want);
-    QCOMPARE(*want, (SnapshotWant{first.commit, QStringLiteral("need"), half}));
+    QCOMPARE(*want, (SnapshotWant{first.commit, QStringLiteral("need"), chunkBytes}));
     m_receiver->cancel();
 
     QVERIFY(writeFile(m_repo + QStringLiteral("/a.txt"), "another"));
@@ -413,6 +434,32 @@ void ReceiverTest::sameOfferResumesAndAnotherPackStartsOver() {
     QVERIFY(waitAnswer());
     QCOMPARE(lastAnswer(), QStringLiteral("ready"));
     QCOMPARE(readFile(workspace() + QStringLiteral("/a.txt")), QByteArray("another"));
+}
+
+// A partial pack cut inside a chunk resumes at the chunk boundary below; the rest is cut.
+void ReceiverTest::truncatedPartialResumesAtAChunkBoundary() {
+    QVERIFY(writeBigFile());
+    const Packed packed = pack(snapshot());
+    const qint64 chunkBytes = protocol::limits::chunkBytes;
+    begin(packed.commit);
+    offer(packed);
+    QVERIFY(nextWant());
+    chunk(packed, 0, chunkBytes);
+    QTRY_COMPARE(lastAck(), std::optional<qint64>(chunkBytes));
+    chunk(packed, chunkBytes, chunkBytes);
+    QTRY_COMPARE(lastAck(), std::optional<qint64>(2 * chunkBytes));
+    makeReceiver();
+    QVERIFY(QFile::resize(partialPack(), chunkBytes + chunkBytes / 2));
+    begin(packed.commit);
+    offer(packed);
+    const auto want = nextWant();
+    QVERIFY(want);
+    QCOMPARE(*want, (SnapshotWant{packed.commit, QStringLiteral("need"), chunkBytes}));
+    QCOMPARE(QFileInfo(partialPack()).size(), chunkBytes);
+    QVERIFY(sendPack(packed, chunkBytes));
+    QVERIFY(waitAnswer());
+    QCOMPARE(lastAnswer(), QStringLiteral("ready"));
+    QVERIFY(QFileInfo::exists(workspace() + QStringLiteral("/big.bin")));
 }
 
 } // namespace runner_receiver_test

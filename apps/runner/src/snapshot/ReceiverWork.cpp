@@ -1,5 +1,6 @@
 #include "snapshot/ReceiverWork.h"
 
+#include "protocol/FrameLimits.h"
 #include "snapshot/WorkspaceApply.h"
 #include "snapshot/WorkspaceStore.h"
 
@@ -19,8 +20,6 @@ namespace {
 
 using snapshot::Error;
 using snapshot::ErrorCode;
-
-constexpr qint64 maxPackBytes = qint64(4) * 1024 * 1024 * 1024;
 
 // Codes git or the library return only before the workspace is touched.
 bool untouched(const ErrorCode code) {
@@ -107,6 +106,8 @@ ProbeResult probe(const WorkContext& context, const QString& repositoryKey,
     const QString pack = context.store.partialPackPath(repositoryKey, workspaceKey);
     const qint64 size = QFileInfo(pack).isFile() ? QFileInfo(pack).size() : 0;
     resumed.offset = qMin(resumed.offset, size);
+    if (resumed.offset != resumed.packBytes)
+        resumed.offset -= resumed.offset % protocol::limits::chunkBytes;
     QString error;
     if ((size > resumed.offset && !QFile::resize(pack, resumed.offset)) ||
         !context.store.write(resumed, &error)) {
@@ -236,8 +237,7 @@ ApplyOutcome apply(const WorkContext& context, const ApplyInput& input) {
         return outcome;
     }
 
-    snapshot::ApplyLimits limits;
-    limits.maxPackBytes = maxPackBytes;
+    const snapshot::ApplyLimits& limits = context.limits;
     const snapshot::Result<snapshot::Applied> applied =
         input.fromMirror
             ? snapshot::applyFromMirror({mirror, workspace, input.commit, limits, input.clean},

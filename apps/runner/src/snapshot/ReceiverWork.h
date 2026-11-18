@@ -3,6 +3,7 @@
 #include "snapshot/ReceiverStore.h"
 #include "snapshot/SealedGit.h"
 #include "snapshot/SnapshotResult.h"
+#include "snapshot/WorkspaceApply.h"
 
 #include <QByteArray>
 #include <QDateTime>
@@ -49,6 +50,7 @@ struct WorkContext {
     ChunkWriter writer;
     std::function<QDateTime()> now;
     std::function<void(WorkStep)> hold; // tests only
+    snapshot::ApplyLimits limits;
 };
 
 struct ProbeResult {
@@ -58,7 +60,8 @@ struct ProbeResult {
     std::optional<PartialRecord> partial; // what is kept for this workspace now
     bool removedOrphan = false;
 };
-// Whether the mirror holds the snapshot or the base, and what of a partial pack can resume.
+// Whether the mirror holds the snapshot or the base, and what of a partial pack can resume:
+// the smaller of its recorded offset and its file, down to a chunk boundary unless whole.
 [[nodiscard]] ProbeResult probe(const WorkContext& context, const QString& repositoryKey,
                                 const QString& workspaceKey, const QString& snapshotId,
                                 const std::optional<QString>& baseId, const QString& packSha256,

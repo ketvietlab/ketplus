@@ -1,5 +1,6 @@
 #include "RunnerReceiverTest.h"
 
+#include "protocol/FrameLimits.h"
 #include "snapshot/ReceiverStore.h"
 
 #include <QDir>
@@ -15,9 +16,9 @@ constexpr qint64 minute = 60 * 1000;
 } // namespace
 
 void ReceiverTest::partialPacksExpireAfterADay() {
-    QVERIFY(writeFile(m_repo + QStringLiteral("/a.txt"), QByteArray(3000, 'a')));
+    QVERIFY(writeBigFile());
     const Packed packed = pack(snapshot());
-    const qint64 half = packed.bytes.size() / 2;
+    const qint64 half = protocol::limits::chunkBytes;
     begin(packed.commit);
     offer(packed);
     QVERIFY(nextWant());

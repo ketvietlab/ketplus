@@ -14,39 +14,41 @@ const QString corrupt = QStringLiteral("chunk_corrupt");
 }
 
 void ReceiverTest::framesAndPayloadsPairInAnyOrder() {
-    QVERIFY(writeFile(m_repo + QStringLiteral("/a.txt"), QByteArray(3000, 'a')));
+    QVERIFY(writeBigFile());
     const Packed packed = pack(snapshot());
-    const qint64 third = packed.bytes.size() / 3;
+    const qint64 size = protocol::limits::chunkBytes;
     begin(packed.commit);
     offer(packed);
     QVERIFY(nextWant());
-    chunk(packed, 0, third, true);
-    QTRY_COMPARE(lastAck(), std::optional<qint64>(third));
-    chunk(packed, third, third, false);
-    QTRY_COMPARE(lastAck(), std::optional<qint64>(2 * third));
-    chunk(packed, 2 * third, packed.bytes.size() - 2 * third, true);
+    chunk(packed, 0, size, true);
+    QTRY_COMPARE(lastAck(), std::optional<qint64>(size));
+    chunk(packed, size, size, false);
+    QTRY_COMPARE(lastAck(), std::optional<qint64>(2 * size));
+    chunk(packed, 2 * size, packed.bytes.size() - 2 * size, true);
     QVERIFY(waitAnswer());
     QCOMPARE(lastAnswer(), QStringLiteral("ready"));
     QVERIFY(errorsSent().isEmpty());
+    for (const protocol::SnapshotAck& ack : sentOf<protocol::SnapshotAck>())
+        QVERIFY(ack.offset % size == 0 || ack.offset == packed.bytes.size());
 }
 
 void ReceiverTest::earlyChunksWaitAndRepeatsAreAckedAgain() {
-    QVERIFY(writeFile(m_repo + QStringLiteral("/a.txt"), QByteArray(3000, 'a')));
+    QVERIFY(writeBigFile());
     const Packed packed = pack(snapshot());
-    const qint64 third = packed.bytes.size() / 3;
+    const qint64 size = protocol::limits::chunkBytes;
     begin(packed.commit);
     offer(packed);
     QVERIFY(nextWant());
-    chunk(packed, third, third); // early
+    chunk(packed, size, size); // early
     QTest::qWait(100);
     QVERIFY(!lastAck());
-    chunk(packed, 0, third);
-    QTRY_COMPARE(lastAck(), std::optional<qint64>(2 * third));
+    chunk(packed, 0, size);
+    QTRY_COMPARE(lastAck(), std::optional<qint64>(2 * size));
     const qsizetype acks = sentOf<protocol::SnapshotAck>().size();
-    chunk(packed, 0, third); // a repeat
+    chunk(packed, 0, size); // a repeat
     QTRY_COMPARE(sentOf<protocol::SnapshotAck>().size(), acks + 1);
-    QCOMPARE(lastAck(), std::optional<qint64>(2 * third));
-    QVERIFY(sendPack(packed, 2 * third, packed.bytes.size()));
+    QCOMPARE(lastAck(), std::optional<qint64>(2 * size));
+    QVERIFY(sendPack(packed, 2 * size));
     QVERIFY(waitAnswer());
     QCOMPARE(lastAnswer(), QStringLiteral("ready"));
     QVERIFY(errorsSent().isEmpty());
@@ -55,19 +57,24 @@ void ReceiverTest::earlyChunksWaitAndRepeatsAreAckedAgain() {
 void ReceiverTest::badChunksAreCorrupt() {
     QVERIFY(writeFile(m_repo + QStringLiteral("/a.txt"), QByteArray(3000, 'a')));
     const Packed packed = pack(snapshot());
-    const qint64 half = packed.bytes.size() / 2;
+    const qint64 size = packed.bytes.size(); // one chunk, the last
     begin(packed.commit);
     offer(packed);
     QVERIFY(nextWant());
 
-    chunk(packed, 0, half, false, packed.bytes.left(half - 1)); // shorter than its bytes
+    chunk(packed, 0, size, false, packed.bytes.left(size - 1)); // shorter than its bytes
     QTRY_COMPARE(errorsSent(), QStringList{corrupt});
-    QByteArray flipped = packed.bytes.left(half);
+    QByteArray flipped = packed.bytes;
     flipped[0] = char(flipped[0] ^ 1);
-    chunk(packed, 0, half, false, flipped); // wrong SHA-256
-    QTRY_COMPARE(errorsSent(), (QStringList{corrupt, corrupt}));
-    chunk(packed, half, half + 2, false, packed.bytes.mid(half) + "xx"); // past packBytes
-    QTRY_COMPARE(errorsSent(), (QStringList{corrupt, corrupt, corrupt}));
+    chunk(packed, 0, size, false, flipped); // wrong SHA-256
+    QTRY_COMPARE(errorsSent().size(), 2);
+    chunk(packed, 0, size + 2, false, packed.bytes + "xx"); // past packBytes
+    QTRY_COMPARE(errorsSent().size(), 3);
+    chunk(packed, 1, size - 1); // off a chunk boundary
+    QTRY_COMPARE(errorsSent().size(), 4);
+    chunk(packed, 0, size - 1); // short, and not the last
+    QTRY_COMPARE(errorsSent().size(), 5);
+    QCOMPARE(errorsSent(), QStringList(5, corrupt));
     QVERIFY(!lastAck());
     QCOMPARE(QFileInfo(partialPack()).size(), 0); // nothing written
 
@@ -77,17 +84,17 @@ void ReceiverTest::badChunksAreCorrupt() {
 }
 
 void ReceiverTest::tooManyHeldChunksAreCorrupt() {
-    QVERIFY(writeFile(m_repo + QStringLiteral("/a.txt"), QByteArray(3000, 'a')));
+    QVERIFY(writeBigFile());
     const Packed packed = pack(snapshot());
-    const qint64 size = packed.bytes.size() / 8;
+    const qint64 size = protocol::limits::chunkBytes;
     begin(packed.commit);
     offer(packed);
     QVERIFY(nextWant());
     for (int i = 1; i <= 4; ++i)
-        chunk(packed, i * size, size); // all early: held
+        frameOnly(packed, i * size); // waiting for payloads: held
     QTest::qWait(100);
     QVERIFY(errorsSent().isEmpty());
-    chunk(packed, 5 * size, size);
+    frameOnly(packed, 5 * size);
     QTRY_COMPARE(errorsSent(), QStringList{corrupt});
     chunk(packed, 0, size); // the held ones were dropped
     QTRY_COMPARE(lastAck(), std::optional<qint64>(size));
@@ -125,7 +132,40 @@ void ReceiverTest::chunksWithoutAnOfferAreDropped() {
     const auto want = nextWant();
     QVERIFY(want);
     QCOMPARE(want->fromOffset, 0);
-    QVERIFY(sendPack(packed, 0, packed.bytes.size()));
+    QVERIFY(sendPack(packed));
+    QVERIFY(waitAnswer());
+    QCOMPARE(lastAnswer(), QStringLiteral("ready"));
+}
+
+// Chunks while no `need` is in force count for nothing; a new offer starts the count again.
+void ReceiverTest::chunksOutsideNeedAreDroppedAndCountsRestart() {
+    QVERIFY(writeFile(m_repo + QStringLiteral("/a.txt"), "alpha"));
+    const QString base = snapshot();
+    QVERIFY(writeFile(m_repo + QStringLiteral("/a.txt"), "changed"));
+    const Packed delta = pack(snapshot(), base);
+    QCOMPARE(deliver(delta, base), QStringLiteral("base_missing"));
+    for (int i = 0; i < 6; ++i)
+        chunk(delta, 0, delta.bytes.size(), false, QByteArray("bad")); // waiting for an offer
+    QTest::qWait(200);
+    QCOMPARE(errorsSent(), QStringList{QStringLiteral("base_missing")});
+    QVERIFY(!lastAck());
+    QVERIFY(m_answers.isEmpty());
+
+    const Packed full = pack(delta.commit);
+    offer(full);
+    QVERIFY(nextWant());
+    for (int i = 1; i <= 7; ++i) {
+        chunk(full, 0, full.bytes.size(), false, QByteArray("bad"));
+        QTRY_COMPARE(errorsSent().size(), 1 + i);
+    }
+    offer(full); // the same pack again: the count starts over
+    QVERIFY(nextWant());
+    for (int i = 1; i <= 7; ++i) {
+        chunk(full, 0, full.bytes.size(), false, QByteArray("bad"));
+        QTRY_COMPARE(errorsSent().size(), 8 + i);
+    }
+    QVERIFY(m_answers.isEmpty());
+    QVERIFY(sendPack(full));
     QVERIFY(waitAnswer());
     QCOMPARE(lastAnswer(), QStringLiteral("ready"));
 }

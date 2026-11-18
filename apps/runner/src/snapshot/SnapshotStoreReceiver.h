@@ -27,6 +27,11 @@ struct ReceiverOptions {
     ChunkWriter writer = writeAndSync;
     snapshot::GitTool git;
     std::function<void(WorkStep)> hold; // tests: called on the worker before each step
+    snapshot::ApplyLimits limits = [] {
+        snapshot::ApplyLimits limits;
+        limits.maxPackBytes = qint64(4) * 1024 * 1024 * 1024;
+        return limits;
+    }();
 };
 
 class SnapshotStoreReceiver final : public session::SnapshotReceiver {

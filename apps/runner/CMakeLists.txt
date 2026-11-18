@@ -80,8 +80,8 @@ target_link_libraries(ketplus_runner_snapshot_receiver
 ketplus_enable_warnings(ketplus_runner_snapshot_receiver)
 
 add_executable(ketplus-runner src/main.cpp)
-target_link_libraries(ketplus-runner PRIVATE ketplus_runner_app ketplus_runner_session
-    ketplus_runner_snapshot_receiver)
+# The receiver brings ketplus_runner_app and ketplus_runner_session with it.
+target_link_libraries(ketplus-runner PRIVATE ketplus_runner_snapshot_receiver)
 ketplus_enable_warnings(ketplus-runner)
 
 # Runners are Linux nodes; the macOS build exists for tests only and ships no runner.

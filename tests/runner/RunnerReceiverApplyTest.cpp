@@ -1,10 +1,13 @@
 #include "RunnerReceiverTest.h"
 
+#include "snapshot/WorkspaceApply.h"
+
 #include <QCryptographicHash>
 #include <QDir>
 #include <QDirIterator>
 #include <QFile>
 #include <QFileInfo>
+#include <QProcess>
 #include <QTest>
 #include <QTimeZone>
 
@@ -43,6 +46,27 @@ void age(const QString& file) {
                            QFileDevice::FileModificationTime);
 }
 
+// Git in `directory` with a fixed identity; the trimmed standard output, or nothing.
+std::optional<QByteArray> git(const QString& directory, const QStringList& arguments,
+                              const QByteArray& input = {}, const QString& outputFile = {}) {
+    QProcess process;
+    QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
+    for (const char* name : {"GIT_AUTHOR_NAME", "GIT_COMMITTER_NAME"})
+        environment.insert(QString::fromLatin1(name), QStringLiteral("Fixture"));
+    for (const char* name : {"GIT_AUTHOR_EMAIL", "GIT_COMMITTER_EMAIL"})
+        environment.insert(QString::fromLatin1(name), QStringLiteral("fixture@example.invalid"));
+    process.setProcessEnvironment(environment);
+    process.setWorkingDirectory(directory);
+    if (!outputFile.isEmpty())
+        process.setStandardOutputFile(outputFile);
+    process.start(QStringLiteral("git"), arguments);
+    process.write(input);
+    process.closeWriteChannel();
+    if (!process.waitForFinished(60'000) || process.exitCode() != 0)
+        return std::nullopt;
+    return process.readAllStandardOutput().trimmed();
+}
+
 } // namespace
 
 void ReceiverTest::badPacksLeaveTheWorkspace() {
@@ -77,6 +101,75 @@ void ReceiverTest::badPacksLeaveTheWorkspace() {
     const QMap<QString, QString> held{{key(QStringLiteral("ws")), first.commit}};
     QCOMPARE(m_receiver->heldSnapshots(QStringLiteral("machine-a")), held);
     QVERIFY(!QFileInfo::exists(partialPack()));
+}
+
+void ReceiverTest::checkoutTooLargeLeavesTheWorkspace() {
+    snapshot::ApplyLimits limits = receiver::ReceiverOptions{}.limits;
+    limits.maxCheckoutBytes = 1000;
+    m_limits = limits;
+    makeReceiver();
+    QVERIFY(writeFile(m_repo + QStringLiteral("/a.txt"), "alpha"));
+    const Packed first = pack(snapshot());
+    QCOMPARE(deliver(first), QStringLiteral("ready"));
+    age(workspace() + QStringLiteral("/a.txt"));
+    const auto before = stateOf(workspace());
+
+    QVERIFY(writeFile(m_repo + QStringLiteral("/a.txt"), QByteArray(2000, 'a')));
+    QCOMPARE(deliver(pack(snapshot())), QStringLiteral("snapshot_too_large"));
+    QCOMPARE(stateOf(workspace()), before);
+    const QMap<QString, QString> held{{key(QStringLiteral("ws")), first.commit}};
+    QCOMPARE(m_receiver->heldSnapshots(QStringLiteral("machine-a")), held);
+}
+
+// A path the snapshot library refuses though Git accepts it: only a forged pack holds one.
+void ReceiverTest::unsafePathLeavesTheWorkspace() {
+    QVERIFY(writeFile(m_repo + QStringLiteral("/a.txt"), "alpha"));
+    const Packed first = pack(snapshot());
+    QCOMPARE(deliver(first), QStringLiteral("ready"));
+    age(workspace() + QStringLiteral("/a.txt"));
+    const auto before = stateOf(workspace());
+
+    const QString forge = path(QStringLiteral("forge"));
+    QVERIFY(git(m_root->path(),
+                {QStringLiteral("init"), QStringLiteral("-q"), QStringLiteral("--bare"), forge}));
+    const QStringList dir{QStringLiteral("--git-dir=") + forge};
+    const auto blob = git(forge,
+                          dir + QStringList{QStringLiteral("hash-object"), QStringLiteral("-w"),
+                                            QStringLiteral("--stdin")},
+                          "escaped\n");
+    QVERIFY(blob);
+    const QByteArray entry = "100644 a\\b.txt" + QByteArray(1, '\0') + QByteArray::fromHex(*blob);
+    const auto tree = git(forge,
+                          dir + QStringList{QStringLiteral("hash-object"), QStringLiteral("-t"),
+                                            QStringLiteral("tree"), QStringLiteral("-w"),
+                                            QStringLiteral("--stdin")},
+                          entry);
+    QVERIFY(tree);
+    const auto commit =
+        git(forge, dir + QStringList{QStringLiteral("commit-tree"), QString::fromLatin1(*tree),
+                                     QStringLiteral("-m"), QStringLiteral("f")});
+    QVERIFY(commit);
+    const QString packFile = path(QStringLiteral("forged.pack"));
+    QVERIFY(git(forge,
+                dir + QStringList{QStringLiteral("pack-objects"), QStringLiteral("--revs"),
+                                  QStringLiteral("--stdout"), QStringLiteral("-q")},
+                *commit + '\n', packFile));
+    Packed forged{QString::fromLatin1(*commit), readFile(packFile), {}};
+    forged.sha256 = QString::fromLatin1(
+        QCryptographicHash::hash(forged.bytes, QCryptographicHash::Sha256).toHex());
+    QVERIFY(!forged.bytes.isEmpty());
+    // The library alone names the reason: the path, not the pack.
+    const auto alone = snapshot::applySnapshot(
+        {path(QStringLiteral("check/mirror.git")), path(QStringLiteral("check/ws")), packFile,
+         forged.sha256.toLatin1(), forged.commit, receiver::ReceiverOptions{}.limits});
+    QVERIFY(!alone);
+    QCOMPARE(alone.error().code, snapshot::ErrorCode::UnsafePath);
+
+    QCOMPARE(deliver(forged), QStringLiteral("pack_invalid"));
+    QCOMPARE(stateOf(workspace()), before);
+    QVERIFY(!QFileInfo::exists(workspace() + QStringLiteral("/a")));
+    const QMap<QString, QString> held{{key(QStringLiteral("ws")), first.commit}};
+    QCOMPARE(m_receiver->heldSnapshots(QStringLiteral("machine-a")), held);
 }
 
 void ReceiverTest::incrementalApplyKeepsUntrackedFiles() {

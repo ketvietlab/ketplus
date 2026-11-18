@@ -57,7 +57,8 @@ SnapshotStoreReceiver::create(const app::StateDirectory& state, const QString& w
 SnapshotStoreReceiver::SnapshotStoreReceiver(const app::StateDirectory& state,
                                              const QString& workRoot, ReceiverOptions options)
     : m_store(state, workRoot), m_options(std::move(options)),
-      m_context{m_store, m_options.git, m_options.writer, m_options.now, m_options.hold} {
+      m_context{m_store,       m_options.git,  m_options.writer,
+                m_options.now, m_options.hold, m_options.limits} {
     adopt(m_store.load());
     const qint64 keep = m_options.partialKeepMs;
     work<StoredRecords>([this, keep] { return tidy(m_context, keep); },
@@ -203,6 +204,7 @@ void SnapshotStoreReceiver::onOffer(const protocol::SnapshotOffer& offer) {
         return;
     }
     clearHeld();
+    job.corruptInARow = 0;
     if (job.phase == Phase::Receiving && offer.packSha256 == job.partial.packSha256 &&
         offer.packBytes == job.partial.packBytes) {
         sendFrame(SnapshotWant{offer.snapshotId, QStringLiteral("need"), job.next});

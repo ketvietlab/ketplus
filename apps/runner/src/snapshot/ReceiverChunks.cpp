@@ -9,15 +9,17 @@ constexpr int maxCorruptInARow = 8;
 
 } // namespace
 
+// Chunks count only while the current offer is being received (`need` was sent); any other
+// time they are dropped without a word.
 void SnapshotStoreReceiver::onChunk(const protocol::SnapshotChunk& chunk) {
-    if (!m_job || !m_job->offer || m_job->phase == Phase::Applying)
-        return; // no offer yet, or every byte is here
+    if (!m_job || m_job->phase != Phase::Receiving)
+        return;
     m_job->frames.insert(chunk.transferId, chunk);
     pair(chunk.transferId);
 }
 
 void SnapshotStoreReceiver::receivePayload(const QString& transferId, const QByteArray& payload) {
-    if (!m_job || !m_job->offer || m_job->phase == Phase::Applying)
+    if (!m_job || m_job->phase != Phase::Receiving)
         return;
     m_job->payloads.insert(transferId, payload);
     pair(transferId);
@@ -28,13 +30,15 @@ void SnapshotStoreReceiver::pair(const QString& transferId) {
     if (job.frames.contains(transferId) && job.payloads.contains(transferId)) {
         const protocol::SnapshotChunk chunk = job.frames.take(transferId);
         const QByteArray payload = job.payloads.take(transferId);
+        // Whole chunks only: each starts on a chunk boundary and is full, but the last.
+        const qint64 end = chunk.offset + chunk.bytes;
         if (chunk.snapshotId != job.offer->snapshotId || chunk.bytes <= 0 ||
-            chunk.bytes > protocol::limits::chunkBytes ||
-            chunk.offset + chunk.bytes > job.offer->packBytes) {
+            chunk.offset % protocol::limits::chunkBytes != 0 || end > job.offer->packBytes ||
+            (chunk.bytes != protocol::limits::chunkBytes && end != job.offer->packBytes)) {
             corrupt();
             return;
         }
-        if (job.phase == Phase::Receiving && chunk.offset < job.next) {
+        if (chunk.offset < job.next) {
             sendFrame(protocol::SnapshotAck{job.offer->snapshotId, job.next}); // a repeat
             return;
         }

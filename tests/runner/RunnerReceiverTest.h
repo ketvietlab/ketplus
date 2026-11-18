@@ -41,6 +41,7 @@ class ReceiverTest : public QObject {
     void haveRestoresTheSnapshotFromTheMirror();
     void needResumesAfterARestart();
     void sameOfferResumesAndAnotherPackStartsOver();
+    void truncatedPartialResumesAtAChunkBoundary();
 
     // RunnerReceiverChunkTest.cpp.
     void framesAndPayloadsPairInAnyOrder();
@@ -49,11 +50,14 @@ class ReceiverTest : public QObject {
     void tooManyHeldChunksAreCorrupt();
     void eightCorruptChunksEndThePack();
     void chunksWithoutAnOfferAreDropped();
+    void chunksOutsideNeedAreDroppedAndCountsRestart();
     void oversizedPackIsRefused();
     void diskFullEndsTheJob();
 
     // RunnerReceiverApplyTest.cpp.
     void badPacksLeaveTheWorkspace();
+    void checkoutTooLargeLeavesTheWorkspace();
+    void unsafePathLeavesTheWorkspace();
     void incrementalApplyKeepsUntrackedFiles();
     void cleanRemovesUntrackedFilesOnly();
     void missingBaseAsksForAFullPack();
@@ -73,7 +77,8 @@ class ReceiverTest : public QObject {
     QString path(const QString& name) const;
     bool writeFile(const QString& file, const QByteArray& content) const;
     QByteArray readFile(const QString& file) const;
-    QString snapshot(); // of the source repository as it is now
+    QString snapshot();  // of the source repository as it is now
+    bool writeBigFile(); // a random file of two chunks and a bit: a pack of three chunks
     Packed pack(const QString& commit, const QString& base = {});
     void makeReceiver(qint64 budget = receiver::ReceiverOptions{}.budgetBytes);
     QString workspace(const QString& workspaceName = QStringLiteral("ws")) const;
@@ -83,10 +88,11 @@ class ReceiverTest : public QObject {
                bool clean = false, const QString& machine = QStringLiteral("machine-a"));
     void offer(const Packed& packed, const std::optional<QString>& base = std::nullopt,
                const QStringList& warnings = {});
+    void frameOnly(const Packed& packed, qint64 offset); // a chunk frame, payload never sent
     void chunk(const Packed& packed, qint64 offset, qint64 bytes, bool payloadFirst = false,
                std::optional<QByteArray> payload = std::nullopt);
-    // Sends from `from` in `size` pieces, each after the previous one was acked.
-    bool sendPack(const Packed& packed, qint64 from = 0, qint64 size = 0);
+    // Sends from `from` chunk by chunk, each after the previous one was acked.
+    bool sendPack(const Packed& packed, qint64 from = 0);
     // begin, offer and every chunk; the answer: "ready" or the failure code.
     QString deliver(const Packed& packed, const std::optional<QString>& base = std::nullopt,
                     const QString& workspaceName = QStringLiteral("ws"), bool clean = false,
@@ -114,6 +120,7 @@ class ReceiverTest : public QObject {
     QString m_work;
     std::optional<app::StateDirectory> m_state;
     std::unique_ptr<receiver::SnapshotStoreReceiver> m_receiver;
+    std::optional<snapshot::ApplyLimits> m_limits;
     std::atomic<qint64> m_nowMs{0};
     std::atomic_bool m_diskFull{false};
     std::atomic_int m_holdAt{-1};
