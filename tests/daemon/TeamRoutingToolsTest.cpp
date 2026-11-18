@@ -589,6 +589,24 @@ class TeamRoutingToolsTest final : public QObject {
             }
             QVERIFY(git(worktree, {"reset", "--hard", head}));
             verify.insert("head_commit", head);
+            // The reset happened outside a developer turn. Lane metadata refreshes
+            // on turn completion; explicitly drive that lifecycle before reusing it.
+            QTRY_VERIFY_WITH_TIMEOUT(idle(), 10000);
+            const auto context = fixture.host->handleCommand(
+                request("session.worktrees", {}, developer, 1), "desktop-test");
+            QVERIFY2(context.value("ok").toBool(), qPrintable(text(context)));
+            const int completed = fixture.count(developer, "turn.completed");
+            const auto refresh = fixture.host->handleCommand(
+                request("session.start_turn",
+                        {{"worktree_path", worktree},
+                         {"expected_context_revision", context.value("context_revision")},
+                         {"prompt", "Refresh the restored task status."},
+                         {"options",
+                          QJsonObject{{"provider", "codex"}, {"permission", "workspace-write"}}}},
+                        developer, 1),
+                "desktop-test");
+            QVERIFY2(refresh.value("ok").toBool(), qPrintable(text(refresh)));
+            QTRY_VERIFY_WITH_TIMEOUT(fixture.count(developer, "turn.completed") > completed, 10000);
             QTRY_VERIFY_WITH_TIMEOUT(!fixture.host->teamChecksPending(), 10000);
             QTRY_VERIFY_WITH_TIMEOUT(readTask().value("outside_lane").toArray().isEmpty(), 10000);
         }
