@@ -257,6 +257,13 @@ if(APPLE OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
     add_dependencies(ketplus_managed_task_origin_host_tests ketplus_job_executor)
     ketplus_add_daemon_test(ketplus_managed_task_remote_host_tests ManagedTaskRemoteHostTest.cpp)
     add_dependencies(ketplus_managed_task_remote_host_tests ketplus_job_executor)
+    # The session host joined to real remote jobs, a Relay and a runner the test plays.
+    ketplus_add_daemon_test(ketplus_managed_task_remote_jobs_tests ManagedTaskRemoteJobsTest.cpp)
+    target_sources(ketplus_managed_task_remote_jobs_tests PRIVATE
+        ManagedTaskRemoteJoined.h RemoteJobsRunnerEnd.cpp RemoteJobsRunnerEnd.h)
+    target_link_libraries(ketplus_managed_task_remote_jobs_tests PRIVATE
+        ketplus_runner_pairing ketplus_control_crypto_primitives)
+    add_dependencies(ketplus_managed_task_remote_jobs_tests ketplus_job_executor)
 endif()
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     ketplus_add_daemon_test(ketplus_linux_job_executor_tests LinuxJobExecutorTest.cpp)

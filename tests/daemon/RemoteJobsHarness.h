@@ -10,6 +10,7 @@
 
 #include <functional>
 #include <memory>
+#include <optional>
 
 // RemoteJobs on a registry in a temporary SQLite file, a Relay the test answers, test clocks
 // and real snapshot stores in a temporary directory. Deferred work runs when the test says.
@@ -39,8 +40,18 @@ struct RemoteHarness {
     // Changes the ports before each build, as for real links or spools.
     std::function<void(RemoteJobsPorts&)> adjust;
     std::unique_ptr<RemoteJobs> jobs;
+    // Another registry to run on, as a session host's journal holds; the fixture's otherwise.
+    struct Registry {
+        QSqlDatabase database;
+        ketplus::daemon::BackgroundTaskLedger* ledger = nullptr;
+    };
+    std::optional<Registry> registry;
 
     RemoteHarness() { build(); }
+
+    [[nodiscard]] QSqlDatabase database() const {
+        return registry ? registry->database : f.database;
+    }
 
     // A new RemoteJobs on the same registry, as after a daemon restart.
     void build() {
@@ -49,8 +60,8 @@ struct RemoteHarness {
         stores =
             std::make_unique<SnapshotStores>(state.filePath("stores"), state.filePath("packs"));
         RemoteJobsPorts ports;
-        ports.database = f.database;
-        ports.ledger = f.ledger.get();
+        ports.database = database();
+        ports.ledger = registry ? registry->ledger : f.ledger.get();
         ports.relay = &relay;
         ports.jobClock = &clock;
         ports.trust = &trust;

@@ -118,7 +118,8 @@ struct LinkedParts {
 // A real repository in a temporary directory, real links, spools and snapshot preparation, a
 // Relay and a runner the test plays.
 struct EndToEnd {
-    EndToEnd();
+    // `before` changes the harness before its RemoteJobs is built, as for another registry.
+    explicit EndToEnd(const std::function<void(RemoteHarness&)>& before = {});
     // A task submitted from `repo/src`, its Relay submit answered queued as `jobId` unless that
     // is empty; empty on failure.
     QString submit(qint64 timeoutMs = 60'000, const QString& jobId = linkedJob);
