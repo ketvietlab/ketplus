@@ -45,6 +45,9 @@ class RunnerService final : public QObject {
   signals:
     // {"ticket_id", "state"}: never a code, a token or a secret.
     void pairingChanged(const QJsonObject& payload);
+    // The runner is no longer trusted here: removed or unpaired, its pin already gone.
+    // `clientId` names the local connection that asked, or is empty; never read from a payload.
+    void runnerRemoved(const QString& runnerId, const QString& clientId);
 
   private:
     using PairingPointer = std::shared_ptr<RunnerPairing>;

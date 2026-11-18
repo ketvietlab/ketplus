@@ -96,6 +96,20 @@ target_link_libraries(ketplus_daemon_runner_link
 target_include_directories(ketplus_daemon_runner_link PUBLIC
     "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>")
 ketplus_enable_warnings(ketplus_daemon_runner_link)
+# Remote jobs on the running daemon: the records, peer sessions, runner links, snapshot sender
+# and output spool on the real registry, Relay socket and pin store.
+target_sources(ketplus_daemon_core PRIVATE
+    src/runner/remote/CoordinatorRecords.cpp src/runner/remote/CoordinatorRecords.h
+    src/runner/remote/RelayCancels.cpp src/runner/remote/RelayCancels.h
+    src/runner/remote/RelayMessages.cpp src/runner/remote/RelayMessages.h
+    src/runner/remote/RemoteJobs.cpp src/runner/remote/RemoteJobs.h
+    src/runner/remote/RemoteJobsLinks.cpp src/runner/remote/RemoteJobsRestore.cpp
+    src/runner/remote/RemoteJobsService.cpp src/runner/remote/RemoteJobsService.h
+    src/runner/remote/SnapshotPorts.cpp src/runner/remote/SnapshotPorts.h
+    src/runner/remote/SnapshotStores.cpp src/runner/remote/SnapshotStores.h
+    src/runner/remote/TaskSnapshots.cpp src/runner/remote/TaskSnapshots.h)
+target_link_libraries(ketplus_daemon_core PUBLIC
+    ketplus_daemon_runner_sync ketplus_daemon_runner_link ketplus_daemon_runner_output)
 # Supported provider CLI versions (ADR 0015).
 set_source_files_properties(src/providers/compat/provider-compatibility.json
     PROPERTIES QT_RESOURCE_ALIAS "provider-compatibility.json")

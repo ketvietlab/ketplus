@@ -145,6 +145,8 @@ void RunnerService::changeState(const QJsonObject& payload,
         fail(callback, QStringLiteral("pin_store_failed"));
         return;
     }
+    if (removing)
+        emit runnerRemoved(runnerId, QString());
     client_.changeState(
         runnerId, change,
         [runnerId, removing,
@@ -173,6 +175,7 @@ void RunnerService::unpairRunner(const QJsonObject& payload, Callback callback) 
         fail(callback, QStringLiteral("pin_store_failed"));
         return;
     }
+    emit runnerRemoved(runnerId, QString());
     client_.unpair(runnerId,
                    [runnerId, callback = std::move(callback)](const RunnerOutcome<bool>& outcome) {
                        // A retry after the Relay dropped the pair is done.

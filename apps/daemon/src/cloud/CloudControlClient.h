@@ -77,6 +77,14 @@ class CloudControlClient final : public QObject {
     // Runner pairing and management (runner/RunnerService.h), created on first use.
     [[nodiscard]] runner::RunnerService& runners();
 
+    // Messages of the Relay socket for remote jobs. `take` answers true for a message it handled;
+    // any other message, and every message while none is set, takes the device path. `opened`
+    // runs each time the socket opens. Neither may destroy this client; `take` may send.
+    using RelayMessageTake = std::function<bool(const QJsonObject& message)>;
+    void setRunnerMessages(RelayMessageTake take, std::function<void()> opened);
+    // One message on the Relay socket; false when it is not open.
+    bool sendRelayMessage(const QJsonObject& message);
+
   private:
     friend class CloudPrivacyTestAccess;
     // Calls the runner routes only, with this client's machine credential.
@@ -334,6 +342,8 @@ class CloudControlClient final : public QObject {
     QHash<QString, QList<std::pair<QString, qint64>>> publishedRevisions_;
     // The Relay listed runner.relay/1 in its last heartbeat answer.
     bool runnerRelayAvailable_{false};
+    RelayMessageTake runnerMessages_;
+    std::function<void()> relayOpened_;
     // Last, so it goes first: it calls back into this client.
     std::unique_ptr<runner::RunnerService> runners_;
 };

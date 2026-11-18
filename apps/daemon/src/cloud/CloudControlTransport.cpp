@@ -57,7 +57,16 @@ void CloudControlClient::initializePeerTransport() {
         invalidateSenderKeys();
         revokeAtlasAccess(device);
     });
-    connect(&wakeups_, &RelayWakeups::message, signaling_, &transport::Signaling::receive);
+    // Runner messages leave first; the rest goes where it always went.
+    connect(&wakeups_, &RelayWakeups::message, signaling_, [this](const QJsonObject& message) {
+        if (runnerMessages_ && runnerMessages_(message))
+            return;
+        signaling_->receive(message);
+    });
+    connect(&wakeups_, &RelayWakeups::opened, this, [this] {
+        if (relayOpened_)
+            relayOpened_();
+    });
     connect(signaling_, &transport::Signaling::outgoing, this, [this](const QJsonObject& message) {
         if (!wakeups_.send(message) && message.value("type") != "signal.end")
             signaling_->receive(
@@ -80,6 +89,15 @@ void CloudControlClient::initializePeerTransport() {
                 command.insert("_peerConnection", id);
                 executeCommand(command);
             });
+}
+
+void CloudControlClient::setRunnerMessages(RelayMessageTake take, std::function<void()> opened) {
+    runnerMessages_ = std::move(take);
+    relayOpened_ = std::move(opened);
+}
+
+bool CloudControlClient::sendRelayMessage(const QJsonObject& message) {
+    return wakeups_.send(message);
 }
 
 void CloudControlClient::negotiatePeerTransport(const QJsonValue& heartbeat) {
