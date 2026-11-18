@@ -1,3 +1,4 @@
+#include "TestSettings.h"
 #include "agent/AgentMessageFormatter.h"
 #include "agent/AgentSessionManager.h"
 #include "agent/CodexAppServer.h"
@@ -53,7 +54,7 @@ QByteArray readFile(const QString& path) {
 QByteArray firstProviderThread(const QByteArray& log) {
     for (const auto& line : log.split('\n'))
         if (line.startsWith("turn:"))
-            return line.mid(5);
+            return line.mid(5).trimmed(); // a Windows Python log line ends in \r\n
     return {};
 }
 
@@ -213,7 +214,10 @@ class DesktopDaemonClientTest final : public QObject {
     // DaemonService reads the machine's cloud credentials from the user's data directory, not
     // from the temporary state it is given. Without test paths, a run from a shell that set
     // KETPLUS_CONTROL_URL published these fixtures as live conversations of the real machine.
-    void initTestCase() { QStandardPaths::setTestModeEnabled(true); }
+    void initTestCase() {
+        isolateTestSettings(QStringLiteral("DesktopDaemonClientTest"));
+        QStandardPaths::setTestModeEnabled(true);
+    }
     void answersAgentPromptThroughDaemon() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
