@@ -15,12 +15,15 @@ foreach(required
         message(FATAL_ERROR "Missing from the staged tree: ${required}")
     endif()
 endforeach()
-file(GLOB ketplus_license_texts "${STAGE}/share/licenses/ketplus/third_party/licenses/*"
-    "${STAGE}/share/licenses/ketplus/*")
-list(LENGTH ketplus_license_texts ketplus_license_count)
-if(ketplus_license_count LESS 3)
-    message(FATAL_ERROR "The staged tree carries too few third-party license texts")
-endif()
+# Every license text the shipped files need, by name (docs/licensing.md, "Required distribution
+# files"): an unrelated extra file must not make up for a missing one.
+foreach(license_text OpenSSL-Apache-2.0.txt Scintilla.txt Lexilla.txt KetPlus-Syntax-MPL-2.0.txt
+        libvterm-MIT.txt KET-Sans-OFL-1.1.txt KET-Sans-Mono-OFL-1.1.txt KetQt-MPL-2.0.txt
+        Ket-Design-System-MIT.txt Ket-Symbol-CC-BY-4.0.txt)
+    if(NOT EXISTS "${STAGE}/share/licenses/ketplus/${license_text}")
+        message(FATAL_ERROR "Missing license text in the staged tree: ${license_text}")
+    endif()
+endforeach()
 if(EXISTS "${STAGE}/bin/vc_redist.x64.exe")
     message(FATAL_ERROR "vc_redist.x64.exe must not be staged; the runtime DLLs are app-local")
 endif()

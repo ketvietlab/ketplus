@@ -8,7 +8,7 @@
 # (docs/release-process.md).
 
 # The executables each edition builds. A target that is not part of this configuration is skipped.
-set(ketplus_windows_deployed_targets ketplus ketplus_cm ketplus_daemon ketplusctl)
+set(ketplus_windows_deployed_targets ketplus ketplus_daemon ketplusctl)
 
 foreach(ketplus_deployed_target IN LISTS ketplus_windows_deployed_targets)
     if(NOT TARGET ${ketplus_deployed_target})
