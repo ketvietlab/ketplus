@@ -13,6 +13,7 @@ import hashlib
 import os
 import sys
 import tempfile
+import urllib.error
 import urllib.request
 import xml.etree.ElementTree as ET
 
@@ -33,9 +34,14 @@ def download(url, dest):
     fetch(url, dest)
     try:
         expected = fetch(url + ".sha1").decode().split()[0].lower()
-    except Exception:  # noqa: BLE001 - repositories without checksums are allowed
+    except urllib.error.HTTPError as error:
+        if error.code != 404:
+            sys.exit(f"cannot fetch the checksum of {url}: {error}")
+        # The repository publishes no checksum for this archive.
         print(f"warning: no checksum for {url.rsplit('/', 1)[-1]}", file=sys.stderr)
         return
+    except (urllib.error.URLError, OSError) as error:
+        sys.exit(f"cannot fetch the checksum of {url}: {error}")
     actual = hashlib.sha1(open(dest, "rb").read()).hexdigest()
     if actual != expected:
         sys.exit(f"checksum mismatch for {url}")

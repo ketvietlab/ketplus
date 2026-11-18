@@ -58,7 +58,12 @@ presets already read `$env{QT_ROOT}`, so no Windows-specific preset is needed.
 
 Install mutagen (`brew install mutagen-io/mutagen/mutagen`, or unpack a release
 into `~/.local/bin`), make sure `ssh` to the Windows machine works without a
-password prompt, then from a worktree:
+password prompt, then from a worktree. Three conditions on the Windows machine:
+the OpenSSH default shell must stay `cmd.exe` (the scripts use `cd /d` and
+`if not exist`); `git config --global core.autocrlf false` must be set, because
+the build clones dependencies and patches them with LF-only patterns, which a
+CRLF checkout breaks; and `qtwebview` is installed without a WebEngine, so
+check that a WebView backend plugin is present before relying on it:
 
 ```sh
 export KETPLUS_WIN_HOST=user@host            # required
