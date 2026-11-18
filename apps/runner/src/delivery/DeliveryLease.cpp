@@ -232,8 +232,8 @@ void JobDelivery::endLease() {
     m_ports.clock.disarm(DeliveryTimer::Renew);
     m_ports.clock.disarm(DeliveryTimer::Retry);
     if (!m_ports.journal.clear())
-        markStorageBroken(QStringLiteral("The job journal could not be cleared. This runner "
-                                         "takes no new job until it is restarted."));
+        stopTakingJobs(QStringLiteral("The job journal could not be cleared. This runner "
+                                      "takes no new job until it is restarted."));
     m_record = JournalRecord{};
     m_state = State::Idle;
     m_sessionOpen = false;

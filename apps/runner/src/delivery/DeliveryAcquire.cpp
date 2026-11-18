@@ -34,7 +34,7 @@ JobDelivery::~JobDelivery() = default;
 session::JobLease& JobDelivery::lease() { return *m_lease; }
 
 bool JobDelivery::takesJobs() const {
-    return !m_draining && !m_disabled && !m_storageBroken && !m_credentialLost;
+    return !m_draining && !m_disabled && !m_stopped && !m_credentialLost;
 }
 
 void JobDelivery::heartbeatAnswered(const bool pending, const bool disabled) {
@@ -54,12 +54,12 @@ void JobDelivery::drain() {
     // An acquire still waiting for its answer goes on: a lease it brings is released.
 }
 
-void JobDelivery::storageFailed(const QString& error) { markStorageBroken(error); }
+void JobDelivery::storageFailed(const QString& error) { stopTakingJobs(error); }
 
-void JobDelivery::markStorageBroken(const QString& error) {
-    if (m_storageBroken)
+void JobDelivery::stopTakingJobs(const QString& error) {
+    if (m_stopped)
         return;
-    m_storageBroken = true;
+    m_stopped = true;
     m_ports.report(error);
 }
 
@@ -67,8 +67,8 @@ bool JobDelivery::journal(const JournalRecord::Step step) {
     m_record.step = step;
     if (m_ports.journal.write(m_record))
         return true;
-    markStorageBroken(QStringLiteral("The job journal could not be written. This runner takes "
-                                     "no new job until it is restarted."));
+    stopTakingJobs(QStringLiteral("The job journal could not be written. This runner takes "
+                                  "no new job until it is restarted."));
     return false;
 }
 
@@ -177,17 +177,16 @@ void JobDelivery::takeLease(const HeldLease& lease) {
     openSession(lease);
 }
 
-// The session takes a job only while it holds none; one that refuses has its lease given back.
+// The session takes a job only while it holds none. One that refuses is out of step with
+// delivery: the lease is given back and no job is taken until the process restarts.
 void JobDelivery::openSession(const HeldLease& lease) {
     m_sessionOpen = true;
     if (m_ports.session.open(lease))
         return;
     m_sessionOpen = false;
-    if (!m_sessionRefusalReported) {
-        m_sessionRefusalReported = true;
-        m_ports.report(QStringLiteral("The job session still held another job; the new lease "
-                                      "was given back."));
-    }
+    stopTakingJobs(QStringLiteral("The job session still held another job; the new lease was "
+                                  "given back. This runner takes no new job until it is "
+                                  "restarted."));
     close(true, {}, QStringLiteral("draining"));
 }
 
@@ -244,9 +243,9 @@ void JobDelivery::restore(const std::optional<JournalRecord>& record) {
 
 QJsonObject JobDelivery::heartbeatFields() const {
     const bool holding = m_state != State::Idle && m_state != State::Acquiring;
-    const QString state = m_draining || m_storageBroken ? QStringLiteral("draining")
-                          : holding                     ? QStringLiteral("busy")
-                                                        : idle;
+    const QString state = m_draining || m_stopped ? QStringLiteral("draining")
+                          : holding               ? QStringLiteral("busy")
+                                                  : idle;
     QJsonValue current = QJsonValue::Null;
     if (holding)
         current = QJsonObject{{QStringLiteral("jobId"), m_record.lease.jobId},

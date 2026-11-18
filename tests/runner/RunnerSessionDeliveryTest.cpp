@@ -160,6 +160,11 @@ void RunnerSessionDeliveryTest::busySessionRefusesTheLease() {
     QCOMPARE(rig.calls.sent.last().reason, QStringLiteral("draining"));
     QCOMPARE(rig.reports.size(), 1);
     QCOMPARE(rig.host->session->phase(), session::JobSession::Phase::Assigned); // job-0 still
+    QCOMPARE(rig.heartbeatState(), QStringLiteral("draining"));
+    rig.delivery->heartbeatAnswered(true, false);
+    rig.delivery->jobAvailable(QStringLiteral("job-2"));
+    QCOMPARE(rig.kinds(), (QStringList{"acquire", "release"})); // stopped until a restart
+    QCOMPARE(rig.heartbeatState(), QStringLiteral("draining"));
 }
 
 } // namespace runner_session_test

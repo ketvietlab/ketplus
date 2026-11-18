@@ -96,7 +96,7 @@ class JobDelivery {
     void endLease();
     [[nodiscard]] QString phase() const;
     bool journal(JournalRecord::Step step);
-    void markStorageBroken(const QString& error);
+    void stopTakingJobs(const QString& error);
     void openSession(const HeldLease& lease);
 
     QStringList m_labels;
@@ -116,8 +116,7 @@ class JobDelivery {
 
     bool m_draining = false;
     bool m_disabled = false;
-    bool m_storageBroken = false;
-    bool m_sessionRefusalReported = false;
+    bool m_stopped = false; // until restart: a broken store, or the session out of step
     bool m_credentialLost = false;
 };
 

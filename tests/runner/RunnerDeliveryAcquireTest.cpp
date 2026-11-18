@@ -161,7 +161,8 @@ void RunnerDeliveryAcquireTest::sessionGetsATrustedLease() {
     QCOMPARE(system.session.opened.size(), 1);
 }
 
-// A session that still holds a job takes no other; the lease goes back and is not offered again.
+// A session that still holds a job takes no other: the lease goes back, and delivery stops
+// taking jobs until a restart, as with a broken store.
 void RunnerDeliveryAcquireTest::busySessionGivesTheLeaseBack() {
     Host host;
     host.session.busy = true;
@@ -172,13 +173,17 @@ void RunnerDeliveryAcquireTest::busySessionGivesTheLeaseBack() {
     QCOMPARE(host.reports.size(), 1);
     QCOMPARE(host.currentJob().toObject().value(QStringLiteral("leaseId")).toString(),
              QStringLiteral("lease-1"));
+    QCOMPARE(host.heartbeatState(), QStringLiteral("draining"));
     host.answerOk({{QStringLiteral("requeued"), true}});
     QCOMPARE(host.delivery->state(), State::Idle);
-    QCOMPARE(host.callKinds().count(QStringLiteral("release")), 1);
-    // Another lease meets the same session: given back again, reported once in all.
-    host.hold();
-    QCOMPARE(host.last().kind, Kind::Release);
+    QCOMPARE(host.heartbeatState(), QStringLiteral("draining"));
+    host.session.busy = false;
+    host.delivery->heartbeatAnswered(true, false);
+    host.delivery->jobAvailable(QStringLiteral("job-2"));
+    host.advance(60'000);
+    QCOMPARE(host.callKinds(), (QStringList{"acquire", "release"}));
     QCOMPARE(host.reports.size(), 1);
+    QCOMPARE(host.heartbeatState(), QStringLiteral("draining"));
 }
 
 void RunnerDeliveryAcquireTest::untrustedRequesterIsReleased() {
