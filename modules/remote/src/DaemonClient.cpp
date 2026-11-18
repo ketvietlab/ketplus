@@ -597,10 +597,16 @@ QString DaemonClient::daemonExecutable() {
         return QFileInfo(configured).absoluteFilePath();
     }
     const QDir applicationDirectory(QCoreApplication::applicationDirPath());
+    // Windows only treats a file with an executable suffix as executable.
+#if defined(Q_OS_WIN)
+    const QString name = QStringLiteral("ketplus_daemon.exe");
+#else
+    const QString name = QStringLiteral("ketplus_daemon");
+#endif
     const QStringList candidates{
-        applicationDirectory.filePath(QStringLiteral("ketplus_daemon")),
-        applicationDirectory.filePath(QStringLiteral("../Helpers/ketplus_daemon")),
-        applicationDirectory.filePath(QStringLiteral("../../../ketplus_daemon")),
+        applicationDirectory.filePath(name),
+        applicationDirectory.filePath(QStringLiteral("../Helpers/") + name),
+        applicationDirectory.filePath(QStringLiteral("../../../") + name),
         QStandardPaths::findExecutable(QStringLiteral("ketplus_daemon"))};
     for (const QString& candidate : candidates) {
         if (!candidate.isEmpty() && QFileInfo(candidate).isExecutable()) {

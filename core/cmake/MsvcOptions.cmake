@@ -10,4 +10,7 @@ if(MSVC)
     # <windows.h> from shadowing std::min and std::max.
     add_compile_options(/utf-8 "$<$<COMPILE_LANGUAGE:CXX>:/Zc:__cplusplus>" /bigobj)
     add_compile_definitions(NOMINMAX _CRT_SECURE_NO_WARNINGS)
+    # Incremental linking writes a roughly 180 MB .ilk next to every executable; with the
+    # hundreds of test executables that filled a build machine's disk. Full links are fast enough.
+    add_link_options(/INCREMENTAL:NO)
 endif()

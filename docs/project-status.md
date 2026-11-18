@@ -950,6 +950,17 @@ Linux store policy, signed upgrade prompts and platform release acceptance remai
   `containment_unavailable`; the POSIX job executor is not built), provider script fixtures and
   the Claude sidecar tests are disabled there, and a Codex `.cmd` wrapper without a resolvable
   `codex.js` refuses arguments containing quotes or percent signs.
+- Windows Pro desktop (MSVC 2022, Qt 6.11, Ninja): `cmake --preset dev` configures and builds
+  `KetPlus.exe`, `ketplus_daemon.exe`, `ketplusctl.exe` and the Pro test executables.
+  Started headless over ssh (`QT_QPA_PLATFORM=offscreen`), `KetPlus.exe` stays up, auto-starts
+  `ketplus_daemon.exe` and the daemon creates its state under `%LOCALAPPDATA%`. POSIX-only runner
+  code (`apps/runner` and the peer-session runner suite) is not built on Windows; computer use reports itself unsupported and the daemon stores credentials with
+  DPAPI. MSVC links with `/INCREMENTAL:NO` to keep build trees small.
+  Not verified: the desktop shell with a visible window (workspace, Agent Workspace, terminal,
+  Atlas WebView, computer use hidden in the UI); this is a separate check that needs an interactive
+  Windows session. Not passing yet: about 28 Pro tests on Windows (fake shell-script provider
+  fixtures, macOS bundle layouts, POSIX path assumptions), tracked as a separate follow-up; the Codex browser
+  tools and chat Mermaid suites already pass there.
 - Cross-block native selection/accessibility mapping and physical-device
   CPU/frame-time/RSS evidence for the bounded transcript renderer. Giant bodies
   already use block rows and the active presentation window is capped at 300
