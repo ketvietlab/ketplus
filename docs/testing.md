@@ -1369,13 +1369,13 @@ decisions remain part of the review.
 | 3. Wake/auth fences, complete registry and platform assurance | Ledger atomic-outbox/dedup/generation/quota/pagination cases; IPC owner/grant checks; `ManagedTaskOriginHostTest` review/delayed-origin cases; Linux real-helper boundary tests; native birth/audit-token checks | Native bootstrap original remains unclassified under its separate integration-only residual decision; seven-suite integration-only residual retains the intermediate SDK-helper attribution limits; no absolute macOS containment claim |
 | 4. Build/matrix, honest limits, no quota or app replacement | Fresh Pro build and 251-suite run; offline SDK/contract/public-tree checks; Linux acceptance and CMake-installed daemon/helper staging; source/binary/hash records | Full Mac remains 242 pass / 1 skip / 8 failed suites; whole-tree Runtime install stopped at an unbuilt runner; no full packaging, release or installed-app validation |
 | 5. Reviewed PR into integration and cross-lane resolution | PR #763 contains the minimal deferred IPC routing fix and socket regressions; provider/UI dependencies are merged | Formal PR approval and integration acceptance remain outstanding; evidence-only residual reviews do not substitute for that approval |
-| 6. Native faults, attention, slots, durable owner fences and user-only resolution | Native detached-descendant timeout, supervisor death, reconnect and lease-loss cases passed within the original suite; ledger attention/slot/audit/rollback cases and IPC/UI user-only confirmation cases passed | These are layered fixtures: a single real native attention incident carried through database reopen plus generation/session close is not directly demonstrated by the retained cases. The SDK-helper sample is not that managed-job fault evidence; reviewer/leader must disposition this coverage boundary before closing the criterion |
+| 6. Native faults, attention, slots, durable owner fences and user-only resolution | Original native detached-descendant, supervisor-death, reconnect and lease-loss cases; ledger/IPC/UI attention, slot and user-only CAS/audit cases; the targeted real-native attention follow-up below carries one incident through file-backed reopen and each distinct owner-close/generation-change path | The new targeted runtime evidence awaits review before closing this criterion. The unrelated SDK-helper sample remains unattributed; no absolute native containment or full packaging claim |
 
 Portable follow-up work uses the verified SSH/Mutagen workflow above. Mac-only
 identity and renderer checks stay on macOS. This mapping authorizes no additional
 control, provider invocation, toolchain change or production fix.
 
-#### Attention incident lifecycle follow-up (prepared, not yet verified)
+#### Attention incident lifecycle follow-up (targeted runtime pass, review pending)
 
 `ketplus_managed_attention_recovery_tests` adds the `owner-close` and
 `generation-change` rows of `attentionSurvivesOwnerLifecycle`. It uses a file-backed
@@ -1427,7 +1427,7 @@ cmake -S "$TASK_SOURCE" -B "$TASK_BUILD" -G Ninja \
   -DKETPLUS_BUILD_TESTS=ON -DCMAKE_BUILD_TYPE=Debug \
   -DCMAKE_PREFIX_PATH="$QT_ROOT" -DFETCHCONTENT_FULLY_DISCONNECTED=ON \
   -DFETCHCONTENT_SOURCE_DIR_KETPLUS_LIBDATACHANNEL="$TASK_DATACHANNEL_SOURCE"
-cmake --build "$TASK_BUILD" --target ketplus_managed_attention_recovery_tests -j1
+cmake --build "$TASK_BUILD" --target ketplus_managed_attention_recovery_tests -j8
 ctest --test-dir "$TASK_BUILD" -R '^ketplus_managed_attention_recovery_tests$' -j1 -V
 ```
 
@@ -1447,11 +1447,38 @@ cmake --build --preset dev --target ketplus_managed_attention_recovery_tests -j1
 ctest --test-dir build/dev -R '^ketplus_managed_attention_recovery_tests$' -j1 -V
 ```
 
-These are proposed commands, not execution evidence. Do not run unrelated suites,
-repeat passed controls, change deadlines or provision shared toolchains. A source-only
+The targeted verification ran once on source `0eba074c`: Linux matched exactly
+three cases (the lookup regression and two injected lifecycle rows), all passed
+without skips in 3.625 seconds. Only after Linux finished, the Mac target and its
+required helper were built; exactly two real-native lifecycle rows passed without
+skips in 41.637 seconds. These elapsed times include the run harness; the raw QtTest
+logs separately record row timings. No old controls or full matrix were repeated.
+The Linux build had already completed with `-j1` when the instruction to use `-j8`
+arrived; it was not rebuilt. The command above records the new concurrency for
+future necessary Linux builds; test concurrency remains serial.
+
+Both native rows captured persisted API output (17 bytes and its cursor/size)
+before supervisor fault, retained the recorded identities and root-result field
+through reopen, observed fresh recovery/owner fences and retained attention without
+pruning or slot ownership. User-only current-revision acknowledgement created one
+durable audit, with final `interrupted`/`unverified` and suppressed completion;
+the no-wake assertions passed. The native recorded exit-code field was `-1`, not
+an observed successful root exit, and executor-event timestamps remain unavailable.
+Both native cleanup guards reported closure, no signal/Stop errors and no retained
+fixture; the scoped post-run process inventory was empty. These checks cover known
+identities and preserve the native best-effort limit.
+
+Append-only runtime evidence v11 retains source/binary/helper/config hashes,
+platform/resource snapshots, exact selector listings, raw logs and JUnit outside
+generated cleanup. It awaits runtime review; the original Mac 242/1/8 and Linux
+5/2 failures remain unclassified under their integration-only residual decisions.
+This follow-up does not complete formal T-5 acceptance, packaging or release.
+
+Do not run unrelated suites, repeat passed controls, change deadlines or provision
+shared toolchains. A source-only
 Linux mirror has no Git metadata; retain the independently verified Mac source
 manifest as provenance rather than claiming the generated `unknown` revision is a
-commit identity. Criterion 6 remains open until this follow-up is verified and reviewed.
+commit identity. Criterion 6 remains open until the runtime evidence is reviewed.
 
 The opt-in `ketplus_linux_job_executor_tests` runs the real packaged helper and
 registry. It covers missing-manager admission, durable retry/output, double-fork/
