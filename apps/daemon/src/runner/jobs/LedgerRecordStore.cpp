@@ -162,10 +162,14 @@ std::optional<QString> LedgerRecordStore::abandonUnreadable(const QString& taskI
         return std::nullopt;
     };
     QSqlQuery query(database_);
-    query.prepare("SELECT revision,runs_on,timeout_ms,job_id,dispatched_to FROM remote_jobs "
+    query.prepare("SELECT revision,runs_on,timeout_ms,job_id,dispatched_to,record FROM remote_jobs "
                   "WHERE task_id=? AND revision>0");
     query.addBindValue(taskId);
     if (!query.exec() || !query.next())
+        return fail();
+    // A record that reads is never ended this way.
+    if (const auto readable = decodeRecord(query.value(5).toByteArray());
+        readable && readable->taskId == taskId)
         return fail();
     const qint64 revision = query.value(0).toLongLong();
     RemoteJobRecord record;
