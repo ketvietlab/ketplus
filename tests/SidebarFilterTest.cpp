@@ -316,8 +316,7 @@ class SidebarFilterTest final : public QObject {
         auto* field = sidebar.findChild<QLineEdit*>("sidebarRepositoryFilter");
         QVERIFY(field);
         QCOMPARE(field->accessibleName(), sidebar_filter::text(sidebar_filter::name));
-        if (locale.startsWith("vi"))
-            QVERIFY(field->accessibleName().startsWith(QString::fromUtf8("Lọc")));
+        QCOMPARE(field->accessibleName(), QStringLiteral("Filter repositories and conversations"));
         QVERIFY(field->toolTip().contains(
             SidebarFilterField::shortcut().toString(QKeySequence::NativeText)));
         QTest::mouseClick(field, Qt::LeftButton);

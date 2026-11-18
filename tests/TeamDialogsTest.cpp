@@ -524,9 +524,12 @@ class TeamDialogsTest final : public QObject {
         auto* dialog = NewTeamForm::present(&window, teams_.get(), "/repo", bothProviders);
         auto* form = dialog->findChild<NewTeamForm*>();
         form->nameField()->setText("Checkout");
-        form->goalField()->setText(language == "vi"
-                                       ? QStringLiteral("Hoàn tất trang thanh toán.")
-                                       : QStringLiteral("Complete the checkout page."));
+        form->goalField()->setText(
+            language == "vi"
+                ? QStringLiteral("Hoàn tất trang thanh toán, giữ nội dung tiếng Việt và kiểm tra "
+                                 "bố cục khi mục tiêu dài. ")
+                      .repeated(16)
+                : QStringLiteral("Complete the checkout page."));
         auto* context = form->findChild<QWidget*>("teamContextColumn");
         auto* settings = form->findChild<QWidget*>("teamSettingsColumn");
         auto* scroll = dialog->findChild<QScrollArea*>("teamDialogScroll");

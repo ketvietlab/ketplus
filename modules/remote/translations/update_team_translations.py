@@ -4,12 +4,13 @@
 lupdate finds every team text, but it guesses a context per class, and the desktop's
 free tr() helpers translate under contexts lupdate cannot see. A team text means the same
 wherever the team shows it, so this keeps one context, "Team", which is the context the
-translator looks up (modules/remote/src/TeamLanguage.cpp):
+historical catalog used. The application no longer installs it (T30):
 
     update_team_translations.py [--check] <lupdate> <repository root> <file.ts>...
 
 A translation already written for a text is kept; a text no source uses any more is dropped.
 With --check the catalog is not rewritten; missing translations and stale entries fail.
+--check-preserved validates the historical catalog without extracting English-only UI text.
 """
 
 import subprocess
@@ -78,6 +79,9 @@ def write(ts: Path, language: str, all_texts: list[str], translated: dict[str, s
 
 def main() -> int:
     args = sys.argv[1:]
+    preserved = "--check-preserved" in args
+    if preserved:
+        args.remove("--check-preserved")
     checking = "--check" in args
     if checking:
         args.remove("--check")
@@ -85,6 +89,15 @@ def main() -> int:
         print(__doc__.strip(), file=sys.stderr)
         return 2
     lupdate, root, files = args[0], Path(args[1]), [Path(p) for p in args[2:]]
+    if preserved:
+        for ts in files:
+            messages = list(ET.parse(ts).getroot().iter("message"))
+            entries = written(ts)
+            if not messages or len(entries) != len(messages):
+                print(f"{ts.name}: incomplete or duplicate historical translations", file=sys.stderr)
+                return 1
+            print(f"{ts.name}: {len(entries)} preserved translations checked")
+        return 0
     all_texts = texts(lupdate, sources(root))
     if checking:
         failed = False

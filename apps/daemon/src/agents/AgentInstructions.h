@@ -24,7 +24,7 @@ struct TeamRoleContext final {
     QString mergePolicy;
     QString integrationBranch;
     bool leaderWritesRequirements{true};
-    // T-56: the team's language ("en", "vi"); the team page and the daemon's texts use it.
+    // Content fallback (auto/en/vi). Prompt instructions win; application chrome is English.
     QString language;
 };
 [[nodiscard]] QString teamInstructions(const TeamRoleContext& context);

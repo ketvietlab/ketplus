@@ -154,6 +154,43 @@ class TeamRemoteTest final : public QObject {
     void initTestCase() { QStandardPaths::setTestModeEnabled(true); }
 
     // §6: each read answers with the fields of the contract's fixture, and no local path.
+    void contentLanguageSurvivesPairedProjectionWithoutTranslatingContent() {
+        Fixture fixture;
+        QVERIFY(fixture.open());
+        QJsonObject payload = createPayload(fixture);
+        payload.insert("language", "vi");
+        payload.insert("goal", "Giữ nguyên mục tiêu tiếng Việt");
+        const QJsonObject made = phone(fixture, "team.create", payload);
+        QVERIFY2(made.value("ok").toBool(), qPrintable(text(made)));
+        const QJsonValue id = made.value("team").toObject().value("id");
+        const qint64 originalRevision = revision(fixture, id.toString());
+        for (const QString& language : {QString("vi"), QString("en"), QString("auto")}) {
+            const QJsonObject changed =
+                phone(fixture, "team.update",
+                      {{"team_id", id},
+                       {"language", language},
+                       {"expected_revision", revision(fixture, id.toString())}});
+            QVERIFY2(changed.value("ok").toBool(), qPrintable(text(changed)));
+            const QJsonObject read = phone(fixture, "team.get", {{"team_id", id}});
+            QCOMPARE(read.value("team").toObject().value("language").toString(), language);
+            QCOMPARE(read.value("team").toObject().value("goal").toString(),
+                     QString("Giữ nguyên mục tiêu tiếng Việt"));
+        }
+        QCOMPARE(
+            phone(fixture, "team.update",
+                  {{"team_id", id}, {"language", "vi"}, {"expected_revision", originalRevision}})
+                .value("error_code")
+                .toString(),
+            QString("stale_team"));
+        for (const QJsonValue& invalid : {QJsonValue("fr"), QJsonValue(""), QJsonValue(3)}) {
+            const auto refused = phone(fixture, "team.update",
+                                       {{"team_id", id},
+                                        {"language", invalid},
+                                        {"expected_revision", revision(fixture, id.toString())}});
+            QCOMPARE(refused.value("error_code").toString(), QString("invalid_payload"));
+        }
+    }
+
     void sidebarPlacementIsAdditiveAndDoesNotReplaceExecutionIdentity() {
         QJsonObject team{{"id", "3"}, {"repository", "/synthetic/execution"}};
         auto row = remote::directoryEntry(team, ids);

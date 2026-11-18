@@ -178,11 +178,10 @@ Linux store policy, signed upgrade prompts and platform release acceptance remai
   check skips tasks with a pull request, needs the branch's own commits and accepts
   `origin/<integration>` after a fetch, and the leader closes a task by hand with `team_task_close`. Not yet run on a
   live team.
-  Team language ([ADR 0125](decisions/0125-team-language.md), T-56): a team works in
-  English or Vietnamese, set in New Team (from the system or the goal's letters) and in the
-  team menu. The team page, its dialogs, the daemon's Updates, history, its own decisions
-  and the leader's digest follow it through Qt Linguist (`ketplus_teams_vi.ts`), and the
-  leader's instructions name it. The phone's team screen is not translated yet.
+  Team language (T30, [contract](decisions/2026-11-18-english-ui-team-content.md)):
+  application chrome and new fixed system templates are English. Content follows the
+  user's prompt; new teams default to Follow prompt (`auto`), with legacy `en`/`vi`
+  preserved as fallback preferences. Stored content is never translated retroactively.
   Sidebar (#464): with a daemon that advertises `teams/1`, each team is a branch of its
   repository's tree before the other conversations, leader, developers, reviewer; a
   member's role is in its hint and accessible description. The branch's name opens the

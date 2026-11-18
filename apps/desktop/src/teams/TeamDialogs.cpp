@@ -24,7 +24,6 @@
 #include <QHBoxLayout>
 #include <QJsonArray>
 #include <QLabel>
-#include <QLocale>
 #include <QPointer>
 #include <QRegularExpression>
 #include <QScrollArea>
@@ -196,26 +195,16 @@ NewTeamForm::NewTeamForm(TeamDirectory* teams, const QString& repository,
     });
     settingsLayout->addWidget(new ket::FieldRow(tr("Integration branch"), branch_, {}, this));
 
-    // T-56: the language the leader works in. The team page, its Updates and the daemon's
-    // decisions follow it. It starts from the system's language and follows the goal's
-    // letters until the user picks one.
+    // A content preference only: neither the OS nor typing into Goal changes UI language.
     namespace team_language = remote::team_language;
     language_ = new ket::Select(this);
     language_->setObjectName(QStringLiteral("teamLanguage"));
     for (const QString& code : team_language::supported())
         language_->addItem(team_language::nativeName(code), code);
-    language_->setCurrentIndex(
-        language_->findData(team_language::fromLocale(QLocale::system().uiLanguages().value(0))));
-    connect(language_, &QComboBox::activated, this, [this] { languageChosen_ = true; });
-    connect(goal_, &ket::TextArea::textChanged, this, [this] {
-        if (const QString written = remote::team_language::detect(goal_->text());
-            !languageChosen_ && !written.isEmpty())
-            language_->setCurrentIndex(language_->findData(written));
-    });
-    settingsLayout->addWidget(new ket::FieldRow(tr("Language"), language_,
-                                                tr("The team page, its updates and the leader's "
-                                                   "decisions use it."),
-                                                this));
+    language_->setCurrentIndex(language_->findData(team_language::automatic));
+    settingsLayout->addWidget(new ket::FieldRow(
+        tr("Content language"), language_,
+        tr("Content fallback. The prompt takes priority. The interface stays English."), this));
 
     auto* merges = new QWidget(this);
     auto* mergeRow = new QHBoxLayout(merges);

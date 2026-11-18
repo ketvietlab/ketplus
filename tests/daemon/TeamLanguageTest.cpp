@@ -1,6 +1,5 @@
-// T-56: a team's language. The team stores the language its leader works in, logs a change in
-// Updates, and the daemon writes its Updates, its own decisions and its messages to the leader
-// in that language; an English team reads exactly as before. A fake runtime; no provider runs.
+// T30: content preferences survive while new fixed system text stays English.
+// A fake runtime; no provider runs.
 #include "TeamLanguage.h"
 #include "AgentTestFixture.h"
 #include "TeamFakeHost.h"
@@ -83,7 +82,7 @@ class TeamLanguageTest final : public QObject {
 
     void theLanguageNamesAreTheSupportedOnes() {
         namespace language = ketplus::remote::team_language;
-        QCOMPARE(language::supported(), (QStringList{"en", "vi"}));
+        QCOMPARE(language::supported(), (QStringList{"auto", "en", "vi"}));
         QCOMPARE(language::fromLocale("vi-VN"), QStringLiteral("vi"));
         QCOMPARE(language::fromLocale("vi_VN"), QStringLiteral("vi"));
         QCOMPARE(language::fromLocale("fr-FR"), QStringLiteral("en"));
@@ -91,9 +90,47 @@ class TeamLanguageTest final : public QObject {
         QCOMPARE(language::detect("Thanh toán bằng Adyen"), QStringLiteral("vi"));
         QCOMPARE(language::detect("Pay with Adyen"), QString{});
         QVERIFY(!teams::rules::validLanguage("vi"));
+        QVERIFY(!teams::rules::validLanguage("auto"));
+        QCOMPARE(Team{}.language, QStringLiteral("auto"));
         const auto refused = teams::rules::validLanguage("fr");
         QVERIFY(refused);
         QCOMPARE(refused->code, QStringLiteral("invalid_payload"));
+    }
+
+    void fixedFormattingIgnoresAllContentAndAmbientPreferences() {
+        namespace language = ketplus::remote::team_language;
+        QObject owner;
+        for (const QString& preference : language::supported()) {
+            language::setAmbient(preference, &owner);
+            language::Scope scope(preference);
+            language::install();
+            QCOMPARE(language::current(), QString("en"));
+            QCOMPARE(QCoreApplication::translate("Team", "Members"), QString("Members"));
+            QCOMPARE(language::text(preference, "Team", "%n tasks", 3), QString("3 tasks"));
+            language::clearAmbient(&owner);
+        }
+    }
+
+    void historicalContentAndDecisionChoicesSurvivePreferenceChangeAndRestart() {
+        start("vi");
+        const QString id = task("Giữ nguyên tiêu đề");
+        QString decision;
+        QVERIFY(teams_
+                    ->raiseQuestion(team_,
+                                    {{"question", "Dùng cách cũ?"},
+                                     {"choices", QJsonArray{"Tiếp tục", "Dừng"}},
+                                     {"context", "Không dịch lại lịch sử"}},
+                                    "lead", &decision)
+                    .ok());
+        QVERIFY(teams_->update(team_, {{"language", "auto"}}, "user").ok());
+        teams_.reset();
+        open();
+        QCOMPARE(team().language, QString("auto"));
+        QCOMPARE(team().task(id)->title, QString("Giữ nguyên tiêu đề"));
+        QCOMPARE(team().decisions.last().question, QString("Dùng cách cũ?"));
+        QCOMPARE(team().decisions.last().choices, (QStringList{"Tiếp tục", "Dừng"}));
+        QVERIFY(teams_->answerDecision(team_, decision, "Tiếp tục", "user").ok());
+        QCOMPARE(team().decisions.last().answer, QString("Tiếp tục"));
     }
 
     // Stored with the team, read back after a restart, changed in settings and logged.
@@ -101,7 +138,7 @@ class TeamLanguageTest final : public QObject {
         start("vi");
         QCOMPARE(team().language, QStringLiteral("vi"));
         QCOMPARE(updates("team_created").first().text,
-                 QStringLiteral("Đã tạo team Checkout với 4 thành viên."));
+                 QStringLiteral("Team Checkout created with 4 members."));
         teams_.reset();
         open();
         QCOMPARE(team().language, QStringLiteral("vi"));
@@ -115,7 +152,7 @@ class TeamLanguageTest final : public QObject {
         QCOMPARE(team().language, QStringLiteral("en"));
         const auto changed = updates("language");
         QCOMPARE(changed.size(), 1);
-        QCOMPARE(changed.first().text, QStringLiteral("The team now works in English."));
+        QCOMPARE(changed.first().text, QStringLiteral("Content language preference: English."));
         QCOMPARE(changed.first().data.value("from").toString(), QStringLiteral("vi"));
         QCOMPARE(changed.first().data.value("to").toString(), QStringLiteral("en"));
         // The same language again changes nothing and logs nothing.
@@ -123,45 +160,48 @@ class TeamLanguageTest final : public QObject {
         QCOMPARE(updates("language").size(), 1);
         QVERIFY(teams_->update(team_, {{"language", "vi"}}, "user").ok());
         QCOMPARE(updates("language").first().text,
-                 QStringLiteral("Team giờ làm việc bằng Tiếng Việt."));
+                 QStringLiteral("Content language preference: Vietnamese."));
     }
 
-    // A team saved before T-56 has no language: it is English.
-    void aTeamWithoutALanguageIsEnglish() {
+    // Missing preference follows the prompt; explicit legacy values remain unchanged.
+    void aTeamWithoutALanguageFollowsThePrompt() {
         QJsonObject saved = toJson(standardTeam());
         saved.remove("language");
+        QCOMPARE(teamFromJson(saved).language, QStringLiteral("auto"));
+        saved.insert("language", "en");
         QCOMPARE(teamFromJson(saved).language, QStringLiteral("en"));
+        saved.insert("language", "vi");
+        QCOMPARE(teamFromJson(saved).language, QStringLiteral("vi"));
     }
 
-    // The budget decision, its Update and the leader's digest in Vietnamese; the Vietnamese
-    // first choice resumes the team as "Continue" does.
-    void theBudgetDecisionAndTheDigestSpeakVietnamese() {
+    // Fixed system text is English; a user-authored Vietnamese note is untouched.
+    void fixedBudgetDecisionAndDigestStayEnglishWithVietnameseContent() {
         const Decision asked = useTheBudget("vi");
         QCOMPARE(asked.kind, QStringLiteral("budget"));
-        QCOMPARE(asked.question, QStringLiteral("Team đã dùng hết 2 lượt tự động. Tiếp tục?"));
-        QCOMPARE(asked.choices, (QStringList{"Tiếp tục (thêm 2 lượt)", "Dừng"}));
-        QCOMPARE(asked.recommended, QStringLiteral("Tiếp tục (thêm 2 lượt)"));
-        QVERIFY(asked.context.startsWith("Lượt tự động tạm dừng"));
+        QCOMPARE(asked.question, QStringLiteral("The team used its 2 automatic turns. Continue?"));
+        QCOMPARE(asked.choices, (QStringList{"Continue (2 more turns)", "Stop"}));
+        QCOMPARE(asked.recommended, QStringLiteral("Continue (2 more turns)"));
+        QVERIFY(asked.context.startsWith("Automatic turns are paused"));
         QCOMPARE(updates("paused").first().text,
-                 QStringLiteral("Tạm dừng: team đã dùng hết 2 lượt tự động."));
+                 QStringLiteral("Paused: the team used its 2 automatic turns."));
         QVERIFY(teams_->moveTask(team_, "T-1", "blocked", "dev1", "cần API key").ok());
-        QVERIFY2(updates("state").first().text.endsWith(QStringLiteral(" → bị chặn: cần API key")),
+        QVERIFY2(updates("state").first().text.endsWith(QStringLiteral(" → blocked: cần API key")),
                  qPrintable(updates("state").first().text));
 
         QVERIFY(teams_->answerDecision(team_, asked.id, asked.choices.first(), "user").ok());
         QVERIFY(!team().paused);
         QCOMPARE(updates("decision_answered").first().text,
-                 QStringLiteral("%1 đã được trả lời: Tiếp tục (thêm 2 lượt)").arg(asked.id));
+                 QStringLiteral("%1 answered: Continue (2 more turns)").arg(asked.id));
         const auto digests = host_.of("decision");
         QCOMPARE(digests.size(), 1);
         QCOMPARE(digests.first().body,
-                 QStringLiteral("Team Checkout: người dùng đã trả lời %1.\n"
-                                "Câu hỏi: Team đã dùng hết 2 lượt tự động. Tiếp tục?\n"
-                                "Trả lời: Tiếp tục (thêm 2 lượt)")
+                 QStringLiteral("Team Checkout: the user answered %1.\n"
+                                "Question: The team used its 2 automatic turns. Continue?\n"
+                                "Answer: Continue (2 more turns)")
                      .arg(asked.id));
     }
 
-    // "Dừng" keeps the team paused, as "Stop" does.
+    // "Stop" keeps the team paused, as "Stop" does.
     void theSecondBudgetChoiceKeepsTheTeamPaused() {
         const Decision asked = useTheBudget("vi");
         QVERIFY(teams_->answerDecision(team_, asked.id, asked.choices.last(), "user").ok());
@@ -205,12 +245,7 @@ class TeamLanguageTest final : public QObject {
         QCOMPARE(team().task(id)->state, state::blocked);
         QCOMPARE(team().task(id)->reviewBlock,
                  noVerdict ? QStringLiteral("no_verdict") : QStringLiteral("round_limit"));
-        if (language == "vi") {
-            QVERIFY(!team().task(id)->question.startsWith("The review"));
-            QVERIFY(!team().task(id)->question.startsWith("Review round"));
-        }
-        if (!noVerdict && language == "vi")
-            QVERIFY(updates("round_limit").first().text.startsWith(QStringLiteral("Kết luận về")));
+        QVERIFY(team().task(id)->question.startsWith(noVerdict ? "Round " : "Review round"));
         // Persist the protocol reason across restart and a display-language change.
         teams_.reset();
         open();
@@ -221,7 +256,7 @@ class TeamLanguageTest final : public QObject {
                  noVerdict ? QStringLiteral("no_verdict") : QStringLiteral("round_limit"));
     }
 
-    void anInterruptedReviewKeepsItsProtocolReasonAndVietnameseMessage() {
+    void anInterruptedReviewKeepsItsProtocolReasonAndEnglishSystemMessage() {
         start("vi");
         const QString id = task("Cart");
         QVERIFY(teams_->assignTask(team_, id, "dev1", "lead").ok());
@@ -234,10 +269,10 @@ class TeamLanguageTest final : public QObject {
         QCOMPARE(interrupted->state, state::blocked);
         QCOMPARE(interrupted->round, 0);
         QCOMPARE(interrupted->reviewBlock, "review_interrupted");
-        QVERIFY(interrupted->question.startsWith(QStringLiteral("Khôi phục và xác minh")));
+        QVERIFY(interrupted->question.startsWith(QStringLiteral("Restore and verify")));
         QVERIFY(updates("review_interrupted")
                     .first()
-                    .text.contains(QStringLiteral("Không suy diễn rằng reviewer đã sửa mã")));
+                    .text.contains(QStringLiteral("No reviewer edit is inferred")));
     }
 
     void ordinaryBlocksCannotMasqueradeAsReviewBlocks() {
@@ -266,20 +301,25 @@ class TeamLanguageTest final : public QObject {
                  qPrintable(updates("state").first().text));
     }
 
-    // The leader is told to write what people read in the team's language; code stays English.
-    void theLeaderWritesInTheTeamLanguage() {
+    // Offline prompt fixtures: both prompt directions outrank an opposing legacy hint.
+    void contentInstructionsPrioritizePromptOverLegacyPreferences() {
         using agent_messaging::teamInstructions;
-        const QString leader =
-            teamInstructions({.team = "Shop", .role = "leader", .language = "vi"});
-        QVERIFY(leader.contains("The team works in Vietnamese"));
-        QVERIFY(leader.contains("task titles"));
-        QVERIFY(leader.contains("decisions"));
-        QVERIFY(leader.contains("Code, commit messages and public pull request bodies stay"));
-        const QString developer =
-            teamInstructions({.team = "Shop", .role = "developer", .language = "vi"});
-        QVERIFY(developer.contains("write your task notes and questions in Vietnamese"));
-        QVERIFY(!teamInstructions({.team = "Shop", .role = "leader", .language = "en"})
-                     .contains("Vietnamese"));
+        for (const QString& language :
+             {QStringLiteral("auto"), QStringLiteral("vi"), QStringLiteral("en")}) {
+            for (const QString& role : {QStringLiteral("leader"), QStringLiteral("developer"),
+                                        QStringLiteral("reviewer")}) {
+                const QString instructions =
+                    teamInstructions({.team = "Shop", .role = role, .language = language});
+                QVERIFY(instructions.contains("The application interface is English"));
+                QVERIFY(instructions.contains("A Vietnamese prompt calls for Vietnamese content"));
+                QVERIFY(instructions.contains("an English prompt calls for English"));
+                QVERIFY(instructions.contains("explicit content-language instructions"));
+                QVERIFY(instructions.contains("retain the established content language"));
+                QVERIFY(instructions.contains("never overrides them") || language == "auto");
+                QVERIFY(instructions.contains("do not translate it retroactively"));
+                QVERIFY(!instructions.contains("The team works in Vietnamese"));
+            }
+        }
     }
 };
 

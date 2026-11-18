@@ -27,9 +27,9 @@ int roleOrder(const QString& role) {
 // revision, so a phone's change is refused only when the part it acts on moved.
 void stampChanges(Team& team, const Team& before) {
     const auto settings = [](const Team& one) {
-        return QJsonArray{one.name,        one.goal,      one.integrationBranch,
-                          one.mergePolicy, one.paused,    one.pausedReason,
-                          one.turnBudget,  one.maxRounds, one.reviewPlace};
+        return QJsonArray{one.name,        one.goal,         one.integrationBranch, one.mergePolicy,
+                          one.paused,      one.pausedReason, one.turnBudget,        one.maxRounds,
+                          one.reviewPlace, one.language};
     };
     team.settingsRevision =
         settings(team) == settings(before) ? before.settingsRevision : team.revision;
@@ -445,8 +445,9 @@ TeamResult TeamCoordinator::update(const qint64 teamId, const QJsonObject& chang
         if (language != team->language)
             updates.append(
                 {.kind = QStringLiteral("language"),
-                 .text = say(language, QT_TRANSLATE_NOOP("Team", "The team now works in %1."))
-                             .arg(::ketplus::remote::team_language::nativeName(language)),
+                 .text =
+                     say(language, QT_TRANSLATE_NOOP("Team", "Content language preference: %1."))
+                         .arg(::ketplus::remote::team_language::nativeName(language)),
                  .data = {{QStringLiteral("from"), team->language},
                           {QStringLiteral("to"), language}}});
         team->language = language;

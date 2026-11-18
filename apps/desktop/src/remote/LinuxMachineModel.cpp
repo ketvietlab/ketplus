@@ -271,7 +271,8 @@ QString LinuxMachineModel::presenceText(const LinuxMachine& machine, const QDate
     if (minutes < 48 * 60)
         return tr("Host offline, last seen %1 h ago").arg(minutes / 60);
     return tr("Host offline, last seen %1")
-        .arg(QLocale().toString(machine.hostLastSeen.toLocalTime().date(), QLocale::ShortFormat));
+        .arg(QLocale(QLocale::English)
+                 .toString(machine.hostLastSeen.toLocalTime().date(), QLocale::ShortFormat));
 }
 
 QString LinuxMachineModel::pickerLabel(const LinuxMachine& machine) {
