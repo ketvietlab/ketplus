@@ -114,6 +114,7 @@ RemoteJobsService::RemoteJobsService(BackgroundTaskLedger ledger, CloudControlCl
         jobs_->jobTimer(taskId, timer);
     });
     linkClock_->setFired([this](const QString& connectionId) { jobs_->linkTimer(connectionId); });
+    sweep_.setObjectName(QStringLiteral("remote-jobs-sweep"));
     sweep_.setInterval(sweepIntervalMs);
     connect(&sweep_, &QTimer::timeout, this,
             [this] { jobs_->sweep(QDateTime::currentDateTimeUtc()); });

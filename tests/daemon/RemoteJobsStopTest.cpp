@@ -330,6 +330,63 @@ class RemoteJobsStopTest final : public QObject {
         e.h.jobs->relaySocketReopened();
         QCOMPARE(e.h.relay.sent(QStringLiteral("get")), before + 1);
     }
+
+    // The Relay stops offering runners while a job runs: only new submits are refused. The
+    // runner's peer goes on, a stop still reaches it and its result ends the record.
+    void aRunningJobOutlivesTheRelaysRunnerOffer() {
+        Running r;
+        QVERIFY(r.start(2 * 60 * 60 * 1000));
+        r.e.h.relay.offered = false;
+        QVERIFY(!r.e.h.jobs->available());
+        QString refused;
+        r.e.h.jobs->submit(r.e.h.f.remoteTask(), {}, [&](const QString& code) { refused = code; });
+        QCOMPARE(refused, QStringLiteral("runner_unavailable"));
+        r.e.h.jobs->relaySocketReopened();
+        QVERIFY(!r.end->closed());
+        QCOMPARE(r.e.h.jobs->record(r.id)->state, state::running);
+
+        QVERIFY(r.e.h.jobs->stop(r.id).ok());
+        QVERIFY(
+            r.e.play(*r.end, [&] { return !framesOf<protocol::JobCancel>(r.e.seen).isEmpty(); }));
+        r.end->send(resultOf(QStringLiteral("cancelled")));
+        QVERIFY(r.e.play(*r.end, [&] { return r.e.resultAcked; }));
+        QCOMPARE(r.e.h.jobs->record(r.id)->state, state::cancelled);
+        QCOMPARE(r.e.h.f.state(r.id), state::cancelled);
+        QCOMPARE(outboxOf(r.e.h.f, r.id), 1);
+    }
+
+    // The Relay socket drops and opens again while a job runs: the same account keeps its links,
+    // so the runner's connection and the job go on.
+    void aRunningJobOutlivesADroppedRelaySocket() {
+        Running r;
+        QVERIFY(r.start(2 * 60 * 60 * 1000));
+        r.e.h.jobs->relaySocketReopened();
+        QVERIFY(!r.end->closed());
+        QCOMPARE(r.e.h.jobs->record(r.id)->state, state::running);
+        QVERIFY(!r.e.h.clock.isArmed(r.id, JobTimer::PeerAbsent));
+        r.end->send(resultOf(QStringLiteral("exited"), 0));
+        QVERIFY(r.e.play(*r.end, [&] { return r.e.resultAcked; }));
+        QCOMPARE(r.e.h.jobs->record(r.id)->state, state::completed);
+        QCOMPARE(r.e.h.f.state(r.id), state::completed);
+        QCOMPARE(outboxOf(r.e.h.f, r.id), 1);
+    }
+
+    // Signed out while a job runs: the Relay socket stops and no runner is offered any more, but
+    // the runner's peer connection stays, so its result still ends the record. Signing in again
+    // under another account is anAccountChangeEndsTheOldLinks.
+    void aRunningJobEndsOverItsPeerAfterASignOut() {
+        Running r;
+        QVERIFY(r.start(2 * 60 * 60 * 1000));
+        r.e.h.scope.clear();
+        r.e.h.relay.offered = false;
+        QVERIFY(!r.e.h.jobs->available());
+        QVERIFY(!r.end->closed());
+        r.end->send(resultOf(QStringLiteral("exited"), 0));
+        QVERIFY(r.e.play(*r.end, [&] { return r.e.resultAcked; }));
+        QCOMPARE(r.e.h.jobs->record(r.id)->state, state::completed);
+        QCOMPARE(r.e.h.f.state(r.id), state::completed);
+        QCOMPARE(outboxOf(r.e.h.f, r.id), 1);
+    }
 };
 
 QTEST_GUILESS_MAIN(RemoteJobsStopTest)

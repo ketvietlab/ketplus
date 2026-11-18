@@ -12,7 +12,11 @@
 // Relay cancels of remote jobs whose record already ended on this desktop, such as a job whose
 // spec was lost when the daemon restarted. A job the Relay never named is submitted again with
 // the same key to learn its id. Each cancel is repeated, 1 second doubling to 30, until the Relay
-// answers it or no longer knows the job; the record is never changed by any of it.
+// answers it, no longer knows the job or refuses it for good (a code jobs::submitRefusalReason
+// names); the record is never changed by any of it. Errors that can pass, such as the network,
+// signing out or the Relay no longer offering runners, are retried at that pace for as long as
+// the daemon runs. The cancels are held in memory only: one still pending when the daemon stops
+// is not sent again.
 namespace ketplus::daemon::runner::remote {
 
 class RelayCancels final {

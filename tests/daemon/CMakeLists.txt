@@ -182,6 +182,8 @@ ketplus_add_daemon_test(ketplus_remote_jobs_restore_tests RemoteJobsRestoreTest.
 ketplus_add_daemon_test(ketplus_remote_jobs_submit_tests RemoteJobsSubmitTest.cpp)
 ketplus_add_daemon_test(ketplus_remote_jobs_relay_socket_tests RemoteJobsRelaySocketTest.cpp)
 target_sources(ketplus_remote_jobs_relay_socket_tests PRIVATE cloud-privacy/MemoryCredentials.cpp)
+ketplus_add_daemon_test(ketplus_remote_jobs_service_tests RemoteJobsServiceTest.cpp)
+target_sources(ketplus_remote_jobs_service_tests PRIVATE cloud-privacy/MemoryCredentials.cpp)
 # Real remote job parts against a Relay and a runner the test plays.
 ketplus_add_daemon_test(ketplus_remote_jobs_end_to_end_tests RemoteJobsEndToEndTest.cpp)
 ketplus_add_daemon_test(ketplus_remote_jobs_stop_tests RemoteJobsStopTest.cpp)

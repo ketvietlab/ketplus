@@ -129,6 +129,30 @@ class RemoteJobsRestoreTest final : public QObject {
         QCOMPARE(h.relay.sent(QStringLiteral("cancel")), 2);
     }
 
+    // Signing out or the Relay no longer offering runners can pass: the cancel is repeated, at
+    // most every 30 seconds. A refusal that cannot change ends it.
+    void aRelayCancelStopsAtARefusalThatCannotChange() {
+        RemoteHarness h;
+        const QString queued = h.f.remoteTask();
+        QVERIFY(h.write(queuedSteps(queued, QStringLiteral("job-q"))));
+        h.build();
+        h.jobs->restore();
+        int sent = 1;
+        for (const char* passing : {"not_enrolled", "runner_unavailable", "account_changed",
+                                    "invalid_access", "relay_error", "rate_limited"}) {
+            QVERIFY(h.relay.refuse(QStringLiteral("cancel"), QString::fromLatin1(passing)));
+            QCOMPARE(h.deferred.size(), 1);
+            QVERIFY(h.deferred.first().delayMs <= 30'000);
+            QCOMPARE(h.run(30'000), 1);
+            QCOMPARE(h.relay.sent(QStringLiteral("cancel")), ++sent);
+        }
+        QVERIFY(h.relay.refuse(QStringLiteral("cancel"), QStringLiteral("invalid_request")));
+        QVERIFY(h.deferred.isEmpty());
+        QCOMPARE(h.run(60'000), 0);
+        QCOMPARE(h.relay.sent(QStringLiteral("cancel")), sent);
+        QCOMPARE(h.f.state(queued), state::interrupted); // the record never changes
+    }
+
     void anAcceptedRecordStays() {
         RemoteHarness h;
         const QString id = h.f.remoteTask();

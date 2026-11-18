@@ -76,6 +76,13 @@ void RelayCancels::answered(const QString& taskId, const quint64 generation,
         cancels_.erase(found);
         return;
     }
+    // A refusal that asking again cannot change ends the cancel; the others are retried.
+    if (jobs::submitRefusalReason(outcome.failure.code)) {
+        qCWarning(lcCancels).noquote()
+            << "relay cancel refused task=" + taskId + " code=" + outcome.failure.code;
+        cancels_.erase(found);
+        return;
+    }
     retry(taskId);
 }
 

@@ -69,7 +69,7 @@ class RemoteJobsService final : public QObject {
     std::unique_ptr<link::FunctionRunnerPins> linkPins_;
     std::unique_ptr<link::FunctionMachineIdentity> identity_; // of the current links
     std::unique_ptr<Signals> signals_;
-    QTimer sweep_;
+    QTimer sweep_{this}; // named "remote-jobs-sweep"
     // Last, so it goes first: it holds references to every part above.
     std::unique_ptr<RemoteJobs> jobs_;
 };
