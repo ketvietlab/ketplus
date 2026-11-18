@@ -472,6 +472,9 @@ retain their repository/team ancestors. The tree materializes matching history r
 existing per-group diff; unmatched hidden history stays unbuilt. Filtering changes presentation,
 not projections, selection,
 pins, ordering or saved folds. The query is temporary window state and survives model updates.
+After visibility changes, native guide/folder/group layouts refresh from children to parents
+before the list measures its content height. Hidden rows and preview footers contribute no
+reserved height; extra viewport space stays outside the repository tree.
 Ctrl+Alt+K (Cmd+Option+K on macOS) focuses it; Ctrl+K remains an editor chord prefix.
 
 Global Spotlight (Ctrl+P, Cmd+P on macOS) wraps the kit CommandPalette in a transparent native popup so it
