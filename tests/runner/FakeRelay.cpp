@@ -394,8 +394,9 @@ void FakeRelay::serve(QTcpSocket* socket) {
             socket->abort();
             return;
         }
-        const QByteArray body = reply->status == 204
-                                    ? QByteArray()
+        const QByteArray body = reply->status == 204 ? QByteArray()
+                                : !reply->raw.isEmpty()
+                                    ? reply->raw
                                     : QJsonDocument(reply->body).toJson(QJsonDocument::Compact);
         socket->write("HTTP/1.1 " + QByteArray::number(reply->status) +
                       " Status\r\nContent-Type: application/json\r\nContent-Length: " +

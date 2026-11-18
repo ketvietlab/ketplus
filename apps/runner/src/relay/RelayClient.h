@@ -13,9 +13,10 @@ namespace ketplus::runner::app {
 struct RelayResult {
     enum class Kind {
         Ok,
-        Refused,  // an HTTP error with a refusal code ("unknown" when the body has none)
-        Network,  // no HTTP answer: connection, timeout or TLS failure
-        BadReply, // a success whose body is not what the contract says
+        Refused,     // a 4xx with its refusal code ("unknown" when the body has none)
+        Network,     // no HTTP answer: connection, timeout or TLS failure
+        ServerError, // a 5xx, whatever its body: the request may or may not have taken effect
+        BadReply,    // a success whose body is not what the contract says
     };
     Kind kind = Kind::Network;
     int status = 0;
@@ -23,6 +24,10 @@ struct RelayResult {
     QJsonObject body;
 
     [[nodiscard]] bool ok() const { return kind == Kind::Ok; }
+    // No usable answer: the request may have taken effect without the runner learning it.
+    [[nodiscard]] bool lostAnswer() const {
+        return kind == Kind::Network || kind == Kind::ServerError;
+    }
     [[nodiscard]] bool refused(const char* refusal) const {
         return kind == Kind::Refused && code == QLatin1StringView(refusal);
     }

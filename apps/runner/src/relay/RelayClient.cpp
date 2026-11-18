@@ -39,6 +39,8 @@ QString RelayResult::describe() const {
         return QStringLiteral("refused (%1)").arg(code);
     case Kind::Network:
         return QStringLiteral("network error");
+    case Kind::ServerError:
+        return QStringLiteral("server error (HTTP %1)").arg(status);
     case Kind::BadReply:
         return QStringLiteral("unexpected reply");
     }
@@ -148,6 +150,10 @@ RelayResult RelayClient::send(const QByteArray& method, const QString& path,
     }
     if (result.status >= 200 && result.status < 400) {
         result.kind = RelayResult::Kind::BadReply;
+        return result;
+    }
+    if (result.status >= 500) {
+        result.kind = RelayResult::Kind::ServerError;
         return result;
     }
     result.kind = RelayResult::Kind::Refused;

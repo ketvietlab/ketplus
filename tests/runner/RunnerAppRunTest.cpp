@@ -192,7 +192,7 @@ void RunnerAppRunTest::retriedRefusalsBackOff_data() {
         for (const auto& [status, code] :
              {std::pair{403, "runner_disabled"}, std::pair{403, "entitlement_required"},
               std::pair{403, "unsupported"}, std::pair{429, "rate_limited"},
-              std::pair{0, "network"}}) {
+              std::pair{503, "server_error"}, std::pair{0, "network"}}) {
             QTest::addRow("%s %s", path, code) << path << status << code;
         }
     }

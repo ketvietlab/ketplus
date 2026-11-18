@@ -300,6 +300,84 @@ void RunnerAppPairingTest::lostClaimAnswer() {
     QVERIFY(host.output().contains("reject the waiting pairing request"));
 }
 
+void RunnerAppPairingTest::serverErrorIsALostAnswer() {
+    const auto gateway = [](const int status) {
+        FakeRelay::Reply reply;
+        reply.status = status;
+        reply.raw = "<html><body>Bad Gateway</body></html>";
+        return reply;
+    };
+    { // A 502 the first time: the same body is sent once more and goes through.
+        TestHost host;
+        host.relay->intercept =
+            [&,
+             n = 0](const FakeRelay::Request& request) mutable -> std::optional<FakeRelay::Reply> {
+            if (request.path == "/v2/runners:register" && n++ == 0)
+                return gateway(502);
+            return std::nullopt;
+        };
+        QCOMPARE(host.run({"register", QString::fromLatin1(host.relay->createToken("desktop-1"))}),
+                 0);
+        QCOMPARE(host.relay->count("POST", "/v2/runners:register"), 2);
+        QCOMPARE(host.relay->requests.at(0).raw, host.relay->requests.at(1).raw);
+    }
+    { // 502 twice, the second with a contract error body: lost, nothing kept, no code shown.
+        TestHost host;
+        host.relay->intercept =
+            [&,
+             n = 0](const FakeRelay::Request& request) mutable -> std::optional<FakeRelay::Reply> {
+            if (request.path != "/v2/runners:register")
+                return std::nullopt;
+            return n++ == 0 ? gateway(502) : FakeRelay::Reply{502, {{"code", "internal"}}, false};
+        };
+        QCOMPARE(host.run({"register", QString::fromLatin1(host.relay->createToken("desktop-1"))}),
+                 1);
+        QCOMPARE(host.relay->count("POST", "/v2/runners:register"), 2);
+        QCOMPARE(host.stateFiles(), QStringList{host.stateDir() + "/lock"});
+        QVERIFY(host.output().contains("reject the waiting pairing request"));
+        QVERIFY(host.output().contains("create a new pairing token"));
+        QVERIFY(!host.output().contains("Confirmation code"));
+    }
+    { // A claim answered 502 twice: no pin, the same advice.
+        TestHost host;
+        const QString runnerId = host.registerRunner();
+        host.relay->requests.clear();
+        host.out.clear();
+        host.err.clear();
+        host.relay->intercept =
+            [&](const FakeRelay::Request& request) -> std::optional<FakeRelay::Reply> {
+            if (request.path.endsWith("/claim"))
+                return gateway(502);
+            return std::nullopt;
+        };
+        QCOMPARE(
+            host.run({"pair", QString::fromLatin1(host.relay->createToken("desktop-2", runnerId))}),
+            1);
+        QCOMPARE(host.relay->count("POST", "/claim"), 2);
+        QVERIFY(!QFile::exists(host.stateDir() + "/pins/desktop-2.json"));
+        QVERIFY(host.output().contains("reject the waiting pairing request"));
+        QVERIFY(!host.output().contains("Confirmation code"));
+    }
+}
+
+void RunnerAppPairingTest::unreadableClientErrorIsARefusal() {
+    TestHost host;
+    host.relay->intercept =
+        [](const FakeRelay::Request& request) -> std::optional<FakeRelay::Reply> {
+        if (request.path != "/v2/runners:register")
+            return std::nullopt;
+        FakeRelay::Reply reply;
+        reply.status = 400;
+        reply.raw = "<html>Bad Request</html>";
+        return reply;
+    };
+    QCOMPARE(host.run({"register", QString::fromLatin1(host.relay->createToken("desktop-1"))}), 1);
+    QCOMPARE(host.relay->count("POST", "/v2/runners:register"), 1); // a refusal is not retried
+    QVERIFY(host.output().contains("unknown"));
+    QVERIFY(!host.output().contains("reject the waiting pairing request"));
+    QCOMPARE(host.stateFiles(), QStringList{host.stateDir() + "/lock"});
+}
+
 void RunnerAppPairingTest::unsupportedPlatform() {
     for (const auto& [os, arch] : {std::pair{"darwin", "arm64"}, std::pair{"linux", "i386"},
                                    std::pair{"linux", "riscv64"}}) {

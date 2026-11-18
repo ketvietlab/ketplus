@@ -29,9 +29,13 @@ class FakeRelay {
         QByteArray raw;
     };
     struct Reply {
+        Reply() = default;
+        Reply(const int status, QJsonObject body, const bool drop = false)
+            : status(status), body(std::move(body)), drop(drop) {}
         int status = 200;
         QJsonObject body;
         bool drop = false; // close the connection without an answer, after handling
+        QByteArray raw;    // sent as the body instead of `body` when not empty
     };
     enum class Approval {
         Approve,

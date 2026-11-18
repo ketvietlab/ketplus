@@ -129,11 +129,19 @@ ExitCode showStatus(const CommandOptions& options, const Environment& environmen
         environment.err(QStringLiteral("Usage: ketplus-runner status"));
         return ExitCode::Usage;
     }
-    const std::optional<StateDirectory> directory = openState(options, environment);
-    if (!directory)
+    // Reading only: no lock, so it also works while `run` holds it.
+    QString openError;
+    const std::optional<StateDirectory> directory =
+        StateDirectory::inspect(StateDirectory::resolve(options.stateDir, environment), &openError);
+    if (!directory) {
+        environment.err(openError);
         return ExitCode::State;
+    }
     const RunnerState state(*directory);
     environment.out(QStringLiteral("State directory: %1").arg(directory->path()));
+    environment.out(directory->inUse()
+                        ? QStringLiteral("In use: another ketplus-runner holds the lock")
+                        : QStringLiteral("In use: no"));
     if (!state.hasIdentity()) {
         environment.out(QStringLiteral("Not registered."));
         return ExitCode::Ok;

@@ -90,7 +90,7 @@ ExitCode registerRunner(const CommandOptions& options, const Environment& enviro
     RelayClient relay(environment.relayUrl, environment.requestTimeoutMs);
     RelayResult result = relay.registerRunner(body);
     bool retried = false;
-    if (result.kind == RelayResult::Kind::Network) {
+    if (result.lostAnswer()) {
         retried = true; // the same body: same issuedAt and signature
         result = relay.registerRunner(body);
     }

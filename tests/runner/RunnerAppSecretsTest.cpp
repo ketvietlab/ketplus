@@ -2,6 +2,7 @@
 
 #include "cloud/CryptoPrimitives.h"
 #include "commands/Commands.h"
+#include "state/StateDirectory.h"
 
 #include <QFile>
 #include <QJsonDocument>
@@ -69,6 +70,13 @@ void RunnerAppRunTest::secretsNeverLeave() {
         host.stopAfterSleeps = host.sleeps.size() + 3;
         QCOMPARE(host.run({"run"}), 0);
         QCOMPARE(host.run({"status"}), 0);
+        {
+            QString error;
+            const std::optional<ketplus::runner::app::StateDirectory> running =
+                ketplus::runner::app::StateDirectory::open(host.stateDir(), &error);
+            QVERIFY(running);
+            QCOMPARE(host.run({"status"}), 0); // while `run` holds the lock
+        }
         verifyClean(host, tokens, keys);
         QCOMPARE(host.run({"unpair", "desktop-2"}), 0);
         QCOMPARE(host.run({"deregister"}), 0);

@@ -51,6 +51,7 @@ class RunnerAppStateTest : public QObject {
     void refusesADirectoryOthersCanReach();
     void refusesADirectoryOfAnotherUser();
     void refusesASecondProcess();
+    void statusWhileAnotherProcessHoldsTheLock();
     void writesAtomically();
     void reportsCorruptFilesWithoutOverwriting_data();
     void reportsCorruptFilesWithoutOverwriting();
@@ -78,6 +79,8 @@ class RunnerAppPairingTest : public QObject {
     void pairingThatEnds();
     void lostRegisterAnswer();
     void lostClaimAnswer();
+    void serverErrorIsALostAnswer();
+    void unreadableClientErrorIsARefusal();
     void unsupportedPlatform();
 };
 

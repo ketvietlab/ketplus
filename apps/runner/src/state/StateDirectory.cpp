@@ -112,9 +112,47 @@ std::optional<StateDirectory> StateDirectory::open(const QString& path, QString*
     return StateDirectory(path, fd, owner);
 }
 
+std::optional<StateDirectory> StateDirectory::inspect(const QString& path, QString* error,
+                                                      const uid_t owner) {
+    if (path.isEmpty()) {
+        *error = QStringLiteral("No state directory: pass --state-dir or set HOME");
+        return std::nullopt;
+    }
+    if (!QFileInfo::exists(path)) {
+        StateDirectory missing(path, -1, owner);
+        missing.m_readOnly = true;
+        return missing;
+    }
+    if (!privateDirectory(path, owner, error))
+        return std::nullopt;
+    StateDirectory directory(path, -1, owner);
+    directory.m_readOnly = true;
+    const QString lockPath = path + QStringLiteral("/lock");
+    const int fd = ::open(native(lockPath).constData(), O_RDONLY | O_CLOEXEC | O_NOFOLLOW);
+    if (fd < 0) {
+        if (errno == ENOENT)
+            return directory;
+        *error = systemError(QStringLiteral("Cannot open %1").arg(lockPath), errno);
+        return std::nullopt;
+    }
+    // A shared lock is refused exactly while a process holds the exclusive one. It is let go at
+    // once so a starting process never finds it taken.
+    if (::flock(fd, LOCK_SH | LOCK_NB) != 0) {
+        const int code = errno;
+        if (code != EWOULDBLOCK) {
+            ::close(fd);
+            *error = systemError(QStringLiteral("Cannot check the lock %1").arg(lockPath), code);
+            return std::nullopt;
+        }
+        directory.m_inUse = true;
+    }
+    ::close(fd);
+    return directory;
+}
+
 StateDirectory::StateDirectory(StateDirectory&& other) noexcept
     : m_path(std::move(other.m_path)), m_lockFd(std::exchange(other.m_lockFd, -1)),
-      m_owner(other.m_owner) {}
+      m_owner(other.m_owner), m_readOnly(other.m_readOnly), m_inUse(other.m_inUse) {}
 
 StateDirectory& StateDirectory::operator=(StateDirectory&& other) noexcept {
     if (this != &other) {
@@ -123,6 +161,8 @@ StateDirectory& StateDirectory::operator=(StateDirectory&& other) noexcept {
         m_path = std::move(other.m_path);
         m_lockFd = std::exchange(other.m_lockFd, -1);
         m_owner = other.m_owner;
+        m_readOnly = other.m_readOnly;
+        m_inUse = other.m_inUse;
     }
     return *this;
 }
@@ -185,6 +225,10 @@ bool StateDirectory::exists(const QString& name) const {
 }
 
 bool StateDirectory::write(const QString& name, const QByteArray& data, QString* error) const {
+    if (m_readOnly) {
+        *error = QStringLiteral("%1 was opened for reading only").arg(m_path);
+        return false;
+    }
     const QString target = absolute(name);
     const QString directory = QFileInfo(target).absolutePath();
     if (directory != m_path && !ensureSubdirectory(QFileInfo(name).path(), error))
@@ -232,6 +276,10 @@ bool StateDirectory::write(const QString& name, const QByteArray& data, QString*
 }
 
 bool StateDirectory::remove(const QString& name, QString* error) const {
+    if (m_readOnly) {
+        *error = QStringLiteral("%1 was opened for reading only").arg(m_path);
+        return false;
+    }
     const QString target = absolute(name);
     if (::unlink(native(target).constData()) != 0) {
         if (errno == ENOENT)
@@ -247,6 +295,8 @@ bool StateDirectory::remove(const QString& name, QString* error) const {
 }
 
 std::optional<QStringList> StateDirectory::list(const QString& subdirectory, QString* error) const {
+    if (m_readOnly && !QFileInfo::exists(absolute(subdirectory)))
+        return QStringList{};
     if (!ensureSubdirectory(subdirectory, error))
         return std::nullopt;
     const QString path = absolute(subdirectory);

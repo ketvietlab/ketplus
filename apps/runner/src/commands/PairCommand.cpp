@@ -52,8 +52,7 @@ ExitCode pairDesktop(const CommandOptions& options, const Environment& environme
     };
     AccessTokens::Call call = tokens.call(claim);
     bool retried = false;
-    if (call.token.outcome == AccessTokens::Outcome::Ok &&
-        call.relay.kind == RelayResult::Kind::Network) {
+    if (call.token.outcome == AccessTokens::Outcome::Ok && call.relay.lostAnswer()) {
         retried = true; // the same body: same issuedAt and signature
         call = tokens.call(claim);
     }

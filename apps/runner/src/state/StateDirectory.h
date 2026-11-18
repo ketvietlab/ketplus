@@ -25,6 +25,11 @@ class StateDirectory {
     // lock. `owner` is the user the directory must belong to.
     [[nodiscard]] static std::optional<StateDirectory> open(const QString& path, QString* error,
                                                             uid_t owner = geteuid());
+    // For reading only, without the lock, so it works while another process holds it: the
+    // same owner and mode checks, and inUse() tells whether a process holds the lock. Files are
+    // replaced atomically, so a read sees a whole file. write() and remove() refuse.
+    [[nodiscard]] static std::optional<StateDirectory> inspect(const QString& path, QString* error,
+                                                               uid_t owner = geteuid());
 
     StateDirectory(StateDirectory&& other) noexcept;
     StateDirectory& operator=(StateDirectory&& other) noexcept;
@@ -33,6 +38,8 @@ class StateDirectory {
     ~StateDirectory();
 
     [[nodiscard]] const QString& path() const { return m_path; }
+    // Opened by inspect() while another process held the lock.
+    [[nodiscard]] bool inUse() const { return m_inUse; }
 
     struct ReadResult {
         enum class Status { Missing, Ok, Invalid };
@@ -61,6 +68,8 @@ class StateDirectory {
     QString m_path;
     int m_lockFd = -1;
     uid_t m_owner = 0;
+    bool m_readOnly = false;
+    bool m_inUse = false;
 };
 
 } // namespace ketplus::runner::app

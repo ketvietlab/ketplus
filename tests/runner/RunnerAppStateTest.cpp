@@ -6,6 +6,7 @@
 #include "state/StateDirectory.h"
 
 #include <QFile>
+#include <QFileInfo>
 #include <QTest>
 
 #include <sys/stat.h>
@@ -60,10 +61,44 @@ void RunnerAppStateTest::refusesASecondProcess() {
     QString error;
     std::optional<StateDirectory> first = StateDirectory::open(host.stateDir(), &error);
     QVERIFY(first);
-    QCOMPARE(host.run({"status"}), 3);
+    QCOMPARE(host.run({"deregister", "--local-only"}), 3);
     QVERIFY(host.output().contains("Another ketplus-runner is using"));
     first.reset(); // the lock goes with the process
+    QCOMPARE(host.run({"deregister", "--local-only"}), 0);
+}
+
+void RunnerAppStateTest::statusWhileAnotherProcessHoldsTheLock() {
+    TestHost host;
+    const QString runnerId = host.registerRunner();
+    QString error;
+    std::optional<StateDirectory> running = StateDirectory::open(host.stateDir(), &error);
+    QVERIFY(running);
+    host.out.clear();
+    host.err.clear();
     QCOMPARE(host.run({"status"}), 0);
+    QVERIFY(host.output().contains("Runner: " + runnerId));
+    QVERIFY(host.output().contains("In use: another ketplus-runner holds the lock"));
+    // Writing commands still wait for the lock.
+    QCOMPARE(host.run({"unpair", "desktop-1"}), 3);
+    QVERIFY(QFile::exists(host.stateDir() + "/pins/desktop-1.json"));
+    // Reading let go of nothing it did not take: the holder keeps its lock.
+    QVERIFY(!StateDirectory::open(host.stateDir(), &error));
+    running.reset();
+    host.out.clear();
+    QCOMPARE(host.run({"status"}), 0);
+    QVERIFY(host.output().contains("In use: no"));
+    // A read-only directory refuses to write.
+    const std::optional<StateDirectory> inspected =
+        StateDirectory::inspect(host.stateDir(), &error);
+    QVERIFY(inspected);
+    QVERIFY(!inspected->write("config.json", "x", &error));
+    QVERIFY(!inspected->remove("config.json", &error));
+    // A directory that does not exist yet is not created by a status.
+    TestHost fresh;
+    QVERIFY(!QFileInfo::exists(fresh.stateDir()));
+    QCOMPARE(fresh.run({"status"}), 0);
+    QVERIFY(fresh.output().contains("Not registered."));
+    QVERIFY(!QFileInfo::exists(fresh.stateDir()));
 }
 
 void RunnerAppStateTest::writesAtomically() {
