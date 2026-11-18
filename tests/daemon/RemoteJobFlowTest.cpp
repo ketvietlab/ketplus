@@ -620,6 +620,121 @@ class RemoteJobFlowTest final : public QObject {
         QCOMPARE(h.relay.sent("submit"), 1);
     }
 
+    // ---- Desktop snapshot failures ----
+
+    void aDesktopSnapshotFailureStopsTheRecordUntilTheResult() {
+        Harness h;
+        QVERIFY(h.syncing());
+        const int relayCalls = h.relay.log.size();
+        QVERIFY(h.jobs->snapshotFailed(job, runnerA, "snapshot_too_large").ok());
+        QCOMPARE(h.record().state, state::stopping);
+        QCOMPARE(h.record().stopReason, QStringLiteral("snapshot_failed"));
+        QCOMPARE(h.record().stopCode, QStringLiteral("snapshot_too_large"));
+        QCOMPARE(h.record().cleanupStatus, cleanup::pending);
+        QCOMPARE(h.record().placement, placement::syncing);
+        QVERIFY(h.peers.cancels.isEmpty()); // the session sends its own cancel
+        QCOMPARE(h.relay.log.size(), relayCalls);
+        // A user Stop now changes nothing.
+        QVERIFY(h.jobs->stop(task).ok());
+        QCOMPARE(h.record().stopReason, QStringLiteral("snapshot_failed"));
+        QVERIFY(h.jobs->result(job, runnerA, jobResult("cancelled", std::nullopt, "session_closed"))
+                    .ok());
+        QCOMPARE(h.record().state, state::failed);
+        QCOMPARE(h.record().reason, QStringLiteral("snapshot_failed"));
+        QCOMPARE(h.record().stopCode, QStringLiteral("snapshot_too_large"));
+        QCOMPARE(h.record().cleanupStatus, cleanup::verified);
+        QCOMPARE(h.relay.log.size(), relayCalls);
+    }
+
+    void aSnapshotStopKeepsTheUsualMapping_data() {
+        QTest::addColumn<QString>("result");
+        QTest::addColumn<QString>("state");
+        QTest::addColumn<QString>("reason");
+        QTest::newRow("ran") << "exited" << state::completed << QString();
+        QTest::newRow("ran and failed") << "exited 2" << state::failed << "exit_code";
+        QTest::newRow("unverified")
+            << "unverified" << state::needsAttention << "cleanup_unverified";
+    }
+    void aSnapshotStopKeepsTheUsualMapping() {
+        QFETCH(QString, result);
+        QFETCH(QString, state);
+        QFETCH(QString, reason);
+        Harness h;
+        QVERIFY(h.syncing());
+        QVERIFY(h.jobs->snapshotFailed(job, runnerA, "pack_invalid").ok());
+        const JobResult value = result == "exited"     ? jobResult("exited", 0)
+                                : result == "exited 2" ? jobResult("exited", 2)
+                                                       : jobResult("cancelled", std::nullopt,
+                                                                   "session_closed", "unverified");
+        QVERIFY(h.jobs->result(job, runnerA, value).ok());
+        QCOMPARE(h.record().state, state);
+        QCOMPARE(h.record().reason, reason);
+    }
+
+    void aSnapshotFailureAppliesOnlyWhileSyncing_data() {
+        QTest::addColumn<QString>("stage");
+        QTest::addColumn<QString>("runner");
+        QTest::newRow("spec sent") << "sent" << runnerA;
+        QTest::newRow("running") << "running" << runnerA;
+        QTest::newRow("stopped") << "stopped" << runnerA;
+        QTest::newRow("other runner") << "syncing" << runnerB;
+        QTest::newRow("ended") << "ended" << runnerA;
+    }
+    void aSnapshotFailureAppliesOnlyWhileSyncing() {
+        QFETCH(QString, stage);
+        QFETCH(QString, runner);
+        Harness h;
+        QVERIFY(stage == "sent" ? h.sent() : stage == "running" ? h.running() : h.syncing());
+        if (stage == "stopped")
+            QVERIFY(h.jobs->stop(task).ok());
+        if (stage == "ended")
+            QVERIFY(h.jobs->result(job, runnerA, jobResult("exited", 0)).ok());
+        const RemoteJobRecord before = h.record();
+        const int writes = h.store.writes;
+        QCOMPARE(h.jobs->snapshotFailed(job, runner, "snapshot_failed").code,
+                 QStringLiteral("not_applicable"));
+        QCOMPARE(h.jobs->snapshotFailed("job-9", runnerA, "snapshot_failed").code,
+                 QStringLiteral("not_applicable"));
+        QCOMPARE(h.record(), before);
+        QCOMPARE(h.store.writes, writes);
+    }
+
+    void aSnapshotFailureThatCannotBeWrittenChangesNothing() {
+        Harness h;
+        QVERIFY(h.syncing());
+        const RemoteJobRecord before = h.record();
+        h.store.failWrites = true;
+        QCOMPARE(h.jobs->snapshotFailed(job, runnerA, "snapshot_failed").code,
+                 QStringLiteral("storage_error"));
+        QCOMPARE(h.record(), before);
+        h.store.failWrites = false;
+        QVERIFY(h.jobs->snapshotFailed(job, runnerA, "snapshot_failed").ok());
+        QCOMPARE(h.record().state, state::stopping);
+    }
+
+    void aSnapshotStopWithoutAResultWaitsForTheWindow() {
+        Harness h;
+        QVERIFY(h.syncing());
+        QVERIFY(h.jobs->snapshotFailed(job, runnerA, "snapshot_failed").ok());
+        h.jobs->peerLost(job, runnerA, h.clock.time);
+        h.clock.advance(20 * minute - 1);
+        QCOMPARE(h.record().state, state::stopping);
+        h.clock.advance(1);
+        QCOMPARE(h.record().state, state::needsAttention);
+        // After a restart the stop and its code are still there.
+        Harness again;
+        QVERIFY(again.syncing());
+        QVERIFY(again.jobs->snapshotFailed(job, runnerA, "disk_full").ok());
+        again.reopen();
+        again.jobs->restore();
+        QCOMPARE(again.record().stopReason, QStringLiteral("snapshot_failed"));
+        QVERIFY(
+            again.jobs->result(job, runnerA, jobResult("cancelled", std::nullopt, "session_closed"))
+                .ok());
+        QCOMPARE(again.record().reason, QStringLiteral("snapshot_failed"));
+        QCOMPARE(again.record().stopCode, QStringLiteral("disk_full"));
+    }
+
     void storeFailuresKeepTheRecordAndAreReported() {
         Harness h;
         QVERIFY(h.running());

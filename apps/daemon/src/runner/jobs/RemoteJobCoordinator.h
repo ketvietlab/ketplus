@@ -35,6 +35,7 @@ class RemoteJobCoordinator final {
 
     void setChanged(Changed changed) { changed_ = std::move(changed); }
     [[nodiscard]] std::optional<RemoteJobRecord> record(const QString& taskId) const;
+    [[nodiscard]] std::optional<RemoteJobRecord> recordOfJob(const QString& jobId) const;
     [[nodiscard]] int outstanding() const;
 
     // Start and Stop.
@@ -55,6 +56,10 @@ class RemoteJobCoordinator final {
     // acknowledge it; storage_error leaves the record unchanged for the runner to send again.
     JobDecision result(const QString& jobId, const QString& runnerId, const JobResult& result);
     void rejected(const QString& jobId, const QString& runnerId, const QString& code);
+    // The desktop could not send the snapshot of an accepted job that has not started: the
+    // record stops and keeps `code`, and the runner's result ends it. not_applicable in any other
+    // state, storage_error when it could not be written; neither changes the record.
+    JobDecision snapshotFailed(const QString& jobId, const QString& runnerId, const QString& code);
     void peerOpened(const QString& jobId, const QString& runnerId);
     void peerLost(const QString& jobId, const QString& runnerId, const QDateTime& lastContact);
 

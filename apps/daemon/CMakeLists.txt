@@ -30,6 +30,16 @@ target_link_libraries(ketplus_daemon_core PUBLIC
     LibDataChannel::LibDataChannelStatic
     ketplus_peer_link
 )
+add_library(ketplus_daemon_runner_peer STATIC
+    src/runner/peer/JobPeerSession.h src/runner/peer/JobPeerSessionJob.cpp
+    src/runner/peer/JobPeerSessionLink.cpp src/runner/peer/JobPeerSessionOutput.cpp
+    src/runner/peer/OutputIntake.cpp src/runner/peer/OutputIntake.h
+    src/runner/peer/PeerLog.cpp src/runner/peer/PeerLog.h src/runner/peer/PeerPorts.h
+    src/runner/peer/RemotePeerSessions.cpp src/runner/peer/RemotePeerSessions.h)
+target_link_libraries(ketplus_daemon_runner_peer PUBLIC Qt6::Core ketplus_runner_protocol)
+target_include_directories(ketplus_daemon_runner_peer PUBLIC
+    "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>")
+ketplus_enable_warnings(ketplus_daemon_runner_peer)
 target_include_directories(ketplus_daemon_core PUBLIC
     "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>"
     "$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/modules/atlas/src>"

@@ -6,7 +6,13 @@ namespace ketplus::daemon::runner::jobs {
 namespace {
 const QString jobMismatch = QStringLiteral("job_mismatch");
 const QString alreadyDispatched = QStringLiteral("already_dispatched");
+const QString snapshotStop = QStringLiteral("snapshot_failed");
 } // namespace
+
+std::optional<RemoteJobRecord> RemoteJobCoordinator::recordOfJob(const QString& jobId) const {
+    const auto task = jobs_.constFind(jobId);
+    return jobId.isEmpty() || task == jobs_.cend() ? std::nullopt : record(*task);
+}
 
 RemoteJobRecord* RemoteJobCoordinator::byJob(const QString& jobId) {
     const auto found = jobs_.constFind(jobId);
@@ -106,7 +112,12 @@ JobDecision RemoteJobCoordinator::result(const QString& jobId, const QString& ru
     if (!current || current->dispatchedTo != runnerId || !trust_.pinnedName(runnerId))
         return {jobMismatch};
     // A result recorded before changes nothing and is acknowledged again.
-    const RemoteJobRecord next = applyResult(*current, value);
+    RemoteJobRecord next = applyResult(*current, value);
+    if (!current->terminal() && next.terminal() && current->stopReason == snapshotStop &&
+        !current->startedAt && !value.exitCode && !value.signal) {
+        next.state = state::failed; // the command never ran
+        next.reason = snapshotStop;
+    }
     if (next != *current && !commit(next))
         return {QStringLiteral("storage_error")};
     return {};
@@ -134,6 +145,21 @@ void RemoteJobCoordinator::rejected(const QString& jobId, const QString& runnerI
     clock_.disarm(next.taskId, JobTimer::PeerAbsent);
     if (!next.terminal())
         refresh(next.taskId);
+}
+
+JobDecision RemoteJobCoordinator::snapshotFailed(const QString& jobId, const QString& runnerId,
+                                                 const QString& code) {
+    RemoteJobRecord* found = fromRunner(jobId, runnerId);
+    if (!found || found->state != state::starting || found->placement != placement::syncing)
+        return {QStringLiteral("not_applicable")};
+    RemoteJobRecord next = *found;
+    next.state = state::stopping;
+    next.stopReason = snapshotStop;
+    next.stopCode = code;
+    next.cleanupStatus = cleanup::pending;
+    if (!commit(next))
+        return {QStringLiteral("storage_error")};
+    return {};
 }
 
 void RemoteJobCoordinator::peerOpened(const QString& jobId, const QString& runnerId) {
