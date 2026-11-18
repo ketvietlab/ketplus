@@ -47,6 +47,9 @@ class ManagedTaskRuntime final : public QObject {
     QJsonObject parkChild(const QString& taskId);
     QJsonObject resumeChild(const QString& taskId);
     bool appendChildOutput(const QString& taskId, qint64 turn, const QByteArray& bytes);
+    // Whether the task is still followed here, and whether anything is.
+    [[nodiscard]] bool isLive(const QString& taskId) const { return live_.contains(taskId); }
+    [[nodiscard]] bool isPumping() const { return timer_.isActive(); }
 
   private:
     QJsonObject accept(const BackgroundTaskIntent& intent, const QJsonObject& execution);
