@@ -2151,8 +2151,11 @@ were all disabled before. macOS and Linux are unchanged.
 
 Not passing in that run:
 
-- `ketplus_daemon_journal_migration_recovery_tests` takes 4-6 minutes on NTFS, so it times out at
-  240 s; it passes with a larger `--timeout`. The slowness is under investigation.
+- `ketplus_daemon_journal_migration_recovery_tests` migrates and reads back the same journal 13
+  times. In a Debug build on Windows it takes about 230 s, because the SQLite driver of Qt's debug
+  libraries is unoptimised (every step is about 3.4x slower than on a Linux machine with release
+  Qt); a Release build takes about 38 s and the migration itself 1.8 s, so NTFS and Defender are not
+  the cause. The test sets its own CTest limit (900 s) and QtTest function limit on Windows.
 - `ketplus_peer_session_runner_tests` and the four `ketplus_snapshot_*` tests do not build on
   Windows yet (runner snapshot code).
 - `ketplus_claude_sidecar_posix_tests` is disabled: it holds the Claude sidecar JavaScript tests
@@ -2198,9 +2201,9 @@ symbolic links (`QFile::link` makes a `.lnk` shortcut), file-mode assertions (ac
 `ketplus_windows_platform_tests`), permission-denial fixtures, FIFOs and resource limits, the
 Linux/macOS user-unit socket probe, the uncheckpointed-WAL fixture (the only `python3` on `PATH` is
 the Microsoft Store alias), and producer-flood timing (QProcess drains the pipe in a thread).
-`ketplus_daemon_journal_migration_recovery_tests` and `ketplus_daemon_usage_retention_tests` pass
-but take 4-6 minutes on NTFS. Fixtures that write exact byte counts switch stdout to binary mode
-(`BinaryStdio.h`), because the C runtime would otherwise add `\r`.
+`ketplus_daemon_usage_retention_tests` passes but takes several minutes in a Debug build on
+Windows; its cause has not been measured. Fixtures that write exact byte counts switch stdout to
+binary mode (`BinaryStdio.h`), because the C runtime would otherwise add `\r`.
 
 ## English chrome and multilingual team content (T30)
 

@@ -348,6 +348,14 @@ ketplus_add_daemon_test(ketplus_daemon_journal_space_tests JournalSpaceTest.cpp)
 ketplus_add_daemon_test(ketplus_daemon_journal_startup_tests JournalStartupTest.cpp)
 ketplus_add_daemon_test(ketplus_daemon_journal_migration_recovery_tests
     JournalMigrationRecoveryTest.cpp)
+if(WIN32)
+    # It migrates the same 60k-row journal 13 times and reads it back after each. In a Debug
+    # build the SQLite driver of Qt's debug libraries is unoptimised (about 3.4x slower than
+    # Release: 228 s against 38 s), so the default 240 s CTest limit and 300 s QtTest function
+    # limit are too short there. The migration itself is not slower on NTFS.
+    set_tests_properties(ketplus_daemon_journal_migration_recovery_tests PROPERTIES TIMEOUT 900
+        ENVIRONMENT_MODIFICATION "QTEST_FUNCTION_TIMEOUT=set:900000")
+endif()
 ketplus_add_daemon_test(ketplus_daemon_schedule_storage_tests ScheduleStorageTest.cpp)
 ketplus_add_daemon_test(ketplus_daemon_schedule_host_tests ScheduleHostTest.cpp)
 # Reads SQLite's own statement counters through the driver's handle; needs the same SQLite.
