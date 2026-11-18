@@ -19,6 +19,7 @@ struct CommandOptions {
     QString tokenFile;
     std::optional<QString> name;
     QStringList labels;
+    QString workDir;
     bool localOnly = false;
 };
 

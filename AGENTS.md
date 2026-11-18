@@ -97,7 +97,7 @@ still takes colours or metrics from that stylesheet or from `ThemePalette`:
 - `apps/desktop`: Pro executable shell, windows, menus, tabs, and composition.
 - `apps/daemon`: local and headless Linux daemon and `ketplusctl`.
 - `apps/runner`: `ketplus-runner`, the process on a Linux build node: state directory,
-  registration, pairing, access tokens and heartbeat.
+  registration, pairing, access tokens, heartbeat, and `run`, which takes jobs and runs them.
 - `apps/browser`: bundled browser runtime, a separate helper process.
 - `apps/computer`: KetPlus Computer, the separately signed macOS app for agent
   computer use (Swift Package; ADR 0030-0032).

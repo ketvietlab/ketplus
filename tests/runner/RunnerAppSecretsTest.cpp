@@ -67,8 +67,7 @@ void RunnerAppRunTest::secretsNeverLeave() {
             QString::fromLatin1(host.relay->createToken("desktop-2", host.relay->lastRunnerId)));
         QCOMPARE(
             host.run({"pair", "--token-file", host.writeFile("token", tokens.last().toUtf8())}), 0);
-        host.stopAfterSleeps = host.sleeps.size() + 3;
-        QCOMPARE(host.run({"run"}), 0);
+        QCOMPARE(host.runLoop(3), 0);
         QCOMPARE(host.run({"status"}), 0);
         {
             QString error;
@@ -109,7 +108,7 @@ void RunnerAppRunTest::secretsNeverLeave() {
                 return FakeRelay::Reply{401, {{"code", "invalid_access"}}, false};
             return std::nullopt;
         };
-        QCOMPARE(host.run({"run"}), 7);
+        QCOMPARE(host.run({"run", "--work-dir", host.workDir()}), 7);
         QCOMPARE(host.run({"deregister"}), 7);
         verifyClean(host, tokens, keys);
     }
