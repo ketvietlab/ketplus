@@ -146,9 +146,8 @@ target_include_directories(ketplus_runner_delivery PUBLIC
 ketplus_enable_warnings(ketplus_runner_delivery)
 
 add_executable(ketplus-runner src/main.cpp)
-# The receiver brings ketplus_runner_app and ketplus_runner_session with it.
-target_link_libraries(ketplus-runner PRIVATE ketplus_runner_snapshot_receiver
-    ketplus_runner_delivery)
+# The receiver brings ketplus_runner_app (with the delivery) and ketplus_runner_session.
+target_link_libraries(ketplus-runner PRIVATE ketplus_runner_snapshot_receiver)
 ketplus_enable_warnings(ketplus-runner)
 
 # Runners are Linux nodes; the macOS build exists for tests only and ships no runner.
