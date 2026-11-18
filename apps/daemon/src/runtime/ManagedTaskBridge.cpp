@@ -17,6 +17,15 @@ namespace {
 QJsonObject failure(const QString& code, const QString& message) {
     return {{"ok", false}, {"error_code", code}, {"error_message", message}};
 }
+// Why a task with runs_on cannot be created now; empty when it can, and for a local task.
+QJsonObject remoteRefusal(runner::entry::RemoteJobPort* port, const BackgroundTaskIntent& intent,
+                          const QJsonObject& execution) {
+    if (!intent.runsOn)
+        return {};
+    if (!port)
+        return failure("runner_unavailable", "No runner is available to this machine.");
+    return port->admit(intent, execution);
+}
 } // namespace
 
 ManagedTaskBridge::ManagedTaskBridge(SessionHost* host)
@@ -233,6 +242,10 @@ void ManagedTaskBridge::start(const QJsonObject& request, const BackgroundTaskOw
         const auto admitted = validateManagedTask(payload, context);
         if (!admitted.error.isEmpty())
             done(failure(admitted.errorCode, admitted.error));
+        else if (const auto refused =
+                     remoteRefusal(remoteJobs_, admitted.intent, admitted.execution);
+                 !refused.isEmpty())
+            done(refused);
         else {
             runtime_->start(admitted.intent, admitted.execution,
                             [done = std::move(done)](QJsonObject reply) {
