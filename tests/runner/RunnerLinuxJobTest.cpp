@@ -11,6 +11,7 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonArray>
+#include <QJsonDocument>
 #include <QLoggingCategory>
 #include <QProcess>
 #include <QRandomGenerator>
@@ -147,7 +148,7 @@ struct DirectJob {
                 },
                 &error))
             return std::nullopt;
-        QTest::qWaitFor([this] { return done.has_value(); }, 90'000);
+        static_cast<void>(QTest::qWaitFor([this] { return done.has_value(); }, 90'000));
         if (done)
             job->acknowledge();
         return done;
@@ -184,9 +185,80 @@ int holdJob(const QString& parent, const QString& random) {
         return 2;
     rig.runner->launch(rig.shell(QStringLiteral("exec sleep 4000.") + random));
     QTextStream(stdout) << rig.layout.base << Qt::endl;
-    QTest::qWaitFor([] { return false; }, 600'000);
+    static_cast<void>(QTest::qWaitFor([] { return false; }, 600'000));
     return 3;
 }
+
+// Every way a command could reach what a covering mount hides, run as `sh escape.sh <label>`
+// in the job's namespaces and again in a user and mount namespace of the command's own. Prints
+// "leak <label> <way>" for each that shows a hidden file, and what the kernel allowed.
+const char* const escapeScript = R"sh(label=$1; r=0
+leak() { echo "leak $label $1"; r=1; }
+parent=${STATE%/*}
+name=${STATE##*/}
+mkdir -p "$WS/root" "$WS/parent" "$WS/moved"
+if mount --bind / "$WS/root" 2>/dev/null; then
+  echo "$label bind-root allowed"
+  [ -e "$WS/root$STATE/secret" ] && leak bind-root
+  [ -e "$WS/root$OTHER/secret" ] && leak bind-root-other
+  umount "$WS/root" 2>/dev/null
+fi
+if mount --bind "$parent" "$WS/parent" 2>/dev/null; then
+  echo "$label bind-parent allowed"
+  [ -e "$WS/parent/$name/secret" ] && leak bind-parent
+  umount "$WS/parent" 2>/dev/null
+fi
+umount "$STATE" 2>/dev/null && leak umount
+umount -l "$STATE" 2>/dev/null && leak umount-detach
+if mount -o remount,rw "$STATE" 2>/dev/null; then
+  echo "$label remount allowed"
+  touch "$STATE/rw" 2>/dev/null && leak remount-rw
+fi
+if mount --move "$STATE" "$WS/moved" 2>/dev/null; then
+  echo "$label move allowed"
+fi
+[ -e "$STATE/secret" ] && leak visible
+[ -e "$OTHER/secret" ] && leak visible-other
+exit $r
+)sh";
+
+// pivot_root in a namespace of the command's own: the old root keeps its covering mounts.
+const char* const pivotScript = R"sh(r=0
+mkdir -p "$WS/newroot"
+mount --bind "$WS/newroot" "$WS/newroot" || { echo "pivot no-bind"; exit 0; }
+mkdir -p "$WS/newroot/old"
+cd "$WS/newroot" || exit 4
+if pivot_root . old 2>/dev/null; then
+  echo "pivot allowed"
+  [ -e "/old$STATE/secret" ] && { echo "leak pivot"; r=1; }
+  [ -e "/old$OTHER/secret" ] && { echo "leak pivot-other"; r=1; }
+else
+  echo "pivot refused"
+fi
+exit $r
+)sh";
+
+// The job: the descriptors it got from the launcher, listed before the shell opens any; both
+// scripts; then the mount table and the other processes' roots.
+const char* const aroundScript = R"sh(echo fds-begin; ls /proc/$$/fd; echo fds-end
+for t in unshare mount umount pivot_root awk find; do
+  command -v $t >/dev/null || { echo "missing $t"; exit 3; }
+done
+r=0
+sh "$WS/escape.sh" job || r=1
+unshare -Urm sh "$WS/escape.sh" nested || r=1
+unshare -Urm sh "$WS/pivot.sh" || r=1
+awk '$4 != "/" { print "mount", $4, $5 }' /proc/self/mountinfo
+for m in $(awk '$4 != "/" { print $5 }' /proc/self/mountinfo); do
+  if find "$m" -xdev -maxdepth 3 -name secret 2>/dev/null | grep -q .; then
+    echo "leak mountinfo $m"; r=1
+  fi
+done
+for p in /proc/[0-9]*; do
+  [ -e "$p/root$STATE/secret" ] && { echo "leak proc-root $p"; r=1; }
+done
+echo checked; exit $r
+)sh";
 
 } // namespace
 
@@ -289,6 +361,74 @@ class RunnerLinuxJobTest : public QObject {
         QVERIFY(rig.finished());
         qInfo().noquote() << "inside:" << rig.output;
         QVERIFY2(rig.exits.first().exitCode == 0, rig.output.constData());
+    }
+
+    // Other ways out, from the job and from a user and mount namespace of the command's own:
+    // binds that are not recursive, moving the cover, pivot_root, the mount table, the other
+    // processes' roots and descriptors the launcher left open. None shows a hidden file.
+    void coverHasNoWayAround() {
+        Linux rig;
+        QVERIFY(rig.ready());
+        QVERIFY(writeFile(rig.layout.workspace + QStringLiteral("/escape.sh"), escapeScript));
+        QVERIFY(writeFile(rig.layout.workspace + QStringLiteral("/pivot.sh"), pivotScript));
+        rig.runner->launch(rig.shell(QString::fromUtf8(aroundScript)));
+        QVERIFY(rig.finished());
+        qInfo().noquote() << "inside:" << rig.output;
+        QVERIFY2(rig.exits.first().exitCode == 0, rig.output.constData());
+        QVERIFY(!rig.output.contains("leak"));
+        // The shell started by the launcher holds only stdin, stdout and stderr.
+        const QByteArray listed = rig.output.mid(rig.output.indexOf("fds-begin\n") + 10);
+        QCOMPARE(listed.left(listed.indexOf("fds-end")).trimmed().split('\n'),
+                 (QList<QByteArray>{"0", "1", "2"}));
+        QVERIFY(rig.output.contains("checked"));
+        QFile secret(rig.layout.state + QStringLiteral("/secret"));
+        QVERIFY(secret.open(QIODevice::ReadOnly));
+        QCOMPARE(secret.readAll(), QByteArray("state"));
+    }
+
+    // Who the command is: the same execution without mounts and with them.
+    void identityWithAndWithoutMounts() {
+        Layout layout(QDir::homePath());
+        const QString tmp = layout.work + QStringLiteral("/jobtmp/t");
+        QDir().mkpath(tmp);
+        const auto who = [](const QString& out) {
+            return QStringLiteral("{ id -u; id -g; grep -E '^Cap(Prm|Eff|Bnd):' /proc/self/status;"
+                                  " cat /proc/self/uid_map; } > '") +
+                   out + QStringLiteral("' 2>&1");
+        };
+        const QString plainOut = layout.workspace + QStringLiteral("/plain");
+        const QString mountedOut = layout.workspace + QStringLiteral("/mounted");
+        DirectJob plain(layout, QStringLiteral("plain"));
+        DirectJob mounted(layout, QStringLiteral("mounted"));
+        const auto a = plain.run(
+            execution(who(plainOut), layout.workspace, QJsonValue(QJsonValue::Undefined)));
+        const auto b =
+            mounted.run(execution(who(mountedOut), layout.workspace,
+                                  mountsOf({layout.state, layout.work}, layout.workspace, tmp)));
+        QVERIFY(a && b);
+        QVERIFY2(a->value(QStringLiteral("exit_code")).toInt() == 0,
+                 plain.executor.output(plain.entry.path, plain.entry.taskId)
+                     ->read(8192)
+                     .bytes.constData());
+        QVERIFY2(b->value(QStringLiteral("exit_code")).toInt() == 0,
+                 QJsonDocument(*b).toJson(QJsonDocument::Compact).constData());
+        QFile plainFile(plainOut);
+        QFile mountedFile(mountedOut);
+        QVERIFY(plainFile.open(QIODevice::ReadOnly) && mountedFile.open(QIODevice::ReadOnly));
+        const QList<QByteArray> without = plainFile.readAll().trimmed().split('\n');
+        const QList<QByteArray> with = mountedFile.readAll().trimmed().split('\n');
+        qInfo().noquote() << "without mounts:" << without.join(" | ");
+        qInfo().noquote() << "with mounts:" << with.join(" | ");
+        QCOMPARE(without.size(), 6);
+        QCOMPARE(with.size(), 6);
+        // The same uid, gid and capabilities: the mounts add a user namespace that maps root to
+        // the namespace's own root, nothing more.
+        QCOMPARE(with.mid(0, 5), without.mid(0, 5));
+        QCOMPARE(with.value(5).simplified(), QByteArray("0 0 1"));
+        const QList<QByteArray> outer = without.value(5).simplified().split(' ');
+        QCOMPARE(outer.size(), 3);
+        QCOMPARE(outer.value(0), QByteArray("0"));
+        QVERIFY(outer.value(1) != "0"); // never the host's root
     }
 
     // While a job runs, the runner outside still reads its state: no mount reached the host.
