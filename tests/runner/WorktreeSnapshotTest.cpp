@@ -1,6 +1,7 @@
 #include "snapshot/WorktreeSnapshot.h"
 #include "snapshot/SealedGit.h"
 #include "snapshot/WorkspaceApply.h"
+#include "snapshot/WorkspaceStore.h"
 
 #include <QCryptographicHash>
 #include <QDateTime>
@@ -204,6 +205,11 @@ class WorktreeSnapshotTest : public QObject {
     void filteredPathsAreNotRunNorSent_data();
     void filteredPathsAreNotRunNorSent();
     void oversizeRuleFilesFailClosed();
+    void cleanDeletesWhatTheIndexDoesNotTrack();
+    void cleanWithoutAnIndexEmptiesTheWorkspace();
+    void applyFromMirrorRestoresTheSnapshot();
+    void mirrorKnowsWhatItHolds();
+    void removeWorkspaceDropsTreeIndexAndRef();
 
   private:
     QString path(const QString& relative) const { return m_root->filePath(relative); }
@@ -1398,6 +1404,239 @@ void WorktreeSnapshotTest::oversizeRuleFilesFailClosed() {
         EXPECT_OK(
             createSnapshot({repo, path(QStringLiteral("store")), UserGitSources{m_home, {}, {}}}));
     }
+}
+
+void WorktreeSnapshotTest::cleanDeletesWhatTheIndexDoesNotTrack() {
+    const QString repo = makeRepository(QStringLiteral("repo"));
+    QVERIFY(writeFile(QDir(repo).filePath(QStringLiteral("keep.txt")), "keep\n"));
+    QVERIFY(writeFile(QDir(repo).filePath(QStringLiteral("src/main.cpp")), "int main() {}\n"));
+    const QString store = path(QStringLiteral("store"));
+    const auto snapshot = createSnapshot({repo, store});
+    EXPECT_OK(snapshot);
+    const auto pack =
+        writePack({store, snapshot.value().commit, {}, path(QStringLiteral("1.pack"))});
+    EXPECT_OK(pack);
+    const QString mirror = path(QStringLiteral("runner/mirror"));
+    const QString workspace = path(QStringLiteral("runner/ws"));
+    const auto ws = [&](const char* name) {
+        return QDir(workspace).filePath(QString::fromLatin1(name));
+    };
+    ApplyRequest request{
+        mirror, workspace, pack.value().path, pack.value().sha256, snapshot.value().commit, {}};
+    EXPECT_OK(applySnapshot(request));
+
+    // What jobs leave behind: build output, a nested repository, `.git` entries and a link
+    // to a directory outside the workspace.
+    const QString outside = path(QStringLiteral("outside"));
+    QVERIFY(writeFile(QDir(outside).filePath(QStringLiteral("precious.txt")), "precious\n"));
+    QVERIFY(writeFile(ws("build/out.o"), "object\n"));
+    QVERIFY(writeFile(ws("notes.txt"), "notes\n"));
+    QVERIFY(writeFile(ws("nested/.git/config"), "[core]\n"));
+    QVERIFY(writeFile(ws("nested/file.txt"), "nested\n"));
+    QVERIFY(writeFile(ws(".git/config"), "[core]\n"));
+    QVERIFY(writeFile(ws("src/.git"), "gitdir: /elsewhere\n"));
+    QVERIFY(makeSymlink(outside, ws("escape")));
+    const QDateTime old = QDateTime::fromSecsSinceEpoch(1'000'000'000);
+    {
+        QFile file(ws("keep.txt"));
+        QVERIFY(file.open(QIODevice::ReadWrite));
+        QVERIFY(file.setFileTime(old, QFileDevice::FileModificationTime));
+    }
+    const qint64 keepMtime = mtimeNs(ws("keep.txt"));
+
+    // Without clean everything stays.
+    EXPECT_OK(applySnapshot(request));
+    QVERIFY(QFileInfo::exists(ws("build/out.o")));
+    QVERIFY(QFileInfo::exists(ws("nested/file.txt")));
+
+    request.clean = true;
+    EXPECT_OK(applySnapshot(request));
+    QCOMPARE(fingerprint(workspace).keys(), (QStringList{".", "keep.txt", "src", "src/main.cpp"}));
+    QCOMPARE(mtimeNs(ws("keep.txt")), keepMtime);
+    QCOMPARE(readFile(QDir(outside).filePath(QStringLiteral("precious.txt"))),
+             QByteArray("precious\n"));
+    QVERIFY(!QFileInfo::exists(ws(".git")));
+    QVERIFY(!QFileInfo::exists(ws("escape")) && !QFileInfo(ws("escape")).isSymLink());
+}
+
+void WorktreeSnapshotTest::cleanWithoutAnIndexEmptiesTheWorkspace() {
+    const QString repo = makeRepository(QStringLiteral("repo"));
+    QVERIFY(writeFile(QDir(repo).filePath(QStringLiteral("a.txt")), "a\n"));
+    const QString store = path(QStringLiteral("store"));
+    const auto snapshot = createSnapshot({repo, store});
+    EXPECT_OK(snapshot);
+    const auto pack =
+        writePack({store, snapshot.value().commit, {}, path(QStringLiteral("1.pack"))});
+    EXPECT_OK(pack);
+    const QString workspace = path(QStringLiteral("runner/ws"));
+    QVERIFY(writeFile(QDir(workspace).filePath(QStringLiteral("stale/old.txt")), "stale\n"));
+    QVERIFY(writeFile(QDir(workspace).filePath(QStringLiteral("a.txt")), "other\n"));
+    ApplyRequest request{path(QStringLiteral("runner/mirror")),
+                         workspace,
+                         pack.value().path,
+                         pack.value().sha256,
+                         snapshot.value().commit,
+                         {}};
+    request.clean = true;
+    EXPECT_OK(applySnapshot(request));
+    QCOMPARE(fingerprint(workspace).keys(), (QStringList{".", "a.txt"}));
+    QCOMPARE(readFile(QDir(workspace).filePath(QStringLiteral("a.txt"))), QByteArray("a\n"));
+
+    // A pack that fails its checks cleans nothing.
+    QVERIFY(writeFile(QDir(workspace).filePath(QStringLiteral("build/x.o")), "x\n"));
+    request.sha256 = QByteArray(64, 'a');
+    QCOMPARE(applySnapshot(request).error().code, ErrorCode::PackDigestMismatch);
+    QVERIFY(QFileInfo::exists(QDir(workspace).filePath(QStringLiteral("build/x.o"))));
+}
+
+void WorktreeSnapshotTest::applyFromMirrorRestoresTheSnapshot() {
+    const QString repo = makeRepository(QStringLiteral("repo"));
+    QVERIFY(writeFile(QDir(repo).filePath(QStringLiteral("a.txt")), "a\n"));
+    QVERIFY(writeFile(QDir(repo).filePath(QStringLiteral("b.txt")), "b\n"));
+    const QString store = path(QStringLiteral("store"));
+    const auto snapshot = createSnapshot({repo, store});
+    EXPECT_OK(snapshot);
+    const auto pack =
+        writePack({store, snapshot.value().commit, {}, path(QStringLiteral("1.pack"))});
+    EXPECT_OK(pack);
+    const QString mirror = path(QStringLiteral("runner/mirror"));
+    const QString workspace = path(QStringLiteral("runner/ws"));
+    const auto ws = [&](const char* name) {
+        return QDir(workspace).filePath(QString::fromLatin1(name));
+    };
+    EXPECT_OK(applySnapshot(
+        {mirror, workspace, pack.value().path, pack.value().sha256, snapshot.value().commit, {}}));
+    // A job edits a tracked file, deletes another and leaves output.
+    QVERIFY(writeFile(ws("a.txt"), "edited by a job\n"));
+    QVERIFY(QFile::remove(ws("b.txt")));
+    QVERIFY(writeFile(ws("build/out.o"), "object\n"));
+
+    MirrorApplyRequest again{mirror, workspace, snapshot.value().commit, {}};
+    const auto applied = applyFromMirror(again);
+    EXPECT_OK(applied);
+    QCOMPARE(applied.value().previousCommit, snapshot.value().commit);
+    QCOMPARE(readFile(ws("a.txt")), QByteArray("a\n"));
+    QCOMPARE(readFile(ws("b.txt")), QByteArray("b\n"));
+    QCOMPARE(readFile(ws("build/out.o")), QByteArray("object\n"));
+
+    again.clean = true;
+    EXPECT_OK(applyFromMirror(again));
+    QCOMPARE(fingerprint(workspace).keys(), (QStringList{".", "a.txt", "b.txt"}));
+
+    // A second workspace from the same mirror, and what the mirror cannot give.
+    const QString other = path(QStringLiteral("runner/ws2"));
+    EXPECT_OK(applyFromMirror({mirror, other, snapshot.value().commit, {}}));
+    QCOMPARE(readFile(QDir(other).filePath(QStringLiteral("a.txt"))), QByteArray("a\n"));
+    const QString missing(snapshot.value().commit.size(), QLatin1Char('1'));
+    QCOMPARE(applyFromMirror({mirror, other, missing, {}}).error().code,
+             ErrorCode::SnapshotIncomplete);
+    QCOMPARE(
+        applyFromMirror({path(QStringLiteral("runner/none")), other, snapshot.value().commit, {}})
+            .error()
+            .code,
+        ErrorCode::SnapshotIncomplete);
+    QVERIFY(!QFileInfo::exists(path(QStringLiteral("runner/none"))));
+    QCOMPARE(applyFromMirror({mirror, other, QStringLiteral("HEAD"), {}}).error().code,
+             ErrorCode::InvalidArgument);
+}
+
+void WorktreeSnapshotTest::mirrorKnowsWhatItHolds() {
+    const QString repo = makeRepository(QStringLiteral("repo"));
+    QVERIFY(writeFile(QDir(repo).filePath(QStringLiteral("a.txt")), "a\n"));
+    const QString store = path(QStringLiteral("store"));
+    const auto first = createSnapshot({repo, store});
+    EXPECT_OK(first);
+    const auto firstPack =
+        writePack({store, first.value().commit, {}, path(QStringLiteral("1.pack"))});
+    EXPECT_OK(firstPack);
+    QVERIFY(writeFile(QDir(repo).filePath(QStringLiteral("b.txt")), "b\n"));
+    const auto second = createSnapshot({repo, store});
+    EXPECT_OK(second);
+    const auto delta = writePack(
+        {store, second.value().commit, first.value().commit, path(QStringLiteral("2.pack"))});
+    EXPECT_OK(delta);
+
+    const QString mirror = path(QStringLiteral("runner/mirror"));
+    QVERIFY(!mirrorHasCommit(mirror, first.value().commit).value());
+    QVERIFY(!mirrorHasSnapshot(mirror, first.value().commit).value());
+    QVERIFY(!QFileInfo::exists(mirror));
+    // Only the delta: strict indexing refuses it without its base, and nothing is kept.
+    QCOMPARE(applySnapshot({mirror,
+                            path(QStringLiteral("runner/ws")),
+                            delta.value().path,
+                            delta.value().sha256,
+                            second.value().commit,
+                            {}})
+                 .error()
+                 .code,
+             ErrorCode::PackInvalid);
+    QVERIFY(!mirrorHasCommit(mirror, second.value().commit).value());
+    QVERIFY(!mirrorHasSnapshot(mirror, second.value().commit).value());
+
+    EXPECT_OK(applySnapshot({mirror,
+                             path(QStringLiteral("runner/ws")),
+                             firstPack.value().path,
+                             firstPack.value().sha256,
+                             first.value().commit,
+                             {}}));
+    QVERIFY(mirrorHasCommit(mirror, first.value().commit).value());
+    QVERIFY(mirrorHasSnapshot(mirror, first.value().commit).value());
+    QVERIFY(!mirrorHasCommit(mirror, second.value().commit).value());
+    // With the base in the mirror the delta indexes, and both snapshots are whole.
+    EXPECT_OK(applySnapshot({mirror,
+                             path(QStringLiteral("runner/ws")),
+                             delta.value().path,
+                             delta.value().sha256,
+                             second.value().commit,
+                             {}}));
+    QVERIFY(mirrorHasSnapshot(mirror, second.value().commit).value());
+    QVERIFY(mirrorHasSnapshot(mirror, first.value().commit).value());
+    // A tree is not a commit; a malformed id never reaches git.
+    QVERIFY(!mirrorHasCommit(mirror, first.value().tree).value());
+    QCOMPARE(mirrorHasCommit(mirror, QStringLiteral("--all")).error().code,
+             ErrorCode::InvalidArgument);
+}
+
+void WorktreeSnapshotTest::removeWorkspaceDropsTreeIndexAndRef() {
+    const QString repo = makeRepository(QStringLiteral("repo"));
+    QVERIFY(writeFile(QDir(repo).filePath(QStringLiteral("a.txt")), "a\n"));
+    const QString store = path(QStringLiteral("store"));
+    const auto snapshot = createSnapshot({repo, store});
+    EXPECT_OK(snapshot);
+    const auto pack =
+        writePack({store, snapshot.value().commit, {}, path(QStringLiteral("1.pack"))});
+    EXPECT_OK(pack);
+    const QString mirror = path(QStringLiteral("runner/mirror"));
+    const QString workspace = path(QStringLiteral("runner/ws"));
+    const QString kept = path(QStringLiteral("runner/kept"));
+    EXPECT_OK(applySnapshot(
+        {mirror, workspace, pack.value().path, pack.value().sha256, snapshot.value().commit, {}}));
+    EXPECT_OK(applyFromMirror({mirror, kept, snapshot.value().commit, {}}));
+    const QString outside = path(QStringLiteral("outside"));
+    QVERIFY(writeFile(QDir(outside).filePath(QStringLiteral("precious.txt")), "precious\n"));
+    QVERIFY(makeSymlink(outside, QDir(workspace).filePath(QStringLiteral("link"))));
+    const WorkspaceState state = workspaceState(mirror, QFileInfo(workspace).canonicalFilePath());
+    QVERIFY(QFileInfo::exists(state.indexFile));
+    QVERIFY(writeFile(state.indexFile + QStringLiteral(".lock"), "stale lock"));
+
+    EXPECT_OK(removeWorkspace(mirror, workspace));
+    QVERIFY(!QFileInfo::exists(workspace));
+    QVERIFY(!QFileInfo::exists(state.indexFile));
+    QVERIFY(!QFileInfo::exists(state.indexFile + QStringLiteral(".lock")));
+    QVERIFY(!runGitIn(m_home, m_home,
+                      {QStringLiteral("--git-dir=") + mirror, QStringLiteral("rev-parse"),
+                       QStringLiteral("--verify"), QStringLiteral("--quiet"), state.ref})
+                 .ok);
+    QCOMPARE(readFile(QDir(outside).filePath(QStringLiteral("precious.txt"))),
+             QByteArray("precious\n"));
+    // The other workspace and the mirror's objects stay.
+    QCOMPARE(readFile(QDir(kept).filePath(QStringLiteral("a.txt"))), QByteArray("a\n"));
+    QVERIFY(mirrorHasSnapshot(mirror, snapshot.value().commit).value());
+    // Gone already is fine; applying again starts without a previous snapshot.
+    EXPECT_OK(removeWorkspace(mirror, workspace));
+    const auto again = applyFromMirror({mirror, workspace, snapshot.value().commit, {}});
+    EXPECT_OK(again);
+    QVERIFY(again.value().previousCommit.isEmpty());
 }
 
 QTEST_GUILESS_MAIN(WorktreeSnapshotTest)

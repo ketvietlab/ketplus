@@ -25,6 +25,9 @@ struct ApplyRequest {
     QByteArray sha256; // expected lowercase hex SHA-256 of the pack
     QString commit;    // the snapshot the pack carries
     ApplyLimits limits;
+    // Delete every path the workspace's index does not track before the checkout (see
+    // cleanWorkspace in WorkspaceStore.h); only once every check has passed.
+    bool clean = false;
 };
 
 struct Applied {
@@ -44,6 +47,19 @@ struct Applied {
 // never writes through a symlink, so a link in the snapshot or the workspace cannot direct a
 // write outside the workspace.
 [[nodiscard]] Result<Applied> applySnapshot(const ApplyRequest& request, const GitTool& tool = {});
+
+// The same as applySnapshot for a snapshot the mirror already holds, without a pack: every
+// check from the commit on, then the same checkout. SnapshotIncomplete when the mirror lacks
+// the commit or an object it reaches.
+struct MirrorApplyRequest {
+    QString mirrorPath;
+    QString workspacePath;
+    QString commit;
+    ApplyLimits limits;
+    bool clean = false;
+};
+[[nodiscard]] Result<Applied> applyFromMirror(const MirrorApplyRequest& request,
+                                              const GitTool& tool = {});
 
 // Whether a tree path from an untrusted snapshot is safe to create under a workspace.
 [[nodiscard]] bool isSafeSnapshotPath(const QString& path);

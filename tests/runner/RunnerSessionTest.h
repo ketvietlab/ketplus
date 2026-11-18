@@ -51,15 +51,21 @@ class FakeSnapshots final : public session::SnapshotReceiver {
     [[nodiscard]] QMap<QString, QString> heldSnapshots(const QString& machineId) const override {
         return machineId == QStringLiteral("desktop-1") ? held : QMap<QString, QString>{};
     }
-    void begin(const protocol::JobSpec& spec, Send sendFrame) override {
+    void begin(const protocol::JobSpec& spec, const QString& machineId, Send sendFrame) override {
         begun.append(spec.jobId);
+        machines.append(machineId);
         send = std::move(sendFrame);
     }
     void receive(const protocol::Frame& frame) override { received.append(frame); }
+    void receivePayload(const QString& transferId, const QByteArray& payload) override {
+        payloads.append({transferId, payload});
+    }
     void cancel() override { ++cancels; }
 
     QMap<QString, QString> held;
     QStringList begun;
+    QStringList machines;
+    QList<std::pair<QString, QByteArray>> payloads;
     Send send;
     QList<protocol::Frame> received;
     int cancels = 0;

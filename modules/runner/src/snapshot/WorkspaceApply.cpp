@@ -1,5 +1,6 @@
 #include "snapshot/WorkspaceApply.h"
 
+#include "snapshot/WorkspaceStore.h"
 #include "snapshot/WorktreeSnapshot.h"
 
 #include <QCryptographicHash>
@@ -87,6 +88,79 @@ std::optional<Error> checkTree(const SealedGit& git, const QString& mirror, cons
     return std::nullopt;
 }
 
+// From an indexed commit to a checked-out workspace: the commit must be whole in the mirror
+// and its tree safe; only then is the workspace touched.
+Result<Applied> checkout(const SealedGit& git, const QString& mirror, const QString& workspace,
+                         const QString& commit, const ApplyLimits& limits, const bool clean) {
+    GitRun check;
+    check.gitDir = mirror;
+    check.arguments = {QStringLiteral("cat-file"), QStringLiteral("-t"), commit};
+    const auto type = git.run(check);
+    if (!type || oneLine(type.value().out) != QStringLiteral("commit"))
+        return Error{ErrorCode::SnapshotIncomplete, QStringLiteral("the pack lacks the snapshot")};
+    check.arguments = {QStringLiteral("rev-list"), QStringLiteral("--objects"),
+                       QStringLiteral("--missing=error"), commit};
+    check.outputFile = QProcess::nullDevice();
+    if (const auto connected = git.run(check); !connected)
+        return Error{ErrorCode::SnapshotIncomplete, connected.error().message};
+    if (auto error = checkTree(git, mirror, commit, limits))
+        return *error;
+
+    // Only now is the workspace touched.
+    if (!QDir().mkpath(workspace))
+        return Error{ErrorCode::Io, QStringLiteral("cannot create %1").arg(workspace)};
+    const QString canonical = QFileInfo(workspace).canonicalFilePath();
+    if (inside(QFileInfo(mirror).canonicalFilePath(), canonical))
+        return Error{ErrorCode::InvalidArgument, QStringLiteral("mirror and workspace overlap")};
+    const WorkspaceState state = workspaceState(mirror, canonical);
+    const QString& ref = state.ref;
+    QDir().mkpath(QDir(mirror).filePath(QStringLiteral("ketplus-workspaces")));
+    if (clean)
+        if (auto error = cleanWorkspace(git, mirror, canonical))
+            return *error;
+
+    Applied applied;
+    applied.commit = commit;
+    GitRun previous;
+    previous.gitDir = mirror;
+    previous.arguments = {QStringLiteral("rev-parse"), QStringLiteral("--verify"),
+                          QStringLiteral("--quiet"), ref};
+    if (const auto held = git.run(previous))
+        applied.previousCommit = oneLine(held.value().out);
+
+    // Settle the stat cache first: a file whose mtime moved but whose content did not is
+    // marked clean here, so the checkout below leaves it (and its mtime) alone. Exit status 1
+    // only means some entries differ, which the checkout then rewrites.
+    GitRun refresh;
+    refresh.gitDir = mirror;
+    refresh.workTree = canonical;
+    refresh.indexFile = state.indexFile;
+    if (QFileInfo::exists(refresh.indexFile)) {
+        refresh.arguments = {QStringLiteral("update-index"), QStringLiteral("-q"),
+                             QStringLiteral("--refresh"), QStringLiteral("--ignore-missing"),
+                             QStringLiteral("--unmerged")};
+        if (const auto refreshed = git.run(refresh);
+            !refreshed && refreshed.error().code != ErrorCode::GitFailed)
+            return refreshed.error();
+    }
+
+    GitRun checkout;
+    checkout.gitDir = mirror;
+    checkout.workTree = canonical;
+    checkout.indexFile = refresh.indexFile;
+    checkout.arguments = {QStringLiteral("read-tree"), QStringLiteral("--reset"),
+                          QStringLiteral("-u"), commit};
+    if (const auto done = git.run(checkout); !done)
+        return done.error();
+
+    GitRun record;
+    record.gitDir = mirror;
+    record.arguments = {QStringLiteral("update-ref"), ref, commit};
+    if (const auto done = git.run(record); !done)
+        return done.error();
+    return applied;
+}
+
 } // namespace
 
 bool isSafeSnapshotPath(const QString& path) {
@@ -148,72 +222,24 @@ Result<Applied> applySnapshot(const ApplyRequest& request, const GitTool& tool) 
     if (const auto indexed = git.run(index); !indexed)
         return Error{ErrorCode::PackInvalid, indexed.error().message};
 
-    GitRun check;
-    check.gitDir = mirror;
-    check.arguments = {QStringLiteral("cat-file"), QStringLiteral("-t"), request.commit};
-    const auto type = git.run(check);
-    if (!type || oneLine(type.value().out) != QStringLiteral("commit"))
-        return Error{ErrorCode::SnapshotIncomplete, QStringLiteral("the pack lacks the snapshot")};
-    check.arguments = {QStringLiteral("rev-list"), QStringLiteral("--objects"),
-                       QStringLiteral("--missing=error"), request.commit};
-    check.outputFile = QProcess::nullDevice();
-    if (const auto connected = git.run(check); !connected)
-        return Error{ErrorCode::SnapshotIncomplete, connected.error().message};
-    if (auto error = checkTree(git, mirror, request.commit, request.limits))
-        return *error;
+    return checkout(git, mirror, workspace, request.commit, request.limits, request.clean);
+}
 
-    // Only now is the workspace touched.
-    if (!QDir().mkpath(workspace))
-        return Error{ErrorCode::Io, QStringLiteral("cannot create %1").arg(workspace)};
-    const QString canonical = QFileInfo(workspace).canonicalFilePath();
-    if (inside(QFileInfo(mirror).canonicalFilePath(), canonical))
+Result<Applied> applyFromMirror(const MirrorApplyRequest& request, const GitTool& tool) {
+    if (!isObjectId(request.commit))
+        return Error{ErrorCode::InvalidArgument, QStringLiteral("malformed snapshot id")};
+    if (!QDir::isAbsolutePath(request.mirrorPath) || !QDir::isAbsolutePath(request.workspacePath))
+        return Error{ErrorCode::InvalidArgument, QStringLiteral("paths must be absolute")};
+    const QString mirror = QDir::cleanPath(request.mirrorPath);
+    const QString workspace = QDir::cleanPath(request.workspacePath);
+    if (inside(mirror, workspace) || inside(workspace, mirror))
         return Error{ErrorCode::InvalidArgument, QStringLiteral("mirror and workspace overlap")};
-    const QByteArray key =
-        QCryptographicHash::hash(canonical.toUtf8(), QCryptographicHash::Sha256).toHex().left(32);
-    const QString ref = QStringLiteral("refs/ketplus/workspaces/") + QString::fromLatin1(key);
-    QDir().mkpath(QDir(mirror).filePath(QStringLiteral("ketplus-workspaces")));
-
-    Applied applied;
-    applied.commit = request.commit;
-    GitRun previous;
-    previous.gitDir = mirror;
-    previous.arguments = {QStringLiteral("rev-parse"), QStringLiteral("--verify"),
-                          QStringLiteral("--quiet"), ref};
-    if (const auto held = git.run(previous))
-        applied.previousCommit = oneLine(held.value().out);
-
-    // Settle the stat cache first: a file whose mtime moved but whose content did not is
-    // marked clean here, so the checkout below leaves it (and its mtime) alone. Exit status 1
-    // only means some entries differ, which the checkout then rewrites.
-    GitRun refresh;
-    refresh.gitDir = mirror;
-    refresh.workTree = canonical;
-    refresh.indexFile = QDir(mirror).filePath(QStringLiteral("ketplus-workspaces/") +
-                                              QString::fromLatin1(key) + QStringLiteral(".index"));
-    if (QFileInfo::exists(refresh.indexFile)) {
-        refresh.arguments = {QStringLiteral("update-index"), QStringLiteral("-q"),
-                             QStringLiteral("--refresh"), QStringLiteral("--ignore-missing"),
-                             QStringLiteral("--unmerged")};
-        if (const auto refreshed = git.run(refresh);
-            !refreshed && refreshed.error().code != ErrorCode::GitFailed)
-            return refreshed.error();
-    }
-
-    GitRun checkout;
-    checkout.gitDir = mirror;
-    checkout.workTree = canonical;
-    checkout.indexFile = refresh.indexFile;
-    checkout.arguments = {QStringLiteral("read-tree"), QStringLiteral("--reset"),
-                          QStringLiteral("-u"), request.commit};
-    if (const auto done = git.run(checkout); !done)
-        return done.error();
-
-    GitRun record;
-    record.gitDir = mirror;
-    record.arguments = {QStringLiteral("update-ref"), ref, request.commit};
-    if (const auto done = git.run(record); !done)
-        return done.error();
-    return applied;
+    if (!QFileInfo::exists(QDir(mirror).filePath(QStringLiteral("HEAD"))))
+        return Error{ErrorCode::SnapshotIncomplete, QStringLiteral("no mirror")};
+    const SealedGit git(tool);
+    if (const auto version = git.checkVersion(); !version)
+        return version.error();
+    return checkout(git, mirror, workspace, request.commit, request.limits, request.clean);
 }
 
 } // namespace ketplus::runner::snapshot

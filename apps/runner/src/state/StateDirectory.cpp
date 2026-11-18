@@ -176,8 +176,15 @@ QString StateDirectory::absolute(const QString& name) const {
     return m_path + QLatin1Char('/') + name;
 }
 
+// Every level of `name` is a private directory of this user.
 bool StateDirectory::ensureSubdirectory(const QString& name, QString* error) const {
-    return privateDirectory(absolute(name), m_owner, error);
+    QString level;
+    for (const QString& part : name.split(QLatin1Char('/'), Qt::SkipEmptyParts)) {
+        level = level.isEmpty() ? part : level + QLatin1Char('/') + part;
+        if (!privateDirectory(absolute(level), m_owner, error))
+            return false;
+    }
+    return true;
 }
 
 StateDirectory::ReadResult StateDirectory::read(const QString& name, const qint64 maxBytes) const {

@@ -63,8 +63,25 @@ target_include_directories(ketplus_runner_session PUBLIC
 )
 ketplus_enable_warnings(ketplus_runner_session)
 
+# The session's SnapshotReceiver over the state directory: partial packs, mirrors and
+# workspaces, with disk and Git work on one worker thread.
+add_library(ketplus_runner_snapshot_receiver STATIC
+    src/snapshot/ReceiverChunks.cpp
+    src/snapshot/ReceiverOffer.cpp
+    src/snapshot/ReceiverStore.cpp
+    src/snapshot/ReceiverStore.h
+    src/snapshot/ReceiverWork.cpp
+    src/snapshot/ReceiverWork.h
+    src/snapshot/SnapshotStoreReceiver.h
+)
+target_link_libraries(ketplus_runner_snapshot_receiver
+    PUBLIC Qt6::Core ketplus_runner_app ketplus_runner_session ketplus_runner_snapshot
+    ketplus_runner_protocol)
+ketplus_enable_warnings(ketplus_runner_snapshot_receiver)
+
 add_executable(ketplus-runner src/main.cpp)
-target_link_libraries(ketplus-runner PRIVATE ketplus_runner_app ketplus_runner_session)
+target_link_libraries(ketplus-runner PRIVATE ketplus_runner_app ketplus_runner_session
+    ketplus_runner_snapshot_receiver)
 ketplus_enable_warnings(ketplus-runner)
 
 # Runners are Linux nodes; the macOS build exists for tests only and ships no runner.
