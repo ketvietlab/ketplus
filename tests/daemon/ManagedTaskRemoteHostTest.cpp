@@ -521,18 +521,72 @@ class ManagedTaskRemoteHostTest final : public QObject {
         QCOMPARE(h.outbox(id), 0);
     }
 
-    // An owner that is let go stops its recorded remote job through the port.
-    void anInvalidOwnerStopsItsRecordedRemoteJob() {
-        Host h;
+    // An owner that is let go stops its recorded remote job through the port, once: the
+    // pump past the job's timeout adds no stop.
+    void anEndedOwnerStopsItsRecordedRemoteJobOnce() {
+        for (const QString reason : {"owner_invalid", "parent_job_stopped"}) {
+            Host h;
+            h.attach();
+            auto payload = remote(h.cwd);
+            payload.insert("timeout_ms", 1000);
+            const auto id = idOf(h.run("session.task.start", payload));
+            QTRY_COMPARE(h.port.submitted, QStringList{id});
+            QVERIFY(h.recorded(id));
+            auto* runtime = h.runtime();
+            QVERIFY(runtime);
+            runtime->cancelOwner({"owner", 1, {}}, reason);
+            QCOMPARE(h.port.stops, QStringList{id});
+            QTest::qWait(1600);
+            QCOMPARE(h.port.stops, QStringList{id});
+            QCOMPARE(h.task(id).value("state"), "queued"); // the record carries the stop
+        }
+    }
+
+    // A reserved task of an ended owner, waiting for approval or for its snapshot, is
+    // cancelled here and nothing reaches the port.
+    void anEndedOwnerCancelsAReservedTaskHere() {
+        for (const bool approved : {false, true}) {
+            Host h(approved ? "full" : "ask");
+            h.attach();
+            const auto id = idOf(h.run("session.task.start", remote(h.cwd)));
+            if (approved)
+                QTRY_COMPARE(h.port.submitted, QStringList{id});
+            else
+                QTRY_COMPARE(h.approvals().size(), 1);
+            auto* runtime = h.runtime();
+            QVERIFY(runtime);
+            runtime->cancelOwner({"owner", 1, {}}, "owner_invalid");
+            QTRY_COMPARE(h.task(id).value("state"), "cancelled");
+            QVERIFY(h.port.stops.isEmpty());
+            if (!approved) {
+                h.resolve("accept");
+                QTest::qWait(300);
+                QVERIFY(h.port.submitted.isEmpty());
+            }
+        }
+    }
+
+    // get and list show containment_mode remote for a remote task; a local one keeps its own.
+    void containmentModeIsRemoteOnlyForARemoteTask() {
+#ifdef Q_OS_LINUX
+        const QString local = "cgroup_v2";
+#else
+        const QString local = "native_best_effort";
+#endif
+        Host h("ask");
         h.attach();
-        const auto id = idOf(h.run("session.task.start", remote(h.cwd)));
-        QTRY_COMPARE(h.port.submitted, QStringList{id});
-        QVERIFY(h.recorded(id));
-        auto* runtime = h.runtime();
-        QVERIFY(runtime);
-        runtime->cancelOwner({"owner", 1, {}}, "owner_invalid");
-        QCOMPARE(h.port.stops, QStringList{id});
-        QCOMPARE(h.task(id).value("state"), "queued"); // the record carries the stop
+        const auto remoteId = idOf(h.run("session.task.start", remote(h.cwd)));
+        const auto localId = idOf(h.run("session.task.start", process(h.cwd)));
+        QVERIFY(!remoteId.isEmpty() && !localId.isEmpty());
+        QCOMPARE(h.task(remoteId).value("containment_mode").toString(), QStringLiteral("remote"));
+        QCOMPARE(h.task(localId).value("containment_mode").toString(), local);
+        const auto listed = h.run("session.task.list").value("tasks").toArray();
+        QCOMPARE(listed.size(), 2);
+        for (const auto value : listed) {
+            const auto task = value.toObject();
+            QCOMPARE(task.value("containment_mode").toString(),
+                     task.value("task_id") == remoteId ? QStringLiteral("remote") : local);
+        }
     }
 
     // Where no local executor is installed: a task with runs_on still starts and is
