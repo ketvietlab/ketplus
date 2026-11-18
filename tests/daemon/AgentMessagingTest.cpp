@@ -806,8 +806,6 @@ class AgentMessagingTest final : public QObject {
     }
 
     void agentConnectionsOnlyReachAgentOperations() {
-        KETPLUS_SKIP_ON_WINDOWS("daemon.hello with an agent token is not reported as an agent "
-                                "connection on Windows; cause not yet diagnosed");
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
         const QString codexPath = directory.filePath(fixtureName("fake-codex"));
@@ -899,11 +897,15 @@ class AgentMessagingTest final : public QObject {
                      .toString(),
                  "authentication_failed");
         agent.abort();
+        // On Windows a client that connects right after another one was refused can reach the
+        // pipe instance that is still closing and never gets its reply; give the server time to
+        // open the next instance.
+        QTest::qWait(500);
         agent.connectToServer(directory.filePath("daemon.sock"));
         QVERIFY(agent.waitForConnected(3000));
-        QVERIFY(roundTrip(agent, request("daemon.hello", {{"agent_token", token}}))
-                    .value("agent")
-                    .toBool());
+        const auto agentHello = roundTrip(agent, request("daemon.hello", {{"agent_token", token}}));
+        QVERIFY2(agentHello.value("agent").toBool(),
+                 QJsonDocument(agentHello).toJson(QJsonDocument::Compact).constData());
         QCOMPARE(roundTrip(agent, request("agents.whoami")).value("number").toString(),
                  started.value("number").toString());
         QCOMPARE(roundTrip(agent, request("session.list")).value("error_code").toString(),
