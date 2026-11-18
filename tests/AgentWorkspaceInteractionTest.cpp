@@ -1650,8 +1650,10 @@ void AgentWorkspaceViewTest::mentionsOnlyFilesInConversationWorktree() {
     QVERIFY(writeFile(QDir(worktree).filePath(QStringLiteral("src/app/main.cpp"))));
     QVERIFY(writeFile(QDir(worktree).filePath(QStringLiteral("README.md"))));
     QVERIFY(writeFile(outside.filePath(QStringLiteral("secret.txt"))));
+#if !defined(Q_OS_WIN) // QFile::link makes a .lnk shortcut on Windows, not a symbolic link
     QVERIFY(QFile::link(outside.filePath(QStringLiteral("secret.txt")),
                         QDir(worktree).filePath(QStringLiteral("escape.txt"))));
+#endif
 
     const QVector<mentions::Mention> parsed = mentions::parseMentions(
         QStringLiteral("See @src/app/main.cpp, @\"a b/c.txt\" and mail me@example.com."));
@@ -1671,8 +1673,10 @@ void AgentWorkspaceViewTest::mentionsOnlyFilesInConversationWorktree() {
              mentions::Resolution::Outside);
     QCOMPARE(mentions::resolve(worktree, outside.filePath(QStringLiteral("secret.txt"))).resolution,
              mentions::Resolution::Outside);
+#if !defined(Q_OS_WIN)
     QCOMPARE(mentions::resolve(worktree, QStringLiteral("escape.txt")).resolution,
              mentions::Resolution::Outside);
+#endif
     // Paths that name nothing on disk are ordinary text, wherever they would point.
     QCOMPARE(mentions::resolve(worktree, QStringLiteral("/api/users")).resolution,
              mentions::Resolution::Missing);
@@ -1715,12 +1719,18 @@ void AgentWorkspaceViewTest::mentionsOnlyFilesInConversationWorktree() {
     view.submitConfiguredPrompt(QStringLiteral("Read @../secret.txt"), {});
     QCOMPARE(configured.count(), 0);
     QCOMPARE(rejected.count(), 1);
+#if !defined(Q_OS_WIN) // needs the symbolic link above
     view.submitConfiguredPrompt(QStringLiteral("Read @escape.txt"), {});
     QCOMPARE(configured.count(), 0);
     QCOMPARE(rejected.count(), 2);
+#endif
     view.submitConfiguredPrompt(QStringLiteral("Call @/api/users"), {});
     QCOMPARE(configured.count(), 1);
+#if defined(Q_OS_WIN)
+    QCOMPARE(rejected.count(), 1); // without the escape.txt symbolic link
+#else
     QCOMPARE(rejected.count(), 2);
+#endif
 
     // Typing `@` in the composer opens the file palette.
     auto* root = view.quickView()->rootObject();

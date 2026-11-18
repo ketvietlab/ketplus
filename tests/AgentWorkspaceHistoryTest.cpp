@@ -1,3 +1,4 @@
+#include "daemon/ScriptFixture.h"
 #include "AgentWorkspaceViewTest.h"
 #include "KetProfile.h"
 #include "agent/AgentMessageFormatter.h"
@@ -36,7 +37,7 @@ using namespace agent_workspace_test;
 
 void AgentWorkspaceViewTest::webSearchLabelsAndAnimation() {
     QTemporaryDir directory;
-    const auto scriptPath = directory.filePath("web-search.py");
+    const auto scriptPath = fixtureName(directory.filePath("web-search.py"));
     QFile script(scriptPath);
     QVERIFY(script.open(QIODevice::WriteOnly));
     script.write(R"PY(#!/usr/bin/env python3
@@ -53,8 +54,7 @@ for line in sys.stdin:
     print(json.dumps({"id":r["id"],"result":result}),flush=True)
 )PY");
     script.close();
-    QVERIFY(QFile::setPermissions(scriptPath, QFileDevice::ReadOwner | QFileDevice::WriteOwner |
-                                                  QFileDevice::ExeOwner));
+    QVERIFY(finalizeScriptFixture(script));
     ketplus::CodexAppServer server(scriptPath);
     ketplus::AgentSessionManager manager(&server);
     const auto path = directory.path();
@@ -555,7 +555,7 @@ void AgentWorkspaceViewTest::presentationGroupingIsDerivedAndDeterministic() {
 
 void AgentWorkspaceViewTest::coalescesStreamingDeltas() {
     QTemporaryDir directory;
-    const QString scriptPath = directory.filePath(QStringLiteral("coalesce.py"));
+    const QString scriptPath = fixtureName(directory.filePath(QStringLiteral("coalesce.py")));
     QFile script(scriptPath);
     QVERIFY(script.open(QIODevice::WriteOnly));
     script.write(R"PY(#!/usr/bin/env python3
@@ -570,8 +570,7 @@ for line in sys.stdin:
     print(json.dumps({"id":request["id"],"result":result}),flush=True)
 )PY");
     script.close();
-    QVERIFY(QFile::setPermissions(scriptPath, QFileDevice::ReadOwner | QFileDevice::WriteOwner |
-                                                  QFileDevice::ExeOwner));
+    QVERIFY(finalizeScriptFixture(script));
     ketplus::CodexAppServer server(scriptPath);
     ketplus::AgentSessionManager manager(&server);
     manager.activate(directory.path());
@@ -812,6 +811,7 @@ void AgentWorkspaceViewTest::userMessageShowsTheImagesItWasSentWith() {
     QFile file(staging);
     QVERIFY(file.open(QIODevice::ReadOnly));
     const QByteArray bytes = file.readAll();
+    file.close(); // an open file cannot be renamed on Windows
     const QString hex =
         QString::fromLatin1(QCryptographicHash::hash(bytes, QCryptographicHash::Sha256).toHex());
     QVERIFY(QFile::rename(staging, media.filePath(hex + QStringLiteral(".png"))));
@@ -1218,7 +1218,7 @@ void AgentWorkspaceViewTest::coversVersionedTranscriptCorpus() {
 void AgentWorkspaceViewTest::streamsLiveCommentary() {
     QTemporaryDir directory;
     QVERIFY(directory.isValid());
-    const QString scriptPath = directory.filePath(QStringLiteral("phase-server.py"));
+    const QString scriptPath = fixtureName(directory.filePath(QStringLiteral("phase-server.py")));
     QFile script(scriptPath);
     QVERIFY(script.open(QIODevice::WriteOnly));
     script.write(R"PY(#!/usr/bin/env python3
@@ -1233,8 +1233,7 @@ for line in sys.stdin:
     print(json.dumps({"id":request["id"],"result":result}),flush=True)
 )PY");
     script.close();
-    QVERIFY(QFile::setPermissions(scriptPath, QFileDevice::ReadOwner | QFileDevice::WriteOwner |
-                                                  QFileDevice::ExeOwner));
+    QVERIFY(finalizeScriptFixture(script));
     ketplus::CodexAppServer server(scriptPath);
     ketplus::AgentSessionManager manager(&server);
     const QString path = directory.path();
@@ -1313,7 +1312,7 @@ for line in sys.stdin:
 void AgentWorkspaceViewTest::paginatesConversationHistory() {
     QTemporaryDir directory;
     QVERIFY(directory.isValid());
-    const auto scriptPath = directory.filePath("pages.py");
+    const auto scriptPath = fixtureName(directory.filePath("pages.py"));
     QFile script(scriptPath);
     QVERIFY(script.open(QIODevice::WriteOnly));
     script.write(R"PY(#!/usr/bin/env python3
@@ -1351,8 +1350,7 @@ for line in sys.stdin:
     elif m=="thread/read": send({"thread":{"turns":[turn(i) for i in range(45)]}})
 )PY");
     script.close();
-    QVERIFY(QFile::setPermissions(scriptPath, QFileDevice::ReadOwner | QFileDevice::WriteOwner |
-                                                  QFileDevice::ExeOwner));
+    QVERIFY(finalizeScriptFixture(script));
     ketplus::CodexAppServer server(scriptPath);
     const auto path = directory.path();
     {
@@ -1637,7 +1635,7 @@ void AgentWorkspaceViewTest::wheelStopsTailFollowing() {
 void AgentWorkspaceViewTest::steersRunningTurn() {
     QTemporaryDir directory;
     QVERIFY(directory.isValid());
-    const QString scriptPath = directory.filePath("steering-server.py");
+    const QString scriptPath = fixtureName(directory.filePath("steering-server.py"));
     QFile script(scriptPath);
     QVERIFY(script.open(QIODevice::WriteOnly));
     script.write(R"PY(#!/usr/bin/env python3
@@ -1667,8 +1665,7 @@ for line in sys.stdin:
             send({"method":"item/completed","params":{"threadId":"steering-thread","item":{"id":"steered-user","type":"userMessage","content":p["input"]}}})
 )PY");
     script.close();
-    QVERIFY(QFile::setPermissions(scriptPath, QFileDevice::ReadOwner | QFileDevice::WriteOwner |
-                                                  QFileDevice::ExeOwner));
+    QVERIFY(finalizeScriptFixture(script));
     ketplus::CodexAppServer server(scriptPath);
     ketplus::AgentSessionManager manager(&server);
     QSignalSpy finished(&manager, &ketplus::AgentSessionManager::steeringFinished);
@@ -2010,7 +2007,7 @@ void AgentWorkspaceViewTest::persistsConversationConfiguration() {
 void AgentWorkspaceViewTest::reportsConversationContextWindow() {
     QTemporaryDir directory;
     QVERIFY(directory.isValid());
-    const QString scriptPath = directory.filePath(QStringLiteral("context-server.py"));
+    const QString scriptPath = fixtureName(directory.filePath(QStringLiteral("context-server.py")));
     QFile script(scriptPath);
     QVERIFY(script.open(QIODevice::WriteOnly));
     script.write(R"PY(#!/usr/bin/env python3
@@ -2047,8 +2044,7 @@ for line in sys.stdin:
         send({"id": request_id, "result": {}})
 )PY");
     script.close();
-    QVERIFY(QFile::setPermissions(scriptPath, QFileDevice::ReadOwner | QFileDevice::WriteOwner |
-                                                  QFileDevice::ExeOwner));
+    QVERIFY(finalizeScriptFixture(script));
 
     QString conversationId;
     {
@@ -2092,7 +2088,7 @@ for line in sys.stdin:
 void AgentWorkspaceViewTest::reportsPlanLimitsAndDropsWindowsThatAlreadyReset() {
     QTemporaryDir directory;
     QVERIFY(directory.isValid());
-    const QString scriptPath = directory.filePath(QStringLiteral("limits-server.py"));
+    const QString scriptPath = fixtureName(directory.filePath(QStringLiteral("limits-server.py")));
     QFile script(scriptPath);
     QVERIFY(script.open(QIODevice::WriteOnly));
     const qint64 future = QDateTime::currentSecsSinceEpoch() + 3600;
@@ -2136,8 +2132,7 @@ for line in sys.stdin:
                      .arg(past)
                      .toUtf8());
     script.close();
-    QVERIFY(QFile::setPermissions(scriptPath, QFileDevice::ReadOwner | QFileDevice::WriteOwner |
-                                                  QFileDevice::ExeOwner));
+    QVERIFY(finalizeScriptFixture(script));
 
     QString conversationId;
     {
@@ -2175,7 +2170,7 @@ for line in sys.stdin:
 void AgentWorkspaceViewTest::hydratesSavedConversationOnSelection() {
     QTemporaryDir directory;
     QVERIFY(directory.isValid());
-    const QString scriptPath = directory.filePath(QStringLiteral("history-server.py"));
+    const QString scriptPath = fixtureName(directory.filePath(QStringLiteral("history-server.py")));
     QFile script(scriptPath);
     QVERIFY(script.open(QIODevice::WriteOnly));
     script.write(R"PY(#!/usr/bin/env python3
@@ -2206,8 +2201,7 @@ for line in sys.stdin:
         ]}}})
 )PY");
     script.close();
-    QVERIFY(QFile::setPermissions(scriptPath, QFileDevice::ReadOwner | QFileDevice::WriteOwner |
-                                                  QFileDevice::ExeOwner));
+    QVERIFY(finalizeScriptFixture(script));
 
     QString savedConversationId;
     {
