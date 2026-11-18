@@ -33,6 +33,11 @@ inline constexpr auto storeRefPrefix = "refs/ketplus/";
 [[nodiscard]] Result<bool> pruneStore(const QString& storePath, const QDateTime& expireBefore,
                                       const GitTool& tool = {});
 
+// Whether the store, with the repository it reads from, still holds every object `commit`
+// reaches; false when one is missing.
+[[nodiscard]] Result<bool> snapshotComplete(const QString& storePath, const QString& commit,
+                                            const GitTool& tool = {});
+
 struct SourceHead {
     QString commit;          // lowercase hex of the layout's object format; empty when none
     bool unborn = false;     // HEAD names a branch without a commit

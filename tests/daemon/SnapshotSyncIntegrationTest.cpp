@@ -5,9 +5,11 @@
 #include "runner/sync/StoreRetention.h"
 
 #include "snapshot/SnapshotStore.h"
+#include "snapshot/WorktreeSnapshot.h"
 #include "snapshot/WorkspaceApply.h"
 
 #include <QDir>
+#include <QDirIterator>
 #include <QFile>
 #include <QProcess>
 #include <QSignalSpy>
@@ -35,6 +37,57 @@ QByteArray readAll(const QString& path) {
     QFile file(path);
     return file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray{};
 }
+
+// Runs git in `directory` with a fixed identity and no user configuration.
+QByteArray gitIn(const QString& home, const QString& directory, const QStringList& arguments) {
+    QProcessEnvironment environment;
+    environment.insert(QStringLiteral("PATH"), qEnvironmentVariable("PATH"));
+    environment.insert(QStringLiteral("HOME"), home);
+    environment.insert(QStringLiteral("GIT_CONFIG_NOSYSTEM"), QStringLiteral("1"));
+    environment.insert(QStringLiteral("GIT_CONFIG_GLOBAL"), QStringLiteral("/dev/null"));
+    for (const auto* name : {"GIT_AUTHOR_NAME", "GIT_COMMITTER_NAME"})
+        environment.insert(QString::fromLatin1(name), QStringLiteral("Fixture"));
+    for (const auto* name : {"GIT_AUTHOR_EMAIL", "GIT_COMMITTER_EMAIL"})
+        environment.insert(QString::fromLatin1(name), QStringLiteral("fixture@example.invalid"));
+    QProcess process;
+    process.setProcessEnvironment(environment);
+    process.setWorkingDirectory(directory);
+    process.start(QStringLiteral("git"), arguments);
+    if (!process.waitForFinished(60'000) || process.exitCode() != 0)
+        qWarning() << "git failed" << arguments.value(0);
+    return process.readAllStandardOutput().trimmed();
+}
+
+int looseObjects(const QString& store) {
+    int count = 0;
+    QDirIterator it(store + QStringLiteral("/objects"), QDir::Files,
+                    QDirIterator::Subdirectories);
+    while (it.hasNext()) {
+        const QString path = it.next();
+        if (QFileInfo(path).dir().dirName().size() == 2)
+            ++count;
+    }
+    return count;
+}
+
+// Counts the packs a sender asks for.
+class CountingWork final : public SyncWork {
+  public:
+    explicit CountingWork(SyncWork& inner) : inner_(inner) {}
+    void buildPack(const QString& snapshotId, const QString& baseId,
+                   PackCallback callback) override {
+        ++builds;
+        inner_.buildPack(snapshotId, baseId, std::move(callback));
+    }
+    void readChunk(const PackFile& pack, qint64 offset, qint64 length,
+                   ChunkCallback callback) override {
+        inner_.readChunk(pack, offset, length, std::move(callback));
+    }
+    int builds = 0;
+
+  private:
+    SyncWork& inner_;
+};
 
 } // namespace
 
@@ -297,6 +350,183 @@ class SnapshotSyncIntegrationTest : public QObject {
         QTRY_VERIFY(outcome.has_value());
         QVERIFY(outcome->baseMissing);
         QVERIFY(!outcome->pack);
+    }
+
+    void aRestartedSenderOffersTheKeptPack() {
+        const QString jobId = QStringLiteral("job-restart");
+        const auto prepared = prepareJob(jobId);
+        QVERIFY(prepared);
+        const QString packsDir = root_ + QStringLiteral("/packs");
+        protocol::SnapshotOffer first;
+        {
+            PackCache packs(packsDir);
+            StoreRetention retention(prepared->storePath, packs);
+            QVERIFY(retention.load());
+            SnapshotWorker worker(prepared->storePath, packs);
+            JobSyncWork work(worker, jobId);
+            FakeLink link;
+            FakeEvents events;
+            SnapshotSender sender(SyncJob{jobId, runnerId, key, prepared->snapshotId, {}}, link,
+                                  work, retention, events);
+            sender.start({});
+            QTRY_COMPARE(link.of<protocol::SnapshotOffer>().size(), 1);
+            first = link.of<protocol::SnapshotOffer>().first();
+            sender.receive(protocol::SnapshotWant{prepared->snapshotId, QStringLiteral("need"), 0});
+            QTRY_VERIFY(sender.sent() > 0);
+            drain(worker);
+        } // the daemon stops: sender, worker, retention and cache are gone
+
+        PackCache packs(packsDir);
+        // A sweep before the job is known again keeps its pack, even a day later.
+        packs.sweep(QDateTime::currentDateTimeUtc().addDays(2));
+        QVERIFY(packs.find(jobId));
+        StoreRetention retention(prepared->storePath, packs);
+        QVERIFY(retention.load());
+        SnapshotWorker worker(prepared->storePath, packs);
+        JobSyncWork jobWork(worker, jobId);
+        CountingWork work(jobWork);
+        FakeLink link;
+        FakeEvents events;
+        SnapshotSender sender(SyncJob{jobId, runnerId, key, prepared->snapshotId, {}}, link, work,
+                              retention, events);
+        sender.start({});
+        QCOMPARE(work.builds, 0);
+        QCOMPARE(link.of<protocol::SnapshotOffer>().size(), 1);
+        const auto again = link.of<protocol::SnapshotOffer>().first();
+        QCOMPARE(again.packSha256, first.packSha256);
+        QCOMPARE(again.packBytes, first.packBytes);
+        QVERIFY(packs.inFlight(jobId));
+        packs.setLiveJobs({});
+        packs.sweep(QDateTime::currentDateTimeUtc().addDays(2));
+        QVERIFY(packs.find(jobId)); // in flight again
+        const QByteArray bytes = sendAll(sender, link, prepared->snapshotId);
+        QCOMPARE(sha256(bytes), first.packSha256);
+        sender.receive(protocol::SnapshotReady{prepared->snapshotId});
+        QCOMPARE(events.ready, QStringList{jobId});
+        QVERIFY(!packs.find(jobId));
+    }
+
+    void aKeptPackWhoseBaseIsGoneIsBuiltAgain() {
+        const QString jobId = QStringLiteral("job-stale");
+        const auto prepared = prepareJob(jobId);
+        QVERIFY(prepared);
+        PackCache packs(root_ + QStringLiteral("/packs"));
+        const QString base = QString(40, QLatin1Char('e'));
+        const QString path = packs.pathFor(jobId, prepared->snapshotId, base);
+        write(path, "stale");
+        QVERIFY(packs.record(jobId, PackFile{path, 5, QString(64, QLatin1Char('a')),
+                                             prepared->snapshotId, base}));
+        StoreRetention retention(prepared->storePath, packs);
+        QVERIFY(retention.load());
+        SnapshotWorker worker(prepared->storePath, packs);
+        JobSyncWork jobWork(worker, jobId);
+        CountingWork work(jobWork);
+        FakeLink link;
+        FakeEvents events;
+        SnapshotSender sender(SyncJob{jobId, runnerId, key, prepared->snapshotId, {}}, link, work,
+                              retention, events);
+        sender.start({}); // the runner no longer lists that base
+        QCOMPARE(work.builds, 1);
+        QTRY_COMPARE(link.of<protocol::SnapshotOffer>().size(), 1);
+        QVERIFY(!link.of<protocol::SnapshotOffer>().first().baseId);
+    }
+
+    void aPrunedStoreNeverBreaksAConfirmedBase() {
+        gitIn(home_, repo_, {QStringLiteral("add"), QStringLiteral("-A")});
+        gitIn(home_, repo_, {QStringLiteral("commit"), QStringLiteral("-qm"), QStringLiteral("one")});
+        gitIn(home_, repo_, {QStringLiteral("gc"), QStringLiteral("-q")});
+        const auto base = prepareJob(QStringLiteral("job-base"));
+        QVERIFY(base);
+        const QString store = base->storePath;
+        PackCache packs(root_ + QStringLiteral("/packs"));
+        StoreRetention retention(store, packs);
+        QVERIFY(retention.load());
+        QVERIFY(retention.confirm(runnerId, key, base->snapshotId));
+        retention.release(QStringLiteral("job-base"));
+
+        const int before = looseObjects(store);
+        QVERIFY(snapshot::pruneStore(store, QDateTime::currentDateTimeUtc().addDays(1)));
+        const int after = looseObjects(store);
+        qInfo() << "store loose objects before prune" << before << "after" << after;
+
+        // (a) An incremental pack on the base still builds.
+        write(repo_ + QStringLiteral("/src/main.c"), "int main() { return 1; }\n");
+        const auto next = prepareJob(QStringLiteral("job-next"));
+        QVERIFY(next);
+        const auto incremental = snapshot::writePack(
+            {store, next->snapshotId, base->snapshotId, root_ + QStringLiteral("/next.pack")});
+        QVERIFY2(incremental || incremental.error().code == snapshot::ErrorCode::BaseMissing,
+                 qPrintable(incremental ? QString{} : incremental.error().message));
+        qInfo() << "incremental pack after prune:"
+                << (incremental ? "built" : "base missing");
+
+        // (b) The user's repository loses the base's objects.
+        gitIn(home_, repo_, {QStringLiteral("checkout"), QStringLiteral("-q"),
+                             QStringLiteral("--orphan"), QStringLiteral("rewritten")});
+        write(repo_ + QStringLiteral("/README"), "rewritten\n");
+        gitIn(home_, repo_, {QStringLiteral("add"), QStringLiteral("-A")});
+        gitIn(home_, repo_, {QStringLiteral("commit"), QStringLiteral("-qm"), QStringLiteral("two")});
+        const QString old = QString::fromLatin1(
+            gitIn(home_, repo_, {QStringLiteral("for-each-ref"), QStringLiteral("--format=%(refname)"),
+                                 QStringLiteral("refs/heads/")}));
+        for (const QString& ref : old.split(QLatin1Char('\n'), Qt::SkipEmptyParts))
+            if (ref != QStringLiteral("refs/heads/rewritten"))
+                gitIn(home_, repo_, {QStringLiteral("update-ref"), QStringLiteral("-d"), ref});
+        gitIn(home_, repo_, {QStringLiteral("reflog"), QStringLiteral("expire"),
+                             QStringLiteral("--expire=now"), QStringLiteral("--all")});
+        gitIn(home_, repo_, {QStringLiteral("gc"), QStringLiteral("-q"), QStringLiteral("--prune=now")});
+        const auto later = prepareJob(QStringLiteral("job-later"));
+        QVERIFY(later);
+        const auto rebuilt = snapshot::writePack(
+            {store, later->snapshotId, base->snapshotId, root_ + QStringLiteral("/later.pack")});
+        qInfo() << "pack on the base after the user's gc:"
+                << (rebuilt ? "built"
+                            : (rebuilt.error().code == snapshot::ErrorCode::BaseMissing
+                                   ? "base missing"
+                                   : "failed"));
+
+        // The sender either uses the base or falls back to a full pack; it never fails.
+        SnapshotWorker worker(store, packs);
+        JobSyncWork work(worker, QStringLiteral("job-later"));
+        FakeLink link;
+        FakeEvents events;
+        SnapshotSender sender(SyncJob{QStringLiteral("job-later"), runnerId, key,
+                                      later->snapshotId, {}},
+                              link, work, retention, events);
+        sender.start({{key, base->snapshotId}});
+        QTRY_COMPARE_WITH_TIMEOUT(link.of<protocol::SnapshotOffer>().size() + events.failed.size(),
+                                  1, 30'000);
+        QVERIFY2(events.failed.isEmpty(),
+                 qPrintable(events.failed.isEmpty() ? QString{} : events.failed.first().second));
+        const QByteArray bytes = sendAll(sender, link, later->snapshotId);
+        const auto offer = link.of<protocol::SnapshotOffer>().last();
+        const QString packPath = root_ + QStringLiteral("/received.pack");
+        write(packPath, bytes);
+        qInfo() << "offered" << (offer.baseId ? "incremental" : "full") << "pack";
+        if (!offer.baseId) {
+            const auto applied = snapshot::applySnapshot({root_ + QStringLiteral("/mirror.git"),
+                                                          root_ + QStringLiteral("/workspace"),
+                                                          packPath,
+                                                          sha256(bytes).toLatin1(),
+                                                          later->snapshotId,
+                                                          {}});
+            QVERIFY2(applied, qPrintable(applied ? QString{} : applied.error().message));
+            QCOMPARE(readAll(root_ + QStringLiteral("/workspace/README")),
+                     QByteArray("rewritten\n"));
+        }
+
+        // A snapshot that lost objects cannot be packed at all: a clear code and no pack file.
+        QCOMPARE(snapshot::snapshotComplete(store, base->snapshotId).value(), false);
+        QCOMPARE(snapshot::snapshotComplete(store, later->snapshotId).value(), true);
+        std::optional<PackOutcome> broken;
+        JobSyncWork brokenWork(worker, QStringLiteral("job-broken"));
+        brokenWork.buildPack(base->snapshotId, {},
+                             [&broken](const PackOutcome& outcome) { broken = outcome; });
+        QTRY_VERIFY_WITH_TIMEOUT(broken.has_value(), 30'000);
+        QVERIFY(!broken->pack);
+        QVERIFY(!broken->baseMissing);
+        QCOMPARE(broken->code, code::snapshotIncomplete);
+        QVERIFY(!packs.find(QStringLiteral("job-broken")));
     }
 
     void readsChunksOnlyOfTheRecordedSize() {

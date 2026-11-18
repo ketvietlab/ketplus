@@ -198,6 +198,17 @@ class SnapshotStoreTest final : public QObject {
         QCOMPARE(pruneStore(store_, QDateTime()).error().code, ErrorCode::InvalidArgument);
     }
 
+    void aSnapshotMissingAnObjectIsIncomplete() {
+        const Snapshot snapshot = snapshotOf("whole\n");
+        QVERIFY(!snapshot.commit.isEmpty());
+        QCOMPARE(snapshotComplete(store_, snapshot.commit).value(), true);
+        QVERIFY(QFile::remove(looseObject(store_, snapshot.tree)));
+        QCOMPARE(snapshotComplete(store_, snapshot.commit).value(), false);
+        QCOMPARE(snapshotComplete(store_, QString(40, QLatin1Char('f'))).value(), false);
+        QCOMPARE(snapshotComplete(store_, QStringLiteral("HEAD")).error().code,
+                 ErrorCode::InvalidArgument);
+    }
+
     void sourceHeadFollowsTheBranch() {
         auto layout = readRepositoryLayout(repo_);
         QVERIFY(layout.ok());

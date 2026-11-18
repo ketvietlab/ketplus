@@ -1,5 +1,6 @@
 #include "runner/sync/SnapshotWorker.h"
 
+#include "snapshot/SnapshotStore.h"
 #include "snapshot/WorktreeSnapshot.h"
 
 #include <QCryptographicHash>
@@ -59,11 +60,15 @@ void SnapshotWorker::buildPack(const QString& jobId, const QString& snapshotId,
             outcome.pack = PackFile{written.value().path, written.value().size,
                                     QString::fromLatin1(written.value().sha256),
                                     written.value().commit, written.value().baseCommit};
-        } else if (written.error().code == snapshot::ErrorCode::BaseMissing) {
+        } else if (written.error().code == snapshot::ErrorCode::BaseMissing ||
+                   !request.baseCommit.isEmpty()) {
+            QFile::remove(request.outputPath);
             outcome.baseMissing = true;
         } else {
             QFile::remove(request.outputPath);
-            outcome.code = code::snapshotBuildFailed;
+            const auto complete = snapshot::snapshotComplete(request.storePath, request.commit, tool);
+            outcome.code = complete && !complete.value() ? code::snapshotIncomplete
+                                                         : code::snapshotBuildFailed;
         }
         answerOn(context, [deliver, outcome] { deliver(outcome); });
     });

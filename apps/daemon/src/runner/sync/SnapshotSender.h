@@ -49,7 +49,8 @@ class SnapshotSender final {
     SnapshotSender(const SnapshotSender&) = delete;
     SnapshotSender& operator=(const SnapshotSender&) = delete;
 
-    // After the runner accepted the spec; `snapshots` is the current connection's hello map.
+    // After the runner accepted the spec; `snapshots` is the current connection's hello map. A
+    // pack kept for the job (after a restart) is offered again when its base is still held.
     void start(const QMap<QString, QString>& snapshots);
     // A frame from the runner on control. Frames that are not `snapshot.*` are ignored.
     void receive(const protocol::Frame& frame);
@@ -69,6 +70,7 @@ class SnapshotSender final {
     [[nodiscard]] QString failure() const { return failure_; }
 
   private:
+    [[nodiscard]] bool offerKept();
     void build(const QString& baseId);
     void packBuilt(const PackOutcome& outcome, const QString& baseId);
     void offer();

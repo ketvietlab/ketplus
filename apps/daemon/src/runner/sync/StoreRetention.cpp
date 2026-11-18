@@ -6,6 +6,7 @@
 #include <QLoggingCategory>
 #include <QRegularExpression>
 
+#include <algorithm>
 #include <utility>
 
 namespace ketplus::daemon::runner::sync {
@@ -28,13 +29,19 @@ bool isWorkspaceKey(const QString& key) {
     return form.match(key).hasMatch();
 }
 
+snapshot::GitTool refToolOf(snapshot::GitTool tool) {
+    tool.timeoutMs = std::min(tool.timeoutMs, refCommandTimeoutMs);
+    return tool;
+}
+
 } // namespace
 
 StoreRetention::StoreRetention(QString storePath, PackCache& packs, snapshot::GitTool tool)
-    : storePath_(std::move(storePath)), packs_(packs), tool_(std::move(tool)) {}
+    : storePath_(std::move(storePath)), packs_(packs), tool_(std::move(tool)),
+      refTool_(refToolOf(tool_)) {}
 
 bool StoreRetention::load() {
-    const auto refs = snapshot::listRefs(storePath_, tool_);
+    const auto refs = snapshot::listRefs(storePath_, refTool_);
     if (!refs)
         return false;
     confirmed_.clear();
@@ -66,7 +73,7 @@ bool StoreRetention::confirm(const QString& runnerId, const QString& workspaceKe
     if (!isWorkspaceKey(workspaceKey))
         return false;
     const QString ref = confirmedRef(runnerId, workspaceKey);
-    if (!snapshot::keepRef(storePath_, ref, snapshotId, tool_)) {
+    if (!snapshot::keepRef(storePath_, ref, snapshotId, refTool_)) {
         qCWarning(lcRetention) << "could not keep a confirmed snapshot";
         return false;
     }
@@ -79,7 +86,7 @@ void StoreRetention::forget(const QString& runnerId, const QString& workspaceKey
         return;
     const QString ref = confirmedRef(runnerId, workspaceKey);
     confirmed_.remove(ref);
-    if (!snapshot::dropRef(storePath_, ref, tool_))
+    if (!snapshot::dropRef(storePath_, ref, refTool_))
         qCWarning(lcRetention) << "could not drop a confirmed snapshot";
 }
 
@@ -87,9 +94,10 @@ std::optional<PackFile> StoreRetention::pack(const QString& jobId) const {
     return packs_.find(jobId);
 }
 
-void StoreRetention::keepPack(const QString& jobId, const PackFile& pack) {
+void StoreRetention::keepPack(const QString& jobId, const QString& runnerId,
+                              const PackFile& pack) {
     packs_.setInFlight(jobId, true);
-    if (!packs_.record(jobId, pack))
+    if (!packs_.record(jobId, pack, runnerId))
         qCWarning(lcRetention) << "could not record a pack for job" << jobId;
 }
 
@@ -97,18 +105,19 @@ void StoreRetention::dropPack(const QString& jobId) { packs_.remove(jobId); }
 
 void StoreRetention::release(const QString& jobId) {
     packs_.setInFlight(jobId, false);
-    if (!dropJobSnapshot(storePath_, packs_, jobId, tool_))
+    if (!dropJobSnapshot(storePath_, packs_, jobId, refTool_))
         qCWarning(lcRetention) << "could not release the snapshot of job" << jobId;
 }
 
 void StoreRetention::releaseRunner(const QString& runnerId) {
+    packs_.removeRunner(runnerId);
     const QString prefix = confirmedPrefix + digestOf(runnerId) + QLatin1Char('/');
     for (auto it = confirmed_.begin(); it != confirmed_.end();) {
         if (!it.key().startsWith(prefix)) {
             ++it;
             continue;
         }
-        if (!snapshot::dropRef(storePath_, it.key(), tool_))
+        if (!snapshot::dropRef(storePath_, it.key(), refTool_))
             qCWarning(lcRetention) << "could not drop a confirmed snapshot";
         it = confirmed_.erase(it);
     }
@@ -122,7 +131,7 @@ bool dropJobSnapshot(const QString& storePath, PackCache& packs, const QString& 
                      const snapshot::GitTool& tool) {
     packs.setInFlight(jobId, false);
     packs.remove(jobId);
-    return snapshot::dropRef(storePath, StoreRetention::inFlightRef(jobId), tool).ok();
+    return snapshot::dropRef(storePath, StoreRetention::inFlightRef(jobId), refToolOf(tool)).ok();
 }
 
 } // namespace ketplus::daemon::runner::sync

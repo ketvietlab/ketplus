@@ -6,6 +6,7 @@
 #include "snapshot/WorktreeSnapshot.h"
 
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QProcess>
 #include <QTemporaryDir>
@@ -70,6 +71,15 @@ void ageJob(const QString& directory, const PackFile& pack, const QDateTime& whe
     const QString stem = QFileInfo(pack.path).fileName().left(32);
     for (const QString& name : QDir(directory).entryList({stem + QStringLiteral("*")}, QDir::Files))
         age(QDir(directory).filePath(name), when);
+}
+
+QByteArray readSide(const PackCache& cache, const QString& jobId) {
+    const QString stem = QFileInfo(cache.pathFor(jobId, QString(40, QLatin1Char('1')), {}))
+                             .fileName()
+                             .left(32);
+    QFile file(QFileInfo(cache.pathFor(jobId, {}, {})).path() + QLatin1Char('/') + stem +
+               QStringLiteral(".json"));
+    return file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray{};
 }
 
 QStringList filesIn(const QString& directory) {
@@ -151,7 +161,7 @@ class SnapshotRetentionTest : public QObject {
             const qint64 offset = id == QStringLiteral("fresh") ? 10 : -10;
             ageJob(packs_, pack, now.addSecs(-24 * 3600 + offset));
         }
-        cache.setInFlight(QStringLiteral("held"), true);
+        cache.setLiveJobs({QStringLiteral("held")});
         cache.sweep(now);
         QVERIFY(!cache.find(QStringLiteral("old")));
         QVERIFY(cache.find(QStringLiteral("fresh")));
@@ -169,7 +179,7 @@ class SnapshotRetentionTest : public QObject {
             ageJob(packs_, pack, now.addSecs(-60 * minutes));
             minutes -= 10;
         }
-        cache.setInFlight(QStringLiteral("oldest-held"), true);
+        cache.setLiveJobs({QStringLiteral("oldest-held")});
         QVERIFY(cache.totalBytes() > 4000);
         cache.sweep(now);
         QVERIFY(cache.find(QStringLiteral("oldest-held")));
@@ -182,12 +192,78 @@ class SnapshotRetentionTest : public QObject {
     void inFlightPacksAreNeverEvicted() {
         PackCache cache(packs_, PackCacheLimits{100, 24 * 3600});
         QVERIFY(cache.record(QStringLiteral("a"), fakePack(cache, QStringLiteral("a"), 1000)));
-        cache.setInFlight(QStringLiteral("a"), true);
+        cache.setLiveJobs({QStringLiteral("a")});
         cache.sweep(QDateTime::currentDateTimeUtc());
         QVERIFY(cache.find(QStringLiteral("a")));
         cache.setInFlight(QStringLiteral("a"), false);
         cache.sweep(QDateTime::currentDateTimeUtc());
         QVERIFY(!cache.find(QStringLiteral("a")));
+    }
+
+    void packsWithASideFileWaitForTheLiveJobs() {
+        PackCache cache(packs_);
+        const QDateTime now = QDateTime::currentDateTimeUtc();
+        for (const char* job : {"alive", "gone"}) {
+            const QString id = QString::fromLatin1(job);
+            const PackFile pack = fakePack(cache, id, 10);
+            QVERIFY(cache.record(id, pack));
+            ageJob(packs_, pack, now.addDays(-3));
+        }
+        write(packs_ + QStringLiteral("/stray.tmp"), "x");
+        age(packs_ + QStringLiteral("/stray.tmp"), now.addDays(-3));
+        PackCache restarted(packs_, PackCacheLimits{1, 24 * 3600});
+        restarted.sweep(now);
+        QVERIFY(restarted.find(QStringLiteral("alive")));
+        QVERIFY(restarted.find(QStringLiteral("gone")));
+        QVERIFY(!QFile::exists(packs_ + QStringLiteral("/stray.tmp")));
+        restarted.setLiveJobs({QStringLiteral("alive")});
+        restarted.sweep(now);
+        QVERIFY(restarted.find(QStringLiteral("alive")));
+        QVERIFY(!restarted.find(QStringLiteral("gone")));
+    }
+
+    void releasingARunnerDropsItsPacksNotInFlight() {
+        PackCache cache(packs_);
+        const QString runner = QStringLiteral("run-1");
+        QVERIFY(cache.record(QStringLiteral("idle"), fakePack(cache, QStringLiteral("idle"), 10),
+                             runner));
+        QVERIFY(cache.record(QStringLiteral("busy"), fakePack(cache, QStringLiteral("busy"), 10),
+                             runner));
+        QVERIFY(cache.record(QStringLiteral("other"),
+                             fakePack(cache, QStringLiteral("other"), 10), QStringLiteral("run-2")));
+        QVERIFY(cache.record(QStringLiteral("legacy"),
+                             fakePack(cache, QStringLiteral("legacy"), 10)));
+        cache.setInFlight(QStringLiteral("busy"), true);
+        for (const QString& name : filesIn(packs_))
+            QVERIFY2(!name.contains(runner), qPrintable(name));
+        QVERIFY(!readSide(cache, QStringLiteral("idle")).contains(runner.toUtf8()));
+        cache.removeRunner(runner);
+        QVERIFY(!cache.find(QStringLiteral("idle")));
+        QVERIFY(cache.find(QStringLiteral("busy")));
+        QVERIFY(cache.find(QStringLiteral("other")));
+        QVERIFY(cache.find(QStringLiteral("legacy")));
+        QCOMPARE(filesIn(packs_).size(), 6);
+    }
+
+    void aRefCommandThatHangsFails() {
+        const QString fake = root_ + QStringLiteral("/hanging-git");
+        write(fake, "#!/bin/sh\nexec sleep 60\n");
+        QVERIFY(QFile::setPermissions(fake, QFile::ReadOwner | QFile::WriteOwner |
+                                                QFile::ExeOwner));
+        QVERIFY(QDir().mkpath(packs_));
+        PackCache cache(packs_);
+        snapshot::GitTool tool;
+        tool.program = fake;
+        const QString store = root_ + QStringLiteral("/store");
+        runGit(root_, root_, {QStringLiteral("init"), QStringLiteral("-q"), QStringLiteral("--bare"),
+                              store});
+        StoreRetention retention(store, cache, tool);
+        QElapsedTimer timer;
+        timer.start();
+        QVERIFY(!retention.confirm(QStringLiteral("run-1"), workspaceKey, QString(40, 'a')));
+        QVERIFY(timer.elapsed() >= refCommandTimeoutMs - 500); // Git ran and was stopped
+        QVERIFY(timer.elapsed() < refCommandTimeoutMs + 3'000);
+        QVERIFY(!retention.confirmed(QStringLiteral("run-1"), workspaceKey));
     }
 
     void storeRefsFollowTheJobAndTheRunner() {
@@ -222,7 +298,7 @@ class SnapshotRetentionTest : public QObject {
                       QString::fromLatin1(written.value().sha256),
                       snap,
                       {}};
-        retention.keepPack(QStringLiteral("job-1"), pack);
+        retention.keepPack(QStringLiteral("job-1"), QStringLiteral("run-1"), pack);
         QVERIFY(cache.inFlight(QStringLiteral("job-1")));
         QCOMPARE(retention.pack(QStringLiteral("job-1"))->sha256, pack.sha256);
 
@@ -240,8 +316,12 @@ class SnapshotRetentionTest : public QObject {
         QVERIFY(refs);
         QCOMPARE(refs.value().size(), 1); // the in-flight ref is gone
 
+        const PackFile left = fakePack(cache, QStringLiteral("job-2"), 10);
+        reloaded.keepPack(QStringLiteral("job-2"), QStringLiteral("run-1"), left);
+        cache.setInFlight(QStringLiteral("job-2"), false); // its job was cancelled meanwhile
         reloaded.releaseRunner(QStringLiteral("run-1"));
         QVERIFY(!reloaded.confirmed(QStringLiteral("run-1"), workspaceKey));
+        QVERIFY(!cache.find(QStringLiteral("job-2")));
         refs = snapshot::listRefs(store);
         QVERIFY(refs.value().isEmpty());
 

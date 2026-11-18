@@ -29,7 +29,21 @@ void SnapshotSender::start(const QMap<QString, QString>& snapshots) {
     if (phase_ != Phase::Idle)
         return;
     snapshots_ = snapshots;
-    build(baseFor(snapshots_));
+    if (!offerKept())
+        build(baseFor(snapshots_));
+}
+
+// Offers the job's kept pack again when it is for this snapshot and its base is still held.
+bool SnapshotSender::offerKept() {
+    const auto kept = retention_.pack(job_.jobId);
+    const bool baseHeld =
+        kept && (kept->baseId.isEmpty() || snapshots_.value(job_.workspaceKey) == kept->baseId);
+    if (!kept || !baseHeld || kept->snapshotId != job_.snapshotId)
+        return false;
+    pack_ = kept;
+    retention_.keepPack(job_.jobId, job_.runnerId, *kept);
+    offer();
+    return true;
 }
 
 QString SnapshotSender::baseFor(const QMap<QString, QString>& snapshots) const {
@@ -81,7 +95,7 @@ void SnapshotSender::packBuilt(const PackOutcome& outcome, const QString& baseId
         return;
     }
     pack_ = pack;
-    retention_.keepPack(job_.jobId, pack);
+    retention_.keepPack(job_.jobId, job_.runnerId, pack);
     offer();
 }
 
@@ -274,14 +288,8 @@ void SnapshotSender::reconnected(const QMap<QString, QString>& snapshots) {
     if (phase_ == Phase::Packing)
         return; // the base is checked again when the pack arrives
     stopTransfer();
-    const auto kept = retention_.pack(job_.jobId);
-    const bool baseHeld =
-        kept && (kept->baseId.isEmpty() || snapshots_.value(job_.workspaceKey) == kept->baseId);
-    if (kept && baseHeld && kept->snapshotId == job_.snapshotId) {
-        pack_ = kept;
-        offer();
+    if (offerKept())
         return;
-    }
     retention_.dropPack(job_.jobId);
     build(baseFor(snapshots_));
 }

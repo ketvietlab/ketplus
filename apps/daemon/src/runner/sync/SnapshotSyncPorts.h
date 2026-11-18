@@ -20,6 +20,7 @@ namespace protocol = ketplus::runner::protocol;
 namespace code {
 inline const QString packUnreadable = QStringLiteral("pack_unreadable");
 inline const QString snapshotBuildFailed = QStringLiteral("snapshot_build_failed");
+inline const QString snapshotIncomplete = QStringLiteral("snapshot_incomplete");
 inline const QString snapshotTooLarge = QStringLiteral("snapshot_too_large");
 inline const QString packInvalid = QStringLiteral("pack_invalid");
 inline const QString storageError = QStringLiteral("storage_error");
@@ -34,7 +35,8 @@ struct PackFile {
     QString baseId; // empty for a full pack
 };
 
-// Outcome of building a pack: the file, or why not. `baseMissing` asks for a full pack instead.
+// Outcome of building a pack: the file, or why not. `baseMissing` asks for a full pack instead;
+// it is set whenever a pack on a base could not be built.
 struct PackOutcome {
     std::optional<PackFile> pack;
     bool baseMissing = false;
@@ -75,7 +77,8 @@ class SyncWork {
 };
 
 // What the store keeps for the sender: the snapshot each runner confirmed per workspace key, and
-// the pack of each job in flight.
+// the pack of each job in flight. Calls are synchronous; those that change a ref are short and
+// limited in time.
 class SyncRetention {
   public:
     virtual ~SyncRetention() = default;
@@ -88,7 +91,7 @@ class SyncRetention {
 
     // The pack kept for `jobId`, when it is still on disk.
     [[nodiscard]] virtual std::optional<PackFile> pack(const QString& jobId) const = 0;
-    virtual void keepPack(const QString& jobId, const PackFile& pack) = 0;
+    virtual void keepPack(const QString& jobId, const QString& runnerId, const PackFile& pack) = 0;
     // Deletes the job's pack; its in-flight snapshot stays held.
     virtual void dropPack(const QString& jobId) = 0;
     // Deletes the job's pack and releases its in-flight snapshot.

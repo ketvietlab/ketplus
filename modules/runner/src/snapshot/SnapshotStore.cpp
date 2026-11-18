@@ -167,6 +167,26 @@ Result<bool> pruneStore(const QString& storePath, const QDateTime& expireBefore,
     return true;
 }
 
+Result<bool> snapshotComplete(const QString& storePath, const QString& commit,
+                              const GitTool& tool) {
+    if (auto error = checkStore(storePath))
+        return *error;
+    if (!isObjectId(commit))
+        return Error{ErrorCode::InvalidArgument, QStringLiteral("malformed snapshot id")};
+    const auto listed = runInStore(storePath,
+                                   {QStringLiteral("rev-list"), QStringLiteral("--objects"),
+                                    QStringLiteral("--missing=print"), commit},
+                                   tool);
+    if (!listed)
+        return listed.error().code == ErrorCode::GitFailed ? Result<bool>(false)
+                                                            : Result<bool>(listed.error());
+    const QList<QByteArray> lines = listed.value().out.split('\n');
+    for (const QByteArray& line : lines)
+        if (line.startsWith('?'))
+            return false;
+    return true;
+}
+
 SourceHead readSourceHead(const RepositoryLayout& layout) {
     SourceHead head;
     if (QFileInfo::exists(QDir(layout.commonDir).filePath(QStringLiteral("reftable")))) {

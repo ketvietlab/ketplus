@@ -50,7 +50,7 @@ QString PackCache::pathFor(const QString& jobId, const QString& snapshotId,
                   digestOf(snapshotId + QLatin1Char(' ') + baseId, 16) + QStringLiteral(".pack"));
 }
 
-bool PackCache::record(const QString& jobId, const PackFile& pack) {
+bool PackCache::record(const QString& jobId, const PackFile& pack, const QString& runnerId) {
     if (pack.path != pathFor(jobId, pack.snapshotId, pack.baseId) || !isDigest(pack.sha256) ||
         pack.size <= 0)
         return false;
@@ -58,12 +58,14 @@ bool PackCache::record(const QString& jobId, const PackFile& pack) {
         QFile::remove(previous->path);
     if (!QDir().mkpath(directory_))
         return false;
-    const QJsonObject side{{QStringLiteral("version"), 1},
-                           {QStringLiteral("jobId"), jobId},
-                           {QStringLiteral("snapshotId"), pack.snapshotId},
-                           {QStringLiteral("baseId"), pack.baseId},
-                           {QStringLiteral("size"), pack.size},
-                           {QStringLiteral("sha256"), pack.sha256}};
+    QJsonObject side{{QStringLiteral("version"), 1},
+                     {QStringLiteral("jobId"), jobId},
+                     {QStringLiteral("snapshotId"), pack.snapshotId},
+                     {QStringLiteral("baseId"), pack.baseId},
+                     {QStringLiteral("size"), pack.size},
+                     {QStringLiteral("sha256"), pack.sha256}};
+    if (!runnerId.isEmpty())
+        side.insert(QStringLiteral("runner"), digestOf(runnerId, 32));
     QSaveFile file(QDir(directory_).filePath(stem(jobId) + QStringLiteral(".json")));
     if (!file.open(QIODevice::WriteOnly))
         return false;
@@ -109,11 +111,40 @@ void PackCache::setInFlight(const QString& jobId, const bool inFlight) {
 
 bool PackCache::inFlight(const QString& jobId) const { return inFlight_.contains(stem(jobId)); }
 
+void PackCache::setLiveJobs(const QStringList& jobIds) {
+    for (const QString& jobId : jobIds)
+        inFlight_.insert(stem(jobId));
+    liveKnown_ = true;
+}
+
+void PackCache::removeRunner(const QString& runnerId) {
+    const QString runner = digestOf(runnerId, 32);
+    const QDir directory(directory_);
+    const QStringList sides = directory.entryList({QStringLiteral("*.json")}, QDir::Files);
+    for (const QString& name : sides) {
+        const QString key = stemOfFile(name);
+        if (inFlight_.contains(key))
+            continue;
+        QFile file(directory.filePath(name));
+        if (file.size() > maximumSideFileBytes || !file.open(QIODevice::ReadOnly))
+            continue;
+        const QJsonObject side = QJsonDocument::fromJson(file.readAll()).object();
+        file.close();
+        if (side.value(QStringLiteral("runner")).toString() != runner)
+            continue;
+        const QStringList names =
+            directory.entryList({key + QStringLiteral("*")}, QDir::Files | QDir::Hidden);
+        for (const QString& owned : names)
+            QFile::remove(directory.filePath(owned));
+    }
+}
+
 void PackCache::sweep(const QDateTime& now) {
     struct Group {
         QStringList paths;
         qint64 bytes = 0;
         QDateTime newest;
+        bool recorded = false; // has a side file
     };
     QMap<QString, Group> groups;
     const QDir directory(directory_);
@@ -123,6 +154,7 @@ void PackCache::sweep(const QDateTime& now) {
         Group& group = groups[stemOfFile(info.fileName())];
         group.paths.append(info.filePath());
         group.bytes += info.size();
+        group.recorded = group.recorded || info.suffix() == QStringLiteral("json");
         if (!group.newest.isValid() || info.lastModified() > group.newest)
             group.newest = info.lastModified();
     }
@@ -130,7 +162,7 @@ void PackCache::sweep(const QDateTime& now) {
     qint64 total = 0;
     std::vector<std::pair<QDateTime, QString>> evictable;
     for (auto it = groups.begin(); it != groups.end(); ++it) {
-        const bool held = inFlight_.contains(it.key());
+        const bool held = inFlight_.contains(it.key()) || (!liveKnown_ && it->recorded);
         if (!held && it->newest < expired) {
             for (const QString& path : std::as_const(it->paths))
                 QFile::remove(path);

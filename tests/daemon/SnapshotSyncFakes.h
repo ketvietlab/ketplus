@@ -159,7 +159,9 @@ class FakeRetention final : public SyncRetention {
         const auto found = packs.constFind(job);
         return found == packs.cend() ? std::nullopt : std::optional(*found);
     }
-    void keepPack(const QString& job, const PackFile& pack) override { packs.insert(job, pack); }
+    void keepPack(const QString& job, const QString&, const PackFile& pack) override {
+        packs.insert(job, pack);
+    }
     void dropPack(const QString& job) override {
         packs.remove(job);
         log.append(QStringLiteral("drop"));
