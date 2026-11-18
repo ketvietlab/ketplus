@@ -37,6 +37,7 @@ class RunCommandTest final : public QObject {
         row("pwsh without suffix", "/usr/local/bin/pwsh", ShellKind::PowerShell);
         row("zsh", "/bin/zsh", ShellKind::Posix);
         row("bash.exe", "C:\\Program Files\\Git\\bin\\bash.exe", ShellKind::Posix);
+        row("pwsh.cmd wrapper", "C:\\tools\\pwsh.cmd", ShellKind::PowerShell);
         row("empty", "", ShellKind::Posix);
     }
 
@@ -113,13 +114,44 @@ class RunCommandTest final : public QObject {
         QVERIFY(!command.error.isEmpty());
     }
 
-    void everyShellRefusesLineBreaks() {
-        for (const auto kind : {ShellKind::Posix, ShellKind::PowerShell, ShellKind::Cmd}) {
-            const auto command = runCommandFor(kind, {}, QStringLiteral("/tmp/a\rrm -rf x"), true);
-            QVERIFY(command.line.isEmpty());
-            QVERIFY(!command.error.isEmpty());
+    void windowsShellsRefuseLineBreaksAndControls() {
+        for (const auto kind : {ShellKind::PowerShell, ShellKind::Cmd}) {
+            for (const QString& path : {QStringLiteral("C:\\a\rb"), QStringLiteral("C:\\a\nb"),
+                                        QStringLiteral("C:\\a\tb")}) {
+                const auto command = runCommandFor(kind, {}, path, true);
+                QVERIFY(command.line.isEmpty());
+                QVERIFY(!command.error.isEmpty());
+            }
         }
     }
+
+    void posixStillTypesWhateverTheNameHolds() {
+        // As before this change: single quotes around the name, control characters included.
+        const auto command = runCommandFor(ShellKind::Posix, {}, QStringLiteral("/tmp/a\tb"), true);
+        QVERIFY(command.error.isEmpty());
+        QCOMPARE(command.line, QStringLiteral("'/tmp/a\tb'"));
+    }
+
+    void cmdKnowsTheVariablesTheTerminalSetsForItsShell() {
+        for (const char* name : {"TERM_PROGRAM", "term", "COLORTERM", "TERM_PROGRAM_VERSION"}) {
+            const auto command = runCommandFor(ShellKind::Cmd, {},
+                                               QStringLiteral("C:\\%") + QLatin1String(name) +
+                                                   QStringLiteral("%\\x.cmd"),
+                                               true, environmentWith({}));
+            QVERIFY2(command.line.isEmpty(), name);
+        }
+    }
+
+#if defined(Q_OS_WIN)
+    void windowsShellsSeeNativeSeparators() {
+        const auto powerShell =
+            runCommandFor(ShellKind::PowerShell, {}, QStringLiteral("C:/a b/x.ps1"), true);
+        QCOMPARE(powerShell.line, QStringLiteral("& 'C:\\a b\\x.ps1'"));
+        const auto cmd = runCommandFor(ShellKind::Cmd, {}, QStringLiteral("C:/a b/x.cmd"), true,
+                                       environmentWith({}));
+        QCOMPARE(cmd.line, QStringLiteral("\"C:\\a b\\x.cmd\""));
+    }
+#endif
 
 #if defined(Q_OS_WIN)
     // End to end in the real shell: a script whose path has spaces and & ^ % ' ( ) runs and
@@ -130,12 +162,25 @@ class RunCommandTest final : public QObject {
         QTest::newRow("powershell")
             << qEnvironmentVariable("SystemRoot") +
                    QStringLiteral("\\System32\\WindowsPowerShell\\v1.0\\powershell.exe");
+        // PowerShell with a prompt of its own, which the terminal cannot recognise.
+        QTest::newRow("powershell custom prompt") << QStringLiteral("<custom prompt>");
     }
 
     void runsAnAwkwardPathInTheShell() {
         QFETCH(QString, shell);
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
+        if (shell == QLatin1String("<custom prompt>")) {
+            // pwsh.cmd is read as a PowerShell by its name; it starts the real one with a
+            // prompt function that never says "PS".
+            const QString launcher = directory.filePath(QStringLiteral("pwsh.cmd"));
+            QFile file(launcher);
+            QVERIFY(file.open(QIODevice::WriteOnly));
+            file.write("@\"%SystemRoot%\\System32\\WindowsPowerShell\\v1.0\\powershell.exe\" "
+                       "-NoLogo -NoExit -Command \"function prompt { 'custom> ' }\"\r\n");
+            file.close();
+            shell = QDir::toNativeSeparators(launcher);
+        }
         const QString folder = QStringLiteral("run it & ^ %nodef% it's (1)");
         QVERIFY(QDir(directory.path()).mkpath(folder));
         const QString script = QDir::toNativeSeparators(

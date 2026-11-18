@@ -1,5 +1,6 @@
 #include "terminal/RunCommand.h"
 
+#include <QDir>
 #include <QStringList>
 
 namespace ketplus {
@@ -59,6 +60,9 @@ bool cmdWouldExpand(const QString& value, const QProcessEnvironment& environment
     QStringList defined;
     for (const QString& key : environment.keys())
         defined.append(key.toLower());
+    // Set by the terminal for its shell (PtyBackend), so they are defined there.
+    defined << QStringLiteral("term") << QStringLiteral("term_program")
+            << QStringLiteral("term_program_version") << QStringLiteral("colorterm");
     for (qsizetype open = value.indexOf(QLatin1Char('%')); open >= 0;
          open = value.indexOf(QLatin1Char('%'), open + 1)) {
         for (qsizetype close = value.indexOf(QLatin1Char('%'), open + 1); close >= 0;
@@ -82,8 +86,13 @@ ShellKind shellKindFor(const QString& shellPath) {
                                  shellPath.lastIndexOf(QLatin1Char('\\'))) +
                             1)
                        .toLower();
-    if (name.endsWith(QLatin1String(".exe")))
-        name.chop(4);
+    for (const QLatin1String suffix : {QLatin1String(".exe"), QLatin1String(".cmd"),
+                                       QLatin1String(".bat"), QLatin1String(".com")}) {
+        if (name.endsWith(suffix)) {
+            name.chop(suffix.size());
+            break;
+        }
+    }
     if (name == QLatin1String("powershell") || name == QLatin1String("pwsh"))
         return ShellKind::PowerShell;
     if (name == QLatin1String("cmd"))
@@ -94,21 +103,21 @@ ShellKind shellKindFor(const QString& shellPath) {
 RunCommand runCommandFor(const ShellKind kind, const QString& interpreter,
                          const QString& absolutePath, const bool directlyExecutable,
                          const QProcessEnvironment& environment) {
-    if (hasLineBreakOrControl(absolutePath))
-        return {{},
-                QStringLiteral("The file name has a control character the terminal cannot "
-                               "type safely.")};
-    switch (kind) {
-    case ShellKind::PowerShell:
-        return {QStringLiteral("& %1").arg(powerShellQuote(absolutePath)), {}};
-    case ShellKind::Cmd:
-        if (absolutePath.contains(QLatin1Char('"')) || cmdWouldExpand(absolutePath, environment))
+    // POSIX keeps what it always did: single quotes around whatever the name holds.
+    if (kind != ShellKind::Posix) {
+        if (hasLineBreakOrControl(absolutePath))
+            return {{},
+                    QStringLiteral("The file name has a control character the terminal "
+                                   "cannot type safely.")};
+        // Windows shells show and expect backslashes (a no-op on other hosts).
+        const QString path = QDir::toNativeSeparators(absolutePath);
+        if (kind == ShellKind::PowerShell)
+            return {QStringLiteral("& %1").arg(powerShellQuote(path)), {}};
+        if (path.contains(QLatin1Char('"')) || cmdWouldExpand(path, environment))
             return {{},
                     QStringLiteral("cmd.exe cannot take this file name literally (a double "
                                    "quote or a %variable%). Use PowerShell or rename it.")};
-        return {QStringLiteral("\"%1\"").arg(absolutePath), {}};
-    case ShellKind::Posix:
-        break;
+        return {QStringLiteral("\"%1\"").arg(path), {}};
     }
     if (directlyExecutable)
         return {posixQuote(absolutePath), {}};

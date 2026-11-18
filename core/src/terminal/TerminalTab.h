@@ -54,6 +54,8 @@ class TerminalTab final : public QWidget {
     QByteArray pendingRun_; // A run command waiting for the shell's first prompt.
     QString pendingTypedText_;
     QTimer promptSettled_;
+    QTimer runQuiet_;
+    QTimer runDeadline_;
     QElapsedTimer sinceStart_;
     bool shellReady_{false};
     QString title_;

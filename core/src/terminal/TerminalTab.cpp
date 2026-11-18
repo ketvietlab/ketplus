@@ -46,9 +46,10 @@ TerminalTab::TerminalTab(const QString& workingDirectory, const QString& command
                 !command.isEmpty()) {
                 // PowerShell's line editor drops what arrives before its first prompt; the
                 // other shells keep it in the terminal's input queue.
-                if (shellKindFor(session_.shellPath()) == ShellKind::PowerShell)
+                if (shellKindFor(session_.shellPath()) == ShellKind::PowerShell) {
                     pendingRun_ = command;
-                else
+                    runDeadline_.start();
+                } else
                     session_.sendBytes(command);
             }
         }
@@ -62,15 +63,39 @@ TerminalTab::TerminalTab(const QString& workingDirectory, const QString& command
     connect(&session_, &TerminalSession::outputReceived, this, [this] {
         if (shellReady_)
             return;
-        // A command waiting for PowerShell needs its prompt: before it, the line editor is
-        // still loading and drops input, even if the banner paused. Without a prompt the
-        // wait in typePendingTextWhenReady() ends it.
-        if (!pendingRun_.isEmpty() && !powerShellPromptVisible())
+        // A command waiting for PowerShell must not go before its line editor is loaded, which
+        // drops input, even if the banner paused. The default prompt shows it; a prompt of the
+        // user's own does not, so a longer silence counts as ready too, and the deadline
+        // sends it anyway and says so.
+        if (!pendingRun_.isEmpty()) {
+            if (powerShellPromptVisible())
+                promptSettled_.start();
+            else
+                runQuiet_.start();
             return;
+        }
         promptSettled_.start();
+    });
+    runQuiet_.setSingleShot(true);
+    runQuiet_.setInterval(2000);
+    connect(&runQuiet_, &QTimer::timeout, this, [this] {
+        if (!shellReady_ && !pendingRun_.isEmpty())
+            promptSettled_.start(0);
+    });
+    runDeadline_.setSingleShot(true);
+    runDeadline_.setInterval(20000);
+    connect(&runDeadline_, &QTimer::timeout, this, [this] {
+        if (shellReady_ || pendingRun_.isEmpty())
+            return;
+        emit statusMessageRequested(
+            tr("PowerShell was slow to start; the command was sent anyway. If nothing ran, run "
+               "the file again."));
+        promptSettled_.start(0);
     });
     connect(&promptSettled_, &QTimer::timeout, this, [this] {
         shellReady_ = true;
+        runQuiet_.stop();
+        runDeadline_.stop();
         if (!pendingRun_.isEmpty())
             session_.sendBytes(std::exchange(pendingRun_, {}));
         if (!pendingTypedText_.isEmpty())
@@ -116,6 +141,8 @@ void TerminalTab::start() {
 bool TerminalTab::restart() {
     pendingCommandPath_.clear();
     pendingRun_.clear();
+    runQuiet_.stop();
+    runDeadline_.stop();
     return terminal_->restart();
 }
 
@@ -140,13 +167,14 @@ void TerminalTab::typeText(const QString& text) {
 }
 
 void TerminalTab::typePendingTextWhenReady() {
-    if (shellReady_ || (pendingTypedText_.isEmpty() && pendingRun_.isEmpty()))
+    // A pending run command has its own readiness rules (runQuiet_, runDeadline_).
+    if (shellReady_ || pendingTypedText_.isEmpty() || !pendingRun_.isEmpty())
         return;
     // A shell that prints nothing still gets the text, after at most three seconds.
     constexpr qint64 longestWaitMs = 3000;
     const qint64 left = longestWaitMs - (sinceStart_.isValid() ? sinceStart_.elapsed() : 0);
     QTimer::singleShot(qMax<qint64>(0, left), this, [this] {
-        if (!shellReady_ && (!pendingTypedText_.isEmpty() || !pendingRun_.isEmpty()))
+        if (!shellReady_ && !pendingTypedText_.isEmpty() && pendingRun_.isEmpty())
             promptSettled_.start(0);
     });
 }
