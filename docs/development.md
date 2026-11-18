@@ -54,6 +54,10 @@ Ninja, `QT_ROOT` and `OPENSSL_ROOT_DIR` set from `KETPLUS_TOOLS_ROOT` (default
 used (compared as version numbers). The
 presets already read `$env{QT_ROOT}`, so no Windows-specific preset is needed.
 
+MSVC links with `/INCREMENTAL:NO` (`core/cmake/MsvcOptions.cmake`): incremental linking
+leaves a ~180 MB `.ilk` beside every executable, which filled the disk of a Windows build
+machine with the full Pro test set.
+
 ### Sync and build from a Mac
 
 Install mutagen (`brew install mutagen-io/mutagen/mutagen`, or unpack a release
