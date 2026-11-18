@@ -19,7 +19,7 @@ class PtyBackend : public QObject {
     ~PtyBackend() override = default;
 
     // Creates the backend for the current platform.
-    static std::unique_ptr<PtyBackend> create(QObject* parent);
+    static std::unique_ptr<PtyBackend> create();
 
     [[nodiscard]] virtual bool isRunning() const noexcept = 0;
     [[nodiscard]] QString shellPath() const { return shellPath_; }

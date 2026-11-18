@@ -70,10 +70,17 @@ void closeHandle(HANDLE& handle) {
 // Environment block (sorted, double-NUL terminated) for the child: ours plus terminal hints.
 std::vector<wchar_t> environmentBlock() {
     QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
-    environment.insert(QStringLiteral("TERM_PROGRAM"),
-                       QCoreApplication::applicationName().remove(QLatin1Char(' ')).isEmpty()
-                           ? QStringLiteral("KetPlusCM")
-                           : QCoreApplication::applicationName().remove(QLatin1Char(' ')));
+    QString program = QCoreApplication::applicationName();
+    program.remove(QLatin1Char(' '));
+    if (program.isEmpty()) {
+        program = QStringLiteral("KetPlusCM");
+    }
+    QString version = QCoreApplication::applicationVersion();
+    if (version.isEmpty()) {
+        version = QStringLiteral("0.1.0");
+    }
+    environment.insert(QStringLiteral("TERM_PROGRAM"), program);
+    environment.insert(QStringLiteral("TERM_PROGRAM_VERSION"), version);
     environment.insert(QStringLiteral("COLORTERM"), QStringLiteral("truecolor"));
     QStringList entries;
     for (const QString& key : environment.keys()) {
@@ -155,6 +162,12 @@ class WindowsPtyBackend final : public PtyBackend {
             STARTUPINFOEXW startup{};
             startup.StartupInfo.cb = sizeof(startup);
             startup.lpAttributeList = attributes;
+            // Without this the shell can inherit the parent's redirected stdio (a test runner, a
+            // log pipe) instead of the pseudo console, so no output reaches the terminal.
+            startup.StartupInfo.dwFlags = STARTF_USESTDHANDLES;
+            startup.StartupInfo.hStdInput = INVALID_HANDLE_VALUE;
+            startup.StartupInfo.hStdOutput = INVALID_HANDLE_VALUE;
+            startup.StartupInfo.hStdError = INVALID_HANDLE_VALUE;
             QString commandLine = QLatin1Char('"') + shellPath_ + QLatin1Char('"');
             const QString name = QFileInfo(shellPath_).completeBaseName().toLower();
             if (name == QLatin1String("pwsh") || name == QLatin1String("powershell")) {
@@ -164,10 +177,10 @@ class WindowsPtyBackend final : public PtyBackend {
             mutableCommand.push_back(L'\0');
             std::vector<wchar_t> environment = environmentBlock();
             const std::wstring directoryWide = QDir::toNativeSeparators(directory).toStdWString();
-            ok = ::CreateProcessW(nullptr, mutableCommand.data(), nullptr, nullptr, FALSE,
-                                  EXTENDED_STARTUPINFO_PRESENT | CREATE_UNICODE_ENVIRONMENT,
-                                  environment.data(), directoryWide.c_str(), &startup.StartupInfo,
-                                  &process);
+            ok = ::CreateProcessW(
+                nullptr, mutableCommand.data(), nullptr, nullptr, FALSE,
+                EXTENDED_STARTUPINFO_PRESENT | CREATE_UNICODE_ENVIRONMENT | CREATE_SUSPENDED,
+                environment.data(), directoryWide.c_str(), &startup.StartupInfo, &process);
         }
         if (!ok) {
             error = windowsError("Unable to start the terminal shell");
@@ -176,10 +189,10 @@ class WindowsPtyBackend final : public PtyBackend {
             return false;
         }
         ::DeleteProcThreadAttributeList(attributes);
-        closeHandle(process.hThread);
         process_ = process.hProcess;
 
-        // Killing the job on close ends the shell and everything it started.
+        // Killing the job on close ends the shell and everything it started. The shell is
+        // created suspended and joins the job before it runs, so no child can escape it.
         job_ = ::CreateJobObjectW(nullptr, nullptr);
         if (job_ != nullptr) {
             JOBOBJECT_EXTENDED_LIMIT_INFORMATION limits{};
@@ -188,6 +201,8 @@ class WindowsPtyBackend final : public PtyBackend {
                                       sizeof(limits));
             ::AssignProcessToJobObject(job_, process_);
         }
+        ::ResumeThread(process.hThread);
+        closeHandle(process.hThread);
 
         running_ = true;
         const quint64 generation = ++generation_;
@@ -348,10 +363,6 @@ class WindowsPtyBackend final : public PtyBackend {
 
 } // namespace
 
-std::unique_ptr<PtyBackend> PtyBackend::create(QObject* parent) {
-    auto backend = std::make_unique<WindowsPtyBackend>();
-    backend->setParent(parent);
-    return backend;
-}
+std::unique_ptr<PtyBackend> PtyBackend::create() { return std::make_unique<WindowsPtyBackend>(); }
 
 } // namespace ketplus

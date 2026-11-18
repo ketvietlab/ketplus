@@ -313,10 +313,6 @@ class PosixPtyBackend final : public PtyBackend {
 
 } // namespace
 
-std::unique_ptr<PtyBackend> PtyBackend::create(QObject* parent) {
-    auto backend = std::make_unique<PosixPtyBackend>();
-    backend->setParent(parent);
-    return backend;
-}
+std::unique_ptr<PtyBackend> PtyBackend::create() { return std::make_unique<PosixPtyBackend>(); }
 
 } // namespace ketplus

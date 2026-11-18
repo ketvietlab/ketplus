@@ -34,4 +34,5 @@ class PtyProcess final : public QObject {
   private:
     std::unique_ptr<PtyBackend> backend_;
 };
-}; // namespace ketplus
+
+} // namespace ketplus

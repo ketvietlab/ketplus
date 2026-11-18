@@ -4,6 +4,8 @@
 
 #include <QCoreApplication>
 #include <QDir>
+#include <QElapsedTimer>
+#include <QRegularExpression>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTest>
@@ -22,6 +24,11 @@ class PtyBackendTest final : public QObject {
 
   private slots:
     void initTestCase() {
+        // KETPLUS_TEST_SHELL runs the same checks against another shell, e.g. PowerShell.
+        if (const QByteArray shell = qgetenv("KETPLUS_TEST_SHELL"); !shell.isEmpty()) {
+            qputenv("SHELL", shell);
+            return;
+        }
 #if defined(Q_OS_WIN)
         qputenv("SHELL", qEnvironmentVariable("COMSPEC").toLocal8Bit());
 #else
@@ -80,13 +87,23 @@ class PtyBackendTest final : public QObject {
                 [&output](const QByteArray& bytes) { output.append(bytes); });
         QVERIFY(process.start(QDir::tempPath(), 24, 80));
         process.resizeTerminal(31, 97);
-        QTest::qWait(300);
-        process.send(QByteArray(query) + kNewline);
+        // A cold shell can take seconds to start, so ask again until it answers.
+        const auto answered = [&output] {
 #if defined(Q_OS_WIN)
-        QTRY_VERIFY_WITH_TIMEOUT(output.contains("97") && output.contains("31"), 15000);
+            return QRegularExpression(QStringLiteral(R"(Lines:\s*31\s+Columns:\s*97)"))
+                .match(QString::fromLocal8Bit(output))
+                .hasMatch();
 #else
-        QTRY_VERIFY_WITH_TIMEOUT(output.contains("31 97"), 15000);
+            return output.contains("31 97");
 #endif
+        };
+        QElapsedTimer waited;
+        waited.start();
+        while (!answered() && waited.elapsed() < 20000) {
+            process.send(QByteArray(query) + kNewline);
+            QTest::qWait(1000);
+        }
+        QVERIFY2(answered(), output.constData());
         process.stop();
     }
 

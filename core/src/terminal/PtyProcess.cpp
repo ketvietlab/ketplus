@@ -4,7 +4,7 @@
 
 namespace ketplus {
 
-PtyProcess::PtyProcess(QObject* parent) : QObject(parent), backend_(PtyBackend::create(nullptr)) {
+PtyProcess::PtyProcess(QObject* parent) : QObject(parent), backend_(PtyBackend::create()) {
     connect(backend_.get(), &PtyBackend::outputReceived, this, &PtyProcess::outputReceived);
     connect(backend_.get(), &PtyBackend::exited, this, &PtyProcess::exited);
 }
