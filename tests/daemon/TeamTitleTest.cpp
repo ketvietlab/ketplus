@@ -112,7 +112,7 @@ class TeamTitleTest final : public QObject {
         oneMoreTurn("Hello");
         QFile log(fixture_->codexLog);
         QVERIFY(log.open(QIODevice::ReadOnly));
-        QVERIFY(log.readAll().contains(":Developer 1\n"));
+        QVERIFY(log.readAll().replace("\r\n", "\n").contains(":Developer 1\n"));
         QCOMPARE(title(developer_), QStringLiteral("Developer 1"));
     }
 

@@ -162,7 +162,7 @@ class ClaudeCredentialsTest : public QObject {
     void desktopAndPhoneTurnsUseHostCredentialWithoutJournalingIt() {
         QTemporaryDir directory;
         const auto log = directory.filePath("fake.log");
-        const auto executable = directory.filePath("claude");
+        const auto executable = directory.filePath(fixtureName("claude"));
         QVERIFY(writeFakeClaude(executable, log));
         MemoryStore memory;
         ClaudeCredentials credentials(memory.storage());

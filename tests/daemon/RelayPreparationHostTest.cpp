@@ -74,8 +74,8 @@ class RelayPreparationHostTest final : public QObject {
             else
                 qputenv("KETPLUS_FAKE_CODEX_LOG_INPUT", oldInputLog);
         });
-        QVERIFY(writeFakeCodex(root.filePath("fake-codex"), providerLog));
-        CodexAdapter provider(root.filePath("fake-codex"));
+        QVERIFY(writeFakeCodex(root.filePath(fixtureName("fake-codex")), providerLog));
+        CodexAdapter provider(root.filePath(fixtureName("fake-codex")));
         SessionHost host(&journal, &provider);
         r03::Transport relay;
         relay.status = 202;

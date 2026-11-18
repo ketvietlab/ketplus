@@ -75,7 +75,7 @@ class DesktopSessionDiscoveryTest final : public QObject {
         Environment env;
         QVERIFY(env.directory.isValid());
         const auto path = QFileInfo(env.directory.path()).canonicalFilePath();
-        const auto executable = env.directory.filePath("fake-codex");
+        const auto executable = env.directory.filePath(fixtureName("fake-codex"));
         QVERIFY(writeFakeCodex(executable, env.directory.filePath("provider.log")));
         {
             LocalJournal journal(env.directory.filePath("journal.sqlite3"));
@@ -168,7 +168,7 @@ class DesktopSessionDiscoveryTest final : public QObject {
         Environment env;
         QVERIFY(env.directory.isValid());
         const auto path = QFileInfo(env.directory.path()).canonicalFilePath();
-        const auto executable = env.directory.filePath("fake-codex");
+        const auto executable = env.directory.filePath(fixtureName("fake-codex"));
         QVERIFY(writeFakeCodex(executable, env.directory.filePath("provider.log")));
         const auto journalPath = env.directory.filePath("journal.sqlite3");
         {
@@ -234,7 +234,7 @@ class DesktopSessionDiscoveryTest final : public QObject {
         Environment env;
         QVERIFY(env.directory.isValid());
         const auto path = QFileInfo(env.directory.path()).canonicalFilePath();
-        const auto executable = env.directory.filePath("fake-codex");
+        const auto executable = env.directory.filePath(fixtureName("fake-codex"));
         QVERIFY(writeFakeCodex(executable, env.directory.filePath("provider.log")));
         const auto journalPath = env.directory.filePath("journal.sqlite3");
         {
@@ -314,7 +314,7 @@ class DesktopSessionDiscoveryTest final : public QObject {
         Environment env;
         QVERIFY(env.directory.isValid());
         const auto path = QFileInfo(env.directory.path()).canonicalFilePath();
-        const auto executable = env.directory.filePath("fake-codex");
+        const auto executable = env.directory.filePath(fixtureName("fake-codex"));
         QVERIFY(writeFakeCodex(executable, env.directory.filePath("provider.log")));
         const auto journalPath = env.directory.filePath("journal.sqlite3");
         seedArchiveJournal(journalPath, path, archived);
@@ -361,7 +361,7 @@ class DesktopSessionDiscoveryTest final : public QObject {
         Environment env;
         QVERIFY(env.directory.isValid());
         const auto path = QFileInfo(env.directory.path()).canonicalFilePath();
-        const auto executable = env.directory.filePath("fake-codex");
+        const auto executable = env.directory.filePath(fixtureName("fake-codex"));
         QVERIFY(writeFakeCodex(executable, env.directory.filePath("provider.log")));
         const auto journalPath = env.directory.filePath("journal.sqlite3");
         seedArchiveJournal(journalPath, path, true);

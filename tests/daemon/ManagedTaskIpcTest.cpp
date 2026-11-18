@@ -65,8 +65,8 @@ class ManagedTaskIpcTest final : public QObject {
     void authenticatedAgentUsesBoundOwnerAndCompleteRegistry() {
         QTemporaryDir directory;
         const auto cwd = QFileInfo(directory.path()).canonicalFilePath();
-        QVERIFY(
-            writeFakeCodex(directory.filePath("fake-codex"), directory.filePath("provider.log")));
+        QVERIFY(writeFakeCodex(directory.filePath(fixtureName("fake-codex")),
+                               directory.filePath("provider.log")));
         LocalJournal journal(directory.filePath("journal.sqlite"));
         for (const auto& id : {"owner", "other"}) {
             StoredSession session;
@@ -77,7 +77,7 @@ class ManagedTaskIpcTest final : public QObject {
             session.executionPolicy = "full";
             QVERIFY(journal.upsertSession(session));
         }
-        CodexAdapter adapter(directory.filePath("fake-codex"));
+        CodexAdapter adapter(directory.filePath(fixtureName("fake-codex")));
         SessionHost host(&journal, &adapter);
         const auto cleanup = qScopeGuard([&] { adapter.stop(); });
         LocalIpcServer server(&host, directory.filePath("ipc.sock"), "user-token");

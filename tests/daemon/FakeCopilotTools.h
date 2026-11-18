@@ -1,4 +1,6 @@
 #pragma once
+#include "ScriptFixture.h"
+
 #include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -49,6 +51,5 @@ for line in sys.stdin:
         reply(pending, {'stopReason':'end_turn'})
     else: reply(id, {})
 )PY");
-    file.close();
-    return file.setPermissions(QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
+    return finalizeScriptFixture(file);
 }

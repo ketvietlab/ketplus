@@ -1,6 +1,7 @@
 #include "ComputerToolLaunch.h"
 #include "FakeClaude.h"
 #include "FakeCursor.h"
+#include "TestPaths.h"
 #include "providers/ClaudeAdapter.h"
 #include "providers/CursorAdapter.h"
 
@@ -59,6 +60,8 @@ class ComputerProviderIntegrationTest final : public QObject {
     }
 
     void frontFollowsSettingsForEachProvider() {
+        KETPLUS_SKIP_ON_WINDOWS(
+            "the front is a macOS app bundle path (Contents/MacOS), not an executable on Windows");
         QFETCH(bool, claude);
         QTemporaryDir root;
         QVERIFY(!qEnvironmentVariable("KETPLUS_COMPUTER_TOOLS_CONFIG").isEmpty());
@@ -73,7 +76,7 @@ class ComputerProviderIntegrationTest final : public QObject {
         QVERIFY(QFile::setPermissions(front, QFileDevice::ReadOwner | QFileDevice::ExeOwner));
         qputenv("KETPLUS_COMPUTER_APP", app.toUtf8());
 
-        const QString provider = root.filePath(QStringLiteral("provider"));
+        const QString provider = root.filePath(fixtureName(QStringLiteral("provider")));
         const QString log = root.filePath(QStringLiteral("provider.log"));
         QVERIFY(claude ? writeFakeClaude(provider, log) : writeFakeCursor(provider, log));
         ClaudeAdapter claudeAdapter(provider);

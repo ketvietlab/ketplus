@@ -74,7 +74,7 @@ class CopilotAdapterTest final : public QObject {
             else
                 qputenv("KETPLUS_COPILOT", previous);
         });
-        const QString file = dir.filePath("copilot");
+        const QString file = dir.filePath(fixtureName("copilot"));
         QVERIFY(writeFakeCopilot(file, dir.filePath("log")));
         qputenv("KETPLUS_COPILOT", file.toUtf8());
         CopilotAdapter discovered;
@@ -152,7 +152,7 @@ class CopilotAdapterTest final : public QObject {
     }
     void streamsAndCancels() {
         QTemporaryDir dir;
-        const QString path = dir.filePath("copilot"), log = dir.filePath("log");
+        const QString path = dir.filePath(fixtureName("copilot")), log = dir.filePath("log");
         QVERIFY(writeFakeCopilot(path, log));
         CopilotAdapter adapter(path);
         QCOMPARE(adapter.name(), "copilot");
@@ -197,7 +197,7 @@ class CopilotAdapterTest final : public QObject {
     void authenticationFailures() {
         QFETCH(QString, mode);
         QTemporaryDir dir;
-        const QString path = dir.filePath("copilot");
+        const QString path = dir.filePath(fixtureName("copilot"));
         QVERIFY(writeFakeCopilot(path, dir.filePath("log"), mode));
         CopilotAdapter adapter(path);
         QSignalSpy events(&adapter, &ProviderAdapter::canonicalEvent);
@@ -219,7 +219,7 @@ class CopilotAdapterTest final : public QObject {
     }
     void retryStartsFreshProcess() {
         QTemporaryDir dir;
-        const QString path = dir.filePath("copilot"), log = dir.filePath("log");
+        const QString path = dir.filePath(fixtureName("copilot")), log = dir.filePath("log");
         QVERIFY(writeFakeCopilot(path, log, "auth-once"));
         CopilotAdapter adapter(path);
         QString failure;
@@ -247,7 +247,7 @@ class CopilotAdapterTest final : public QObject {
     void preservesUnrelatedFailures() {
         QFETCH(QString, mode);
         QTemporaryDir dir;
-        const QString path = dir.filePath("copilot");
+        const QString path = dir.filePath(fixtureName("copilot"));
         QVERIFY(writeFakeCopilot(path, dir.filePath("log"), mode));
         CopilotAdapter adapter(path);
         QSignalSpy events(&adapter, &ProviderAdapter::canonicalEvent);
@@ -262,7 +262,7 @@ class CopilotAdapterTest final : public QObject {
     }
     void doesNotAssumeResumeCapability() {
         QTemporaryDir dir;
-        const QString path = dir.filePath("copilot"), log = dir.filePath("log");
+        const QString path = dir.filePath(fixtureName("copilot")), log = dir.filePath("log");
         QVERIFY(writeFakeCopilot(path, log, "no-load"));
         CopilotAdapter adapter(path);
         QVERIFY(!adapter.supports(QString(compat::capability::threadResume)));
@@ -278,7 +278,7 @@ class CopilotAdapterTest final : public QObject {
     }
     void rejectsUnsupportedProtocolVersion() {
         QTemporaryDir dir;
-        const QString path = dir.filePath("copilot");
+        const QString path = dir.filePath(fixtureName("copilot"));
         QVERIFY(writeFakeCopilot(path, dir.filePath("log"), "unsupported"));
         CopilotAdapter adapter(path);
         QString failure;
@@ -292,7 +292,7 @@ class CopilotAdapterTest final : public QObject {
 
     void waitingPromptHasNoProcessKillTimer() {
         QTemporaryDir dir;
-        const QString path = dir.filePath("copilot");
+        const QString path = dir.filePath(fixtureName("copilot"));
         QVERIFY(writeFakeCopilot(path, dir.filePath("log")));
         CopilotAdapter adapter(path);
         QSignalSpy events(&adapter, &ProviderAdapter::canonicalEvent);
@@ -313,7 +313,7 @@ class CopilotAdapterTest final : public QObject {
     }
     void startupDeadlineSettlesOnce() {
         QTemporaryDir dir;
-        const QString path = dir.filePath("copilot");
+        const QString path = dir.filePath(fixtureName("copilot"));
         QVERIFY(writeFakeCopilot(path, dir.filePath("log"), "hang"));
         CopilotAdapter adapter(path);
         QSignalSpy stopped(&adapter, &ProviderAdapter::stopped);
@@ -331,7 +331,7 @@ class CopilotAdapterTest final : public QObject {
     }
     void hostRoutesCopilotTurns() {
         QTemporaryDir dir;
-        const QString path = dir.filePath("copilot");
+        const QString path = dir.filePath(fixtureName("copilot"));
         QVERIFY(writeFakeCopilot(path, dir.filePath("log")));
         LocalJournal journal(dir.filePath("journal.sqlite"));
         QVERIFY2(journal.isOpen(), qPrintable(journal.errorString()));

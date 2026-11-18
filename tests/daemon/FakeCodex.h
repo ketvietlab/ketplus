@@ -1,5 +1,7 @@
 #pragma once
 
+#include "ScriptFixture.h"
+
 #include <QFile>
 #include <QString>
 
@@ -323,7 +325,5 @@ for line in sys.stdin:
     if (script.write(encoded) != encoded.size()) {
         return false;
     }
-    script.close();
-    return script.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner |
-                                 QFileDevice::ExeOwner);
+    return finalizeScriptFixture(script);
 }

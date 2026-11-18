@@ -19,9 +19,9 @@ struct Fixture {
     QTemporaryDir root;
     QString log = root.filePath("provider.log");
     LocalJournal journal{root.filePath("journal.sqlite")};
-    CodexAdapter provider{root.filePath("fake-codex")};
+    CodexAdapter provider{root.filePath(fixtureName("fake-codex"))};
     SessionHost host{&journal, &provider};
-    Fixture() { writeFakeCodex(root.filePath("fake-codex"), log); }
+    Fixture() { writeFakeCodex(root.filePath(fixtureName("fake-codex")), log); }
     QJsonObject run(const QString& type, const QJsonObject& payload = {}, const QString& id = {},
                     const QString& device = {}) {
         QJsonObject request{{"message_id", QUuid::createUuid().toString()},

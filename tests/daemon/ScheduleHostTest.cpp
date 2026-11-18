@@ -455,11 +455,11 @@ class ScheduleHostTest final : public QObject {
     void scheduledTurnFollowsTheHost() {
         QTemporaryDir dir;
         QVERIFY(dir.isValid());
-        QVERIFY(writeFakeCodex(dir.filePath(QStringLiteral("fake-codex")),
+        QVERIFY(writeFakeCodex(dir.filePath(fixtureName(QStringLiteral("fake-codex"))),
                                dir.filePath(QStringLiteral("codex.log"))));
         LocalJournal journal(dir.filePath(QStringLiteral("journal.sqlite3")));
         QVERIFY(journal.errorString().isEmpty());
-        CodexAdapter adapter(dir.filePath(QStringLiteral("fake-codex")));
+        CodexAdapter adapter(dir.filePath(fixtureName(QStringLiteral("fake-codex"))));
         const auto stop = qScopeGuard([&adapter] { adapter.stop(); });
         SessionHost host(&journal, &adapter);
         QString why;

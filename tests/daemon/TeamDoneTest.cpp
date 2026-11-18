@@ -2,6 +2,7 @@
 // closes it by hand. The coordinator cases use a fake runtime and a fake remote; the probe and
 // the git cases a temporary repository and a stand-in for the GitHub tool. No network.
 #include "TeamFakeHost.h"
+#include "TestPaths.h"
 #include "runtime/TeamGit.h"
 #include "runtime/TeamPullRequests.h"
 #include "storage/LocalJournal.h"
@@ -385,6 +386,8 @@ class TeamDoneTest final : public QObject {
     }
 
     void theProbeRunsTheToolOncePerPullRequestAndReportsItsFailure() {
+        KETPLUS_SKIP_ON_WINDOWS(
+            "the fixture is a POSIX shell script (fake git/gh) that Windows cannot run");
         QTemporaryDir bin;
         const QString tool = bin.filePath("gh");
         QFile script(tool);
@@ -416,6 +419,8 @@ class TeamDoneTest final : public QObject {
     // A request that does not answer ends the batch: the rest waits for the next check, and
     // a daemon that stops asks nothing more.
     void aSilentRemoteEndsTheBatchAndAStopAsksNothing() {
+        KETPLUS_SKIP_ON_WINDOWS(
+            "the fixture is a POSIX shell script (fake git/gh) that Windows cannot run");
         QTemporaryDir bin;
         const QString tool = bin.filePath("gh");
         QFile script(tool);
