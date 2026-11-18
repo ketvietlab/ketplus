@@ -2,6 +2,7 @@
 #include "runner/entry/RemoteJobPort.h"
 #include "runtime/executor/LinuxJobContainment.h"
 #include "runtime/executor/NativeJobClient.h"
+#include "storage/RemoteJobRows.h"
 
 #include <QDateTime>
 #include <QDir>
@@ -295,6 +296,22 @@ void ManagedTaskRuntime::permissionResolved(const QString& id, bool granted) {
     if (!live || live->record.value("state") != "queued")
         return;
     BackgroundTaskChange change;
+    if (granted &&
+        remote_job_rows::phaseOf(ledger_.database(), id) == remote_job_rows::Phase::Reserved) {
+        change.state = "queued";
+        change.permissionApproved = true;
+        if (remoteJobs_ && apply(id, change))
+            remoteJobs_->submit(id, live->execution);
+        else if (!remoteJobs_) {
+            change = {};
+            change.state = "failed";
+            change.reason = "spawn_failed";
+            change.errorCode = "runner_unavailable";
+            change.neverLaunched = true;
+            apply(id, change);
+        }
+        return;
+    }
     if (granted) {
         change.state = "queued";
         change.permissionApproved = true;
