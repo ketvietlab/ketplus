@@ -2,6 +2,7 @@
 #include "agent/AgentSessionState.h"
 #include "agent/CodexAppServer.h"
 #include "agent/ConversationWorktreeStore.h"
+#include "agent/ToolLocations.h"
 
 #include "git/GitParser.h"
 
@@ -16,14 +17,7 @@
 
 namespace ketplus {
 namespace {
-QString gitExecutable() {
-    QString found = QStandardPaths::findExecutable(QStringLiteral("git"));
-    if (found.isEmpty())
-        found = QStandardPaths::findExecutable(
-            QStringLiteral("git"),
-            {QStringLiteral("/opt/homebrew/bin"), QStringLiteral("/usr/local/bin")});
-    return found;
-}
+QString gitExecutable() { return tool_locations::findTool(QStringLiteral("git")); }
 
 // Newest messages first, and only as far back as a turn can plausibly reach.
 constexpr int kTurnMessageScanLimit = 4000;

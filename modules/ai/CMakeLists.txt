@@ -119,6 +119,8 @@ add_library(ketplus_ai STATIC
     src/agent/CopilotSetupGuide.cpp
     src/agent/CopilotSetupGuide.h
     src/agent/FileMentions.cpp
+    src/agent/ToolLocations.cpp
+    src/agent/ToolLocations.h
     src/agent/FileMentions.h
     src/agent/FileReveal.cpp
     src/agent/FileReveal.h

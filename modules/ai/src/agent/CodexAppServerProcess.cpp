@@ -2,6 +2,7 @@
 #include "agent/CodexAppServer.h"
 
 #include "agent/DaemonTranscriptProjection.h"
+#include "agent/ToolLocations.h"
 #include <algorithm>
 
 #include "CodexBrowserTools.h"
@@ -136,11 +137,13 @@ void CodexAppServer::ensureStarted() {
     starting_ = true;
     stdoutBuffer_.clear();
     stderrBuffer_.clear();
-    process_->setProgram(executable_);
+    const auto command = tool_locations::codexCommand(executable_);
+    process_->setProgram(command.program);
     // Browser tools (ADR 0008): read at each start; changes restart an idle process (reloader_).
     launchedBrowserArguments_ = browserArguments();
     const QStringList& browserArguments = launchedBrowserArguments_;
     process_->setArguments(
+        command.leadingArguments +
         QStringList{QStringLiteral("app-server"), QStringLiteral("--stdio"), QStringLiteral("-c"),
                     QStringLiteral("features.default_mode_request_user_input=true")} +
         browserArguments);

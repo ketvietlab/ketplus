@@ -1,5 +1,7 @@
 #include "agent/FileMentions.h"
 
+#include "agent/ToolLocations.h"
+
 #include <QDir>
 #include <QDirIterator>
 #include <QFileInfo>
@@ -29,11 +31,7 @@ void addWithParents(const QString& file, QSet<QString>& folders, QStringList& en
 
 bool listGitEntries(const QString& root, qsizetype maximumEntries, QStringList& entries) {
     // A GUI app launched from Finder has a minimal PATH; look where Git usually lives too.
-    QString executable = QStandardPaths::findExecutable(QStringLiteral("git"));
-    if (executable.isEmpty())
-        executable = QStandardPaths::findExecutable(
-            QStringLiteral("git"),
-            {QStringLiteral("/opt/homebrew/bin"), QStringLiteral("/usr/local/bin")});
+    const QString executable = tool_locations::findTool(QStringLiteral("git"));
     if (executable.isEmpty())
         return false;
     QProcess git;

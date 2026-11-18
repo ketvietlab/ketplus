@@ -100,8 +100,14 @@ QStringList AtlasProcess::toolSearchPaths() {
     auto paths = QProcessEnvironment::systemEnvironment().value("PATH").split(QDir::listSeparator(),
                                                                               Qt::SkipEmptyParts);
 #if defined(Q_OS_WIN)
+    // npm's global bin and the Node installer, which are on PATH only after a new login.
     if (const auto appData = qEnvironmentVariable("APPDATA"); !appData.isEmpty())
         paths << QDir(appData).filePath("npm");
+    for (const char* variable : {"ProgramFiles", "ProgramFiles(x86)"}) {
+        if (const auto base = qEnvironmentVariable(variable); !base.isEmpty())
+            paths << QDir(base).filePath("nodejs");
+    }
+    return paths;
 #else
     paths << "/opt/homebrew/bin" << "/usr/local/bin";
 #endif
