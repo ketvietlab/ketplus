@@ -30,7 +30,10 @@ QString directScript(const QString& shim) {
 QString cmdCommandLine(const QString& program, const QStringList& arguments, bool* ok) {
     QString line;
     bool valid = quotableForCmd(program);
-    line += QLatin1Char('"') + program + QLatin1Char('"');
+    // cmd.exe wants backslashes in the program path; Qt hands out `C:/...` (whatever the host).
+    QString nativeProgram = program;
+    nativeProgram.replace(QLatin1Char('/'), QLatin1Char('\\'));
+    line += QLatin1Char('"') + nativeProgram + QLatin1Char('"');
     for (const QString& argument : arguments) {
         valid = valid && quotableForCmd(argument);
         line += QStringLiteral(" \"") + argument + QLatin1Char('"');
@@ -47,7 +50,10 @@ MermaidLaunch mermaidWindowsLaunch(const QString& shellPath, const QString& shim
     const QString script = directScript(shim);
     if (!script.isEmpty()) {
         for (const QString& node : nodeCandidates) {
-            if (QFileInfo(node).isFile()) {
+            // Only a real executable: a node.cmd/.bat wrapper (version managers) would put
+            // cmd.exe, and its argument parsing, back in between.
+            if (node.endsWith(QLatin1String(".exe"), Qt::CaseInsensitive) &&
+                QFileInfo(node).isFile()) {
                 launch.program = node;
                 launch.arguments = QStringList{script} + arguments;
                 return launch;
@@ -63,8 +69,9 @@ MermaidLaunch mermaidWindowsLaunch(const QString& shellPath, const QString& shim
         return launch;
     }
     launch.program = shellPath;
-    // /D skips AutoRun commands; /S makes cmd remove exactly the outer quotes.
-    launch.nativeArguments = QStringLiteral("/D /S /C \"%1\"").arg(line);
+    // /D skips AutoRun commands, /V:OFF turns delayed expansion off even if the registry turns
+    // it on (so `!` in a path stays literal), and /S makes cmd remove exactly the outer quotes.
+    launch.nativeArguments = QStringLiteral("/D /V:OFF /S /C \"%1\"").arg(line);
     return launch;
 }
 

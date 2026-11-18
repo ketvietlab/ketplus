@@ -440,7 +440,7 @@ void MermaidRenderer::startNext() {
     if (executablePath_.endsWith(QStringLiteral(".cmd"), Qt::CaseInsensitive) ||
         executablePath_.endsWith(QStringLiteral(".bat"), Qt::CaseInsensitive)) {
         QStringList nodeCandidates{QDir(executableDirectory).filePath(QStringLiteral("node.exe"))};
-        const QString nodeOnPath = QStandardPaths::findExecutable(QStringLiteral("node"));
+        const QString nodeOnPath = QStandardPaths::findExecutable(QStringLiteral("node.exe"));
         if (!nodeOnPath.isEmpty())
             nodeCandidates.append(nodeOnPath);
         const MermaidLaunch launch =

@@ -3,6 +3,8 @@
 #include <QDir>
 #include <QFile>
 #include <QProcess>
+#include <QRegularExpression>
+#include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QTest>
 
@@ -55,7 +57,34 @@ class MermaidLaunchTest final : public QObject {
         QCOMPARE(launch.program, QStringLiteral("C:\\Windows\\System32\\cmd.exe"));
         QVERIFY(launch.arguments.isEmpty());
         QCOMPARE(launch.nativeArguments,
-                 QStringLiteral("/D /S /C \"\"C:\\no node\\mmdc.cmd\" \"-i\" \"a b\"\""));
+                 QStringLiteral("/D /V:OFF /S /C \"\"C:\\no node\\mmdc.cmd\" \"-i\" \"a b\"\""));
+    }
+
+    void turnsForwardSlashesOfTheProgramIntoBackslashes() {
+        bool ok = false;
+        const QString line = cmdCommandLine(QStringLiteral("C:/Users/John Smith/npm/mmdc.cmd"),
+                                            {QStringLiteral("C:/a b/x.mmd")}, &ok);
+        QVERIFY(ok);
+        // Arguments are left as given: they are not programs, and mmdc takes either form.
+        QCOMPARE(line, QStringLiteral("\"C:\\Users\\John Smith\\npm\\mmdc.cmd\" \"C:/a b/x.mmd\""));
+    }
+
+    void ignoresNodeWrappersThatAreNotExecutables() {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QDir root(directory.path());
+        const QString shim = root.filePath(QStringLiteral("mmdc.cmd"));
+        QVERIFY(touch(shim));
+        QVERIFY(touch(
+            root.filePath(QStringLiteral("node_modules/@mermaid-js/mermaid-cli/src/cli.js"))));
+        const QString wrapper = root.filePath(QStringLiteral("node.cmd"));
+        const QString batch = root.filePath(QStringLiteral("node.bat"));
+        QVERIFY(touch(wrapper));
+        QVERIFY(touch(batch));
+        const auto launch =
+            mermaidWindowsLaunch(QStringLiteral("cmd.exe"), shim, {}, {wrapper, batch});
+        QCOMPARE(launch.program, QStringLiteral("cmd.exe"));
+        QVERIFY(!launch.nativeArguments.isEmpty());
     }
 
     void reportsPathsCmdCannotTakeLiterally() {
@@ -101,6 +130,28 @@ class MermaidLaunchTest final : public QObject {
     }
 
 #if defined(Q_OS_WIN)
+    // The user's real npm install, if there is one: node runs mermaid-cli directly (no cmd.exe).
+    void runsARealMermaidCliThroughNodeDirectly() {
+        const QString shim =
+            QDir(qEnvironmentVariable("APPDATA")).filePath(QStringLiteral("npm/mmdc.cmd"));
+        const QString node = QStandardPaths::findExecutable(QStringLiteral("node.exe"));
+        if (!QFileInfo::exists(shim) || node.isEmpty())
+            QSKIP("mermaid-cli and node.exe are not installed here.");
+        const auto launch = mermaidWindowsLaunch(QStringLiteral("cmd.exe"), shim,
+                                                 {QStringLiteral("--version")}, {node});
+        QVERIFY2(launch.error.isEmpty(), qPrintable(launch.error));
+        QCOMPARE(QFileInfo(launch.program).fileName().toLower(), QStringLiteral("node.exe"));
+        QVERIFY(launch.nativeArguments.isEmpty());
+        QProcess process;
+        process.start(launch.program, launch.arguments);
+        QVERIFY(process.waitForFinished(30000));
+        QCOMPARE(process.exitCode(), 0);
+        QVERIFY2(QRegularExpression(QStringLiteral("^\\d+\\.\\d+"))
+                     .match(QString::fromLocal8Bit(process.readAllStandardOutput()).trimmed())
+                     .hasMatch(),
+                 "mmdc --version did not print a version");
+    }
+
     // End to end on Windows: a shim in a folder with spaces, run through cmd.exe, receives each
     // argument intact, including & ^ ( ) and spaces.
     void cmdRunsAShimWhosePathAndArgumentsHaveSpaces() {

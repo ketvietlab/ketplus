@@ -17,7 +17,8 @@ struct MermaidLaunch final {
 };
 
 // Runs mmdc.cmd/.bat as `node <cli.js> args` when the npm package next to the shim and a node
-// binary are found (no cmd.exe at all). Otherwise runs `cmd /D /S /C ""shim" "arg" ..."`, which
+// binary (an `.exe`; never a node.cmd wrapper) are found, with no cmd.exe at all. Otherwise runs
+// `cmd /D /V:OFF /S /C ""shim" "arg" ..."`, which
 // is only safe for paths without `%`, `"` and line breaks; those fail with an error because cmd
 // cannot take them literally on a command line. `nodeCandidates` are tried in order.
 [[nodiscard]] MermaidLaunch mermaidWindowsLaunch(const QString& shellPath, const QString& shim,
