@@ -1,3 +1,4 @@
+#include "runner/entry/RemoteOutput.h"
 #include "runtime/ManagedTaskRuntime.h"
 #include "storage/BackgroundTaskOutput.h"
 
@@ -36,6 +37,8 @@ QJsonObject ManagedTaskRuntime::output(const QString& id, const BackgroundTaskOw
     const auto authorized = ledger_.get(id, owner, localAdministration);
     if (!authorized.value("ok").toBool())
         return authorized;
+    if (const auto remote = runner::entry::remoteOutput(ledger_.database(), id, cursor, authorized))
+        return *remote;
     const auto path = directory_ + '/' + id + "/output.sqlite";
     const auto connection = QUuid::createUuid().toString();
     BackgroundOutputPage page;
