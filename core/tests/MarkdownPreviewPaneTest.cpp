@@ -36,6 +36,7 @@ class MarkdownPreviewPaneTest final : public QObject {
     void explainsHowToInstallMissingMmdc();
     void discoversMmdcInstalledByNvm();
     void rendersMermaidAndOpensThePopup();
+    void rendersMermaidThroughACmdShimInAFolderWithSpaces();
     void opensVectorDiagramWithPanControls();
     void classColoursSurviveQtSvg();
     void sequenceColoursSurviveQtSvg();
@@ -323,6 +324,66 @@ printf '%s' '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="160"><r
         QVERIFY(QMetaObject::invokeMethod(browser, "anchorClicked", Qt::DirectConnection,
                                           Q_ARG(QUrl, QUrl(diagramLink))));
         QTRY_VERIFY(preview.findChild<ketplus::MermaidDiagramDialog*>() != nullptr);
+    }
+    if (overrideWasSet) {
+        qputenv("KETPLUS_MMDC", previousOverride);
+    } else {
+        qunsetenv("KETPLUS_MMDC");
+    }
+#endif
+}
+
+void MarkdownPreviewPaneTest::rendersMermaidThroughACmdShimInAFolderWithSpaces() {
+#ifndef Q_OS_WIN
+    QSKIP("mmdc is an npm .cmd shim run through cmd.exe only on Windows.");
+#else
+    // The shim's folder has spaces, as a user profile can; the renderer must still start it
+    // and pass the -o path through intact.
+    QTemporaryDir temporaryDirectory(QDir::tempPath() + QStringLiteral("/ketplus mermaid XXXXXX"));
+    QVERIFY(temporaryDirectory.isValid());
+    QVERIFY(QDir().mkpath(temporaryDirectory.filePath(QStringLiteral("npm bin"))));
+    const QString executablePath = temporaryDirectory.filePath(QStringLiteral("npm bin/mmdc.cmd"));
+    QFile executable(executablePath);
+    QVERIFY(executable.open(QIODevice::WriteOnly));
+    const QByteArray script =
+        "@echo off\r\n"
+        ":loop\r\n"
+        "if \"%~1\"==\"\" exit /b 9\r\n"
+        "if \"%~1\"==\"-o\" goto found\r\n"
+        "shift\r\n"
+        "goto loop\r\n"
+        ":found\r\n"
+        "> \"%~2\" echo ^<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"320\" "
+        "height=\"160\"^>^<rect x=\"10\" y=\"10\" width=\"300\" height=\"140\" "
+        "fill=\"#8b5cf6\"/^>^</svg^>\r\n";
+    QCOMPARE(executable.write(script), script.size());
+    executable.close();
+
+    const bool overrideWasSet = qEnvironmentVariableIsSet("KETPLUS_MMDC");
+    const QByteArray previousOverride = qgetenv("KETPLUS_MMDC");
+    qputenv("KETPLUS_MMDC", QDir::toNativeSeparators(executablePath).toUtf8());
+    {
+        ketplus::MarkdownPreviewPane preview;
+        const QString uniqueNode = QUuid::createUuid().toString(QUuid::WithoutBraces);
+        preview.setSource(
+            QStringLiteral("```mermaid\nflowchart LR\nA[%1] --> B\n```").arg(uniqueNode),
+            temporaryDirectory.filePath(QStringLiteral("diagram.md")), ketplus::ThemePalette{});
+        auto* browser = preview.findChild<QTextBrowser*>(QStringLiteral("markdownPreviewBrowser"));
+        QVERIFY(browser != nullptr);
+        QTRY_VERIFY_WITH_TIMEOUT(
+            [&] {
+                for (QTextBlock block = browser->document()->begin(); block.isValid();
+                     block = block.next()) {
+                    for (auto fragment = block.begin(); !fragment.atEnd(); ++fragment) {
+                        const QTextCharFormat format = fragment.fragment().charFormat();
+                        if (format.isImageFormat() && format.isAnchor())
+                            return format.anchorHref().startsWith(
+                                QStringLiteral("ketplus-mermaid-open:"));
+                    }
+                }
+                return false;
+            }(),
+            15000);
     }
     if (overrideWasSet) {
         qputenv("KETPLUS_MMDC", previousOverride);
