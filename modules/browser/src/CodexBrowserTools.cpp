@@ -1,6 +1,7 @@
 #include "CodexBrowserTools.h"
 #include "BrowserToolLaunch.h"
 
+#include "ToolLocations.h"
 #include "ToolPackageRegistry.h"
 
 #include <QCryptographicHash>
@@ -325,9 +326,10 @@ Probes systemProbes() {
     probes.nodeCandidates = [] {
 #if defined(Q_OS_WIN)
         QStringList candidates;
-        const QString onPath = QStandardPaths::findExecutable(QStringLiteral("node"));
-        if (!onPath.isEmpty())
-            candidates.append(onPath);
+        // PATH, then the usual tool directories a GUI app started from the Start menu lacks.
+        const QString found = ketplus::tool_locations::findTool(QStringLiteral("node"));
+        if (!found.isEmpty())
+            candidates.append(found);
         // The Node installer, then nvm for Windows (a symlink to the active version).
         for (const char* variable : {"ProgramFiles", "ProgramFiles(x86)", "NVM_SYMLINK"}) {
             const QString base = qEnvironmentVariable(variable);
