@@ -1282,6 +1282,13 @@ Preserve the original failing run and binary identity before a
 control; a passing control alone does not classify an earlier failure. Do not
 relax the assertions or deadlines to obtain a passing result.
 
+The native short-command fixture also reports its iteration and bootstrap phase
+(`directory`, `process_start`, `connect`, `ready`), elapsed time, process/socket
+state and error enums, valid exit information and bounded receipt readability
+before destructor cleanup. The same diagnostic opt-in includes passing iterations.
+It retains the 12 iterations and existing deadlines, and logs no protocol bodies,
+lease values or command arguments.
+
 Integration acceptance at `cc914a05` ([PR #763](https://github.com/ketvietlab/ketplus/pull/763))
 ran the fresh serialized Pro matrix: 242 passed, one skipped and eight failed
 out of 251 suites. Failures were in ChatMermaid, DaemonLifecycle, SessionFork,
@@ -1295,11 +1302,17 @@ forks failed the count predicate before the cleanup assertions. Isolated and
 predecessor-order controls passed. After the Mac matrix ended, one final serial
 run of the two Linux cases with exact-count/boundary diagnostics also passed;
 the fork sample was 71 with successful parsing, a removed boundary and verified
-cleanup. These controls do not classify the original failures, and acceptance
-remains pending their review and explicit disposition. No assertion or deadline
+cleanup. These controls do not classify the original failures. The team leader
+accepted this Linux validation risk for integration after independent evidence
+verification; this does not accept all T-5 checks, release or packaging. The Mac
+failures remain pending classification and explicit disposition. No assertion or deadline
 was relaxed and no full matrix was retried. CMake-installed daemon/helper staging
 passed the runtime and capability checks; the whole-tree Runtime install stopped
 at the unbuilt runner target, so this is not a full packaging pass.
+One subsequent native short-command case control with bootstrap diagnostics passed
+all 12 iterations; each reached `ready` in 45–74 ms with a readable receipt. This
+does not identify or fix the original bootstrap failure, and native controls stop
+at that single run pending residual assessment.
 
 The opt-in `ketplus_linux_job_executor_tests` runs the real packaged helper and
 registry. It covers missing-manager admission, durable retry/output, double-fork/
