@@ -24,6 +24,56 @@ export QT_ROOT="$(brew --prefix qt)"
 Use `CMakeUserPresets.json` for machine-specific settings. It is ignored and
 must not be committed.
 
+## Windows
+
+The Windows build uses MSVC (Visual Studio 2022 Build Tools, x64), Ninja and
+the same presets as other platforms. Source is edited on a Mac and mirrored
+with [mutagen](https://mutagen.io) to a Windows machine that builds over ssh;
+nothing here names a host, so pass it through the environment.
+
+### Toolchain
+
+On the Windows machine, in an administrator PowerShell or over ssh as an
+administrator, run `tools/windows/install-toolchain.ps1` (copy it with
+`install_qt.py`; both sit side by side). `-Root` selects the install folder
+(default `C:\ketplus-tools`). It installs Python 3, CMake, Ninja, MSVC Build
+Tools 2022 with the Windows SDK, Qt 6.11 `msvc2022_64` with the add-ons the
+project needs (WebSockets, WebView, Core5Compat, ShaderTools, ImageFormats) and
+the prebuilt OpenSSL 3 that Qt publishes. Qt is fetched by `install_qt.py`
+directly from `download.qt.io`, because aqtinstall does not read the Qt 6.11
+repository layout; no Qt account is needed. Re-running skips what is present.
+The Visual Studio installer must be recent enough for the Qt build (MSVC 14.4x);
+an old Build Tools install is brought up to date with
+`vs_BuildTools.exe update --quiet --wait --installPath <path>`.
+
+`tools/windows/vsenv.cmd <command>` runs a command with `vcvars64`, CMake,
+Ninja, `QT_ROOT` and `OPENSSL_ROOT_DIR` set from `KETPLUS_TOOLS_ROOT` (default
+`C:\ketplus-tools`); run it without arguments to print the resolved tools. The
+presets already read `$env{QT_ROOT}`, so no Windows-specific preset is needed.
+
+### Sync and build from a Mac
+
+Install mutagen (`brew install mutagen-io/mutagen/mutagen`, or unpack a release
+into `~/.local/bin`), make sure `ssh` to the Windows machine works without a
+password prompt, then from a worktree:
+
+```sh
+export KETPLUS_WIN_HOST=user@host            # required
+export KETPLUS_WIN_ROOT=C:/ketplus-work      # optional parent folder on Windows
+tools/windows/win-sync.sh start              # also: stop | status | flush
+tools/windows/win-run.sh cmake --preset lite-dev
+tools/windows/win-run.sh cmake --build --preset lite-dev
+tools/windows/win-run.sh ctest --preset lite-dev
+```
+
+Each worktree gets its own session and Windows folder, named after the
+worktree directory (`KETPLUS_WIN_NAME` overrides it), so parallel worktrees do
+not collide. The sync is one-way (Mac to Windows) and skips `build/`,
+`build-*`, `.cache/` and `.git`; the Windows build tree stays on the Windows
+machine. `win-run.sh` flushes the sync before it runs, so edits made on the Mac
+are always built. Stop a session with `win-sync.sh stop` when the worktree is
+removed.
+
 ## Build presets
 
 For the independent Linux server target, see
