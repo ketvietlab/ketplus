@@ -1261,6 +1261,24 @@ owned delegated guest. The native QML task-bar states and controls remain covere
 separately by `ketplus_agent_tests`; protocol-peer paging and stale-response tests
 remain in `ketplus_background_task_transport_tests`.
 
+Additional portable background-task builds and tests run over SSH in a task-owned
+Linux workspace. Git and source edits stay on the Mac. Export tracked working-tree
+source on the Mac (stage new source files there first), mirror that export with a
+named one-way Mutagen session, and exclude Git metadata, builds, caches, local
+authentication state and evidence. Keep remote build outputs and evidence outside
+the source mirror. Flush synchronization and compare the complete file/mode/SHA256
+manifest before testing; record the Mac commit and any uncommitted source hashes.
+Do not edit source or perform Git writes on Linux, and do not rerun passed checks
+merely to move them to the new host.
+
+The native macOS identity/audit-token executor checks and macOS renderer-specific
+Mermaid responsiveness classification require the Mac. Model-only Desktop,
+Discovery and Attention checks are portable, as are runtime, storage, IPC and fake
+provider checks. Select a Qt 6.11 toolchain explicitly on Linux; desktop/model
+targets also require its WebView module. Missing toolchain components are a setup
+blocker, not a reason to move portable work back to the Mac. Dependency preparation
+must respect the same source-sync and no-remote-Git-write boundary.
+
 The Host/IPC fixtures alone do not verify the shared UI, SDK native-background blocking or a
 signed deployment bundle. On Linux, process tests require a non-root user with
 a working systemd user manager, delegated cgroup v2/`nsdelegate`, `cgroup.kill`,
