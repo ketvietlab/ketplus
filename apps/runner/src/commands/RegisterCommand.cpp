@@ -4,6 +4,7 @@
 #include "commands/CommandSupport.h"
 #include "commands/Commands.h"
 #include "flow/PairingFlow.h"
+#include "protocol/Capabilities.h"
 #include "state/RunnerState.h"
 
 #include <QJsonArray>
@@ -83,7 +84,7 @@ ExitCode registerRunner(const CommandOptions& options, const Environment& enviro
     body.insert(QStringLiteral("arch"), environment.platform.arch);
     body.insert(QStringLiteral("labels"), QJsonArray::fromStringList(options.labels));
     body.insert(QStringLiteral("capabilities"),
-                QJsonArray{QString::fromLatin1(runnerProtocolCapability)});
+                QJsonArray{QString(protocol::capability::runnerProtocol)});
     body.insert(QStringLiteral("runnerVersion"), environment.runnerVersion);
 
     RelayClient relay(environment.relayUrl, environment.requestTimeoutMs);

@@ -2,6 +2,7 @@
 
 #include "Environment.h"
 #include "RunnerRules.h"
+#include "protocol/Capabilities.h"
 #include "run/Backoff.h"
 
 #include <QJsonArray>
@@ -62,7 +63,7 @@ ExitCode runHeartbeatLoop(PairingContext& context, const RunnerIdentity& identit
     const QJsonObject heartbeat{
         {QStringLiteral("state"), QStringLiteral("idle")},
         {QStringLiteral("labels"), QJsonArray::fromStringList(identity.config.labels)},
-        {QStringLiteral("capabilities"), QJsonArray{QString::fromLatin1(runnerProtocolCapability)}},
+        {QStringLiteral("capabilities"), QJsonArray{QString(protocol::capability::runnerProtocol)}},
         {QStringLiteral("runnerVersion"), environment.runnerVersion},
         {QStringLiteral("currentJob"), QJsonValue(QJsonValue::Null)},
     };

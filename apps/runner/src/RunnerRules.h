@@ -12,7 +12,6 @@ namespace ketplus::runner::app {
 inline constexpr qsizetype maxNameCharacters = 64;
 inline constexpr qsizetype maxLabels = 32;
 inline constexpr qsizetype maxLabelCharacters = 64;
-inline constexpr char runnerProtocolCapability[] = "runner.protocol/1";
 
 // Ids the Relay hands out: 1 to 128 of [A-Za-z0-9_-]. Also what makes a machine id a safe
 // file name.

@@ -31,7 +31,8 @@ add_library(ketplus_runner_app STATIC
     src/state/StateDirectory.h
 )
 target_link_libraries(ketplus_runner_app
-    PUBLIC Qt6::Core Qt6::Network ketplus_runner_pairing ketplus_control_crypto_primitives
+    PUBLIC Qt6::Core Qt6::Network ketplus_runner_pairing ketplus_runner_protocol
+    ketplus_control_crypto_primitives
     PRIVATE ketplus_product_version OpenSSL::Crypto)
 target_include_directories(ketplus_runner_app PUBLIC
     "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>"
