@@ -129,7 +129,13 @@ class SpotlightTest final : public QObject {
         QVERIFY(client.waitForConnected(1000));
         // A client that never ends its line is cut off instead of buffering until the timeout.
         client.write(QByteArray(32 * 1024, 'a'));
+#if defined(Q_OS_WIN)
+        // A named pipe write only completes while the server (this thread) services the pipe, so
+        // waiting here would block; the event loop in the next line drives it.
+        client.waitForBytesWritten(0);
+#else
         QVERIFY(client.waitForBytesWritten(1000));
+#endif
         QTRY_COMPARE_WITH_TIMEOUT(client.state(), QLocalSocket::UnconnectedState, 600);
         QVERIFY(!window.isVisible());
     }
