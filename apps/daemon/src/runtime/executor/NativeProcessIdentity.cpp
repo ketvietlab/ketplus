@@ -1,3 +1,6 @@
+#include <QtGlobal>
+// POSIX-only; Windows builds NativeJobUnsupported.cpp instead.
+#if !defined(Q_OS_WIN)
 #include "runtime/executor/NativeProcessIdentity.h"
 
 #include <QFile>
@@ -201,3 +204,4 @@ bool signalIdentity(const NativeProcessIdentity& identity, int signal, QString* 
     return target && target->send(signal, error);
 }
 } // namespace ketplus::daemon::executor
+#endif // !Q_OS_WIN

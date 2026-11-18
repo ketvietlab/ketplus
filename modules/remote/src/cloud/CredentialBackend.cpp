@@ -23,7 +23,7 @@ std::shared_ptr<CredentialBackend> nativeCredentialBackend() {
     // Unit tests must explicitly inject a fake or an isolated OS-store fixture.
     if (QStandardPaths::isTestModeEnabled())
         return std::make_shared<Unavailable>();
-#if defined(Q_OS_MACOS) || defined(Q_OS_LINUX)
+#if defined(Q_OS_MACOS) || defined(Q_OS_LINUX) || defined(Q_OS_WIN)
     return platformCredentialBackend();
 #else
     return std::make_shared<Unavailable>();

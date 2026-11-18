@@ -1,3 +1,6 @@
+#include <QtGlobal>
+// POSIX-only; Windows builds NativeJobUnsupported.cpp instead.
+#if !defined(Q_OS_WIN)
 #include "runtime/executor/LinuxJobContainment.h"
 #include "runtime/executor/NativeJobClient.h"
 #include "runtime/executor/NativeProcessIdentity.h"
@@ -144,3 +147,4 @@ void NativeJobClient::reportLost(bool stopped, const QString& issue) {
         event_(lastReceipt_);
 }
 } // namespace ketplus::daemon::executor
+#endif // !Q_OS_WIN

@@ -1,3 +1,4 @@
+#include "platform/ProcessTree.h"
 #include "providers/ProviderFrameValidation.h"
 #include "providers/ProviderResponseEnvelope.h"
 #include "providers/ProviderResponseId.h"
@@ -57,7 +58,7 @@ void AcpAdapter::sendCall(const QString& method, const QJsonObject& params, Call
                 emit stopped(reason);
                 stopping_ = true;
             }
-            process_->kill();
+            killProcessTree(process_);
         });
         timer->start(timeout);
     }
@@ -112,7 +113,7 @@ void AcpAdapter::consumeStdout() {
                     emit stopped(reason);
                     stopping_ = true;
                 }
-                process_->kill();
+                killProcessTree(process_);
                 return;
             }
             if (newline < 0)
@@ -138,7 +139,7 @@ void AcpAdapter::consumeLine(const QByteArray& line) {
         setReady(false);
         stdoutBuffer_.clear();
         process_->closeReadChannel(QProcess::StandardOutput);
-        process_->kill();
+        killProcessTree(process_);
         return;
     }
     const QJsonObject object = document.object();

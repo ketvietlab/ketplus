@@ -5,8 +5,8 @@
 #include "AgentTestFixture.h"
 #include "TeamFakeHost.h"
 #include "agents/AgentBroker.h"
-#include "storage/LocalJournal.h"
 #include "protocol/DaemonProtocol.h"
+#include "storage/LocalJournal.h"
 
 #include <QStandardPaths>
 #include <QTest>
@@ -146,8 +146,9 @@ class TeamBudgetTest final : public QObject {
         QCOMPARE(teams_->takeMemberTurn("outsider"), QString{});
         QVERIFY(host_.released.isEmpty());
 
-        QVERIFY(teams_->answerDecision(team_, team().decisions.last().id,
-                                       "Continue (5 more turns)", "user")
+        QVERIFY(teams_
+                    ->answerDecision(team_, team().decisions.last().id, "Continue (5 more turns)",
+                                     "user")
                     .ok());
         QVERIFY(!team().paused);
         QVERIFY(team().automaticTurns < 5);
@@ -172,11 +173,12 @@ class TeamBudgetTest final : public QObject {
         const auto command = [&](const QString& type, const QJsonObject& payload) {
             return fixture.host->handleCommand(agent_test::request(type, payload), "desktop-test");
         };
-        const QJsonObject created = command("team.create", {{"repository", fixture.directory.path()},
-                                                            {"name", "Budget"},
-                                                            {"integration_branch", "integration"},
-                                                            {"turn_budget", 5},
-                                                            {"plan", plan()}});
+        const QJsonObject created =
+            command("team.create", {{"repository", fixture.directory.path()},
+                                    {"name", "Budget"},
+                                    {"integration_branch", "integration"},
+                                    {"turn_budget", 5},
+                                    {"plan", plan()}});
         QVERIFY2(created.value("ok").toBool(), qPrintable(agent_test::text(created)));
         const QJsonValue teamId = created.value("team").toObject().value("id");
         const QJsonArray members = created.value("team").toObject().value("members").toArray();
@@ -215,9 +217,9 @@ class TeamBudgetTest final : public QObject {
         QString held;
         for (int sent = 0; sent < 10 && held.isEmpty(); ++sent) {
             const int turns = fixture.count(leader, "turn.completed");
-            const QJsonObject reply = fixture.agents(
-                developer, "agents.send",
-                {{"to", "leader"}, {"text", QStringLiteral("Update %1").arg(sent)}});
+            const QJsonObject reply =
+                fixture.agents(developer, "agents.send",
+                               {{"to", "leader"}, {"text", QStringLiteral("Update %1").arg(sent)}});
             QVERIFY2(reply.value("ok").toBool(), qPrintable(agent_test::text(reply)));
             const QString id = reply.value("message_id").toString();
             QTRY_VERIFY_WITH_TIMEOUT(fixture.journal->agentMessage(id)->state != "queued", 5000);
@@ -247,8 +249,8 @@ class TeamBudgetTest final : public QObject {
                                   QStringLiteral("delivered"), 5000);
         bool released = false;
         for (const QJsonObject& notice : fixture.payloads(leader, "agent_message.state"))
-            released = released || (notice.value("message_id") == held &&
-                                     notice.value("state") == "released");
+            released = released ||
+                       (notice.value("message_id") == held && notice.value("state") == "released");
         QVERIFY(released);
     }
 

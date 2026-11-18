@@ -159,9 +159,11 @@ class ProviderReadinessTest final : public QObject {
                         .toInteger();
         }
         QVERIFY(since > 5); // the time it was reported, not the time it was read
+#if !defined(Q_OS_WIN)      // Windows access is an ACL, not mode bits: see WindowsPlatformTest.
         QCOMPARE(QFile::permissions(path) & (QFileDevice::ReadGroup | QFileDevice::ReadOther |
                                              QFileDevice::WriteGroup | QFileDevice::WriteOther),
                  QFileDevice::Permissions{});
+#endif
         ProviderReadiness restarted(path);
         const QJsonObject result =
             restarted.compose(runtime("claude", compat::SupportStatus::Bundled), {}, 10);

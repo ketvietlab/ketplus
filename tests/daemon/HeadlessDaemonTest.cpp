@@ -17,6 +17,9 @@
 #include <QSqlQuery>
 #include <QTemporaryDir>
 #include <QUuid>
+#if defined(Q_OS_WIN)
+#include <qt_windows.h>
+#endif
 #include <QtTest>
 
 #include <memory>
@@ -269,7 +272,9 @@ class HeadlessDaemonTest final : public QObject {
         QCOMPARE(repositoryOf.value(linked), main);
         QCOMPARE(repositoryOf.value(broken), broken);
 
+#if !defined(Q_OS_WIN)
         // A main checkout remembered through a symlink names its canonical repository too.
+        // (Skipped on Windows: QFile::link makes a .lnk shortcut, not a symbolic link.)
         QVERIFY(QFile::link(main, directory.filePath("app-link")));
         const auto linkPath = QDir(directory.path()).filePath("app-link");
         QVERIFY(journal.rememberWorktree(linkPath));
@@ -277,6 +282,7 @@ class HeadlessDaemonTest final : public QObject {
              host.handleCommand(command("workspace.list"), "admin").value("workspaces").toArray())
             if (value.toObject().value("path").toString() == linkPath)
                 QCOMPARE(value.toObject().value("repository_path").toString(), main);
+#endif
     }
     void workspaceEnrollmentRequiresALocalAdministratorAndARealCheckout() {
         QTemporaryDir directory;
@@ -356,7 +362,7 @@ class HeadlessDaemonTest final : public QObject {
                 }
             });
             ketplus::remote::DaemonClient client;
-            client.call("session.list", {}, {}, 0, [](const QJsonObject&, const QString&) {});
+            client.call("session.list", {}, {}, 0, [](const QJsonObject&, const QString&){});
             if (!QTest::qWaitFor([&] { return client.isReady(); }, 10000))
                 return {};
             if (!client.hasFeature(QStringLiteral("daemon.host_identity/1")))
@@ -367,6 +373,62 @@ class HeadlessDaemonTest final : public QObject {
         // base64url(SHA-256) of the host's key set, as a pairing QR code carries it.
         QCOMPARE(first.size(), 43);
         QCOMPARE(fingerprintOfOneRun(), first);
+#endif
+    }
+
+    void windowsPipeServesOnlyACredentialedClientAndStopsOnCtrlBreak() {
+#if defined(Q_OS_WIN)
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        QProcess daemon;
+        auto environment = QProcessEnvironment::systemEnvironment();
+        environment.insert("KETPLUS_DAEMON_DATA_DIR", directory.path());
+        // A named-pipe name, not a path; unique so a stray daemon cannot answer.
+        environment.insert("KETPLUS_DAEMON_SOCKET",
+                           "kp-test-" + QUuid::createUuid().toString(QUuid::Id128));
+        daemon.setProcessEnvironment(environment);
+        // Its own process group, so CTRL_BREAK reaches the daemon and not this test.
+        daemon.setCreateProcessArgumentsModifier([](QProcess::CreateProcessArguments* arguments) {
+            arguments->flags |= CREATE_NEW_PROCESS_GROUP;
+        });
+        daemon.start(KETPLUS_TEST_DAEMON,
+                     {"--codex", "C:/nonexistent/codex", "--claude", "C:/nonexistent/claude",
+                      "--cursor", "C:/nonexistent/agent"});
+        QVERIFY(daemon.waitForStarted());
+        const auto stop = qScopeGuard([&] {
+            if (daemon.state() != QProcess::NotRunning) {
+                daemon.kill();
+                daemon.waitForFinished();
+            }
+        });
+        QTRY_VERIFY_WITH_TIMEOUT(QFileInfo::exists(directory.filePath("daemon/local.token")),
+                                 10000);
+
+        QProcess cli;
+        cli.setProcessEnvironment(environment);
+        cli.start(KETPLUS_TEST_CTL, {"--timeout", "15", "sessions"});
+        QVERIFY(cli.waitForFinished(20000));
+        QCOMPARE(cli.exitCode(), 0);
+        QVERIFY(QJsonDocument::fromJson(cli.readAllStandardOutput()).object().value("ok").toBool());
+
+        // The local credential is required even for a client that reaches the pipe.
+        QFile wrong(directory.filePath("wrong.token"));
+        QVERIFY(wrong.open(QIODevice::WriteOnly));
+        wrong.write(QByteArray(64, 'x'));
+        wrong.close();
+        cli.start(KETPLUS_TEST_CTL,
+                  {"--timeout", "2", "--token-file", wrong.fileName(), "workspace", "list"});
+        QVERIFY(cli.waitForFinished(8000));
+        QVERIFY(cli.exitCode() != 0);
+
+        // Clean stop: the console event ends the loop and the process exits normally.
+        if (!::GenerateConsoleCtrlEvent(CTRL_BREAK_EVENT, static_cast<DWORD>(daemon.processId())) ||
+            !daemon.waitForFinished(10000))
+            QSKIP("No console is shared with the daemon, so CTRL_BREAK cannot be delivered.");
+        QCOMPARE(daemon.exitStatus(), QProcess::NormalExit);
+        QCOMPARE(daemon.exitCode(), 0);
+#else
+        QSKIP("Windows named pipe only.");
 #endif
     }
 

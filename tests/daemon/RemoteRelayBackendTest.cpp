@@ -674,7 +674,12 @@ class RemoteRelayBackendTest final : public QObject {
         const auto stored = file.readAll();
         QVERIFY(stored.contains(id.toUtf8()));
         QVERIFY(!stored.contains("private retried prompt"));
+#if !defined(Q_OS_WIN) // Windows access is an ACL, not mode bits: see WindowsPlatformTest.
         QCOMPARE(file.permissions() & (QFile::ReadGroup | QFile::ReadOther), QFile::Permissions{});
+#endif
+        // An open handle without delete sharing makes the next atomic replace of the outbox
+        // fail on Windows; the restarted backend writes it again.
+        file.close();
         first.reset();
 
         // The restarted Desktop: a new client from the stored credential, a new backend.

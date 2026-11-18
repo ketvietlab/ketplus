@@ -1,3 +1,6 @@
+#include <QtGlobal>
+// POSIX-only; Windows builds NativeJobUnsupported.cpp instead.
+#if !defined(Q_OS_WIN)
 #include "runtime/executor/LinuxJobContainment.h"
 
 #include <QCoreApplication>
@@ -344,3 +347,4 @@ QJsonObject linuxRecoverBoundary(const QString& task, const QString& lease,
     return {{"clean", false}, {"reason", "linux_cleanup_pending"}};
 }
 } // namespace ketplus::daemon::executor
+#endif // !Q_OS_WIN

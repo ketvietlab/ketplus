@@ -1897,6 +1897,33 @@ read, requiring an explicit error and byte-for-byte retention of both previous h
 These are native C++ tests with synthetic credentials and HTTP replies; they do not certify OS
 ACLs, backup recovery, signed upgrades or deployment.
 
+## Windows daemon tests
+
+`cmake --preset daemon-dev`, `cmake --build --preset daemon-dev` and `ctest --preset daemon-dev`
+run on Windows (MSVC) with the toolchain from `tools/windows` (see
+[development](development.md)). Windows-specific coverage: `ketplus_windows_platform_tests`
+(owner-only access list on a directory and its children; killing a provider ends its helper
+processes through the Job Object), `ketplus_windows_script_launch_tests` (`cmd.exe` with
+`nativeArguments`, npm shim to `node`), `ketplus_cursor_invocation_tests` (Cursor launch and model
+id checks), a pipe-server user check in `ketplus_windows_platform_tests`, and `HeadlessDaemonTest::windowsPipe...` (daemon and
+`ketplusctl` over the named pipe, a wrong credential refused, clean exit on `CTRL_BREAK`).
+
+Disabled on Windows (built, label `windows-script-fixture`), because their provider fixtures are
+`#!/usr/bin/env python3` scripts launched by path, or JavaScript that assumes POSIX paths. They
+still run on macOS and Linux; a follow-up runs the fixtures through explicit `python.exe` /
+`node.exe`:
+
+`ketplus_context_harness_tests`, `ketplus_provider_deletion_tests`, `ketplus_daemon_worktree_context_tests`, `ketplus_daemon_claude_worktree_tests`, `ketplus_daemon_lifecycle_tests`, `ketplus_turn_acceptance_tests`, `ketplus_daemon_claude_adapter_tests`, `ketplus_computer_tool_launch_tests`, `ketplus_computer_provider_integration_tests`, `ketplus_daemon_cursor_adapter_tests`, `ketplus_daemon_session_fork_tests`, `ketplus_agent_messaging_tests`, `ketplus_agent_urgent_delivery_tests`, `ketplus_team_routing_tools_tests`, `ketplus_team_finding_routing_tests`, `ketplus_team_task_tests`, `ketplus_team_task_git_tests`, `ketplus_team_agent_tools_tests`, `ketplus_team_flow_tests`, `ketplus_team_title_tests`, `ketplus_team_reply_tests`, `ketplus_team_review_tests`, `ketplus_team_lane_tests`, `ketplus_team_budget_tests`, `ketplus_team_merge_tests`, `ketplus_team_done_tests`, `ketplus_team_storage_tests`, `ketplus_work_report_tests`, `ketplus_awaiting_reply_tests`, `ketplus_turn_review_tests`, `ketplus_provider_compatibility_tests`, `ketplus_daemon_schedule_host_tests`, `ketplus_claude_credentials_tests`, `ketplus_daemon_upgrade_tests`, `ketplus_async_question_lifetime_tests`, `ketplus_relay_attachment_host_tests`, `ketplus_session_preparation_host_tests`, `ketplus_relay_preparation_host_tests`, `ketplus_codex_session_isolation_tests`, `ketplus_acp_session_isolation_tests`, and `ketplus_claude_sidecar_tests`.
+
+Skipped inside tests on Windows, each with its reason in the test source: fixtures that need POSIX
+symbolic links (`QFile::link` makes a `.lnk` shortcut), file-mode assertions (access is an ACL, see
+`ketplus_windows_platform_tests`), permission-denial fixtures, FIFOs and resource limits, the
+Linux/macOS user-unit socket probe, the uncheckpointed-WAL fixture (the only `python3` on `PATH` is
+the Microsoft Store alias), and producer-flood timing (QProcess drains the pipe in a thread).
+`ketplus_daemon_journal_migration_recovery_tests` and `ketplus_daemon_usage_retention_tests` pass
+but take 4-6 minutes on NTFS. Fixtures that write exact byte counts switch stdout to binary mode
+(`BinaryStdio.h`), because the C runtime would otherwise add `\r`.
+
 ## English chrome and multilingual team content (T30)
 
 See [the inventory](team-content-language.md). Run `ketplus_team_page_language_tests`,

@@ -1,4 +1,5 @@
 #include "BrowserToolLaunch.h"
+#include "platform/ProcessTree.h"
 #include "providers/acp/AcpAdapter.h"
 #include <QJsonDocument>
 #include <QProcess>
@@ -25,6 +26,7 @@ namespace ketplus::daemon {
 AcpAdapter::AcpAdapter(QString label, QObject* parent)
     : ProviderAdapter(parent), label_(std::move(label)) {
     process_ = new QProcess(this);
+    attachProcessTree(process_);
     restartTimer_ = new QTimer(this);
     restartTimer_->setSingleShot(true);
     connect(restartTimer_, &QTimer::timeout, this, [this] {
@@ -105,7 +107,7 @@ void AcpAdapter::stop() {
     if (process_->state() != QProcess::NotRunning) {
         process_->terminate();
         if (!process_->waitForFinished(500)) {
-            process_->kill();
+            killProcessTree(process_);
             process_->waitForFinished(500);
         }
     }

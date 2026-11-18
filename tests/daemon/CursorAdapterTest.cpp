@@ -958,15 +958,8 @@ class CursorAdapterTest final : public QObject {
 #if defined(Q_OS_WIN)
         QVERIFY(known.first().contains(QStringLiteral("cursor-agent")));
         QVERIFY(known.first().endsWith(QStringLiteral("agent.cmd")));
-        const auto cmd = CursorAdapter::processInvocation(
-            QStringLiteral("C:/Users/dev/AppData/Local/cursor-agent/agent.cmd"));
-        QCOMPARE(cmd.program, QStringLiteral("cmd.exe"));
-        QCOMPARE(cmd.arguments.at(0), QStringLiteral("/c"));
-        QCOMPARE(cmd.arguments.last(), QStringLiteral("acp"));
-        const auto ps1 = CursorAdapter::processInvocation(
-            QStringLiteral("C:/Users/dev/AppData/Local/cursor-agent/agent.ps1"));
-        QCOMPARE(ps1.program, QStringLiteral("powershell.exe"));
-        QVERIFY(ps1.arguments.contains(QStringLiteral("-File")));
+        // The cmd.exe / PowerShell invocations are checked by CursorInvocationTest, which is not
+        // disabled on Windows like this fixture-driven suite.
         QCOMPARE(CursorAdapter::installCommand(),
                  QStringLiteral("irm 'https://cursor.com/install?win32=true' | iex"));
         QVERIFY(

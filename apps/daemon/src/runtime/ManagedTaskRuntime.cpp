@@ -9,9 +9,21 @@
 #include <QScopedValueRollback>
 #include <QSet>
 #include <QUuid>
+#if !defined(Q_OS_WIN)
 #include <unistd.h>
+#endif
 
 namespace ketplus::daemon {
+namespace {
+// QFileInfo::ownerId() is -2 on Windows, where background jobs are not available anyway.
+uint effectiveUserId() {
+#if defined(Q_OS_WIN)
+    return static_cast<uint>(-2);
+#else
+    return ::geteuid();
+#endif
+}
+} // namespace
 namespace {
 QJsonObject failure(const QString& code, const QString& message) {
     return {{"ok", false}, {"error_code", code}, {"error_message", message}};
@@ -43,7 +55,7 @@ void ManagedTaskRuntime::setCallbacks(Changed changed, Permission permission, Ch
 bool ManagedTaskRuntime::initialize(QString* error) {
     const QFileInfo existing(directory_);
     if (existing.exists() && (existing.isSymLink() || existing.canonicalFilePath() != directory_ ||
-                              existing.ownerId() != geteuid())) {
+                              existing.ownerId() != effectiveUserId())) {
         if (error)
             *error = "The existing background directory has an unexpected path or owner.";
         return false;
@@ -56,7 +68,8 @@ bool ManagedTaskRuntime::initialize(QString* error) {
         return false;
     }
     const QFileInfo root(directory_);
-    if (root.isSymLink() || root.canonicalFilePath() != directory_ || root.ownerId() != geteuid()) {
+    if (root.isSymLink() || root.canonicalFilePath() != directory_ ||
+        root.ownerId() != effectiveUserId()) {
         if (error)
             *error = "The background execution directory must be canonical and owner-controlled.";
         return false;
@@ -127,8 +140,9 @@ void ManagedTaskRuntime::maintain() {
         const QFileInfo file(path);
         if (file.isSymLink())
             continue;
-        if (!file.exists() || (file.isDir() && file.canonicalFilePath() == path &&
-                               file.ownerId() == geteuid() && QDir(path).removeRecursively()))
+        if (!file.exists() ||
+            (file.isDir() && file.canonicalFilePath() == path &&
+             file.ownerId() == effectiveUserId() && QDir(path).removeRecursively()))
             if (ledger_.outputRemoved(id))
                 ++removed;
     }

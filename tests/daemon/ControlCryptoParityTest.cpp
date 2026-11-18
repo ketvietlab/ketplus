@@ -62,9 +62,20 @@ class ControlCryptoParityTest final : public QObject {
         QTest::newRow("null and bool")
             << QJsonArray{QJsonValue(), true, false, QJsonValue()}
             << QByteArray::fromHex("5b6e756c6c2c747275652c66616c73652c6e756c6c5d");
+        // A braced list holding one array of the same type may copy it instead of nesting it
+        // (MSVC does), so the nesting is built with explicit appends.
+        QJsonArray leaf{"deep", QJsonValue()};
+        QJsonArray wrapped;
+        wrapped.append(leaf);
+        QJsonArray first;
+        first.append(wrapped);
+        first.append(QJsonArray());
+        QJsonArray nested;
+        nested.append(first);
+        nested.append(QJsonObject{{"b", 1}, {"a", QJsonArray{2, "x"}}});
+        nested.append("tail");
         QTest::newRow("nested")
-            << QJsonArray{QJsonArray{QJsonArray{QJsonArray{"deep", QJsonValue()}}, QJsonArray()},
-                          QJsonObject{{"b", 1}, {"a", QJsonArray{2, "x"}}}, "tail"}
+            << nested
             << QByteArray::fromHex("5b5b5b5b2264656570222c6e756c6c5d5d2c5b5d5d2c7b2261223a5b322c227"
                                    "8225d2c2262223a31"
                                    "7d2c227461696c225d");

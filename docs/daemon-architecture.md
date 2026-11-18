@@ -774,6 +774,55 @@ Once enrolled, it reports `account {display_name, username}`. Settings → Accou
 & devices and the Connections account strip show it. An enrollment made before
 ADR 0109 has no `account` until the next sign-in.
 
+## Windows daemon (in progress)
+
+The daemon and `ketplusctl` build on Windows (MSVC, Qt 6) with the `daemon-dev` preset. What
+differs from macOS/Linux:
+
+- **Local IPC.** The endpoint is a named pipe, not a socket path. `DaemonPaths::socket()` returns
+  `ketplus-daemon-v0-<USERNAME>` (a `QLocalServer` name; the pipe namespace is machine-wide, so
+  the user is part of the name). `LocalIpcServer` keeps `QLocalServer::UserAccessOption`, which
+  makes Qt create the pipe with a security descriptor that admits only the current user. The
+  bearer credential in `local.token` is still required in `daemon.hello`; the pipe ACL is
+  an additional boundary, not a replacement. `--socket` may still name another pipe.
+  The pipe namespace is machine-wide and the name is predictable, so another account could create
+  the pipe first and wait for a client to send it the credential. The ACL only protects the
+  server's side. Before sending any credential, a client (`DaemonClient`, and the agent MCP
+  server's connection) therefore calls `remote::serverRunsAsCurrentUser`: it asks the pipe for its
+  server process (`GetNamedPipeServerProcessId`), opens that process's token and compares its user
+  SID with its own; a different or unreadable user closes the connection unsent.
+- **State and credential files.** Data lives under `%LOCALAPPDATA%\Ketsuite\KetPlus`
+  (`QStandardPaths::GenericDataLocation`). Mode bits and `umask` do not exist, so
+  `DaemonService::start()` replaces the DACL of the state and token directories with one
+  full-control entry for the current user, with inheritance blocked and object/container
+  inherit set (`remote::restrictToCurrentUser`, `modules/remote/src/OwnerOnlyAccess.cpp`).
+  The journal, its WAL/SHM files, the token and staged media inherit it. Unlike POSIX,
+  `readLocalDaemonCredential` does not re-verify the opened file's owner/mode; it relies on that
+  directory ACL and refuses symbolic links.
+- **Credential store.** `DpapiCredentialBackend` seals each service record with
+  `CryptProtectData` (current user scope, no UI) in `daemon\protected\<service>.dpapi`,
+  written atomically. The cross-process store lock is a `CreateFile` handle opened with share mode
+  0. Migration from the legacy plain file is not offered on Windows.
+- **Shutdown.** `WindowsShutdown` handles console Ctrl+C/Break/close/logoff/shutdown by quitting
+  the event loop, so the journal and endpoint close cleanly (the counterpart of `UnixSignals`).
+- **Process trees.** The daemon places itself in a kill-on-close Job Object at startup, so every
+  child it started ends with it. Each Codex, Claude and ACP provider process also gets a private
+  nested job (`platform/ProcessTree`): `killProcessTree` terminates the whole job and the job is
+  terminated again when the root exits, so shell wrappers and helper processes are not
+  orphaned. A grandchild spawned between `CreateProcess` and the job assignment escapes the
+  private job, but not the daemon-wide one.
+- **Provider launch.** `.cmd`/`.bat` wrappers must apply `nativeArguments` (see
+  [development](development.md)); the Copilot and Cursor adapters do. Codex and Cursor go through
+  `providers/WindowsScriptLaunch`: npm's `codex.cmd` is never run by cmd.exe; it is replaced by
+  `node.exe` on the package script (`tool_locations::npmCliCommand`, `modules/tools`), and is
+  refused when either is missing. Any other `.cmd`/`.bat` runs as `cmd.exe /d /v:off /s /c` with
+  `nativeArguments`, and a path or argument containing quotes, percent signs or newlines is
+  refused, not run. Cursor model ids, which reach that command line, must also match
+  `[A-Za-z0-9][A-Za-z0-9._:/@+-]*`; the launch check reports a refusal as the provider error.
+- **Not available.** Managed background process jobs (`ketplus_job_executor`, cgroup/process
+  group supervision) are POSIX-only. On Windows `ManagedTaskRuntime` refuses a `process` task with
+  `containment_unavailable`; `NativeJobUnsupported.cpp` only lets the daemon link.
+
 ## Lifecycle
 
 ACP v1 `loadSession` and `promptCapabilities.image` are opt-in booleans (ADR 0090).

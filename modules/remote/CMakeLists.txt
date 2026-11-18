@@ -3,6 +3,8 @@ add_library(ketplus_remote STATIC
     src/DaemonCredentialFile.h
     src/DaemonPaths.cpp
     src/DaemonPaths.h
+    src/OwnerOnlyAccess.cpp
+    src/OwnerOnlyAccess.h
     src/DaemonClient.cpp
     src/DaemonClient.h
     src/Schedule.cpp
@@ -27,6 +29,9 @@ add_library(ketplus_remote STATIC
 target_compile_definitions(ketplus_remote PRIVATE
     KETPLUS_AUTO_UPGRADE_DAEMON=$<BOOL:${KETPLUS_AUTO_UPGRADE_DAEMON}>)
 target_link_libraries(ketplus_remote PUBLIC Qt6::Core Qt6::Network ketplus_product_version)
+if(WIN32)
+    target_link_libraries(ketplus_remote PRIVATE advapi32)
+endif()
 target_include_directories(ketplus_remote PUBLIC
     "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>"
 )
@@ -91,6 +96,9 @@ elseif(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     find_package(Qt6 6.11 REQUIRED COMPONENTS DBus)
     target_sources(ketplus_control_crypto PRIVATE src/cloud/SecretServiceCredentialBackend.cpp)
     target_link_libraries(ketplus_control_crypto PRIVATE Qt6::DBus)
+elseif(WIN32)
+    target_sources(ketplus_control_crypto PRIVATE src/cloud/DpapiCredentialBackend.cpp)
+    target_link_libraries(ketplus_control_crypto PRIVATE crypt32 advapi32)
 endif()
 
 # Independent backend for a Desktop acting as a paired remote client; no UI composition yet.

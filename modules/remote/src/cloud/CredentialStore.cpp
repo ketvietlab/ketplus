@@ -8,6 +8,9 @@
 #include <QJsonDocument>
 #include <QRegularExpression>
 #include <utility>
+#if defined(Q_OS_WIN)
+#include <qt_windows.h>
+#endif
 #if defined(Q_OS_UNIX)
 #include <fcntl.h>
 #include <sys/file.h>
@@ -26,6 +29,9 @@ bool fail(QString* error, const QString& message) {
 // A kernel lock releases on close/process exit even if permissions change during
 // cleanup. Keep its empty inode; unlinking a held lock could split the lock domain.
 class StoreLock {
+#if defined(Q_OS_WIN)
+    HANDLE handle_{INVALID_HANDLE_VALUE};
+#endif
     int descriptor_{-1};
 
   public:
@@ -33,6 +39,9 @@ class StoreLock {
 #if defined(Q_OS_UNIX)
         if (descriptor_ >= 0)
             ::close(descriptor_);
+#elif defined(Q_OS_WIN)
+        if (handle_ != INVALID_HANDLE_VALUE)
+            ::CloseHandle(handle_);
 #endif
     }
     bool acquire(const QString& path, QString* error) {
@@ -43,6 +52,14 @@ class StoreLock {
         if (descriptor_ >= 0 && ::fstat(descriptor_, &status) == 0 && S_ISREG(status.st_mode) &&
             status.st_uid == ::geteuid() && (status.st_mode & 0077) == 0 && status.st_nlink == 1 &&
             ::flock(descriptor_, LOCK_EX | LOCK_NB) == 0)
+            return true;
+#elif defined(Q_OS_WIN)
+        // Share mode 0: a second opener, in this or another process, is refused until this
+        // handle closes, which the system also does when the process exits.
+        handle_ = ::CreateFileW(reinterpret_cast<LPCWSTR>(QDir::toNativeSeparators(path).utf16()),
+                                GENERIC_READ | GENERIC_WRITE, 0, nullptr, OPEN_ALWAYS,
+                                FILE_ATTRIBUTE_NORMAL | FILE_FLAG_OPEN_REPARSE_POINT, nullptr);
+        if (handle_ != INVALID_HANDLE_VALUE)
             return true;
 #else
         Q_UNUSED(path);
@@ -98,6 +115,20 @@ bool readLegacy(const QString& path, QByteArray* bytes, QString* error) {
                     QStringLiteral(
                         "The legacy credential file has unsafe ownership, permissions or size."));
     }
+    *bytes = file.read(maximumRecordBytes + 1);
+    if (file.error() != QFileDevice::NoError || bytes->size() > maximumRecordBytes)
+        return fail(error, QStringLiteral("Unable to read the legacy credential file."));
+    return true;
+#elif defined(Q_OS_WIN)
+    // No owner/mode to compare: the credential directory carries an owner-only access list.
+    // A link is refused, as on POSIX, and the size is bounded before anything is read.
+    const QFileInfo info(path);
+    QFile file(path);
+    if (info.isSymLink() || !info.isFile() || info.size() > maximumRecordBytes ||
+        !file.open(QIODevice::ReadOnly))
+        return fail(error,
+                    QStringLiteral(
+                        "The legacy credential file has unsafe ownership, permissions or size."));
     *bytes = file.read(maximumRecordBytes + 1);
     if (file.error() != QFileDevice::NoError || bytes->size() > maximumRecordBytes)
         return fail(error, QStringLiteral("Unable to read the legacy credential file."));

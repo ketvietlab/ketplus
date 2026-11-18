@@ -4,6 +4,7 @@
 #include "BundledBrowserRuntime.h"
 #include "ComputerAgentInstructions.h"
 #include "ComputerToolLaunch.h"
+#include "platform/ProcessTree.h"
 #include "providers/ClaudeCredentials.h"
 #include "providers/ProviderFrameValidation.h"
 #include "providers/ProviderResponseEnvelope.h"
@@ -107,6 +108,7 @@ QJsonObject decorateClaudeModel(QJsonObject source) {
 ClaudeAdapter::ClaudeAdapter(const QString& executable, QObject* parent)
     : ProviderAdapter(parent), executable_(executable, &findExecutable),
       process_(new QProcess(this)), restartTimer_(new QTimer(this)) {
+    attachProcessTree(process_);
     restartTimer_->setSingleShot(true);
     connect(restartTimer_, &QTimer::timeout, this, [this] {
         if (!queued_.isEmpty())
@@ -307,7 +309,7 @@ void ClaudeAdapter::stop() {
     if (process_->state() != QProcess::NotRunning) {
         process_->terminate();
         if (!process_->waitForFinished(500)) {
-            process_->kill();
+            killProcessTree(process_);
             process_->waitForFinished(500);
         }
     }
@@ -457,7 +459,7 @@ void ClaudeAdapter::consumeStdout() {
                     emit stopped(reason);
                     stopping_ = true;
                 }
-                process_->kill();
+                killProcessTree(process_);
                 return;
             }
             if (newline < 0)
@@ -483,7 +485,7 @@ void ClaudeAdapter::consumeLine(const QByteArray& line) {
         setReady(false);
         stdoutBuffer_.clear();
         process_->closeReadChannel(QProcess::StandardOutput);
-        process_->kill();
+        killProcessTree(process_);
         return;
     }
     const QJsonObject object = document.object();

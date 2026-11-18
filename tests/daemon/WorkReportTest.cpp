@@ -1010,8 +1010,8 @@ class WorkReportTest final : public QObject {
             {{"jsonrpc", "2.0"},
              {"id", 2},
              {"method", "tools/call"},
-                 {"params", QJsonObject{{"name", "work_report"},
-                                        {"arguments", call({item("a", "active")})}}}},
+             {"params",
+              QJsonObject{{"name", "work_report"}, {"arguments", call({item("a", "active")})}}}},
             daemon);
         QVERIFY(!answer.value("result").toObject().value("isError").toBool());
         // tools/list asks whoami whether to add the team tools (ADR 0114).

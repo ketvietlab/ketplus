@@ -1,6 +1,7 @@
 #include "DaemonClient.h"
 #include "DaemonCredentialFile.h"
 #include "DaemonPaths.h"
+#include "OwnerOnlyAccess.h"
 
 #include "KetPlusProductVersion.h"
 
@@ -351,6 +352,12 @@ void DaemonClient::launchDaemon() {
 }
 
 void DaemonClient::authenticate() {
+    // Before any credential leaves this process (Windows pipe names are machine-wide).
+    if (!serverRunsAsCurrentUser(socket_)) {
+        abortConnection();
+        scheduleReconnect();
+        return;
+    }
     const QByteArray token = adopted_ ? (credential_ ? credential_() : QByteArray{})
                                       : readLocalDaemonCredential(tokenPath_);
     if (token.isEmpty()) {
