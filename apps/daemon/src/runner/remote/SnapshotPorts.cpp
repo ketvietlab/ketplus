@@ -119,8 +119,13 @@ void SnapshotPorts::begin(const QString& jobId, const quint64 generation, const 
         return;
     }
     const std::optional<SnapshotPlan> plan = plan_ ? plan_(jobId, job->runnerId_) : std::nullopt;
-    SnapshotStores::Store* store = plan ? stores_.open(plan->storePath) : nullptr;
-    if (!plan || !store || plan->job.jobId != jobId || plan->job.runnerId != job->runnerId_) {
+    if (!plan) {
+        // A record written before it kept its snapshot: nothing is known to send.
+        answer(jobId, QStringLiteral("snapshot_failed"));
+        return;
+    }
+    SnapshotStores::Store* store = stores_.open(plan->storePath);
+    if (!store || plan->job.jobId != jobId || plan->job.runnerId != job->runnerId_) {
         answer(jobId, QString(sync::code::snapshotBuildFailed));
         return;
     }

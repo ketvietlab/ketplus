@@ -40,6 +40,9 @@ class RemoteJobCoordinator final {
 
     // Start and Stop.
     JobDecision start(const QString& taskId, const QStringList& runsOn, qint64 timeoutMs);
+    // The same, with the snapshot frozen for the job in its first record.
+    JobDecision start(const QString& taskId, const QStringList& runsOn, qint64 timeoutMs,
+                      const RemoteSnapshot& snapshot);
     JobDecision stop(const QString& taskId);
     JobDecision resolveCleanup(const QString& taskId);
 
@@ -74,6 +77,8 @@ class RemoteJobCoordinator final {
     void timerFired(const QString& taskId, JobTimer timer);
 
   private:
+    JobDecision begin(const QString& taskId, const QStringList& runsOn, qint64 timeoutMs,
+                      const std::optional<RemoteSnapshot>& snapshot);
     struct Live {
         qint64 retryMs = firstRetryMs;
         bool peerOpen = false;

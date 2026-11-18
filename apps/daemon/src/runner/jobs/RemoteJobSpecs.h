@@ -19,6 +19,8 @@ class RemoteJobSpecs final : public peer::JobSpecSource {
     [[nodiscard]] bool store(const QString& taskId, peer::protocol::JobSpec spec);
     // Follows a record the coordinator committed: names its job, or drops the spec once it ends.
     void recorded(const RemoteJobRecord& record);
+    // Drops the spec of a task whose start never made a record.
+    void forget(const QString& taskId) { specs_.remove(taskId); }
 
     // The task's spec with this job id and attempt; nullopt when none is held.
     [[nodiscard]] std::optional<peer::protocol::JobSpec> spec(const QString& jobId,

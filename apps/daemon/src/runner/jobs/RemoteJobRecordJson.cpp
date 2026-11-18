@@ -93,6 +93,13 @@ QByteArray encodeRecord(const RemoteJobRecord& record) {
     putTime(object, "startedAt", record.startedAt);
     putNumber(object, "exitCode", record.exitCode);
     putNumber(object, "signal", record.signal);
+    if (record.snapshot)
+        object.insert(
+            "snapshot",
+            QJsonObject{{"repositoryId", record.snapshot->repositoryId},
+                        {"worktreeId", record.snapshot->worktreeId},
+                        {"snapshotId", record.snapshot->snapshotId},
+                        {"warnings", QJsonArray::fromStringList(record.snapshot->warnings)}});
     return QJsonDocument(object).toJson(QJsonDocument::Compact);
 }
 
@@ -145,6 +152,23 @@ std::optional<RemoteJobRecord> decodeRecord(const QByteArray& bytes) {
             return std::nullopt;
         value.attempt = int(*attempt);
         record.runner = value;
+    }
+    const QJsonValue snapshot = object.value("snapshot");
+    if (!snapshot.isUndefined()) {
+        const QJsonObject held = snapshot.toObject();
+        RemoteSnapshot value;
+        if (!snapshot.isObject() || !readString(held, "repositoryId", value.repositoryId) ||
+            !readString(held, "worktreeId", value.worktreeId) ||
+            !readString(held, "snapshotId", value.snapshotId) || value.repositoryId.isEmpty() ||
+            value.worktreeId.isEmpty() || value.snapshotId.isEmpty() ||
+            !held.value("warnings").isArray())
+            return std::nullopt;
+        for (const QJsonValue& warning : held.value("warnings").toArray()) {
+            if (!warning.isString())
+                return std::nullopt;
+            value.warnings.append(warning.toString());
+        }
+        record.snapshot = value;
     }
     return record;
 }

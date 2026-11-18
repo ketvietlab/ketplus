@@ -47,6 +47,16 @@ struct RemoteRunner {
     friend bool operator==(const RemoteRunner&, const RemoteRunner&) = default;
 };
 
+// The worktree snapshot of a job, frozen at submit: what the desktop needs to send it after a
+// restart. The runner key is derived again from the secret each time; it is never stored.
+struct RemoteSnapshot {
+    QString repositoryId; // canonical common git dir
+    QString worktreeId;   // canonical worktree root
+    QString snapshotId;   // the snapshot commit, hex
+    QStringList warnings; // wire codes only
+    friend bool operator==(const RemoteSnapshot&, const RemoteSnapshot&) = default;
+};
+
 struct RemoteJobRecord {
     QString taskId; // also the job's submitKey
     QStringList runsOn;
@@ -65,6 +75,7 @@ struct RemoteJobRecord {
     std::optional<QDateTime> startedAt;
     std::optional<qint64> exitCode;
     std::optional<qint64> signal;
+    std::optional<RemoteSnapshot> snapshot; // absent in records written before it existed
     qint64 revision = 0;
 
     [[nodiscard]] bool terminal() const;
