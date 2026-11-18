@@ -487,9 +487,10 @@ Team teamFromJson(const QJsonObject& json) {
     team.mergePolicy = json.value(QStringLiteral("merge_policy")).toString(role::leader);
     team.executionPolicy =
         json.value(QStringLiteral("execution_policy")).toString(QStringLiteral("ask"));
-    // A team saved before T-56 is English.
+    // Missing content preference follows the prompt, without rewriting any saved content.
     team.language = ::ketplus::remote::team_language::orEnglish(
-        json.value(QStringLiteral("language")).toString());
+        json.value(QStringLiteral("language"))
+            .toString(::ketplus::remote::team_language::automatic));
     team.leaderWritesRequirements =
         json.value(QStringLiteral("leader_writes_requirements")).toBool(true);
     team.paused = json.value(QStringLiteral("paused")).toBool();

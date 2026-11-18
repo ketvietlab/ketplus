@@ -4,6 +4,7 @@
 #include "runtime/SessionHost.h"
 
 #include "teams/TeamRemoteView.h"
+#include "teams/TeamRules.h"
 
 #include <QPointer>
 #include <QSet>
@@ -38,7 +39,8 @@ const QHash<QString, QSet<QString>>& allowedFields() {
           QStringLiteral("text"), QStringLiteral("expected_revision")}},
         {QStringLiteral("team.update"),
          {QStringLiteral("team_id"), QStringLiteral("paused"), QStringLiteral("merge_policy"),
-          QStringLiteral("turn_budget"), QStringLiteral("expected_revision")}},
+          QStringLiteral("turn_budget"), QStringLiteral("language"),
+          QStringLiteral("expected_revision")}},
         {QStringLiteral("team.delete"),
          {QStringLiteral("team_id"), QStringLiteral("confirmation"),
           QStringLiteral("expected_revision")}},
@@ -48,7 +50,7 @@ const QHash<QString, QSet<QString>>& allowedFields() {
           QStringLiteral("integration_branch"), QStringLiteral("merge_policy"),
           QStringLiteral("leader_writes_requirements"), QStringLiteral("execution_policy"),
           QStringLiteral("risk_acknowledged"), QStringLiteral("plan"),
-          QStringLiteral("turn_budget")}},
+          QStringLiteral("turn_budget"), QStringLiteral("language")}},
         {QStringLiteral("team.member.add"),
          {QStringLiteral("team_id"), QStringLiteral("name"), QStringLiteral("lane"),
           QStringLiteral("paths"), QStringLiteral("provider"), QStringLiteral("model"),
@@ -96,16 +98,25 @@ std::optional<QJsonObject> payloadRefusal(const QString& type, const QJsonObject
             return invalid(QStringLiteral("Answer with one of the choices, or 1 to 4,000 "
                                           "characters."));
     }
+    if ((type == QStringLiteral("team.create") || type == QStringLiteral("team.update")) &&
+        payload.contains(QStringLiteral("language"))) {
+        if (const auto refused =
+                teams::rules::validLanguage(payload.value(QStringLiteral("language")).toString()))
+            return refusal(refused->code, refused->message);
+    }
     if (type == QStringLiteral("team.update")) {
         const QJsonValue paused = payload.value(QStringLiteral("paused"));
         const QJsonValue policy = payload.value(QStringLiteral("merge_policy"));
         const QJsonValue budget = payload.value(QStringLiteral("turn_budget"));
-        if ((paused.isUndefined() && policy.isUndefined() && budget.isUndefined()) ||
+        const QJsonValue language = payload.value(QStringLiteral("language"));
+        if ((paused.isUndefined() && policy.isUndefined() && budget.isUndefined() &&
+             language.isUndefined()) ||
             (!paused.isUndefined() && !paused.isBool()) ||
             (!policy.isUndefined() && policy != QStringLiteral("leader") &&
              policy != QStringLiteral("user")))
-            return invalid(QStringLiteral("A paired device pauses, resumes, chooses who "
-                                          "merges or sets the automatic turns."));
+            return invalid(
+                QStringLiteral("A paired device pauses, resumes, chooses who "
+                               "merges, sets automatic turns or chooses a content language."));
     }
     if (type == QStringLiteral("team.delete") &&
         payload.value(QStringLiteral("confirmation")).toString() != QStringLiteral("DELETE"))

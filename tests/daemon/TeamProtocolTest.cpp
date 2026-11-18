@@ -130,13 +130,13 @@ class TeamProtocolTest final : public QObject {
     }
 
     // T-56 (ADR 0120): the team's language comes with team.create; another one is refused
-    // before any member starts, and a client that sends none gets English.
+    // before any member starts; omitted preferences follow the prompt.
     void theLanguageComesWithTheTeam() {
         Fixture fixture;
         QVERIFY(fixture.open());
         const auto createIn = [&](const QJsonValue& language) {
             QJsonObject payload{{"repository", fixture.directory.path()},
-                                {"name", "Checkout"},
+                                {"name", "Checkout " + QString::number(sessions(fixture))},
                                 {"merge_policy", "leader"},
                                 {"plan", plan()}};
             if (!language.isUndefined())
@@ -148,6 +148,13 @@ class TeamProtocolTest final : public QObject {
             QCOMPARE(createIn(bad).value("error_code").toString(),
                      QStringLiteral("invalid_payload"));
         QCOMPARE(sessions(fixture), 0);
+        const QJsonObject automatic = createIn(QJsonValue(QJsonValue::Undefined));
+        QVERIFY(automatic.value("ok").toBool());
+        QCOMPARE(automatic.value("team").toObject().value("language").toString(), QString("auto"));
+        const QJsonObject explicitAuto = createIn("auto");
+        QVERIFY(explicitAuto.value("ok").toBool());
+        QCOMPARE(explicitAuto.value("team").toObject().value("language").toString(),
+                 QString("auto"));
         const QJsonObject made = createIn("vi");
         QVERIFY2(made.value("ok").toBool(), qPrintable(made.value("error_message").toString()));
         QCOMPARE(made.value("team").toObject().value("language").toString(), QStringLiteral("vi"));

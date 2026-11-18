@@ -430,7 +430,7 @@ QJsonObject SessionHost::createTeam(const QJsonObject& payload) {
                        QStringLiteral("The requested permission was not authorized."));
     draft.leaderWritesRequirements =
         payload.value(QStringLiteral("leader_writes_requirements")).toBool(true);
-    // T-56: the leader's language; a client that sends none (an older phone) gets English.
+    // Missing preference follows the prompt, including older clients; never consult OS locale.
     if (payload.contains(QStringLiteral("language"))) {
         draft.language = payload.value(QStringLiteral("language")).toString();
         if (const auto invalid = teams::rules::validLanguage(draft.language))

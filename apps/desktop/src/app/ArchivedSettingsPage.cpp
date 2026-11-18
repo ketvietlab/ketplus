@@ -60,7 +60,8 @@ QString details(const QVariantMap& item) {
     if (archived.isValid())
         parts.append(
             ArchivedSettingsPage::tr("archived %1")
-                .arg(QLocale().toString(archived.toLocalTime().date(), QStringLiteral("d MMM"))));
+                .arg(QLocale(QLocale::English)
+                         .toString(archived.toLocalTime().date(), QStringLiteral("d MMM"))));
     if (item.value(QStringLiteral("running")).toBool())
         parts.append(ArchivedSettingsPage::tr("Running"));
     return parts.join(QStringLiteral(" · "));

@@ -124,7 +124,8 @@ std::optional<TeamError> validReviewRounds(const QJsonValue& value, int* rounds)
 std::optional<TeamError> validLanguage(const QString& language) {
     if (!::ketplus::remote::team_language::isSupported(language))
         return refusal(QStringLiteral("invalid_payload"),
-                       QStringLiteral("A team works in English (\"en\") or Vietnamese (\"vi\")."));
+                       QStringLiteral("Choose a content preference: follow prompt (\"auto\"), "
+                                      "English (\"en\") or Vietnamese (\"vi\")."));
     return std::nullopt;
 }
 

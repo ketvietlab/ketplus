@@ -1891,3 +1891,20 @@ sign-in completion semantics. The remote fixture restores a valid session then f
 read, requiring an explicit error and byte-for-byte retention of both previous host pins.
 These are native C++ tests with synthetic credentials and HTTP replies; they do not certify OS
 ACLs, backup recovery, signed upgrades or deployment.
+
+## English chrome and multilingual team content (T30)
+
+See [the inventory](team-content-language.md). Run `ketplus_team_page_language_tests`,
+`ketplus_team_language_tests`, `ketplus_team_protocol_tests`, `ketplus_team_remote_tests`,
+`ketplus_team_remote_cloud_tests`, `ketplus_team_dialogs_tests`, and
+`ketplus_sidebar_filter_tests` with `QT_QPA_PLATFORM=offscreen`. The page fixture sets a
+Vietnamese default locale; `KETPLUS_T56_CAPTURE` writes actual Qt page/task captures.
+`ketplus_team_translation_catalog_tests` validates preserved catalog completeness, rather
+than requiring Vietnamese translations of newly added English chrome.
+
+Use the existing dialog geometry fixtures for desktop/narrow/short screens and English/
+Vietnamese content. Inspect a native Qt capture of New Team/settings/team/task/decision
+surfaces; retain original logs and render measurements. These tests exercise fake transports
+and generated instructions, not model language compliance or an installed application.
+Shared desktop/header changes still require a full build and full Pro suite. Record first
+failures, bounded failed-only reruns and platform skips without changing thresholds.
