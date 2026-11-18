@@ -213,7 +213,7 @@ class TeamRemoteTest final : public QObject {
         for (const QJsonValue& role :
              {QJsonValue("leader"), QJsonValue("Reviewer"), QJsonValue(" reviewer"), QJsonValue(""),
               QJsonValue(QJsonValue::Null), QJsonValue(3), QJsonValue(true),
-              QJsonValue(QJsonArray{})}) {
+              QJsonValue(QJsonArray{}), QJsonValue(QJsonObject{})}) {
             const auto result = phone(fixture, "team.member.add",
                                       {{"team_id", team.id},
                                        {"role", role},

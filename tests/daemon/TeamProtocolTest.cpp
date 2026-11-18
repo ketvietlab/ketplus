@@ -528,8 +528,8 @@ class TeamProtocolTest final : public QObject {
         const int before = sessions(fixture);
         for (const QJsonValue& role :
              {QJsonValue(QJsonValue::Null), QJsonValue(3), QJsonValue(true),
-              QJsonValue(QJsonArray{}), QJsonValue("leader"), QJsonValue("Reviewer"),
-              QJsonValue("")}) {
+              QJsonValue(QJsonArray{}), QJsonValue(QJsonObject{}), QJsonValue("leader"),
+              QJsonValue("Reviewer"), QJsonValue("")}) {
             const auto result = command(fixture, "team.member.add",
                                         {{"team_id", id},
                                          {"name", "Refused member"},

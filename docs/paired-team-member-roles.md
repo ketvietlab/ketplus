@@ -65,7 +65,9 @@ belongs to the client owner and is not implemented or copied here.
 
 Run the actual host fixtures `ketplus_team_remote_tests`,
 `ketplus_team_remote_cloud_tests` and `ketplus_team_protocol_tests`, together with
-the directly affected team rules/provider-policy fixtures required by
+`ketplus_team_store_tests`, `ketplus_team_reviewers_tests` and
+`ketplus_team_review_policy_tests` as the directly affected rules/provider-policy
+fixtures required by
 [testing.md](testing.md#minimum-verification). The cases cover explicit/omitted roles,
 malformed/leader/actor/policy injection, no partial member/session creation, replay,
 member limits, reviewer support, stale revision and authenticated paired scope.
