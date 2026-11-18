@@ -4,10 +4,11 @@
 #include <QObject>
 #include <QString>
 
-class QSocketNotifier;
-class QTimer;
+#include <memory>
 
 namespace ketplus {
+
+class PtyBackend;
 
 class PtyProcess final : public QObject {
     Q_OBJECT
@@ -31,18 +32,6 @@ class PtyProcess final : public QObject {
     void errorOccurred(const QString& message);
 
   private:
-    void readAvailable();
-    void flushPendingWrite();
-    void checkChild();
-    void closeMaster();
-
-    int masterFileDescriptor_{-1};
-    qint64 childProcessId_{-1};
-    QSocketNotifier* readNotifier_{nullptr};
-    QSocketNotifier* writeNotifier_{nullptr};
-    QTimer* childTimer_{nullptr};
-    QByteArray pendingWrite_;
-    QString shellPath_;
+    std::unique_ptr<PtyBackend> backend_;
 };
-
-} // namespace ketplus
+}; // namespace ketplus

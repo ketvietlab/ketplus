@@ -168,11 +168,17 @@ ketplus_enable_warnings(ketplus_workspace)
 add_library(KetPlusCM::workspace ALIAS ketplus_workspace)
 
 add_library(ketplus_terminal_core STATIC
+    src/terminal/PtyBackend.h
     src/terminal/PtyProcess.cpp
     src/terminal/PtyProcess.h
     src/terminal/TerminalSession.cpp
     src/terminal/TerminalSession.h
 )
+if(WIN32)
+    target_sources(ketplus_terminal_core PRIVATE src/terminal/PtyBackendWindows.cpp)
+else()
+    target_sources(ketplus_terminal_core PRIVATE src/terminal/PtyBackendPosix.cpp)
+endif()
 target_link_libraries(ketplus_terminal_core PUBLIC Qt6::Core ketplus_vterm)
 if(UNIX AND NOT APPLE)
     target_link_libraries(ketplus_terminal_core PRIVATE util)
@@ -742,6 +748,13 @@ if(KETPLUS_CM_BUILD_TESTS)
     set_tests_properties(ketplus_search_view_tests PROPERTIES
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
     )
+
+    add_executable(ketplus_pty_backend_tests tests/PtyBackendTest.cpp)
+    target_link_libraries(ketplus_pty_backend_tests
+        PRIVATE Qt6::Test KetPlusCM::terminal_core
+    )
+    ketplus_enable_warnings(ketplus_pty_backend_tests)
+    ketplus_cm_add_test(ketplus_pty_backend_tests ketplus_pty_backend_tests)
 
     add_executable(ketplus_terminal_tests tests/PtyProcessTest.cpp)
     target_link_libraries(ketplus_terminal_tests

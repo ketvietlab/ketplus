@@ -29,7 +29,7 @@ Qt application shell
         -> libvterm screen and keyboard model
         -> PTY process backend
             -> forkpty (macOS/Linux)
-            -> ConPTY (future Windows backend)
+            -> ConPTY (Windows 10 1809+)
     -> reusable settings shell from KetPlus CM
         -> shared appearance snapshot and built-in theme preview
         -> private pages remain consumer-owned through SettingsPage
@@ -91,8 +91,9 @@ Qt application shell
   processes, including bounded output and a
   timeout; this does not expand the public Git service's mutation surface.
 - `core/src/terminal` owns the embedded terminal surface, VT state, scrollback, and
-  process transport. `PtyProcess` isolates platform process creation from the
-  renderer so a ConPTY backend can be added without changing terminal UI code.
+  process transport. `PtyProcess` keeps one public API and delegates to a
+  `PtyBackend`: `PtyBackendPosix.cpp` (forkpty) or `PtyBackendWindows.cpp` (ConPTY, chosen by
+  CMake per platform). The Windows shell is `SHELL` if set, else pwsh, powershell, then cmd.
 - `core/src/app/SettingsDialog` owns the reusable settings shell and
   public appearance persistence. `core/src/app/SettingsWorkspace` recomposes its
   live theme and typography controls as the non-modal, full-page Két settings
