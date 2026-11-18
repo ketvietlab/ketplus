@@ -56,9 +56,13 @@ class SnapshotReceiver {
     virtual ~SnapshotReceiver() = default;
     // The `snapshots` of `hello`: workspaceKey -> snapshotId held for this desktop.
     [[nodiscard]] virtual QMap<QString, QString> heldSnapshots(const QString& machineId) const = 0;
-    virtual void begin(const protocol::JobSpec& spec, Send send) = 0;
+    // `machineId` is the requesting desktop's.
+    virtual void begin(const protocol::JobSpec& spec, const QString& machineId, Send send) = 0;
     // `snapshot.offer` and `snapshot.chunk` of the current job.
     virtual void receive(const protocol::Frame& frame) = 0;
+    // A whole `bulk` transfer: the payload of the `snapshot.chunk` naming `transferId`, which
+    // may arrive before or after it.
+    virtual void receivePayload(const QString& transferId, const QByteArray& payload) = 0;
     virtual void cancel() = 0;
 };
 

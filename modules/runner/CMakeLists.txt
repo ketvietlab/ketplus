@@ -9,6 +9,8 @@ add_library(ketplus_runner_snapshot STATIC
     src/snapshot/SnapshotResult.h
     src/snapshot/WorkspaceApply.cpp
     src/snapshot/WorkspaceApply.h
+    src/snapshot/WorkspaceStore.cpp
+    src/snapshot/WorkspaceStore.h
     src/snapshot/WorktreeSnapshot.cpp
     src/snapshot/WorktreeSnapshot.h
 )

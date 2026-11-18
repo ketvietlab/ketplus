@@ -419,6 +419,14 @@ bool rules::isJobId(const QString& text) { return isToken(text, limits::maxIdCha
 
 bool rules::isAttempt(const qint64 value) { return value >= 1 && value <= limits::maxAttempt; }
 
+bool rules::isKey(const QString& text) { return protocol::isKey(text); }
+
+bool rules::isObjectId(const QString& text) { return protocol::isObjectId(text); }
+
+bool rules::isLowerHex(const QString& text, const qsizetype length) {
+    return protocol::isLowerHex(text, length);
+}
+
 QLatin1StringView frameType(const Frame& frame) {
     return std::visit([](const auto& f) { return std::decay_t<decltype(f)>::type; }, frame);
 }

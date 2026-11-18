@@ -35,3 +35,13 @@ ketplus_enable_warnings(ketplus_runner_session_tests)
 target_link_libraries(ketplus_runner_session_tests PRIVATE Qt6::Test ketplus_runner_session)
 add_test(NAME ketplus_runner_session_tests COMMAND ketplus_runner_session_tests)
 ketplus_tests_offscreen()
+
+# The runner's snapshot receiver with real packs from the snapshot library and the system git;
+# temporary directories only, no network.
+qt_add_executable(ketplus_runner_receiver_tests
+    RunnerReceiverApplyTest.cpp RunnerReceiverChunkTest.cpp RunnerReceiverKeepTest.cpp
+    RunnerReceiverTest.cpp RunnerReceiverTest.h)
+ketplus_enable_warnings(ketplus_runner_receiver_tests)
+target_link_libraries(ketplus_runner_receiver_tests PRIVATE
+    Qt6::Test ketplus_runner_snapshot_receiver)
+add_test(NAME ketplus_runner_receiver_tests COMMAND ketplus_runner_receiver_tests)

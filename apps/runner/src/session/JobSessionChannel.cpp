@@ -211,4 +211,9 @@ void JobSession::onFrame(const Frame& frame) {
         frame);
 }
 
+void JobSession::bulkReceived(const QString& transferId, const QByteArray& payload) {
+    if (m_phase == Phase::Syncing)
+        m_ports.snapshots.receivePayload(transferId, payload);
+}
+
 } // namespace ketplus::runner::session

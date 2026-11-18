@@ -69,6 +69,8 @@ class JobSession {
     void frameReceived(protocol::Channel channel, const QByteArray& message);
     // `events` takes frames again.
     void eventsWritable();
+    // A whole transfer on `bulk`: a snapshot chunk's payload, passed on while syncing.
+    void bulkReceived(const QString& transferId, const QByteArray& payload);
 
     void leaseStarted(const QString& startedAt);
     void leaseStartRefused(const QString& code);

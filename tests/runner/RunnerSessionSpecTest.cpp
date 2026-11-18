@@ -100,6 +100,7 @@ void RunnerSessionSpecTest::orderOfStartAcceptedAndStarted() {
     host.session->leaseStarted(startedAt);
     QCOMPARE(host.sentTypes(), QStringList{"job.accepted"});
     QCOMPARE(host.snapshots.begun, QStringList{"job-1"});
+    QCOMPARE(host.snapshots.machines, QStringList{"desktop-1"});
     // The receiver's own frames go out while it syncs.
     host.snapshots.send(SnapshotWant{spec.snapshotId, QStringLiteral("need"), 0});
     host.deliver(SnapshotOffer{7,
@@ -111,6 +112,9 @@ void RunnerSessionSpecTest::orderOfStartAcceptedAndStarted() {
                                limits::chunkBytes,
                                {}});
     QCOMPARE(host.snapshots.received.size(), 1);
+    host.session->bulkReceived(QStringLiteral("00000000000000aa"), QByteArray("pack"));
+    QCOMPARE(host.snapshots.payloads.size(), 1);
+    QCOMPARE(host.snapshots.payloads.first().first, QStringLiteral("00000000000000aa"));
     QVERIFY(host.command.launches.isEmpty()); // nothing runs before the snapshot is ready
     host.session->snapshotReady(QStringLiteral("/work/ws"), {QStringLiteral("lfs_not_synced")});
     QCOMPARE(host.command.launches.size(), 1);
@@ -118,6 +122,8 @@ void RunnerSessionSpecTest::orderOfStartAcceptedAndStarted() {
              (QStringList{"job.accepted", "snapshot.want", "snapshot.ready", "job.started"}));
     QCOMPARE(host.sentOf<JobStarted>().first().startedAt, startedAt);
     QCOMPARE(host.session->phase(), Phase::Running);
+    host.session->bulkReceived(QStringLiteral("00000000000000bb"), QByteArray("late"));
+    QCOMPARE(host.snapshots.payloads.size(), 1); // dropped outside syncing
     host.session->commandFinished({QStringLiteral("exited"), 0, std::nullopt, {}, "verified"});
     const JobResult result = host.sentOf<JobResult>().first();
     QCOMPARE(result.warnings, QStringList{"lfs_not_synced"});

@@ -88,10 +88,11 @@ void JobSession::beginSnapshot() {
     if (m_link == Link::None)
         m_ports.clock.arm(SessionTimer::PeerAbsent, peerAbsentMs);
     const quint64 generation = m_generation;
-    m_ports.snapshots.begin(*m_job->spec, [this, generation](const Frame& frame) {
-        if (generation == m_generation && m_phase == Phase::Syncing)
-            send(frame);
-    });
+    m_ports.snapshots.begin(*m_job->spec, m_job->assignment.machineId,
+                            [this, generation](const Frame& frame) {
+                                if (generation == m_generation && m_phase == Phase::Syncing)
+                                    send(frame);
+                            });
 }
 
 void JobSession::snapshotReady(const QString& workspace, const QStringList& warnings) {
