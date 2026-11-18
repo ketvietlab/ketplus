@@ -417,6 +417,9 @@ class ManagedTaskAttentionRecoveryTest final : public QObject {
             bool initializationDispatched = false;
             QTimer::singleShot(0, &host, [&] { initializationDispatched = true; });
             QTRY_VERIFY_WITH_TIMEOUT(initializationDispatched, 6000);
+            // Exercise more than two 500 ms wake-dispatch polls after reopening
+            // the suppressed completion, not just synchronous registry reads.
+            QTest::qWait(1100);
             latest = task(host, id, &latest);
             QCOMPARE(latest.value("state"), "interrupted");
             QCOMPARE(latest.value("cleanup_status"), "unverified");
