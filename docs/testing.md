@@ -1910,12 +1910,50 @@ processes through the Job Object), `ketplus_windows_script_launch_tests` (`cmd.e
 id checks), a pipe-server user check in `ketplus_windows_platform_tests`, and `HeadlessDaemonTest::windowsPipe...` (daemon and
 `ketplusctl` over the named pipe, a wrong credential refused, clean exit on `CTRL_BREAK`).
 
-Disabled on Windows (built, label `windows-script-fixture`), because their provider fixtures are
-`#!/usr/bin/env python3` scripts launched by path, or JavaScript that assumes POSIX paths. They
-still run on macOS and Linux; a follow-up runs the fixtures through explicit `python.exe` /
-`node.exe`:
+Provider fixtures are Python scripts written as `<name>.py`. On macOS and Linux the script
+itself is the executable (`#!/usr/bin/env python3`). On Windows `tests/daemon/ScriptFixture.h`
+copies `ketplus_script_launcher` (`ScriptLauncher.cpp`) to `<name>.exe`; the launcher starts the
+configured `python.exe` on `<name>.exe.py` with the same arguments and stdio, sets
+`PYTHONUTF8=1`, and ends the interpreter when the launcher is killed (Job Object). A fixture name
+therefore goes through `fixtureName()`, and a test that needs an absolute path that does not exist
+uses `absoluteTestPath()` (`"/repo"` is not absolute on Windows). Fixture logs written by Python
+carry `\r\n` on Windows; a test that matches a whole line normalises it first.
 
-`ketplus_context_harness_tests`, `ketplus_provider_deletion_tests`, `ketplus_daemon_worktree_context_tests`, `ketplus_daemon_claude_worktree_tests`, `ketplus_daemon_lifecycle_tests`, `ketplus_turn_acceptance_tests`, `ketplus_daemon_claude_adapter_tests`, `ketplus_computer_tool_launch_tests`, `ketplus_computer_provider_integration_tests`, `ketplus_daemon_cursor_adapter_tests`, `ketplus_daemon_session_fork_tests`, `ketplus_agent_messaging_tests`, `ketplus_agent_urgent_delivery_tests`, `ketplus_team_routing_tools_tests`, `ketplus_team_finding_routing_tests`, `ketplus_team_task_tests`, `ketplus_team_task_git_tests`, `ketplus_team_agent_tools_tests`, `ketplus_team_flow_tests`, `ketplus_team_title_tests`, `ketplus_team_reply_tests`, `ketplus_team_review_tests`, `ketplus_team_lane_tests`, `ketplus_team_budget_tests`, `ketplus_team_merge_tests`, `ketplus_team_done_tests`, `ketplus_team_storage_tests`, `ketplus_work_report_tests`, `ketplus_awaiting_reply_tests`, `ketplus_turn_review_tests`, `ketplus_provider_compatibility_tests`, `ketplus_daemon_schedule_host_tests`, `ketplus_claude_credentials_tests`, `ketplus_daemon_upgrade_tests`, `ketplus_async_question_lifetime_tests`, `ketplus_relay_attachment_host_tests`, `ketplus_session_preparation_host_tests`, `ketplus_relay_preparation_host_tests`, `ketplus_codex_session_isolation_tests`, `ketplus_acp_session_isolation_tests`, and `ketplus_claude_sidecar_tests`.
+The tests that use these fixtures carry the label `windows-script-fixture`, so
+`ctest --preset daemon-dev -L windows-script-fixture` runs them. They were disabled on Windows
+before; they now run. Last full Windows run (`ctest --preset daemon-dev -j4 --timeout 240`):
+163 tests, 156 pass, 7 do not (see below); the 40 fixture tests plus `ketplus_claude_sidecar_tests`
+were all disabled before. macOS and Linux are unchanged.
+
+Not passing in that run: `ketplus_daemon_journal_migration_recovery_tests` needs 4-6 minutes on
+NTFS, so it times out at 240 s and passes with a larger `--timeout`; `ketplus_peer_session_runner_tests` and
+the four `ketplus_snapshot_*` tests do not build on Windows yet (runner snapshot code, tracked
+separately). Disabled with a reason: `ketplus_claude_sidecar_posix_tests` (the Claude sidecar
+JavaScript tests that hang or fail under `node --test` on Windows: transcript, permissions,
+agent-tools, usage, compact-window, steer, fork, background-tasks, managed-background,
+model-catalog, review-guard, review-profile; the other sidecar files run in
+`ketplus_claude_sidecar_tests`) and `ketplus_acp_session_isolation_tests`.
+
+Skipped inside a test on Windows with `KETPLUS_SKIP_ON_WINDOWS(reason)`; the reason prints in
+the test output. Needs a Windows port of the fixture: `TeamReplyTest` (three tests),
+`TeamTaskGitTest` (two) and `TeamDoneTest` (two) use a POSIX shell script as a fake `git` or
+`gh`. Not yet diagnosed (each prints its symptom): `DaemonWorktreeContextTest` (four tests: the
+provider log has no `provider-input`, `steer-input` or `model-list` line, or the pending
+question is not found), `AgentMessagingTest::agentConnectionsOnlyReachAgentOperations`,
+`CursorAdapterTest::findsTheCliInstalledAfterStartup`, `ProviderCompatibilityTest::
+probeCachesUntilTheExecutableChanges`, `SessionForkTest::destinationCreatedWhileProviderFork
+IsPendingIsPreserved`, `TeamReviewTest` and `TurnReviewTest` (the Codex review checks and five
+review-turn tests), `TeamStorageTest::theMainCheckoutIsRefused`, the `ordinary-prose`,
+`concurrent-only`, `ignored-gitlink` and `replaced-base-tree` rows of
+`TeamRoutingToolsTest::authenticatedToolsUseRealProducerThenHostLookupThenPolicy`,
+`TeamFindingRoutingTest::authenticatedClosureUsesRealProducerStoreAndReviewedRecord` (the remote
+branch cannot be read and the test then crashes), `TeamAgentToolsTest::theLeadersFirstTurnCarries
+TheGoalAndItsInstructions` (hangs), `CodexSessionIsolationTest::twoSessionsKeepHistoryWhileOnly
+OneProcessRefreshes`. By design: `ComputerProviderIntegrationTest::frontFollowsSettingsForEach
+Provider` (macOS app bundle path), `ProviderCompatibilityTest::prefersHomebrewUpdateFor
+HomebrewInstalls` (Homebrew), `SessionForkTest::forkRequiresMediaOwnershipBeforeJournalCommit
+(source-unreadable)` (POSIX mode), `JournalStartupTest::startupBacklogCharacterization` (a 250 ms
+startup budget; SQLite commits are several times slower on NTFS).
 
 Skipped inside tests on Windows, each with its reason in the test source: fixtures that need POSIX
 symbolic links (`QFile::link` makes a `.lnk` shortcut), file-mode assertions (access is an ACL, see
