@@ -1,6 +1,7 @@
 // Stops, timers and failures of a remote job through RemoteJobs with real parts: the Relay and
 // the runner are played by the test, time moves only when the test moves it.
 #include "RemoteJobsRunnerEnd.h"
+#include "storage/BackgroundTaskOutput.h"
 
 #include <QTest>
 
@@ -331,8 +332,8 @@ class RemoteJobsStopTest final : public QObject {
         QCOMPARE(e.h.relay.sent(QStringLiteral("get")), before + 1);
     }
 
-    // The Relay stops offering runners while a job runs: only new submits are refused. The
-    // runner's peer goes on, a stop still reaches it and its result ends the record.
+    // The Relay stops offering runners (or the daemon signs out) while a job runs: new submits
+    // are refused, the job goes on over its peer, its output is kept and its result ends it.
     void aRunningJobOutlivesTheRelaysRunnerOffer() {
         Running r;
         QVERIFY(r.start(2 * 60 * 60 * 1000));
@@ -341,51 +342,54 @@ class RemoteJobsStopTest final : public QObject {
         QString refused;
         r.e.h.jobs->submit(r.e.h.f.remoteTask(), {}, [&](const QString& code) { refused = code; });
         QCOMPARE(refused, QStringLiteral("runner_unavailable"));
-        r.e.h.jobs->relaySocketReopened();
-        QVERIFY(!r.end->closed());
-        QCOMPARE(r.e.h.jobs->record(r.id)->state, state::running);
 
-        QVERIFY(r.e.h.jobs->stop(r.id).ok());
-        QVERIFY(
-            r.e.play(*r.end, [&] { return !framesOf<protocol::JobCancel>(r.e.seen).isEmpty(); }));
-        r.end->send(resultOf(QStringLiteral("cancelled")));
+        r.end->send(protocol::JobOutput{linkedJob, 0, QByteArrayLiteral("abc")});
+        protocol::JobResult result = resultOf(QStringLiteral("exited"), 0);
+        result.outputBytes = 3;
+        r.end->send(result);
         QVERIFY(r.e.play(*r.end, [&] { return r.e.resultAcked; }));
-        QCOMPARE(r.e.h.jobs->record(r.id)->state, state::cancelled);
-        QCOMPARE(r.e.h.f.state(r.id), state::cancelled);
+        QCOMPARE(r.e.h.jobs->record(r.id)->state, state::completed);
+        QCOMPARE(r.e.h.f.state(r.id), state::completed);
+        QCOMPARE(ketplus::daemon::BackgroundTaskOutput(r.e.h.f.database).read(r.id).bytes,
+                 QByteArrayLiteral("abc"));
         QCOMPARE(outboxOf(r.e.h.f, r.id), 1);
     }
 
-    // The Relay socket drops and opens again while a job runs: the same account keeps its links,
-    // so the runner's connection and the job go on.
+    // The Relay socket drops and opens again while a job runs: the job goes on over its peer,
+    // the Relay is asked once about the record still waiting there, and the running job ends
+    // with one completion only, also after another reopening.
     void aRunningJobOutlivesADroppedRelaySocket() {
         Running r;
         QVERIFY(r.start(2 * 60 * 60 * 1000));
+        const QString waiting = r.e.submit(60'000, QStringLiteral("job-2"));
+        QVERIFY(!waiting.isEmpty());
+        const int before = r.e.h.relay.sent(QStringLiteral("get"));
         r.e.h.jobs->relaySocketReopened();
+        QCOMPARE(r.e.h.relay.sent(QStringLiteral("get")), before + 1);
         QVERIFY(!r.end->closed());
         QCOMPARE(r.e.h.jobs->record(r.id)->state, state::running);
         QVERIFY(!r.e.h.clock.isArmed(r.id, JobTimer::PeerAbsent));
+
         r.end->send(resultOf(QStringLiteral("exited"), 0));
         QVERIFY(r.e.play(*r.end, [&] { return r.e.resultAcked; }));
+        QCOMPARE(r.e.h.jobs->record(r.id)->state, state::completed);
+        r.e.h.jobs->relaySocketReopened();
         QCOMPARE(r.e.h.jobs->record(r.id)->state, state::completed);
         QCOMPARE(r.e.h.f.state(r.id), state::completed);
         QCOMPARE(outboxOf(r.e.h.f, r.id), 1);
     }
 
-    // Signed out while a job runs: the Relay socket stops and no runner is offered any more, but
-    // the runner's peer connection stays, so its result still ends the record. Signing in again
-    // under another account is anAccountChangeEndsTheOldLinks.
-    void aRunningJobEndsOverItsPeerAfterASignOut() {
+    // Both the Relay and the runner's peer gone for 20 minutes: the record needs attention.
+    void aRunningJobWithoutRelayOrPeerNeedsAttention() {
         Running r;
         QVERIFY(r.start(2 * 60 * 60 * 1000));
-        r.e.h.scope.clear();
         r.e.h.relay.offered = false;
-        QVERIFY(!r.e.h.jobs->available());
-        QVERIFY(!r.end->closed());
-        r.end->send(resultOf(QStringLiteral("exited"), 0));
-        QVERIFY(r.e.play(*r.end, [&] { return r.e.resultAcked; }));
-        QCOMPARE(r.e.h.jobs->record(r.id)->state, state::completed);
-        QCOMPARE(r.e.h.f.state(r.id), state::completed);
-        QCOMPARE(outboxOf(r.e.h.f, r.id), 1);
+        r.end->lose();
+        r.e.h.clock.advance(20 * 60 * 1000 - 1);
+        QCOMPARE(r.e.h.jobs->record(r.id)->state, state::running);
+        r.e.h.clock.advance(1);
+        QCOMPARE(r.e.h.jobs->record(r.id)->state, state::needsAttention);
+        QCOMPARE(r.e.h.f.state(r.id), state::needsAttention);
     }
 };
 

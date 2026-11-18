@@ -74,6 +74,17 @@ class RemoteJobsRelaySocketTest final : public QObject {
         QCOMPARE(opened, 2);
     }
 
+    // Signing out is losing the Relay for remote jobs: no runner is offered any more.
+    void signingOutWithdrawsTheRunnerRelay() {
+        Fixture f;
+        QVERIFY(f.service().port().runnerRelayAvailable());
+        bool signedOut = false;
+        f.client->handleLocal("remote.sign_out", {},
+                              [&](const QJsonObject&, const QString&) { signedOut = true; });
+        QTRY_VERIFY(signedOut);
+        QVERIFY(!f.service().port().runnerRelayAvailable());
+    }
+
     void aClosedSocketSendsNothing() {
         Fixture f;
         QVERIFY(!f.client->sendRelayMessage({{"type", "signal.end"}, {"connectionId", "c"}}));

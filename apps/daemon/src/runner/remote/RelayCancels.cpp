@@ -14,15 +14,17 @@ const QString userReason = QStringLiteral("user");
 const QString jobNotFound = QStringLiteral("job_not_found");
 } // namespace
 
-RelayCancels::RelayCancels(jobs::JobRelay& relay, Schedule schedule)
-    : relay_(relay), schedule_(std::move(schedule)) {}
+RelayCancels::RelayCancels(jobs::JobRelay& relay, const jobs::JobClock& clock, Schedule schedule)
+    : relay_(relay), clock_(clock), schedule_(std::move(schedule)) {}
 
 RelayCancels::~RelayCancels() = default;
 
 void RelayCancels::cancel(const QString& taskId, const QString& jobId, const QStringList& runsOn) {
     if (taskId.isEmpty() || cancels_.contains(taskId))
         return;
-    cancels_.insert(taskId, Cancel{jobId, runsOn});
+    Cancel cancel{jobId, runsOn};
+    cancel.created = clock_.now();
+    cancels_.insert(taskId, cancel);
     attempt(taskId);
 }
 
@@ -30,7 +32,16 @@ void RelayCancels::attempt(const QString& taskId) {
     const auto found = cancels_.find(taskId);
     if (found == cancels_.end())
         return;
+    if (found->created.msecsTo(clock_.now()) >= givenUpAfterMs) {
+        qCWarning(lcCancels).noquote() << "relay cancel given up task=" + taskId;
+        cancels_.erase(found);
+        return;
+    }
     const quint64 generation = ++found->generation;
+    if (!relay_.available()) {
+        retry(taskId); // nothing is sent while the Relay is unavailable
+        return;
+    }
     const std::weak_ptr<int> alive = alive_;
     if (found->jobId.isEmpty()) {
         relay_.submit(taskId, found->runsOn,
@@ -73,13 +84,6 @@ void RelayCancels::answered(const QString& taskId, const quint64 generation,
         return;
     if (outcome.ok() || outcome.failure.code == jobNotFound) {
         qCInfo(lcCancels).noquote() << "relay cancel answered task=" + taskId;
-        cancels_.erase(found);
-        return;
-    }
-    // A refusal that asking again cannot change ends the cancel; the others are retried.
-    if (jobs::submitRefusalReason(outcome.failure.code)) {
-        qCWarning(lcCancels).noquote()
-            << "relay cancel refused task=" + taskId + " code=" + outcome.failure.code;
         cancels_.erase(found);
         return;
     }

@@ -46,7 +46,7 @@ RemoteJobs::RemoteJobs(RemoteJobsPorts ports)
                   sessions_.snapshotReady(jobId);
           },
           ports_.defer),
-      cancels_(*ports_.relay, ports_.defer) {
+      cancels_(*ports_.relay, *ports_.jobClock, ports_.defer) {
     QString error;
     // The output store is otherwise created by the first local job that writes output.
     open_ = ports_.ledger && ports_.ledger->initialize(&error) &&

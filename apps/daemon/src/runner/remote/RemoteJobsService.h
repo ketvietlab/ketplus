@@ -2,10 +2,12 @@
 
 #include "storage/BackgroundTaskLedger.h"
 
+#include <QJsonObject>
 #include <QObject>
 #include <QString>
 #include <QTimer>
 
+#include <functional>
 #include <memory>
 
 namespace ketplus::daemon {
@@ -14,6 +16,7 @@ class CloudControlClient;
 
 namespace ketplus::daemon::runner {
 class RunnerPinStore;
+class RunnerRelayPort;
 namespace jobs {
 class PinRunnerTrust;
 class QtJobClock;
@@ -40,12 +43,29 @@ namespace ketplus::daemon::runner::remote {
 class RemoteJobs;
 class SnapshotStores;
 
+// The Relay socket as remote jobs use it.
+class RelaySocket {
+  public:
+    using Take = std::function<bool(const QJsonObject& message)>;
+    virtual ~RelaySocket() = default;
+    virtual bool send(const QJsonObject& message) = 0;
+    // Offers each message to `take` first and reports each opening; empty gives them back.
+    virtual void take(Take take, std::function<void()> reopened) = 0;
+};
+
 class RemoteJobsService final : public QObject {
     Q_OBJECT
   public:
+    static constexpr int hourlySweepMs = 60 * 60 * 1000;
+
     // `ledger` is a handle on the daemon's registry; `stateDirectory` holds the snapshot stores.
+    // Runners the user removes through the Control client end their jobs.
     RemoteJobsService(BackgroundTaskLedger ledger, CloudControlClient& cloud,
                       const QString& stateDirectory, QObject* parent = nullptr);
+    // The same on any runner port and socket, sweeping every `sweepIntervalMs`.
+    RemoteJobsService(BackgroundTaskLedger ledger, RunnerRelayPort& port,
+                      std::unique_ptr<RelaySocket> socket, const QString& stateDirectory,
+                      int sweepIntervalMs = hourlySweepMs, QObject* parent = nullptr);
     ~RemoteJobsService() override;
 
     // Once, before the Control client starts: resumes the records and takes runner messages.
@@ -56,7 +76,7 @@ class RemoteJobsService final : public QObject {
     class Signals;
 
     BackgroundTaskLedger ledger_;
-    CloudControlClient& cloud_;
+    std::unique_ptr<RelaySocket> socket_;
     std::unique_ptr<RunnerPinStore> pins_;
     std::unique_ptr<jobs::RemoteJobRelay> relay_;
     std::unique_ptr<jobs::QtJobClock> jobClock_;
@@ -69,7 +89,7 @@ class RemoteJobsService final : public QObject {
     std::unique_ptr<link::FunctionRunnerPins> linkPins_;
     std::unique_ptr<link::FunctionMachineIdentity> identity_; // of the current links
     std::unique_ptr<Signals> signals_;
-    QTimer sweep_{this}; // named "remote-jobs-sweep"
+    QTimer sweep_;
     // Last, so it goes first: it holds references to every part above.
     std::unique_ptr<RemoteJobs> jobs_;
 };

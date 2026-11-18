@@ -24,23 +24,48 @@
 namespace ketplus::daemon::runner::remote {
 
 namespace {
-constexpr int sweepIntervalMs = 60 * 60 * 1000;
-} // namespace
 
-// Signaling of the runner links leaves on the Relay socket.
-class RemoteJobsService::Signals final : public link::SignalOut {
+// The Control client's Relay socket.
+class CloudSocket final : public RelaySocket {
   public:
-    explicit Signals(CloudControlClient& cloud) : cloud_(cloud) {}
-    void sendSignal(const QJsonObject& message) override { (void)cloud_.sendRelayMessage(message); }
+    explicit CloudSocket(CloudControlClient& cloud) : cloud_(cloud) {}
+    bool send(const QJsonObject& message) override { return cloud_.sendRelayMessage(message); }
+    void take(Take take, std::function<void()> reopened) override {
+        cloud_.setRunnerMessages(std::move(take), std::move(reopened));
+    }
 
   private:
     CloudControlClient& cloud_;
 };
 
+} // namespace
+
+// Signaling of the runner links leaves on the Relay socket.
+class RemoteJobsService::Signals final : public link::SignalOut {
+  public:
+    explicit Signals(RelaySocket& socket) : socket_(socket) {}
+    void sendSignal(const QJsonObject& message) override { (void)socket_.send(message); }
+
+  private:
+    RelaySocket& socket_;
+};
+
 RemoteJobsService::RemoteJobsService(BackgroundTaskLedger ledger, CloudControlClient& cloud,
                                      const QString& stateDirectory, QObject* parent)
-    : QObject(parent), ledger_(std::move(ledger)), cloud_(cloud) {
-    RunnerRelayPort& port = cloud_.runners().port();
+    : RemoteJobsService(std::move(ledger), cloud.runners().port(),
+                        std::make_unique<CloudSocket>(cloud), stateDirectory, hourlySweepMs,
+                        parent) {
+    connect(&cloud.runners(), &RunnerService::runnerRemoved, this,
+            [this](const QString& runnerId, const QString& clientId) {
+                (void)jobs_->runnerRemoved(runnerId, clientId);
+            });
+}
+
+RemoteJobsService::RemoteJobsService(BackgroundTaskLedger ledger, RunnerRelayPort& port,
+                                     std::unique_ptr<RelaySocket> socket,
+                                     const QString& stateDirectory, const int sweepIntervalMs,
+                                     QObject* parent)
+    : QObject(parent), ledger_(std::move(ledger)), socket_(std::move(socket)) {
     pins_ = std::make_unique<RunnerPinStore>(port.credentials());
     relay_ = std::make_unique<jobs::RemoteJobRelay>(port);
     jobClock_ = std::make_unique<jobs::QtJobClock>();
@@ -57,7 +82,7 @@ RemoteJobsService::RemoteJobsService(BackgroundTaskLedger ledger, CloudControlCl
     transports_ = std::make_unique<link::WebRtcAnswerTransportFactory>();
     linkPins_ = std::make_unique<link::FunctionRunnerPins>(
         [pins = pins_.get()](const QString& runnerId) { return pins->pin(runnerId); });
-    signals_ = std::make_unique<Signals>(cloud_);
+    signals_ = std::make_unique<Signals>(*socket_);
 
     const QPointer<RemoteJobsService> self(this);
     const auto defer = [self](const qint64 delayMs, std::function<void()> work) {
@@ -114,18 +139,13 @@ RemoteJobsService::RemoteJobsService(BackgroundTaskLedger ledger, CloudControlCl
         jobs_->jobTimer(taskId, timer);
     });
     linkClock_->setFired([this](const QString& connectionId) { jobs_->linkTimer(connectionId); });
-    sweep_.setObjectName(QStringLiteral("remote-jobs-sweep"));
     sweep_.setInterval(sweepIntervalMs);
     connect(&sweep_, &QTimer::timeout, this,
             [this] { jobs_->sweep(QDateTime::currentDateTimeUtc()); });
-    connect(&cloud_.runners(), &RunnerService::runnerRemoved, this,
-            [this](const QString& runnerId, const QString& clientId) {
-                (void)jobs_->runnerRemoved(runnerId, clientId);
-            });
 }
 
 RemoteJobsService::~RemoteJobsService() {
-    cloud_.setRunnerMessages({}, {});
+    socket_->take({}, {});
     sweep_.stop();
     jobClock_->setFired({});
     linkClock_->setFired({});
@@ -134,9 +154,8 @@ RemoteJobsService::~RemoteJobsService() {
 
 void RemoteJobsService::start() {
     jobs_->restore();
-    cloud_.setRunnerMessages(
-        [this](const QJsonObject& message) { return jobs_->relayMessage(message); },
-        [this] { jobs_->relaySocketReopened(); });
+    socket_->take([this](const QJsonObject& message) { return jobs_->relayMessage(message); },
+                  [this] { jobs_->relaySocketReopened(); });
     jobs_->sweep(QDateTime::currentDateTimeUtc());
     sweep_.start();
 }

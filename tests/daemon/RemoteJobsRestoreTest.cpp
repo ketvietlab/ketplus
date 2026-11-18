@@ -129,27 +129,51 @@ class RemoteJobsRestoreTest final : public QObject {
         QCOMPARE(h.relay.sent(QStringLiteral("cancel")), 2);
     }
 
-    // Signing out or the Relay no longer offering runners can pass: the cancel is repeated, at
-    // most every 30 seconds. A refusal that cannot change ends it.
-    void aRelayCancelStopsAtARefusalThatCannotChange() {
+    // While the Relay is unavailable (signed out, or no runner.relay/1) a cancel only waits; it is
+    // sent at the first attempt after the Relay is back.
+    void aRelayCancelWaitsWhileTheRelayIsUnavailable() {
+        RemoteHarness h;
+        const QString queued = h.f.remoteTask();
+        QVERIFY(h.write(queuedSteps(queued, QStringLiteral("job-q"))));
+        h.relay.offered = false;
+        h.build();
+        h.jobs->restore();
+        QCOMPARE(h.f.state(queued), state::interrupted);
+        // Each attempt schedules the next one, so they run one at a time here.
+        const auto next = [&h] {
+            const auto work = h.deferred.takeFirst().work;
+            work();
+        };
+        for (int attempt = 0; attempt < 8; ++attempt) {
+            QCOMPARE(h.deferred.size(), 1);
+            QVERIFY(h.deferred.first().delayMs <= 30'000);
+            next();
+        }
+        QCOMPARE(h.relay.sent(QStringLiteral("cancel")), 0);
+        h.relay.offered = true;
+        QCOMPARE(h.deferred.size(), 1);
+        next();
+        QCOMPARE(h.relay.sent(QStringLiteral("cancel")), 1);
+        QVERIFY(h.relay.refuse(QStringLiteral("cancel"), QStringLiteral("job_not_found")));
+        QVERIFY(h.deferred.isEmpty());
+    }
+
+    // A cancel the Relay never answers is given up 24 hours after it was made.
+    void aRelayCancelIsGivenUpAfterADay() {
         RemoteHarness h;
         const QString queued = h.f.remoteTask();
         QVERIFY(h.write(queuedSteps(queued, QStringLiteral("job-q"))));
         h.build();
         h.jobs->restore();
-        int sent = 1;
-        for (const char* passing : {"not_enrolled", "runner_unavailable", "account_changed",
-                                    "invalid_access", "relay_error", "rate_limited"}) {
-            QVERIFY(h.relay.refuse(QStringLiteral("cancel"), QString::fromLatin1(passing)));
-            QCOMPARE(h.deferred.size(), 1);
-            QVERIFY(h.deferred.first().delayMs <= 30'000);
-            QCOMPARE(h.run(30'000), 1);
-            QCOMPARE(h.relay.sent(QStringLiteral("cancel")), ++sent);
-        }
-        QVERIFY(h.relay.refuse(QStringLiteral("cancel"), QStringLiteral("invalid_request")));
+        QVERIFY(h.relay.refuse(QStringLiteral("cancel"), QStringLiteral("network")));
+        h.clock.time = h.clock.time.addMSecs(RelayCancels::givenUpAfterMs - 60'000);
+        QCOMPARE(h.run(30'000), 1);
+        QCOMPARE(h.relay.sent(QStringLiteral("cancel")), 2);
+        QVERIFY(h.relay.refuse(QStringLiteral("cancel"), QStringLiteral("network")));
+        h.clock.time = h.clock.time.addMSecs(60'000);
+        QCOMPARE(h.run(30'000), 1);
+        QCOMPARE(h.relay.sent(QStringLiteral("cancel")), 2);
         QVERIFY(h.deferred.isEmpty());
-        QCOMPARE(h.run(60'000), 0);
-        QCOMPARE(h.relay.sent(QStringLiteral("cancel")), sent);
         QCOMPARE(h.f.state(queued), state::interrupted); // the record never changes
     }
 
