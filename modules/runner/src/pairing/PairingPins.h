@@ -38,6 +38,7 @@ struct RunnerPin {
 
     // A pending pin for the desktop the token names, once the reported keys match it
     // (checkDesktopKeys). `pairingDigest` is pairingCode(...).digest of the runner's own input.
+    // A digest that is not base64url of 32 bytes fails with PinInvalid.
     [[nodiscard]] static PairingResult<RunnerPin> pending(const PairingToken& token,
                                                           const ReportedDesktop& desktop,
                                                           const QString& pairingDigest);

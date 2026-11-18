@@ -68,7 +68,9 @@ PairingResult<RunnerPin> RunnerPin::pending(const PairingToken& token,
                                             const QString& pairingDigest) {
     if (const auto error = checkDesktopKeys(token, desktop))
         return *error;
-    if (pairingDigest.isEmpty())
+    // The rule fromJson applies, so a pending pin always reads back.
+    const auto digestBytes = decodeBase64Url(pairingDigest);
+    if (!digestBytes || digestBytes->size() != 32)
         return PairingError::PinInvalid;
     const PairingTokenFields& fields = token.fields();
     RunnerPin pin;

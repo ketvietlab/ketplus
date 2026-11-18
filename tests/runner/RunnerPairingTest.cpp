@@ -651,6 +651,19 @@ void RunnerPairingTest::approvalChecksAgainstPendingPin() {
     const auto refused = RunnerPin::pending(token.value(), wrong, str(v0.digest));
     QVERIFY(!refused.ok());
     QCOMPARE(refused.error(), PairingError::DesktopKeyMismatch);
+
+    // A digest that would not read back makes no pin.
+    const QString digest = str(v0.digest);
+    for (const QString& bad :
+         {QString(), digest.left(digest.size() - 1), digest + QStringLiteral("A"),
+          QString(digest).replace(0, 1, QStringLiteral("+")), QStringLiteral("AAAA")}) {
+        const auto badPin = RunnerPin::pending(token.value(), reportedDesktop(), bad);
+        QVERIFY(!badPin.ok());
+        QCOMPARE(badPin.error(), PairingError::PinInvalid);
+    }
+    const auto good = RunnerPin::pending(token.value(), reportedDesktop(), digest);
+    QVERIFY(good.ok());
+    QVERIFY(RunnerPin::fromJson(good.value().toJson()).ok());
 }
 
 void RunnerPairingTest::issuedAtWindow_data() {
