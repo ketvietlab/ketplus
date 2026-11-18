@@ -27,6 +27,11 @@ add_library(r03_privacy_core STATIC MemoryCredentials.cpp ${KETPLUS_DAEMON_CORE_
   "${REPO}/modules/computer/src/ComputerAgentInstructions.cpp"
   "${REPO}/modules/computer/src/ComputerToolLaunch.cpp"
   "${REPO}/modules/remote/src/DaemonCredentialFile.cpp"
+  "${REPO}/modules/runner/src/pairing/PairingIdentity.cpp"
+  "${REPO}/modules/runner/src/pairing/PairingPins.cpp"
+  "${REPO}/modules/runner/src/pairing/PairingResult.cpp"
+  "${REPO}/modules/runner/src/pairing/PairingSignatures.cpp"
+  "${REPO}/modules/runner/src/pairing/PairingToken.cpp"
   "${DAEMON}/providers/ClaudeCredentials.cpp" "${DAEMON}/providers/ClaudeAccountUsage.cpp"
   "${DAEMON}/providers/ClaudeKeychain.cpp")
 set_source_files_properties("${DAEMON}/providers/compat/provider-compatibility.json"
@@ -35,7 +40,7 @@ qt_add_resources(r03_privacy_core "r03_daemon_compat" PREFIX "/ketplus/daemon"
   FILES "${DAEMON}/providers/compat/provider-compatibility.json")
 # Only OS key storage is replaced; encryption and HTTP request serialization are production code.
 target_include_directories(r03_privacy_core PUBLIC "${DAEMON}" "${REPO}/modules/ai/src" "${REPO}/modules/atlas/src" "${REPO}/modules/browser/src" "${REPO}/modules/remote/src"
-  "${REPO}/modules/computer/src"
+  "${REPO}/modules/computer/src" "${REPO}/modules/runner/src"
   "${CMAKE_CURRENT_BINARY_DIR}")
 target_link_libraries(r03_privacy_core PUBLIC Qt6::Concurrent Qt6::Core Qt6::Gui Qt6::Network Qt6::Sql Qt6::WebSockets
   OpenSSL::Crypto LibDataChannel::LibDataChannelStatic ketplus_peer_link)

@@ -27,9 +27,15 @@
 
 #include <atomic>
 #include <functional>
+#include <memory>
 #include <optional>
 
 namespace ketplus::daemon {
+
+namespace runner {
+class CloudRunnerRelay;
+class RunnerService;
+} // namespace runner
 
 class BrowserSignIn;
 class LocalJournal;
@@ -68,9 +74,13 @@ class CloudControlClient final : public QObject {
     // ADR 0119 "Machine identity": the fingerprint of this host's key set, the same one a pairing
     // QR code carries. The keys are created on first use, so a host has one without signing in.
     [[nodiscard]] QString hostKeyFingerprint(QString* error = nullptr);
+    // Runner pairing and management (runner/RunnerService.h), created on first use.
+    [[nodiscard]] runner::RunnerService& runners();
 
   private:
     friend class CloudPrivacyTestAccess;
+    // Calls the runner routes only, with this client's machine credential.
+    friend class runner::CloudRunnerRelay;
     using ReplyCallback = std::function<void(int, const QJsonValue&, const QString&)>;
     using ReadyCallback = std::function<void(bool, const QString&)>;
 
@@ -322,6 +332,10 @@ class CloudControlClient final : public QObject {
     std::atomic_int workspaceFilesPending_{0};
     // session -> (workspace revision, ms since epoch) this daemon recently published for it.
     QHash<QString, QList<std::pair<QString, qint64>>> publishedRevisions_;
+    // The Relay listed runner.relay/1 in its last heartbeat answer.
+    bool runnerRelayAvailable_{false};
+    // Last, so it goes first: it calls back into this client.
+    std::unique_ptr<runner::RunnerService> runners_;
 };
 
 } // namespace ketplus::daemon
