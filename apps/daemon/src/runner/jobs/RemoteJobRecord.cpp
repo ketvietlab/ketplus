@@ -37,14 +37,12 @@ const QSet<QString>& relayRefusalReasons() {
 // failed result that carries one ends like one whose reason is not a code.
 const QSet<QString>& reservedReasons() {
     static const QSet<QString> reasons = [] {
-        QSet<QString> all{QStringLiteral("permission_denied"),
-                          QStringLiteral("cleanup_acknowledged"),
-                          QStringLiteral("cleanup_unverified"),
-                          QStringLiteral("queue_expired"),
-                          QStringLiteral("expired"),
-                          QStringLiteral("exit_code"),
-                          QStringLiteral("user"),
-                          QStringLiteral("deadline")};
+        QSet<QString> all{
+            QStringLiteral("permission_denied"),  QStringLiteral("cleanup_acknowledged"),
+            QStringLiteral("cleanup_unverified"), QStringLiteral("queue_expired"),
+            QStringLiteral("exit_code"),          QStringLiteral("user"),
+            QStringLiteral("deadline"),           QStringLiteral("session_closed"),
+            QStringLiteral("worker_restart")};
         all.unite(relayFailedReasons());
         all.unite(relayRefusalReasons());
         return all;

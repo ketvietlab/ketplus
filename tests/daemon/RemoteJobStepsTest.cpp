@@ -201,8 +201,8 @@ class RemoteJobStepsTest final : public QObject {
                  {"permission_denied", "cleanup_acknowledged", "cleanup_unverified",
                   "delivery_exhausted", "not_paired", "runner_removed", "entitlement_required",
                   "runner_unavailable", "no_matching_runner", "queue_full", "invalid_labels",
-                  "idempotency_conflict", "invalid_request", "queue_expired", "expired",
-                  "exit_code", "user", "deadline"})
+                  "idempotency_conflict", "invalid_request", "queue_expired", "exit_code", "user",
+                  "deadline", "session_closed", "worker_restart"})
                 QTest::addRow("%s reserved %s", from, code)
                     << from << QString::fromLatin1(code) << "spawn_failed";
             QTest::addRow("%s snapshot code", from) << from << "disk_full" << "snapshot_failed";

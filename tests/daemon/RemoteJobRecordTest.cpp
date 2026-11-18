@@ -165,8 +165,8 @@ class RemoteJobRecordTest final : public QObject {
              {"permission_denied", "cleanup_acknowledged", "cleanup_unverified",
               "delivery_exhausted", "not_paired", "runner_removed", "entitlement_required",
               "runner_unavailable", "no_matching_runner", "queue_full", "invalid_labels",
-              "idempotency_conflict", "invalid_request", "queue_expired", "expired", "exit_code",
-              "user", "deadline"})
+              "idempotency_conflict", "invalid_request", "queue_expired", "exit_code", "user",
+              "deadline", "session_closed", "worker_restart"})
             QTest::addRow("failed reserved %s", code)
                 << "failed" << -1LL << -1LL << code << "failed" << "spawn_failed";
         // A reason that is not a code is never kept.
