@@ -67,6 +67,9 @@ class SnapshotReceiver {
 };
 
 struct LaunchRequest {
+    QString jobId;
+    qint64 attempt = 0;
+    qint64 timeoutMs = 0; // the job's own; the session ends the job at it
     protocol::Invocation invocation;
     QString workspace;
     QString cwd;
@@ -82,8 +85,8 @@ struct CommandExit {
     QString cleanupStatus; // "verified" or "unverified"
 };
 
-// Runs the job's command. Answers: JobSession::commandOutput and commandFinished (also after
-// kill(), and when launch() fails).
+// Runs the job's command. Answers: JobSession::commandOutput, commandOutputLost and
+// commandFinished (also after kill(), and when launch() fails).
 class CommandRunner {
   public:
     virtual ~CommandRunner() = default;

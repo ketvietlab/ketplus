@@ -233,4 +233,15 @@ class RunnerSessionStopTest : public QObject {
     void withdrawOnlyBeforeTheSpec();
 };
 
+// Output lost before it reached the session, and what a launch carries.
+class RunnerSessionLostOutputTest : public QObject {
+    Q_OBJECT
+  private slots:
+    void bufferNeverHoldsALostRange();
+    void lostBytesMakeOneGapInOrder();
+    void lostBytesWhileBlockedJoinTheGap();
+    void lostBytesOutsideACommandAreIgnored();
+    void launchCarriesTheJobAndItsTimeLimit();
+};
+
 } // namespace runner_session_test

@@ -147,5 +147,9 @@ int main(int argc, char* argv[]) {
         runner_session_test::RunnerSessionStopTest test;
         failures += QTest::qExec(&test, argc, argv);
     }
+    {
+        runner_session_test::RunnerSessionLostOutputTest test;
+        failures += QTest::qExec(&test, argc, argv);
+    }
     return failures == 0 ? 0 : 1;
 }
