@@ -17,6 +17,19 @@
 #endif
 
 namespace ket::theme::io {
+namespace detail {
+QString withTrailingSeparator(const QString& root, QChar separator) {
+    return root.endsWith(separator) ? root : root + separator;
+}
+QString dosFinalPathToNative(QString finalPath) {
+    const QString unc = QStringLiteral("\\\\?\\UNC\\");
+    if (finalPath.startsWith(unc, Qt::CaseInsensitive))
+        return QStringLiteral("\\\\") + finalPath.mid(unc.size());
+    if (finalPath.startsWith(QStringLiteral("\\\\?\\")))
+        finalPath.remove(0, 4);
+    return finalPath;
+}
+} // namespace detail
 namespace {
 bool fail(Error* error, const QString& message, const QString& path) {
     if (error)
@@ -52,16 +65,17 @@ bool IncludeResolver::resolve(const QString& declaring, const QString& reference
         if (root.isEmpty())
             return fail(error, QStringLiteral("Source directory does not exist"), reference);
         const auto canonical = QFileInfo(QDir(root).filePath(cleaned)).canonicalFilePath();
-        if (canonical.isEmpty() || !canonical.startsWith(root + '/'))
+        if (canonical.isEmpty() || !canonical.startsWith(detail::withTrailingSeparator(root, '/')))
             return fail(error, QStringLiteral("Include missing or outside source root"), reference);
         // Refuse links even if their target happens to be inside the root. This
         // also keeps include identities stable for cycle detection.
-        QString current = root;
+        QString current = detail::withTrailingSeparator(root, '/');
         for (const auto& part : cleaned.split('/')) {
-            current += '/' + part;
+            current += part;
             const QFileInfo component(current);
             if (component.isSymLink() || component.isJunction() || component.isShortcut())
                 return fail(error, QStringLiteral("Include symlinks are forbidden"), reference);
+            current += '/';
         }
     }
     *path = cleaned;
@@ -129,13 +143,13 @@ bool IncludeResolver::read(const QString& path, QByteArray* data, Error* error) 
     wchar_t finalPath[32768];
     const DWORD finalLength =
         GetFinalPathNameByHandleW(handle, finalPath, DWORD(std::size(finalPath)), VOLUME_NAME_DOS);
-    QString actual = finalLength > 0 && finalLength < std::size(finalPath)
-                         ? QString::fromWCharArray(finalPath, int(finalLength))
-                         : QString();
-    if (actual.startsWith(QStringLiteral("\\\\?\\")))
-        actual.remove(0, 4);
-    const QString nativeRoot = QDir::toNativeSeparators(root);
-    if (!actual.startsWith(nativeRoot + QLatin1Char('\\'), Qt::CaseInsensitive)) {
+    const QString actual =
+        detail::dosFinalPathToNative(finalLength > 0 && finalLength < std::size(finalPath)
+                                         ? QString::fromWCharArray(finalPath, int(finalLength))
+                                         : QString());
+    const QString nativeRoot =
+        detail::withTrailingSeparator(QDir::toNativeSeparators(root), QLatin1Char('\\'));
+    if (!actual.startsWith(nativeRoot, Qt::CaseInsensitive)) {
         CloseHandle(handle);
         return fail(error, QStringLiteral("Include resolves outside the source root"), path);
     }

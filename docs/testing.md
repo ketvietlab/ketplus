@@ -79,19 +79,21 @@ version for the same reason. No job in the matrix uses provider quota.
 `tools/windows/win-run.sh` (see `docs/development.md`, Windows) runs the Lite
 suite on a Windows build machine with MSVC 2022 and Qt 6.11:
 `cmake --preset lite-dev`, `cmake --build --preset lite-dev`, then
-`ctest --preset lite-dev -j4 --timeout 120`. All 27 Lite tests pass. Two cases
+`ctest --preset lite-dev -j4 --timeout 120`. All 28 Lite tests pass (`ketplus_pty_backend_tests` can miss its 20-second shell
+start-up window under `-j4`; run alone it passes). Two cases
 inside `ketplus_preview_tests` are skipped on Windows (QTest `SKIP`, which CTest
 does not list): `discoversMmdcInstalledByNvm` (the nvm layout and `HOME` are POSIX
 only) and `rendersMermaidAndOpensThePopup` (its fake `mmdc` is a `/bin/sh`
 script). Windows `mmdc` discovery and rendering are covered by the Mermaid task;
 that test must then set `USERPROFILE`, which `QDir::homePath()` reads on Windows,
-alongside `HOME`. On macOS all 28 Lite tests (one more than on Windows) pass with
+alongside `HOME`. On macOS all 29 Lite tests (one more than on Windows) pass with
 `QT_QPA_PLATFORM=offscreen ctest --preset lite-dev -j4`.
 Open, edit and save, Git status and the Markdown preview are covered by
 automated offscreen tests that ran on Windows: `ketplus_lite_window_tests`
 (real Git repository opened in the window), `ketplus_tests` document save and
 `ketplus_editor_file_refresh_tests`, `ketplus_git_tests`,
-`ketplus_git_changes_panel_tests` and `ketplus_preview_tests`. ConPTY terminal
+`ketplus_git_changes_panel_tests` and `ketplus_preview_tests`. Theme includes from a
+drive root and from a UNC share (`\\\\localhost\\C$`) run in `ketplus_theme_input_tests`. ConPTY terminal
 behavior depends on the Windows terminal task, and Mermaid rendering needs the
 external `mmdc` tool; neither is part of this build check.
 

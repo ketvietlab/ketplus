@@ -53,6 +53,14 @@ struct JsonSource {
     QString path;
     QJsonDocument document;
 };
+namespace detail {
+// `root` with exactly one trailing separator, so a drive or filesystem root ("C:/", "/") and
+// an ordinary directory both give a prefix every path below it starts with.
+QString withTrailingSeparator(const QString& root, QChar separator);
+// The path GetFinalPathNameByHandleW returns for an include, as a user-style native path:
+// `\\?\C:\dir` -> `C:\dir` and `\\?\UNC\server\share\dir` -> `\\server\share\dir`.
+QString dosFinalPathToNative(QString finalPath);
+} // namespace detail
 // Exactly one source: a caller-selected directory or an already validated archive.
 // Returned documents are ordered parent first. Merging remains the adapter's job.
 class IncludeResolver {
