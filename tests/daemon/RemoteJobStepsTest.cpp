@@ -181,30 +181,46 @@ class RemoteJobStepsTest final : public QObject {
 
     // A failed result keeps the runner's code on the task row; a reason that is not a code
     // ends spawn_failed and is written nowhere: not the registry, its JSON or the log.
+    // A launch that fails before job.started ends the job from starting or syncing.
     void aFailedResultKeepsTheRunnersCode_data() {
+        QTest::addColumn<QString>("from");
         QTest::addColumn<QString>("reason");
         QTest::addColumn<QString>("kept");
-        for (const char* code :
-             {"spawn_failed", "invalid_invocation", "workspace_missing", "cwd_missing",
-              "cwd_outside_workspace", "invalid_environment", "launch_too_large",
-              "runner_directory_missing", "workspace_outside_work", "runtime_directory_invalid",
-              "executor_directory_unavailable", "handshake_failed", "containment_unavailable",
-              "executor_leftover_unidentified", "timed_out", "executor_interrupted",
-              "exit_status_unknown", "a_code_not_yet_known"})
-            QTest::addRow("%s", code) << QString::fromLatin1(code) << QString::fromLatin1(code);
-        QTest::newRow("snapshot code") << "disk_full" << "snapshot_failed";
-        QTest::newRow("empty") << "" << "spawn_failed";
-        QTest::newRow("capitals") << "Marker_Reason" << "spawn_failed";
-        QTest::newRow("space") << "marker reason" << "spawn_failed";
-        QTest::newRow("newline") << "marker_reason\nnext" << "spawn_failed";
-        QTest::newRow("html") << "<i>marker_reason</i>" << "spawn_failed";
-        QTest::newRow("too long") << QString(65, QLatin1Char('m')) << "spawn_failed";
+        for (const char* from : {"running", "starting", "syncing"}) {
+            for (const char* code :
+                 {"spawn_failed", "invalid_invocation", "workspace_missing", "cwd_missing",
+                  "cwd_outside_workspace", "invalid_environment", "launch_too_large",
+                  "runner_directory_missing", "workspace_outside_work", "runtime_directory_invalid",
+                  "executor_directory_unavailable", "handshake_failed", "containment_unavailable",
+                  "executor_leftover_unidentified", "timed_out", "executor_interrupted",
+                  "exit_status_unknown", "a_code_not_yet_known"})
+                QTest::addRow("%s %s", from, code)
+                    << from << QString::fromLatin1(code) << QString::fromLatin1(code);
+            QTest::addRow("%s snapshot code", from) << from << "disk_full" << "snapshot_failed";
+            QTest::addRow("%s empty", from) << from << "" << "spawn_failed";
+            QTest::addRow("%s capitals", from) << from << "Marker_Reason" << "spawn_failed";
+            QTest::addRow("%s space", from) << from << "marker reason" << "spawn_failed";
+            QTest::addRow("%s newline", from) << from << "marker_reason\nnext" << "spawn_failed";
+            QTest::addRow("%s html", from) << from << "<i>marker_reason</i>" << "spawn_failed";
+            QTest::addRow("%s too long", from)
+                << from << QString(65, QLatin1Char('m')) << "spawn_failed";
+        }
     }
     void aFailedResultKeepsTheRunnersCode() {
+        QFETCH(QString, from);
         QFETCH(QString, reason);
         QFETCH(QString, kept);
         Steps s;
-        QVERIFY(s.running());
+        if (from == "running") {
+            QVERIFY(s.running());
+        } else {
+            QVERIFY(s.sent());
+            if (from == "syncing")
+                s.jobs->accepted(job, runnerA);
+            QCOMPARE(s.task(), QStringLiteral("starting"));
+            QCOMPARE(s.record().placement,
+                     from == "syncing" ? placement::syncing : placement::assigned);
+        }
         capturedLog.clear();
         const auto previous = qInstallMessageHandler(captureLog);
         const bool recorded = s.jobs->result(job, runnerA, jobResult("failed", {}, reason)).ok();
