@@ -56,8 +56,9 @@ class CloudControlClient final : public QObject {
     // with the remote demo, the KETPLUS_CONTROL_URL environment variable.
     [[nodiscard]] static QUrl configuredControlUrl();
     [[nodiscard]] bool handles(const QString& messageType) const;
-    void handleLocal(const QString& messageType, const QJsonObject& payload,
-                     LocalCallback callback);
+    // `clientId` names the local connection that sent the request; empty when there is none.
+    void handleLocal(const QString& messageType, const QJsonObject& payload, LocalCallback callback,
+                     const QString& clientId = {});
 
     // The relay drops an unclaimed Stop after 15s (interruptTtlSeconds); a Stop whose wake-up
     // is lost must still be polled before then.

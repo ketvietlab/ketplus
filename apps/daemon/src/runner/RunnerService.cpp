@@ -57,7 +57,8 @@ void RunnerService::setTime(Clock clock, Scheduler scheduler) {
     scheduler_ = std::move(scheduler);
 }
 
-void RunnerService::handle(const QString& type, const QJsonObject& payload, Callback callback) {
+void RunnerService::handle(const QString& type, const QJsonObject& payload, Callback callback,
+                           const QString& clientId) {
     if (!port_->runnerRelayAvailable()) {
         fail(callback, QStringLiteral("runner_unavailable"));
         return;
@@ -73,13 +74,14 @@ void RunnerService::handle(const QString& type, const QJsonObject& payload, Call
     else if (type == QStringLiteral("runner.list"))
         listRunners(std::move(callback));
     else if (type == QStringLiteral("runner.disable"))
-        changeState(payload, RunnerRelayClient::StateChange::Disable, std::move(callback));
+        changeState(payload, RunnerRelayClient::StateChange::Disable, std::move(callback),
+                    clientId);
     else if (type == QStringLiteral("runner.enable"))
-        changeState(payload, RunnerRelayClient::StateChange::Enable, std::move(callback));
+        changeState(payload, RunnerRelayClient::StateChange::Enable, std::move(callback), clientId);
     else if (type == QStringLiteral("runner.remove"))
-        changeState(payload, RunnerRelayClient::StateChange::Remove, std::move(callback));
+        changeState(payload, RunnerRelayClient::StateChange::Remove, std::move(callback), clientId);
     else if (type == QStringLiteral("runner.unpair"))
-        unpairRunner(payload, std::move(callback));
+        unpairRunner(payload, std::move(callback), clientId);
     else
         fail(callback, QStringLiteral("invalid_request"));
 }
@@ -133,7 +135,8 @@ void RunnerService::collectRunners(QList<RunnerSummary> runners,
 }
 
 void RunnerService::changeState(const QJsonObject& payload,
-                                const RunnerRelayClient::StateChange change, Callback callback) {
+                                const RunnerRelayClient::StateChange change, Callback callback,
+                                const QString& clientId) {
     const QString runnerId = payload.value(QStringLiteral("runner_id")).toString();
     if (!isRunnerId(runnerId)) {
         fail(callback, QStringLiteral("invalid_request"));
@@ -146,7 +149,7 @@ void RunnerService::changeState(const QJsonObject& payload,
         return;
     }
     if (removing)
-        emit runnerRemoved(runnerId, QString());
+        emit runnerRemoved(runnerId, clientId);
     client_.changeState(
         runnerId, change,
         [runnerId, removing,
@@ -165,7 +168,8 @@ void RunnerService::changeState(const QJsonObject& payload,
         });
 }
 
-void RunnerService::unpairRunner(const QJsonObject& payload, Callback callback) {
+void RunnerService::unpairRunner(const QJsonObject& payload, Callback callback,
+                                 const QString& clientId) {
     const QString runnerId = payload.value(QStringLiteral("runner_id")).toString();
     if (!isRunnerId(runnerId)) {
         fail(callback, QStringLiteral("invalid_request"));
@@ -175,7 +179,7 @@ void RunnerService::unpairRunner(const QJsonObject& payload, Callback callback) 
         fail(callback, QStringLiteral("pin_store_failed"));
         return;
     }
-    emit runnerRemoved(runnerId, QString());
+    emit runnerRemoved(runnerId, clientId);
     client_.unpair(runnerId,
                    [runnerId, callback = std::move(callback)](const RunnerOutcome<bool>& outcome) {
                        // A retry after the Relay dropped the pair is done.

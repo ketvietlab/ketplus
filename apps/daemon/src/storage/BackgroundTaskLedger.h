@@ -67,6 +67,8 @@ struct BackgroundTaskEffects final {
 class BackgroundTaskLedger final {
   public:
     explicit BackgroundTaskLedger(QSqlDatabase database);
+    // The registry's database, for stores that keep rows beside its tasks.
+    [[nodiscard]] QSqlDatabase database() const { return database_; }
     bool initialize(QString* error);
     QJsonObject create(const BackgroundTaskIntent& intent);
     // Retry lookup precedes infrastructure/quota checks; it never creates a job.
