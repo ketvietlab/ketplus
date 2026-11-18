@@ -85,7 +85,7 @@ class RemoteJobsSubmitTest final : public QObject {
         for (const QString& line : std::as_const(capturedLog)) {
             QVERIFY2(!line.contains(QStringLiteral("/work/repo")), qPrintable(line));
             QVERIFY2(!line.contains(QStringLiteral("feedface")), qPrintable(line));
-            QVERIFY2(!line.contains(preparedIn(RemoteHarness()).prepared->snapshotId),
+            QVERIFY2(!line.contains(QStringLiteral("0123456789abcdef0123456789abcdef01234567")),
                      qPrintable(line));
         }
     }
