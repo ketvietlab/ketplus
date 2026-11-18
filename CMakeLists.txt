@@ -124,6 +124,7 @@ target_include_directories(ketplus_product_version INTERFACE
 add_subdirectory(modules/browser)
 add_subdirectory(modules/computer)
 add_subdirectory(modules/remote)
+add_subdirectory(modules/runner)
 add_subdirectory(apps/daemon)
 
 if(KETPLUS_BUILD_DESKTOP)
@@ -186,6 +187,7 @@ if(KETPLUS_BUILD_TESTS)
     else()
         add_subdirectory(tests/daemon)
     endif()
+    add_subdirectory(tests/runner)
 endif()
 
 if(NOT APPLE OR NOT KETPLUS_BUILD_DESKTOP)
