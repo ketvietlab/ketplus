@@ -1934,25 +1934,8 @@ agent-tools, usage, compact-window, steer, fork, background-tasks, managed-backg
 model-catalog, review-guard, review-profile; the other sidecar files run in
 `ketplus_claude_sidecar_tests`) and `ketplus_acp_session_isolation_tests`.
 
-Skipped inside a test on Windows with `KETPLUS_SKIP_ON_WINDOWS(reason)`; the reason prints in
-the test output. Needs a Windows port of the fixture: `TeamReplyTest` (three tests),
-`TeamTaskGitTest` (two) and `TeamDoneTest` (two) use a POSIX shell script as a fake `git` or
-`gh`. Not yet diagnosed (each prints its symptom): `DaemonWorktreeContextTest` (four tests: the
-provider log has no `provider-input`, `steer-input` or `model-list` line, or the pending
-question is not found), `AgentMessagingTest::agentConnectionsOnlyReachAgentOperations`,
-`CursorAdapterTest::findsTheCliInstalledAfterStartup`, `ProviderCompatibilityTest::
-probeCachesUntilTheExecutableChanges`, `SessionForkTest::destinationCreatedWhileProviderFork
-IsPendingIsPreserved`, `TeamReviewTest` and `TurnReviewTest` (the Codex review checks and five
-review-turn tests), `TeamStorageTest::theMainCheckoutIsRefused`, the `ordinary-prose`,
-`concurrent-only`, `ignored-gitlink` and `replaced-base-tree` rows of
-`TeamRoutingToolsTest::authenticatedToolsUseRealProducerThenHostLookupThenPolicy`,
-`TeamFindingRoutingTest::authenticatedClosureUsesRealProducerStoreAndReviewedRecord` (the remote
-branch cannot be read and the test then crashes), `TeamAgentToolsTest::theLeadersFirstTurnCarries
-TheGoalAndItsInstructions` (hangs), `CodexSessionIsolationTest::twoSessionsKeepHistoryWhileOnly
-OneProcessRefreshes`. By design: `ComputerProviderIntegrationTest::frontFollowsSettingsForEach
-Provider` (macOS app bundle path), `ProviderCompatibilityTest::prefersHomebrewUpdateFor
-HomebrewInstalls` (Homebrew), `SessionForkTest::forkRequiresMediaOwnershipBeforeJournalCommit
-(source-unreadable)` (POSIX mode), `JournalStartupTest::startupBacklogCharacterization` (a 250 ms
+Skipped inside a test on Windows with `KETPLUS_SKIP_ON_WINDOWS(reason)`; the reason prints inthe test output. Needs a Windows port of the fixture: `TeamReplyTest` (three tests),`TeamTaskGitTest` (two) and `TeamDoneTest` (two) use a POSIX shell script as a fake `git` or`gh`. Not yet diagnosed (each prints its symptom): `DaemonWorktreeContextTest` (four tests: theprovider log has no `provider-input`, `steer-input` or `model-list` line, or the pendingquestion is not found), `AgentMessagingTest::agentConnectionsOnlyReachAgentOperations`,`CursorAdapterTest::findsTheCliInstalledAfterStartup`, `ProviderCompatibilityTest::probeCachesUntilTheExecutableChanges`, `SessionForkTest::destinationCreatedWhileProviderForkIsPendingIsPreserved`, `TeamReviewTest` and `TurnReviewTest` (the Codex review checks and fivereview-turn tests), `TeamStorageTest::theMainCheckoutIsRefused`, the `ordinary-prose`,`concurrent-only`, `ignored-gitlink` and `replaced-base-tree` rows of`TeamRoutingToolsTest::authenticatedToolsUseRealProducerThenHostLookupThenPolicy`,`TeamFindingRoutingTest::authenticatedClosureUsesRealProducerStoreAndReviewedRecord` (the remotebranch cannot be read and the test then crashes), `TeamAgentToolsTest::theLeadersFirstTurnCarries
+TheGoalAndItsInstructions` (hangs), `CodexSessionIsolationTest::twoSessionsKeepHistoryWhileOnlyOneProcessRefreshes`. By design: `ComputerProviderIntegrationTest::frontFollowsSettingsForEachProvider` (macOS app bundle path), `ProviderCompatibilityTest::prefersHomebrewUpdateForHomebrewInstalls` (Homebrew), `SessionForkTest::forkRequiresMediaOwnershipBeforeJournalCommit(source-unreadable)` (POSIX mode), `JournalStartupTest::startupBacklogCharacterization` (a 250 ms
 startup budget; SQLite commits are several times slower on NTFS).
 
 Skipped inside tests on Windows, each with its reason in the test source: fixtures that need POSIX
