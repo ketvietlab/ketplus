@@ -52,6 +52,16 @@ inline QJsonArray tools() {
          {"effort", string("Optional supported effort; defaults to the owner.")},
          {"cwd", string("Optional existing directory within the owner's workspace.")}},
         {"prompt"});
+    const QJsonObject runsOn{
+        {"type", "array"},
+        {"minItems", 1},
+        {"maxItems", 16},
+        {"items", string("os:linux, arch:x86_64, arch:arm64 or a label matching "
+                         "[a-z0-9][a-z0-9._-]{0,63}.")},
+        {"description", "Process only. Runs the job on a runner with all these labels instead of "
+                        "this machine, on a snapshot of the cwd's Git worktree as it is now. The "
+                        "timeout is 1 second to 24 hours. A job that is interrupted is not run "
+                        "again."}};
     const auto taskId = string(
         "Task id returned by background_task_start/list; ownership is checked by the daemon.");
     return {
@@ -70,6 +80,7 @@ inline QJsonArray tools() {
                       QJsonObject{{"type", "string"}, {"enum", QJsonArray{"process", "agent"}}}},
                      {"title", string("Short description, at most 256 UTF-8 bytes.")},
                      {"execution_spec", QJsonObject{{"oneOf", QJsonArray{process, agent}}}},
+                     {"runs_on", runsOn},
                      {"timeout_ms",
                       QJsonObject{{"type", "integer"},
                                   {"minimum", 1},
