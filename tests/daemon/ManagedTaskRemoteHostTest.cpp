@@ -1,12 +1,14 @@
 #include "FakeCodex.h"
 #include "providers/CodexAdapter.h"
 #include "runner/entry/RemoteJobPort.h"
+#include "runtime/ManagedTaskRuntime.h"
 #include "runtime/SessionHost.h"
 #include "storage/BackgroundTaskLedger.h"
 #include "storage/LocalJournal.h"
 
 #include <QJsonArray>
 #include <QJsonDocument>
+#include <QProcess>
 #include <QScopeGuard>
 #include <QSqlQuery>
 #include <QTemporaryDir>
@@ -17,6 +19,9 @@ using namespace ketplus::daemon;
 using runner::entry::RemoteJobPort;
 
 namespace {
+
+// Set in a copy of this test that runs where no local executor is installed.
+constexpr auto withoutExecutor = "KETPLUS_REMOTE_HOST_TEST_WITHOUT_EXECUTOR";
 
 QJsonObject command(SessionHost& host, const QString& type, const QJsonObject& payload = {}) {
     auto result = std::make_shared<QJsonObject>();
@@ -152,6 +157,50 @@ struct Host {
         if (!query.exec("SELECT count(*) FROM " + table) || !query.next())
             return -1;
         return query.value(0).toInt();
+    }
+    int outbox(const QString& id) {
+        QSqlQuery query(journal->backgroundTasks().database());
+        query.prepare("SELECT count(*) FROM managed_job_outbox WHERE task_id=?");
+        query.addBindValue(id);
+        if (!query.exec() || !query.next())
+            return -1;
+        return query.value(0).toInt();
+    }
+    ManagedTaskRuntime* runtime() const {
+        for (auto* child : host->findChildren<QObject*>())
+            if (auto* found = dynamic_cast<ManagedTaskRuntime*>(child))
+                return found;
+        return nullptr;
+    }
+    // The remote jobs stored a record for the task, as a submit that reached the Relay does.
+    bool recorded(const QString& id) {
+        QSqlQuery query(journal->backgroundTasks().database());
+        query.prepare(
+            "UPDATE remote_jobs SET revision=1,record=X'7B7D' WHERE task_id=? AND revision=0");
+        query.addBindValue(id);
+        if (!query.exec() || query.numRowsAffected() != 1)
+            return false;
+        port.records.insert(id);
+        return true;
+    }
+    // The remote jobs end the task as its runner reported it.
+    bool end(const QString& id) {
+        auto ledger = journal->backgroundTasks();
+        auto database = ledger.database();
+        const auto task = ledger.runtimeTask(id);
+        BackgroundTaskChange change;
+        change.state = "completed";
+        change.cleanupStatus = "verified";
+        change.exitCode = 0;
+        if (!database.transaction())
+            return false;
+        if (!ledger.applyTransition(id, task, task.value("revision").toInteger(), change, {})
+                 .value("ok")
+                 .toBool()) {
+            database.rollback();
+            return false;
+        }
+        return database.commit();
     }
     QJsonArray approvals() {
         return run("session.pending_approvals").value("pending_approvals").toArray();
@@ -418,7 +467,148 @@ class ManagedTaskRemoteHostTest final : public QObject {
         h.port.ports.changed("unknown");
         QCOMPARE(h.task(id).value("state"), "queued");
     }
+
+    // A submit that ends before a record exists: each code is the task's error, read by get.
+    void eachSubmitFailureIsReadByGet() {
+        Host h;
+        h.attach();
+        for (const QString code : {"runner_unavailable", "snapshot_build_failed",
+                                   "repository_unsupported", "entitlement_required"}) {
+            const auto id = idOf(h.run("session.task.start", remote(h.cwd, {"os:linux"}, code)));
+            QVERIFY(!id.isEmpty());
+            QTRY_VERIFY(h.port.submitted.contains(id));
+            h.port.ports.failReserved(id, code);
+            const auto task = h.task(id);
+            QCOMPARE(task.value("state").toString(), QStringLiteral("failed"));
+            QCOMPARE(task.value("reason").toString(), QStringLiteral("spawn_failed"));
+            QCOMPARE(task.value("error").toString(), code);
+            QCOMPARE(h.outbox(id), 1);
+        }
+    }
+
+    // A remote job that ended is no longer followed here, and its owner hears of it once.
+    void anEndedRemoteJobLeavesTheRuntimeWithOneCompletion() {
+        Host h;
+        h.attach();
+        const auto id = idOf(h.run("session.task.start", remote(h.cwd)));
+        QTRY_COMPARE(h.port.submitted, QStringList{id});
+        auto* runtime = h.runtime();
+        QVERIFY(runtime);
+        QVERIFY(runtime->isLive(id));
+        QVERIFY(runtime->isPumping());
+        QVERIFY(h.recorded(id));
+        QVERIFY(h.end(id));
+        h.port.ports.changed(id);
+        QVERIFY(!runtime->isLive(id));
+        QVERIFY(!runtime->isPumping());
+        h.port.ports.changed(id);
+        QCOMPARE(h.task(id).value("state"), "completed");
+        QCOMPARE(h.outbox(id), 1);
+    }
+
+    // Past its timeout here, a recorded remote job is left to its runner.
+    void aRecordedRemoteJobIsNotTimedOutHere() {
+        Host h;
+        h.attach();
+        auto payload = remote(h.cwd);
+        payload.insert("timeout_ms", 1000);
+        const auto id = idOf(h.run("session.task.start", payload));
+        QTRY_COMPARE(h.port.submitted, QStringList{id});
+        QVERIFY(h.recorded(id));
+        QTest::qWait(1600);
+        QCOMPARE(h.task(id).value("state"), "queued");
+        QVERIFY(h.port.stops.isEmpty());
+        QCOMPARE(h.outbox(id), 0);
+    }
+
+    // An owner that is let go stops its recorded remote job through the port.
+    void anInvalidOwnerStopsItsRecordedRemoteJob() {
+        Host h;
+        h.attach();
+        const auto id = idOf(h.run("session.task.start", remote(h.cwd)));
+        QTRY_COMPARE(h.port.submitted, QStringList{id});
+        QVERIFY(h.recorded(id));
+        auto* runtime = h.runtime();
+        QVERIFY(runtime);
+        runtime->cancelOwner({"owner", 1, {}}, "owner_invalid");
+        QCOMPARE(h.port.stops, QStringList{id});
+        QCOMPARE(h.task(id).value("state"), "queued"); // the record carries the stop
+    }
+
+    // Where no local executor is installed: a task with runs_on still starts and is
+    // submitted, a local one is refused. Runs the cases below in a copy of this test.
+    void withoutALocalExecutor() {
+        QTemporaryDir directory;
+        const QString self = QCoreApplication::applicationFilePath();
+        const QString copy = directory.filePath(QFileInfo(self).fileName());
+        QVERIFY(QFile::copy(self, copy));
+        QVERIFY(
+            QFile::setPermissions(copy, QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner));
+        QVERIFY(!QFileInfo::exists(directory.filePath("ketplus_job_executor")));
+        QProcess child;
+        auto environment = QProcessEnvironment::systemEnvironment();
+        environment.insert(withoutExecutor, "1");
+        child.setProcessEnvironment(environment);
+        child.setProcessChannelMode(QProcess::MergedChannels);
+        child.start(copy, {});
+        QVERIFY(child.waitForFinished(60000));
+        const auto output = child.readAll();
+        QVERIFY2(child.exitStatus() == QProcess::NormalExit && child.exitCode() == 0,
+                 output.constData());
+        QVERIFY2(output.contains("PASS   : WithoutExecutorTest::aRemoteTaskNeedsNoExecutor()"),
+                 output.constData());
+        QVERIFY2(output.contains("PASS   : WithoutExecutorTest::aLocalTaskNeedsTheExecutor()"),
+                 output.constData());
+        QVERIFY2(!output.contains("SKIP"), output.constData());
+    }
 };
 
-QTEST_GUILESS_MAIN(ManagedTaskRemoteHostTest)
+// Run only by withoutALocalExecutor, from a directory without the executor.
+class WithoutExecutorTest final : public QObject {
+    Q_OBJECT
+  private slots:
+    void init() {
+        QVERIFY(
+            !QFileInfo::exists(QCoreApplication::applicationDirPath() + "/ketplus_job_executor"));
+    }
+
+    // No executor, containment check or Linux probe: the task is reserved, asked for and
+    // submitted once.
+    void aRemoteTaskNeedsNoExecutor() {
+        Host h("ask");
+        h.attach();
+        const auto started = h.run("session.task.start", remote(h.cwd));
+        QVERIFY2(started.value("ok").toBool(),
+                 qPrintable(QJsonDocument(started).toJson(QJsonDocument::Compact)));
+        const auto id = idOf(started);
+        QCOMPARE(h.rows("remote_jobs"), 1);
+        QCOMPARE(h.task(id).value("containment_mode"), "remote");
+        QTRY_COMPARE(h.approvals().size(), 1);
+        QVERIFY(h.port.submitted.isEmpty());
+        QVERIFY(h.resolve("accept"));
+        QTRY_COMPARE(h.port.submitted, QStringList{id});
+        QTest::qWait(500);
+        QCOMPARE(h.port.submitted, QStringList{id});
+    }
+
+    void aLocalTaskNeedsTheExecutor() {
+        Host h("ask");
+        h.attach();
+        QCOMPARE(h.run("session.task.start", process(h.cwd)).value("error_code"),
+                 "executor_unavailable");
+        QCOMPARE(h.rows("managed_jobs"), 0);
+        QCOMPARE(h.port.admits, 0);
+    }
+};
+
+int main(int argc, char** argv) {
+    QCoreApplication application(argc, argv);
+    if (qEnvironmentVariableIsSet(withoutExecutor)) {
+        WithoutExecutorTest test;
+        return QTest::qExec(&test, argc, argv);
+    }
+    ManagedTaskRemoteHostTest test;
+    return QTest::qExec(&test, argc, argv);
+}
+
 #include "ManagedTaskRemoteHostTest.moc"
