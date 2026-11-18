@@ -121,6 +121,16 @@ foreach(suite Link Job Output Runner)
 endforeach()
 # Against the runner's real job session.
 target_link_libraries(ketplus_peer_session_runner_tests PRIVATE ketplus_runner_session)
+function(ketplus_add_runner_sync_test target source)
+    qt_add_executable(${target} ${source})
+    ketplus_enable_warnings(${target})
+    target_link_libraries(${target} PRIVATE Qt6::Test ketplus_daemon_runner_sync)
+    target_include_directories(${target} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
+    add_test(NAME ${target} COMMAND ${target})
+endfunction()
+ketplus_add_runner_sync_test(ketplus_snapshot_keys_tests SnapshotKeysTest.cpp)
+ketplus_add_runner_sync_test(ketplus_snapshot_sender_tests SnapshotSenderTest.cpp)
+target_sources(ketplus_snapshot_keys_tests PRIVATE cloud-privacy/MemoryCredentials.cpp)
 # Signed builds may run PCRE2 without JIT; cloud projection must stay linear there too.
 set_tests_properties(ketplus_daemon_cloud_privacy_tests PROPERTIES ENVIRONMENT
     "KETPLUS_DISABLE_DAEMON_AUTOSTART=1;KETPLUS_BROWSER_TOOLS_CONFIG=${CMAKE_CURRENT_BINARY_DIR}/ketplus_daemon_cloud_privacy_tests-browser-tools.json;KETPLUS_COMPUTER_TOOLS_CONFIG=${CMAKE_CURRENT_BINARY_DIR}/ketplus_daemon_cloud_privacy_tests-computer-tools.json;KETPLUS_COMPUTER_DIR=${CMAKE_CURRENT_BINARY_DIR}/ketplus_daemon_cloud_privacy_tests-computer;QT_ENABLE_REGEXP_JIT=0")

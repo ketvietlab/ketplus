@@ -40,6 +40,17 @@ target_link_libraries(ketplus_daemon_runner_peer PUBLIC Qt6::Core ketplus_runner
 target_include_directories(ketplus_daemon_runner_peer PUBLIC
     "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>")
 ketplus_enable_warnings(ketplus_daemon_runner_peer)
+# Runner snapshot sync on the desktop: keys, preparation and the sender, on abstract ports.
+add_library(ketplus_daemon_runner_sync STATIC
+    src/runner/sync/SnapshotKeys.cpp src/runner/sync/SnapshotKeys.h
+    src/runner/sync/SnapshotSender.cpp src/runner/sync/SnapshotSender.h
+    src/runner/sync/SnapshotSyncPorts.h)
+target_link_libraries(ketplus_daemon_runner_sync PUBLIC
+    Qt6::Core OpenSSL::Crypto ketplus_control_crypto ketplus_control_crypto_primitives
+    ketplus_runner_protocol ketplus_runner_snapshot)
+target_include_directories(ketplus_daemon_runner_sync PUBLIC
+    "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>")
+ketplus_enable_warnings(ketplus_daemon_runner_sync)
 target_include_directories(ketplus_daemon_core PUBLIC
     "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>"
     "$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/modules/atlas/src>"
