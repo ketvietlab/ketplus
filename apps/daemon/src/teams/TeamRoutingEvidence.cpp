@@ -21,6 +21,10 @@ QString digest(const QByteArray& bytes) {
 
 // No shell, hooks, external diff/textconv, replacement objects or inherited
 // GIT_* repository overrides. Every operation reads the immutable named objects.
+// The user's own configuration is ignored, so `core.autocrlf=input` is set here: a Windows
+// checkout that Git rewrote with CRLF endings (Git for Windows does that by default) would
+// otherwise read as modified, and a clean worktree could never be proven. `input` only affects
+// how worktree files are compared; it rewrites nothing.
 std::optional<QByteArray> git(const QString& directory, const QStringList& arguments) {
     QProcess process;
     process.setWorkingDirectory(directory);
@@ -40,7 +44,8 @@ std::optional<QByteArray> git(const QString& directory, const QStringList& argum
     process.start(QStringLiteral("git"),
                   QStringList{QStringLiteral("--no-replace-objects"), QStringLiteral("-c"),
                               QStringLiteral("core.fsmonitor=false"), QStringLiteral("-c"),
-                              QStringLiteral("core.untrackedCache=false")} +
+                              QStringLiteral("core.untrackedCache=false"), QStringLiteral("-c"),
+                              QStringLiteral("core.autocrlf=input")} +
                       arguments);
     QElapsedTimer elapsed;
     elapsed.start();

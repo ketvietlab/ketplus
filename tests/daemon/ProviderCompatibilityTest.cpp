@@ -9,6 +9,7 @@
 
 #include "FakeCodex.h"
 
+#include <QDateTime>
 #include <QDir>
 #include <QFile>
 #include <QJsonArray>
@@ -61,12 +62,21 @@ bool writeFile(const QString& path, const QByteArray& content) {
     return file.open(QIODevice::WriteOnly) && file.write(content) == content.size();
 }
 
-// A shell CLI that logs each call and prints `banner`.
+// A CLI that logs each call and prints `banner`; a Python script, so Windows can run it too.
 bool writeVersionScript(const QString& path, const QString& logPath, const QString& banner) {
-    const QByteArray source =
-        QStringLiteral("#!/bin/sh\necho call >> '%1'\necho '%2'\n").arg(logPath, banner).toUtf8();
-    return writeFile(path, source) &&
-           QFile::setPermissions(path, QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
+    const auto quoted = [](const QString& value) {
+        const QByteArray json = QJsonDocument(QJsonArray{value}).toJson(QJsonDocument::Compact);
+        return QString::fromUtf8(json.mid(1, json.size() - 2));
+    };
+    QFile file(path);
+    if (!file.open(QIODevice::WriteOnly))
+        return false;
+    file.write(QStringLiteral("#!/usr/bin/env python3\n"
+                              "with open(%1, 'a') as log:\n    log.write('call\\n')\n"
+                              "print(%2)\n")
+                   .arg(quoted(logPath), quoted(banner))
+                   .toUtf8());
+    return finalizeScriptFixture(file);
 }
 
 } // namespace
@@ -188,8 +198,6 @@ class ProviderCompatibilityTest final : public QObject {
     }
 
     void probeCachesUntilTheExecutableChanges() {
-        KETPLUS_SKIP_ON_WINDOWS("the probe reports a non-supported status for the fixture on "
-                                "Windows; cause not yet diagnosed");
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
         const QString cli = directory.filePath(fixtureName(QStringLiteral("codex")));
@@ -216,6 +224,14 @@ class ProviderCompatibilityTest final : public QObject {
 
         // An update on disk (new size and time) is noticed at the next check.
         QVERIFY(writeVersionScript(cli, logPath, QStringLiteral("codex-cli 0.120.10")));
+        {
+            // On Windows the launcher copy has the same size and keeps the source's time, so the
+            // update is stamped as a newer file explicitly.
+            QFile file(cli);
+            QVERIFY(file.open(QIODevice::ReadWrite));
+            QVERIFY(file.setFileTime(QDateTime::currentDateTime().addSecs(10),
+                                     QFileDevice::FileModificationTime));
+        }
         std::optional<compat::Runtime> updated;
         probe.check(cli, [&updated](const compat::Runtime& runtime) { updated = runtime; });
         QTRY_VERIFY(updated.has_value());
