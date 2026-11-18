@@ -1,7 +1,7 @@
 #include "Environment.h"
 #include "commands/CommandSupport.h"
 #include "commands/Commands.h"
-#include "run/RunLoop.h"
+#include "run/RunJobs.h"
 #include "state/RunnerState.h"
 
 #include <QSet>
@@ -29,7 +29,9 @@ const QList<CommandSpec>& commands() {
          deregisterRunner,
          {QStringLiteral("local-only"), QStringLiteral("state-dir")}},
         {QLatin1StringView("status"), showStatus, {QStringLiteral("state-dir")}},
-        {QLatin1StringView("run"), runRunner, {QStringLiteral("state-dir")}},
+        {QLatin1StringView("run"),
+         runRunner,
+         {QStringLiteral("state-dir"), QStringLiteral("work-dir")}},
     };
     return list;
 }
@@ -80,6 +82,8 @@ std::optional<CommandOptions> parse(const QStringList& arguments, const CommandS
             options.name = *value;
         else if (name == QStringLiteral("label"))
             options.labels.append(*value);
+        else if (name == QStringLiteral("work-dir"))
+            options.workDir = *value;
     }
     return options;
 }
@@ -99,7 +103,10 @@ QString helpText() {
         "  deregister [--local-only]\n"
         "                      Remove this runner from the Relay and delete its state\n"
         "  status              Show the runner and its desktops\n"
-        "  run                 Keep the runner online\n"
+        "  run [--work-dir DIR]\n"
+        "                      Keep the runner online and run its jobs; workspaces go in DIR\n"
+        "                      (default: $XDG_CACHE_HOME/ketplus-runner/RUNNER_ID/work, else\n"
+        "                      ~/.cache/ketplus-runner/RUNNER_ID/work)\n"
         "\n"
         "Every command takes --state-dir DIR (default: $KETPLUS_RUNNER_STATE_DIR, else\n"
         "$XDG_STATE_HOME/ketplus-runner, else ~/.local/state/ketplus-runner).\n"
@@ -169,7 +176,7 @@ ExitCode runRunner(const CommandOptions& options, const Environment& environment
     RelayClient relay(environment.relayUrl, environment.requestTimeoutMs);
     AccessTokens tokens(relay, state, *identity, environment);
     PairingContext context{environment, relay, state, tokens};
-    return runHeartbeatLoop(context, *identity);
+    return runJobs(context, *identity, *directory, options.workDir);
 }
 
 } // namespace ketplus::runner::app
