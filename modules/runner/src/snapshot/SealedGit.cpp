@@ -1,8 +1,12 @@
 #include "snapshot/SealedGit.h"
 
 #include <QDir>
+#include <QMutex>
+#include <QMutexLocker>
 #include <QProcess>
 #include <QRegularExpression>
+#include <QSet>
+#include <QTemporaryDir>
 
 namespace ketplus::runner::snapshot {
 namespace {
@@ -11,6 +15,16 @@ namespace {
 // ~/.config/git/ignore or ~/.config/git/attributes there.
 QString sealedHome() {
     return QDir::rootPath() + QStringLiteral("nonexistent/ketplus-runner-sealed-home");
+}
+
+// The file git reads as empty. QProcess::nullDevice() is "\\.\NUL" on Windows, which git
+// rejects as a config path; plain "NUL" is accepted there (and by hooksPath and the rule files).
+QString nullPath() {
+#if defined(Q_OS_WIN)
+    return QStringLiteral("NUL");
+#else
+    return QStringLiteral("/dev/null");
+#endif
 }
 
 QString describe(const QStringList& arguments) {
@@ -53,11 +67,11 @@ QStringList SealedGit::sealedOptions() {
     // Repository configuration is the store's or mirror's own (written only by this library),
     // so these mainly pin defaults a future store config or git release could change.
     const QStringList values{
-        QStringLiteral("core.hooksPath=/dev/null"),
+        QStringLiteral("core.hooksPath=") + nullPath(),
         QStringLiteral("core.fsmonitor=false"),
         QStringLiteral("core.untrackedCache=false"),
-        QStringLiteral("core.attributesFile=/dev/null"),
-        QStringLiteral("core.excludesFile=/dev/null"),
+        QStringLiteral("core.attributesFile=") + nullPath(),
+        QStringLiteral("core.excludesFile=") + nullPath(),
         QStringLiteral("core.splitIndex=false"),
         QStringLiteral("core.protectHFS=true"),
         QStringLiteral("core.protectNTFS=true"),
@@ -88,8 +102,8 @@ QProcessEnvironment SealedGit::environment() const {
     environment.insert(QStringLiteral("HOME"), sealedHome());
     environment.insert(QStringLiteral("XDG_CONFIG_HOME"), sealedHome());
     environment.insert(QStringLiteral("GIT_CONFIG_NOSYSTEM"), QStringLiteral("1"));
-    environment.insert(QStringLiteral("GIT_CONFIG_SYSTEM"), QStringLiteral("/dev/null"));
-    environment.insert(QStringLiteral("GIT_CONFIG_GLOBAL"), QStringLiteral("/dev/null"));
+    environment.insert(QStringLiteral("GIT_CONFIG_SYSTEM"), nullPath());
+    environment.insert(QStringLiteral("GIT_CONFIG_GLOBAL"), nullPath());
     environment.insert(QStringLiteral("GIT_ATTR_NOSYSTEM"), QStringLiteral("1"));
     environment.insert(QStringLiteral("GIT_TERMINAL_PROMPT"), QStringLiteral("0"));
     environment.insert(QStringLiteral("GIT_ASKPASS"), QStringLiteral("/bin/false"));
@@ -115,7 +129,45 @@ Result<QString> SealedGit::checkVersion() const {
             ErrorCode::GitTooOld,
             QStringLiteral("%1 is older than the required %2").arg(text, minimumGitVersion())};
     }
+    // A version number does not say whether `git add` takes `attr:` pathspecs (the snapshot stages
+    // with them): Git for Windows 2.38 refuses them and 2.47 accepts them. Ask git once per
+    // program.
+    static QMutex mutex;
+    static QSet<QString> verified;
+    {
+        const QMutexLocker lock(&mutex);
+        if (verified.contains(m_tool.program))
+            return text;
+    }
+    if (const auto probe = probeAttributePathspecs(); !probe)
+        return probe.error();
+    const QMutexLocker lock(&mutex);
+    verified.insert(m_tool.program);
     return text;
+}
+
+Result<bool> SealedGit::probeAttributePathspecs() const {
+    QTemporaryDir directory;
+    if (!directory.isValid())
+        return Error{ErrorCode::Io, QStringLiteral("cannot create a temporary directory")};
+    const QString gitDir = directory.filePath(QStringLiteral("probe.git"));
+    const QString workTree = directory.filePath(QStringLiteral("work"));
+    QDir().mkpath(workTree);
+    if (const auto init = initBare(gitDir); !init)
+        return init.error();
+    GitRun run;
+    run.gitDir = gitDir;
+    run.workTree = workTree;
+    run.indexFile = directory.filePath(QStringLiteral("probe.index"));
+    run.arguments = {QStringLiteral("add"), QStringLiteral("--all"), QStringLiteral("--"),
+                     QStringLiteral(":(top,attr:!filter)")};
+    if (const auto added = this->run(run); !added) {
+        return Error{ErrorCode::GitTooOld,
+                     QStringLiteral("this git does not accept attr: pathspecs in `git add`, which "
+                                    "snapshots need (%1)")
+                         .arg(added.error().message)};
+    }
+    return true;
 }
 
 Result<GitOutput> SealedGit::run(const GitRun& run) const {

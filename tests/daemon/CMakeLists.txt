@@ -181,7 +181,12 @@ qt_add_executable(ketplus_peer_output_tests PeerOutputTest.cpp)
 ketplus_enable_warnings(ketplus_peer_output_tests)
 target_link_libraries(ketplus_peer_output_tests PRIVATE Qt6::Test ketplus_daemon_runner_peer)
 add_test(NAME ketplus_peer_output_tests COMMAND ketplus_peer_output_tests)
-foreach(suite Link Job Output Runner)
+# The Runner suite runs against the runner's own job session, which Windows does not build.
+set(KETPLUS_PEER_SESSION_SUITES Link Job Output)
+if(NOT WIN32)
+    list(APPEND KETPLUS_PEER_SESSION_SUITES Runner)
+endif()
+foreach(suite IN LISTS KETPLUS_PEER_SESSION_SUITES)
     string(TOLOWER ${suite} name)
     set(target ketplus_peer_session_${name}_tests)
     qt_add_executable(${target}
@@ -191,7 +196,9 @@ foreach(suite Link Job Output Runner)
     add_test(NAME ${target} COMMAND ${target})
 endforeach()
 # Against the runner's real job session.
-target_link_libraries(ketplus_peer_session_runner_tests PRIVATE ketplus_runner_session)
+if(NOT WIN32)
+    target_link_libraries(ketplus_peer_session_runner_tests PRIVATE ketplus_runner_session)
+endif()
 function(ketplus_add_runner_sync_test target source)
     qt_add_executable(${target} ${source})
     ketplus_enable_warnings(${target})
@@ -500,16 +507,20 @@ add_test(NAME ketplus_peer_link_tests COMMAND ketplus_peer_link_tests)
 set_tests_properties(ketplus_peer_link_tests PROPERTIES TIMEOUT 90)
 # The desktop's runner peer links: fakes for every port, then the runner's connector against
 # them over real links on this machine.
-qt_add_executable(ketplus_daemon_runner_link_tests
-    runner-link/RunnerLinkTest.cpp runner-link/RunnerLinkTest.h
-    runner-link/RunnerLinkOfferTest.cpp runner-link/RunnerLinkLifecycleTest.cpp
-    runner-link/RunnerLinkChannelsTest.cpp runner-link/RunnerLinkLoopbackTest.cpp)
-ketplus_enable_warnings(ketplus_daemon_runner_link_tests)
-target_link_libraries(ketplus_daemon_runner_link_tests PRIVATE
-    Qt6::Test ketplus_daemon_runner_link ketplus_runner_peer ketplus_runner_pairing
-    ketplus_control_crypto_primitives)
-add_test(NAME ketplus_daemon_runner_link_tests COMMAND ketplus_daemon_runner_link_tests)
-set_tests_properties(ketplus_daemon_runner_link_tests PROPERTIES TIMEOUT 180)
+# The runner's connector lives in apps/runner, which Windows does not build, so these run on
+# Linux and macOS only.
+if(NOT WIN32)
+    qt_add_executable(ketplus_daemon_runner_link_tests
+        runner-link/RunnerLinkTest.cpp runner-link/RunnerLinkTest.h
+        runner-link/RunnerLinkOfferTest.cpp runner-link/RunnerLinkLifecycleTest.cpp
+        runner-link/RunnerLinkChannelsTest.cpp runner-link/RunnerLinkLoopbackTest.cpp)
+    ketplus_enable_warnings(ketplus_daemon_runner_link_tests)
+    target_link_libraries(ketplus_daemon_runner_link_tests PRIVATE
+        Qt6::Test ketplus_daemon_runner_link ketplus_runner_peer ketplus_runner_pairing
+        ketplus_control_crypto_primitives)
+    add_test(NAME ketplus_daemon_runner_link_tests COMMAND ketplus_daemon_runner_link_tests)
+    set_tests_properties(ketplus_daemon_runner_link_tests PROPERTIES TIMEOUT 180)
+endif()
 
 ketplus_add_daemon_test(ketplus_async_question_lifetime_tests AsyncQuestionLifetimeTest.cpp)
 

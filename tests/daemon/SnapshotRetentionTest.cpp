@@ -13,7 +13,6 @@
 #include <QTest>
 
 #include <memory>
-#include <sys/time.h>
 
 using namespace ketplus::daemon::runner::sync;
 namespace snapshot = ketplus::runner::snapshot;
@@ -49,9 +48,10 @@ void write(const QString& path, const QByteArray& content) {
 }
 
 void age(const QString& path, const QDateTime& when) {
-    const time_t seconds = static_cast<time_t>(when.toSecsSinceEpoch());
-    const timeval times[2] = {{seconds, 0}, {seconds, 0}};
-    QCOMPARE(utimes(QFile::encodeName(path).constData(), times), 0);
+    QFile file(path);
+    QVERIFY(file.open(QIODevice::ReadWrite));
+    QVERIFY(file.setFileTime(when, QFileDevice::FileModificationTime));
+    QVERIFY(file.setFileTime(when, QFileDevice::FileAccessTime));
 }
 
 PackFile fakePack(const PackCache& cache, const QString& jobId, const qint64 size,
@@ -245,6 +245,9 @@ class SnapshotRetentionTest : public QObject {
     }
 
     void aRefCommandThatHangsFails() {
+#if defined(Q_OS_WIN)
+        QSKIP("The stand-in git is a sh script, which Windows cannot start directly.");
+#else
         const QString fake = root_ + QStringLiteral("/hanging-git");
         write(fake, "#!/bin/sh\nexec sleep 60\n");
         QVERIFY(
@@ -263,6 +266,7 @@ class SnapshotRetentionTest : public QObject {
         QVERIFY(timer.elapsed() >= refCommandTimeoutMs - 500); // Git ran and was stopped
         QVERIFY(timer.elapsed() < refCommandTimeoutMs + 3'000);
         QVERIFY(!retention.confirmed(QStringLiteral("run-1"), workspaceKey));
+#endif
     }
 
     void storeRefsFollowTheJobAndTheRunner() {

@@ -20,7 +20,8 @@ struct GitTool {
     int timeoutMs = 10 * 60 * 1000;
 };
 
-// GIT_CONFIG_GLOBAL and GIT_CONFIG_SYSTEM arrived in Git 2.32.
+// GIT_CONFIG_GLOBAL and GIT_CONFIG_SYSTEM arrived in Git 2.32. `attr:` pathspecs in `git add` are
+// checked by running git (see checkVersion), not by number.
 inline constexpr int minimumGitMajor = 2;
 inline constexpr int minimumGitMinor = 32;
 [[nodiscard]] QString minimumGitVersion();
@@ -49,7 +50,8 @@ class SealedGit {
   public:
     explicit SealedGit(GitTool tool = {});
 
-    // Runs `git --version` and checks it against the minimum.
+    // Runs `git --version` and checks it against the minimum, then (once per program) that
+    // `git add` accepts `attr:` pathspecs, which snapshots use and some older releases refuse.
     [[nodiscard]] Result<QString> checkVersion() const;
     // Exit 0 → output; anything else → GitFailed with stderr (or GitUnavailable).
     [[nodiscard]] Result<GitOutput> run(const GitRun& run) const;
@@ -72,6 +74,7 @@ class SealedGit {
     [[nodiscard]] static QStringList sealedOptions();
 
   private:
+    [[nodiscard]] Result<bool> probeAttributePathspecs() const;
     [[nodiscard]] Result<GitOutput> start(const QStringList& arguments,
                                           const QProcessEnvironment& environment,
                                           const GitRun& io) const;

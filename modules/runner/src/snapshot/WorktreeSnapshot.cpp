@@ -81,8 +81,14 @@ std::optional<Error> prepareStore(const SealedGit& git, const QString& storePath
     // alternate, git "freshens" (touches the mtime of) any repository object or pack it is
     // about to write again, which would change the user's repository. Commands that only read
     // get the repository's objects through GIT_ALTERNATE_OBJECT_DIRECTORIES instead.
-    if (layout.objectsDir.contains(QLatin1Char('\n')) ||
-        layout.objectsDir.contains(QLatin1Char(':')))
+    // GIT_ALTERNATE_OBJECT_DIRECTORIES is a list: separated by ':' on POSIX and by ';' on Windows
+    // (where ':' belongs to the drive letter), so a path holding its separator cannot be passed.
+#if defined(Q_OS_WIN)
+    constexpr QLatin1Char listSeparator(';');
+#else
+    constexpr QLatin1Char listSeparator(':');
+#endif
+    if (layout.objectsDir.contains(QLatin1Char('\n')) || layout.objectsDir.contains(listSeparator))
         return Error{ErrorCode::UnsupportedRepository,
                      QStringLiteral("unsupported character in %1").arg(layout.objectsDir)};
     const QString binding = QDir(storeRoot).filePath(sourceObjectsFile());
