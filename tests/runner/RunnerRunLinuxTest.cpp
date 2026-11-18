@@ -38,6 +38,14 @@ const protocol::JobResult* resultOf(const QList<protocol::Frame>& frames) {
 
 } // namespace
 
+class RunnerRunLinuxTest : public QObject {
+    Q_OBJECT
+  private slots:
+    void initTestCase();
+    void realJobs_data();
+    void realJobs();
+};
+
 void RunnerRunLinuxTest::initTestCase() {
     if (qEnvironmentVariable("KETPLUS_RUN_LINUX_JOB_TESTS") != QStringLiteral("1"))
         QSKIP("set KETPLUS_RUN_LINUX_JOB_TESTS=1 in a prepared Linux user session");
@@ -127,4 +135,11 @@ void RunnerRunLinuxTest::realJobs() {
     QCOMPARE(run.heartbeatState(), QStringLiteral("idle"));
 }
 
+int runLinuxJobTests(int argc, char* argv[]) {
+    RunnerRunLinuxTest test;
+    return QTest::qExec(&test, argc, argv);
+}
+
 } // namespace runner_run_test
+
+#include "RunnerRunLinuxTest.moc"

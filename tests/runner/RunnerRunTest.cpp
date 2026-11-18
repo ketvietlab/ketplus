@@ -543,10 +543,7 @@ int main(int argc, char* argv[]) {
         failures += QTest::qExec(&test, argc, argv);
     }
 #ifdef Q_OS_LINUX
-    {
-        runner_run_test::RunnerRunLinuxTest test;
-        failures += QTest::qExec(&test, argc, argv);
-    }
+    failures += runner_run_test::runLinuxJobTests(argc, argv);
 #endif
     return failures == 0 ? 0 : 1;
 }
