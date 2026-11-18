@@ -74,6 +74,55 @@ job fails with a named mismatch, instead of running stale or missing binaries,
 when a runner image puts any of them elsewhere. Node is pinned to an exact
 version for the same reason. No job in the matrix uses provider quota.
 
+### Lite on a local Windows machine
+
+`tools/windows/win-run.sh` (see `docs/development.md`, Windows) runs the Lite
+suite on a Windows build machine with MSVC 2022 and Qt 6.11:
+`cmake --preset lite-dev`, `cmake --build --preset lite-dev`, then
+`ctest --preset lite-dev -j4 --timeout 180`. All 28 Lite tests pass on Windows.
+The two tests that start real `cmd.exe` shells (`ketplus_pty_backend_tests`,
+`ketplus_terminal_tests`) are `RUN_SERIAL` there, because a cold shell start can
+exceed their wait windows when it competes with the rest of the suite.
+
+macOS runs 29 tests: `ketplus_terminal_app_tests` is built only on Apple
+platforms. Run it with `QT_QPA_PLATFORM=offscreen ctest --preset lite-dev -j4`.
+
+Two cases inside `ketplus_preview_tests` are skipped on Windows (QTest `SKIP`,
+which CTest does not list): `discoversMmdcInstalledByNvm` (the nvm layout and
+`HOME` are POSIX only) and `rendersMermaidAndOpensThePopup` (its fake `mmdc` is
+a `/bin/sh` script). Windows `mmdc` discovery and rendering are not covered yet;
+a Windows version of the first test must set `USERPROFILE`, which
+`QDir::homePath()` reads on Windows, alongside `HOME`.
+
+Open, edit and save, Git status and the Markdown preview are covered by
+automated offscreen tests that ran on Windows: `ketplus_lite_window_tests` (a
+real Git repository opened in the window), `ketplus_tests` document save,
+`ketplus_editor_file_refresh_tests`, `ketplus_git_tests`,
+`ketplus_git_changes_panel_tests` and `ketplus_preview_tests`. Theme includes
+from a UNC share (`\\localhost\C$`) run in `ketplus_theme_input_tests`. The
+case with a filesystem root as the source (`C:\` or `/`) writes a scratch
+directory there, so it runs only with `KETPLUS_TEST_WRITE_FILESYSTEM_ROOT=1`
+and is skipped otherwise. Rendering Mermaid needs the external `mmdc` tool.
+
+Launching the app for a smoke check needs a desktop. An ssh session has none,
+so the default `windows` Qt platform plugin aborts at startup. Deploy the
+offscreen plugin next to the executable and use the review capture (see
+`docs/design-system.md`):
+
+```bat
+windeployqt --no-translations --compiler-runtime build\lite-dev\core\KetPlusCM.exe
+copy %QT_ROOT%\plugins\platforms\qoffscreend.dll build\lite-dev\core\platforms\
+set QT_QPA_PLATFORM=offscreen
+set KETPLUS_CAPTURE=smoke.png
+build\lite-dev\core\KetPlusCM.exe <repository-folder>
+```
+
+The Debug executable is `core\KetPlusCM.exe` and needs the OpenSSL `bin`
+directory on `PATH`. A capture of a folder holding a Markdown file and a Git
+repository shows the Markdown preview, `Git: <branch>` with the changed-file
+count, the file's CRLF and UTF-8 BOM, and the light and dark themes. The
+Mermaid block falls back to code with a notice until `mmdc` is installed.
+
 ## VS Code importer fixtures
 
 `ketplus_vscode_import_tests` covers original dark/light/include themes, standard
