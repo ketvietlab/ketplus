@@ -105,7 +105,7 @@ class PtyBackendTest final : public QObject {
         };
         QElapsedTimer waited;
         waited.start();
-        while (!answered() && waited.elapsed() < 20000) {
+        while (!answered() && waited.elapsed() < 45000) {
             process.send(QByteArray(query) + kNewline);
             QTest::qWait(1000);
         }

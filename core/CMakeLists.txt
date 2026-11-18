@@ -171,6 +171,8 @@ add_library(KetPlusCM::workspace ALIAS ketplus_workspace)
 
 add_library(ketplus_terminal_core STATIC
     src/terminal/PtyBackend.h
+    src/terminal/RunCommand.cpp
+    src/terminal/RunCommand.h
     src/terminal/PtyProcess.cpp
     src/terminal/PtyProcess.h
     src/terminal/TerminalSession.cpp
@@ -750,6 +752,14 @@ if(KETPLUS_CM_BUILD_TESTS)
 
     ketplus_cm_add_test(ketplus_search_view_tests ketplus_search_view_tests)
     set_tests_properties(ketplus_search_view_tests PROPERTIES
+        ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
+    )
+
+    add_executable(ketplus_run_command_tests tests/RunCommandTest.cpp)
+    target_link_libraries(ketplus_run_command_tests PRIVATE Qt6::Test KetPlusCM::terminal_ui)
+    ketplus_enable_warnings(ketplus_run_command_tests)
+    ketplus_cm_add_test(ketplus_run_command_tests ketplus_run_command_tests)
+    set_tests_properties(ketplus_run_command_tests PROPERTIES
         ENVIRONMENT "QT_QPA_PLATFORM=offscreen"
     )
 
