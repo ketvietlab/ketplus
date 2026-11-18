@@ -36,13 +36,6 @@ bool failed(const QJsonObject& result, const QString& error) {
            result.value(QStringLiteral("ok")) == QJsonValue(false);
 }
 
-std::optional<int> attemptsIn(const QJsonObject& result) {
-    const QJsonValue value = result.value(QStringLiteral("attempts_left"));
-    if (!value.isDouble())
-        return std::nullopt;
-    return value.toInt();
-}
-
 } // namespace
 
 RunnerPairingDialog::RunnerPairingDialog(Requester requester, QWidget* anchor,
@@ -269,6 +262,7 @@ void RunnerPairingDialog::approveClicked() {
     if (!view_ || !view_->canApprove() || approving_ || rejectSent_ || closed_ || !requester_)
         return;
     approving_ = true;
+    mismatch_ = false;
     approve_->setEnabled(false);
     showError({});
     const QPointer<RunnerPairingDialog> alive(this);
@@ -298,7 +292,8 @@ void RunnerPairingDialog::receivePairing(const QJsonObject& result, const QStrin
                                          const bool fromApprove) {
     if (failed(result, error)) {
         const QString code = failureCode(result);
-        showError(pairingErrorText(code, attemptsIn(result), failureMessage(result, error)));
+        mismatch_ = false;
+        showError(pairingErrorText(code, std::nullopt, failureMessage(result, error)));
         if (code == QStringLiteral("ticket_not_found") && view_) {
             view_->stage = PairingView::Stage::Failed;
             show(*view_);
@@ -307,8 +302,10 @@ void RunnerPairingDialog::receivePairing(const QJsonObject& result, const QStrin
         if (view_)
             show(*view_);
         // The attempts left and the stage after a refused approval come from the daemon.
-        if (fromApprove)
+        if (fromApprove) {
+            mismatch_ = code == QStringLiteral("code_mismatch");
             readStatus();
+        }
         return;
     }
     if (const std::optional<PairingView> view = parsePairing(result))
@@ -353,6 +350,9 @@ void RunnerPairingDialog::show(const PairingView& view) {
     code_->setVisible(!view.confirmationCode.isEmpty());
     if (!view.lastError.isEmpty() && !view.finished())
         showError(pairingErrorText(view.lastError, view.attemptsLeft, {}));
+    else if (mismatch_ && view.stage == Stage::Confirm)
+        // A refused code leaves no last_error; the attempts left come with the status.
+        showError(pairingErrorText(QStringLiteral("code_mismatch"), view.attemptsLeft, {}));
 
     if (view.finished()) {
         finished_ = true;
@@ -439,7 +439,8 @@ void RunnerPairingDialog::showError(const QString& text) {
 }
 
 void RunnerPairingDialog::clearToken() {
-    token_->clear();
+    // setText, unlike clear, also drops the undo history that would keep the token.
+    token_->setText(QString());
     copyToken_->setEnabled(false);
 }
 

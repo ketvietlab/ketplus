@@ -10,6 +10,7 @@
 #include "runners/RunnerPairingDialog.h"
 
 #include <QHBoxLayout>
+#include <QHideEvent>
 #include <QLabel>
 #include <QVBoxLayout>
 
@@ -175,7 +176,9 @@ void SettingsRunnersPage::showEvent(QShowEvent* event) {
 
 void SettingsRunnersPage::hideEvent(QHideEvent* event) {
     QWidget::hideEvent(event);
-    closeDialogs();
+    // Minimizing the window hides it spontaneously; the pairing stays open meanwhile.
+    if (!event->spontaneous())
+        closeDialogs();
 }
 
 void SettingsRunnersPage::closeDialogs() {

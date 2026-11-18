@@ -100,6 +100,7 @@ class RunnerPairingDialog final : public QObject {
     bool approving_{false};
     bool rejectSent_{false};
     bool finished_{false};
+    bool mismatch_{false};
     bool closed_{false};
 };
 

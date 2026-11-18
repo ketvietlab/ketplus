@@ -1,6 +1,7 @@
 // Settings → Runners: the answers of runner.list and runner.pairing.* turned into rows and
 // pairing stages. Only a runner this machine pinned and the relay pairs with it is trusted.
 #include "runners/RunnerListModel.h"
+#include "runners/RunnerMessages.h"
 #include "runners/RunnerPairingModel.h"
 
 #include <QJsonArray>
@@ -221,6 +222,29 @@ class RunnerSettingsModelTest final : public QObject {
         QCOMPARE(int(view->stage), stage);
         QCOMPARE(view->finished(), finished);
         QCOMPARE(view->canReject(), !finished);
+    }
+
+    void everyFailureReasonHasItsOwnSentence() {
+        const QStringList reasons{
+            "account_changed",      "runner_unavailable", "claim_changed",   "too_many_attempts",
+            "invalid_claim",        "unexpected_state",   "digest_mismatch", "ticket_not_found",
+            "desktop_key_changed",  "pin_store_failed",   "unsupported",     "not_enrolled",
+            "entitlement_required", "invalid_access",     "route_refused",   "invalid_request"};
+        PairingView view;
+        view.ticketId = "t1";
+        view.stage = PairingView::Stage::Failed;
+        const QString generic = stageText(view);
+        QSet<QString> seen{generic};
+        for (const QString& reason : reasons) {
+            view.failureReason = reason;
+            const QString text = stageText(view);
+            QVERIFY2(!seen.contains(text), qPrintable(reason));
+            seen.insert(text);
+        }
+        view.failureReason = "too_many_attempts";
+        QVERIFY(stageText(view).contains("Too many wrong confirmation codes"));
+        view.failureReason = "something_new";
+        QCOMPARE(stageText(view), generic);
     }
 
     void approveNeedsClaimAndCode() {

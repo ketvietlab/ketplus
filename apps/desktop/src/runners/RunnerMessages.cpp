@@ -219,8 +219,41 @@ QString stageText(const PairingView& view) {
         return tr("The account on this computer changed. Start again.");
     if (view.failureReason == QStringLiteral("runner_unavailable"))
         return tr("KetPlus Relay stopped offering runners. Start again later.");
-    if (view.failureReason == QStringLiteral("claim_changed"))
+    const QString& reason = view.failureReason;
+    if (reason == QStringLiteral("claim_changed"))
         return tr("Another node claimed this token. Start again.");
+    if (reason == QStringLiteral("too_many_attempts"))
+        return tr("Too many wrong confirmation codes. Nothing was paired. Start again with a new "
+                  "token.");
+    if (reason == QStringLiteral("invalid_claim"))
+        return tr("The node's claim could not be verified. Nothing was paired. Start again.");
+    if (reason == QStringLiteral("unexpected_state"))
+        return tr("KetPlus Relay reported an unexpected pairing state. Start again.");
+    if (reason == QStringLiteral("digest_mismatch"))
+        return tr("The node and this computer saw different pairing details. Nothing was paired. "
+                  "Start again.");
+    if (reason == QStringLiteral("ticket_not_found"))
+        return tr("KetPlus Relay no longer knows this token. Start again.");
+    if (reason == QStringLiteral("desktop_key_changed"))
+        return tr("This computer's key changed during pairing. Start again.");
+    if (reason == QStringLiteral("pin_store_failed"))
+        return tr("KetPlus Relay paired the runner, but this computer could not store its key, so "
+                  "it is listed as untrusted. Check that KetPlus can write its data, then remove "
+                  "the runner and pair it again.");
+    if (reason == QStringLiteral("unsupported"))
+        return tr("KetPlus Relay stopped supporting pairing. Start again later.");
+    if (reason == QStringLiteral("not_enrolled"))
+        return tr("This computer has no relay credential. Sign in again in Account & devices, "
+                  "then start again.");
+    if (reason == QStringLiteral("entitlement_required"))
+        return tr("This account's plan does not include runners. Nothing was paired.");
+    if (reason == QStringLiteral("invalid_access"))
+        return tr("KetPlus Relay refused this computer's credential. Sign in again in Account & "
+                  "devices, then start again.");
+    if (reason == QStringLiteral("route_refused"))
+        return tr("KetPlus Daemon refused to send the pairing request. Start again.");
+    if (reason == QStringLiteral("invalid_request"))
+        return tr("KetPlus Relay refused the pairing request. Start again.");
     return tr("Pairing failed. Start again.");
 }
 

@@ -471,7 +471,8 @@ class SettingsRunnersPageTest final : public QObject {
         QCOMPARE(daemon.count("runner.pairing.approve"), 0);
         pairing->checkButton()->click();
         daemon.answers["runner.pairing.approve"] = {
-            {{"ok", false}, {"error_code", "code_mismatch"}, {"attempts_left", 2}}, "rejected"};
+            {{"ok", false}, {"error_code", "code_mismatch"}, {"error_message", "rejected"}},
+            "rejected"};
         QJsonObject after = claimed();
         after["attempts_left"] = 2;
         daemon.answers["runner.pairing.status"] = {after, {}};
@@ -528,6 +529,35 @@ class SettingsRunnersPageTest final : public QObject {
         }
         QTRY_VERIFY(!page.pairingDialog());
         QCOMPARE(daemon.count("runner.pairing.reject"), 1);
+    }
+
+    void minimizingKeepsThePairingOpen() {
+        FakeDaemon daemon;
+        SettingsRunnersPage page(daemon.requester());
+        page.show();
+        auto* pairing = startPairing(page);
+        // The window manager hides a minimized window spontaneously.
+        QHideEvent minimized;
+        QSpontaneKeyEvent::setSpontaneous(&minimized);
+        // sendEvent would clear the spontaneous flag; notify delivers the event as it is.
+        QCoreApplication::instance()->notify(&page, &minimized);
+        QCOMPARE(page.pairingDialog(), pairing);
+        QCOMPARE(pairing->tokenField()->text(), token);
+        QCOMPARE(daemon.count("runner.pairing.reject"), 0);
+        QVERIFY(!pairing->isFinished());
+    }
+
+    void aClearedTokenLeavesNoUndo() {
+        FakeDaemon daemon;
+        SettingsRunnersPage page(daemon.requester());
+        page.show();
+        auto* pairing = startPairing(page);
+        pairing->checkButton()->click(); // claimed: the token leaves the screen
+        ket::TextField* field = pairing->tokenField();
+        QVERIFY(field->text().isEmpty());
+        // A read-only field never reports undo; lift it to see what the history holds.
+        field->setReadOnly(false);
+        QVERIFY(!field->isUndoAvailable());
     }
 
     void aTokenThatArrivesAfterCloseIsRejected() {
