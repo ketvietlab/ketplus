@@ -215,18 +215,22 @@ std::unique_ptr<peer::PeerTransport> FakeTransports::create(peer::PeerTransportE
     return std::make_unique<FakeTransport>(state);
 }
 
+// Like the executor's command runner, an unverified clean-up makes it unavailable before it
+// answers.
 void FakeCommand::cleanUpLeftovers(std::function<void(bool)> done) {
     if (order)
         order->append(QStringLiteral("cleanup"));
+    m_cleanupDone = std::move(done);
     if (autoCleanup)
-        done(*autoCleanup);
-    else
-        m_cleanupDone = std::move(done);
+        finishCleanup(*autoCleanup);
 }
 
 void FakeCommand::finishCleanup(const bool clean) {
-    if (m_cleanupDone)
-        std::exchange(m_cleanupDone, {})(clean);
+    if (!m_cleanupDone)
+        return;
+    if (!clean)
+        set(Readiness::Unavailable);
+    std::exchange(m_cleanupDone, {})(clean);
 }
 
 void FakeCommand::launch(const session::LaunchRequest& request) { launches.append(request); }
@@ -333,7 +337,7 @@ void Run::make(const ReceiverHost* host) {
         jobs,
         acceptedError,
         host ? *host : fake,
-        command,
+        realCommand ? *realCommand : static_cast<CommandHost&>(command),
         hub,
         info,
         identity.config.labels,
@@ -524,6 +528,10 @@ int main(int argc, char* argv[]) {
     int failures = 0;
     {
         runner_run_test::RunnerRunStartTest test;
+        failures += QTest::qExec(&test, argc, argv);
+    }
+    {
+        runner_run_test::RunnerRunCleanupTest test;
         failures += QTest::qExec(&test, argc, argv);
     }
     {

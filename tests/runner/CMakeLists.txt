@@ -34,7 +34,7 @@ add_test(NAME ketplus_runner_app_tests COMMAND ketplus_runner_app_tests)
 # `ketplus-runner run`: the run loop over a fake Relay, socket, peer transport, command
 # runner and clock, with the real job pieces, journal, accepted jobs and pins.
 qt_add_executable(ketplus_runner_run_tests
-    RunnerRunJobTest.cpp RunnerRunLoopbackTest.cpp RunnerRunSnapshotTest.cpp RunnerRunStartTest.cpp RunnerRunStopTest.cpp
+    RunnerRunCleanupTest.cpp RunnerRunJobTest.cpp RunnerRunLoopbackTest.cpp RunnerRunSnapshotTest.cpp RunnerRunStartTest.cpp RunnerRunStopTest.cpp
     RunnerRunTest.cpp RunnerRunTest.h)
 ketplus_enable_warnings(ketplus_runner_run_tests)
 target_link_libraries(ketplus_runner_run_tests PRIVATE

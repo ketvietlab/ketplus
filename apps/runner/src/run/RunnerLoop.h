@@ -169,7 +169,7 @@ class RunnerLoop final : public RelayQueueListener,
 
     std::function<void(ExitCode)> m_finished;
     Startup m_startup = Startup::NotStarted;
-    bool m_cleanupClean = false;
+    bool m_cleanupAnswered = false; // the start-up clean-up has answered, clean or not
     bool m_shuttingDown = false;
     bool m_done = false;
     bool m_wasHolding = false;

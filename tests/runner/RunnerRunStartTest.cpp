@@ -276,6 +276,40 @@ void RunnerRunStartTest::brokenAcceptedJobsDrainUntilRestart() {
     QVERIFY(run.relay.leases.isEmpty());
 }
 
+// An unverified start-up clean-up drains the runner until the command runner, which keeps
+// retrying it, is ready again; then the runner takes jobs without a restart.
+void RunnerRunStartTest::uncleanStartUpRecoversWhenTheCommandRunnerIsReady() {
+    Run run;
+    run.command.autoCleanup = false;
+    run.start();
+    run.socketReady();
+    run.acquire();
+    QVERIFY(run.relay.leases.isEmpty());
+    QCOMPARE(run.heartbeatState(), draining);
+
+    run.command.set(Readiness::Ready);
+    run.advance(heartbeatSpacingMs);
+    QCOMPARE(run.heartbeatState(), idle);
+    run.acquire();
+    QCOMPARE(run.leaseKinds().value(0), QStringLiteral("acquire"));
+    QVERIFY(!run.exit);
+}
+
+// While the command runner stays unavailable, no acquire goes, whatever the Relay says.
+void RunnerRunStartTest::uncleanStartUpWithoutRecoveryNeverAcquires() {
+    Run run;
+    run.command.autoCleanup = false;
+    run.start();
+    run.socketReady();
+    for (int i = 0; i < 5; ++i) {
+        run.wakeup({{"type", "job.available"}, {"jobId", "job_42"}});
+        run.acquire();
+        run.advance(heartbeatIntervalMs);
+    }
+    QVERIFY(run.relay.leases.isEmpty());
+    QCOMPARE(run.heartbeatState(), draining);
+}
+
 void RunnerRunStartTest::restoredLeaseWithoutSpecIsReleasedWhileDraining() {
     Run run;
     QVERIFY(run.journal->write(leasedRecord(JournalRecord::Step::Leased)));

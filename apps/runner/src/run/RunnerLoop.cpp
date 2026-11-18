@@ -79,7 +79,7 @@ void RunnerLoop::cleanupDone(const bool clean, const bool bounded) {
     if (m_done)
         return;
     if (!bounded)
-        m_cleanupClean = clean; // a late answer still counts
+        m_cleanupAnswered = true; // a late answer still counts
     if (m_startup != Startup::CleaningUp) {
         update();
         return;
@@ -116,10 +116,11 @@ bool RunnerLoop::holding() const {
 }
 
 // Every cause in one place: any of them makes the runner draining, also while it holds a job.
+// Whether what a previous run left is cleaned up is the command runner's readiness alone: it
+// stays unavailable while the clean-up is unverified and retries it.
 bool RunnerLoop::draining() const {
-    return m_startup != Startup::Running ||
-           m_deps.command.readiness() != CommandHost::Readiness::Ready || !m_cleanupClean ||
-           m_shuttingDown ||
+    return m_startup != Startup::Running || !m_cleanupAnswered ||
+           m_deps.command.readiness() != CommandHost::Readiness::Ready || m_shuttingDown ||
            m_delivery.heartbeatFields().value(QStringLiteral("state")).toString() == drainingState;
 }
 

@@ -222,6 +222,7 @@ struct Run {
     FakeTransports transports;
     peer::PeerTransportFactory* realTransports = nullptr; // replaces `transports` when set
     FakeCommand command;
+    CommandHost* realCommand = nullptr; // replaces `command` when set
     FakeReceiver receiver;
     std::unique_ptr<IdentitySigner> signer;
     std::unique_ptr<StatePins> pins;
@@ -264,12 +265,21 @@ class RunnerRunStartTest : public QObject {
     void stateChangesSendAHeartbeatSoon();
     void brokenJournalDrainsUntilRestart();
     void brokenAcceptedJobsDrainUntilRestart();
+    void uncleanStartUpRecoversWhenTheCommandRunnerIsReady();
+    void uncleanStartUpWithoutRecoveryNeverAcquires();
     void restoredLeaseWithoutSpecIsReleasedWhileDraining();
     void restoredStartedJobFinishesInterrupted();
     void relayCallsNeverNest();
     void heartbeatsWaitAtMostOnce();
     void cancelWakeupRenewsOnce();
     void logsHoldNoSecret();
+};
+
+// The run loop over the executor's real command runner, on a fake executor.
+class RunnerRunCleanupTest : public QObject {
+    Q_OBJECT
+  private slots:
+    void retriedCleanUpLetsTheRunnerAcquire();
 };
 
 class RunnerRunJobTest : public QObject {
