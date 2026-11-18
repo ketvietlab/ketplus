@@ -1389,15 +1389,25 @@ plumbing and makes no claim about native faults, birth identity or containment.
 
 Each row closes and reopens both journal and Host/runtime, retains the incident,
 output and root result, checks slot release without terminalizing the incident,
-and deletes the owner through the Host. The generation-change row then inserts a
-replacement generation through the journal while the Host is closed and reopens
-the Host; there is no separate Host command that replaces a generation. Local
-administration must retain access to the old owner's incident. Pruning, automatic
+and tests two distinct invalidation paths. The owner-close row deletes through
+the Host. The generation-change row closes the Host, verifies no tombstone or owner
+fence exists, then replaces the generation directly through the journal and reopens
+the Host without deleting first. A fresh owner-invalid fence must be observed;
+close/recreate must not mask generation mismatch. Local administration must retain
+access to the old owner's incident. Pruning, automatic
 wake/relaunch/reassignment/resolution, agent acknowledgement and stale revision
 acknowledgement are fenced. A current-revision local user acknowledgement must
 create exactly one durable audit row and retain `unverified`/suppressed completion
-after the final reopen. Diagnostics whitelist bounded fields, never lease values,
-protocol bodies or command arguments.
+after the final reopen. Before the native fault, the output API must already
+return the exact bytes with a captured cursor and size; later reads check
+preservation of this sample. Reconciliation waits for publication of this task and
+generation, with a newer native revision; the portable no-identity path instead
+requires publication of its unchanged incident. Native scope cleanup retains access
+to the live Host/journal and validates the task's own receipt, including failures
+before `running` or local identity capture. Stop/reconcile and birth-bound signals
+must reach bounded closure before fixture deletion. Signal/Stop errors or unproven
+closure fail the test and retain the private directory. Diagnostics whitelist
+bounded fields, never lease values, protocol bodies or command arguments.
 
 Before executing this follow-up, submit the exact source/configuration and commands
 for offline review. On the verified Linux source mirror, use a separate build tree

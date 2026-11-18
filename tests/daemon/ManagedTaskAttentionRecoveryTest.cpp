@@ -5,6 +5,9 @@
 #include "storage/BackgroundTaskLedger.h"
 #include "storage/BackgroundTaskOutput.h"
 #include "storage/LocalJournal.h"
+#ifdef Q_OS_MACOS
+#include "ManagedTaskAttentionCleanup.h"
+#endif
 
 #include <QDateTime>
 #include <QDir>
@@ -108,6 +111,38 @@ bool noTurnEvents(const QSignalSpy& events) {
     }
     return true;
 }
+bool preservesOutput(const QJsonObject& page, const QJsonObject& before) {
+    if (!page.value("ok").toBool() || !before.value("ok").toBool())
+        return false;
+    for (const auto* key : {"output", "next_cursor", "total_bytes", "truncated"})
+        if (page.value(key) != before.value(key))
+            return false;
+    return true;
+}
+bool publishedIncident(const QSignalSpy& events, const QString& id, qint64 previousRevision) {
+    for (const auto& values : events) {
+        const auto event = values.first().toJsonObject();
+        if (event.value("event_type") != "tasks.changed" || event.value("session_id") != "owner" ||
+            event.value("session_generation").toInteger() != 1)
+            continue;
+        for (const auto value : event.value("payload").toObject().value("tasks").toArray()) {
+            const auto incident = value.toObject();
+            if (incident.value("task_id") != id || incident.value("owner_session_id") != "owner" ||
+                incident.value("owner_generation").toInteger() != 1 ||
+                incident.value("state") != "needs_attention" ||
+                !incident.value("executor_stopped").toBool())
+                continue;
+#ifdef Q_OS_MACOS
+            if (incident.value("revision").toInteger() > previousRevision)
+#else
+            // No-identity portable reconciliation publishes the unchanged incident.
+            if (incident.value("revision").toInteger() == previousRevision)
+#endif
+                return true;
+        }
+    }
+    return false;
+}
 #ifdef Q_OS_MACOS
 executor::NativeProcessIdentity identity(const QJsonObject& value) {
     return {value.value("pid").toInteger(), 0, 0, value.value("birth").toString()};
@@ -146,6 +181,11 @@ class ManagedTaskAttentionRecoveryTest final : public QObject {
         QJsonObject supervisor;
         QByteArray output;
         QJsonObject outputPage;
+        qint64 beforeOwnerChangeRevision = 0;
+        bool cleanupClosed = true;
+        int cleanupSignalFailures = 0;
+        bool cleanupStopFailed = false;
+        bool fixtureRetained = false;
         QElapsedTimer elapsed;
         elapsed.start();
         const auto diagnostic = qScopeGuard([&] {
@@ -153,38 +193,52 @@ class ManagedTaskAttentionRecoveryTest final : public QObject {
             // execution spec, lease, provider text or arbitrary command arguments.
             qInfo().noquote()
                 << QJsonDocument(
-                       QJsonObject{{"row", replaceGeneration ? "generation-change" : "owner-close"},
+                       QJsonObject{
+                           {"row", replaceGeneration ? "generation-change" : "owner-close"},
 #ifdef Q_OS_MACOS
-                                   {"mode", "real-native-fault"},
+                           {"mode", "real-native-fault"},
 #else
-                                   {"mode", "portable-injected-attention"},
+                           {"mode", "portable-injected-attention"},
 #endif
-                                   {"phase", phase},
-                                   {"elapsed_ms", elapsed.elapsed()},
-                                   {"execution_event_timestamps_available", false},
-                                   {"task_id", id},
-                                   {"state", latest.value("state")},
-                                   {"revision", latest.value("revision")},
-                                   {"owner_generation", latest.value("owner_generation")},
-                                   {"executor_stopped", latest.value("executor_stopped")},
-                                   {"cleanup_status", latest.value("cleanup_status")},
-                                   {"exit_code", latest.value("exit_code")},
-                                   {"identity_present",
-                                    !latest.value("execution_identity").toObject().isEmpty()},
-                                   {"launch_marker_bytes", bytes(cwd + "/launch-marker").size()},
-                                   {"output_bytes", output.size()}})
+                           {"phase", phase},
+                           {"elapsed_ms", elapsed.elapsed()},
+                           {"execution_event_timestamps_available", false},
+                           {"task_id", id},
+                           {"state", latest.value("state")},
+                           {"revision", latest.value("revision")},
+                           {"owner_generation", latest.value("owner_generation")},
+                           {"executor_stopped", latest.value("executor_stopped")},
+                           {"cleanup_status", latest.value("cleanup_status")},
+                           {"exit_code", latest.value("exit_code")},
+                           {"identity_present",
+                            !latest.value("execution_identity").toObject().isEmpty()},
+                           {"launch_marker_bytes", bytes(cwd + "/launch-marker").size()},
+                           {"output_bytes", output.size()},
+                           {"cleanup_closed", cleanupClosed},
+                           {"cleanup_signal_failures", cleanupSignalFailures},
+                           {"cleanup_stop_failed", cleanupStopFailed},
+                           {"fixture_retained", fixtureRetained},
+                           {"retained_fixture", fixtureRetained ? QJsonValue(cwd) : QJsonValue()}})
                        .toJson(QJsonDocument::Compact);
         });
 #ifdef Q_OS_MACOS
-        const auto cleanup = qScopeGuard([&] {
-            // Fault or assertion failure can only signal captured test-owned identities.
-            for (const auto& value : {root, supervisor}) {
-                if (!value.isEmpty()) {
-                    QString error;
-                    executor::signalIdentity(identity(value), SIGKILL, &error);
-                }
+        const auto cleanupNative = [&](LocalJournal& journal, SessionHost& host) {
+            const auto result = attention_fixture::cleanupNativeAttention(
+                journal, id, cwd, [&](const QString& taskId) {
+                    return command(host, "session.task.stop", {{ "task_id", taskId }});
+                });
+            cleanupClosed = cleanupClosed && result.closed;
+            cleanupSignalFailures += result.signalFailures;
+            cleanupStopFailed = cleanupStopFailed || result.stopFailed;
+            if (!result.ok()) {
+                // Keep the DB/receipt until intervention if closure is uncertain,
+                // or retain evidence of any failed stop/signal instead of ignoring it.
+                directory.setAutoRemove(false);
+                fixtureRetained = true;
+                QTest::qFail("Native fixture cleanup failed; private directory retained.", __FILE__,
+                             __LINE__);
             }
-        });
+        };
 #endif
         {
             LocalJournal journal(databasePath);
@@ -240,6 +294,10 @@ class ManagedTaskAttentionRecoveryTest final : public QObject {
             QSignalSpy events(&host, &SessionHost::eventReady);
             const auto stopAdapter = qScopeGuard([&] { adapter.stop(); });
 #ifdef Q_OS_MACOS
+            // Runs before adapter/Host/journal destruction and before directory removal.
+            const auto closeNative = qScopeGuard([&] { cleanupNative(journal, host); });
+#endif
+#ifdef Q_OS_MACOS
             phase = "native-launch";
             const auto accepted =
                 command(host, "session.task.start",
@@ -256,19 +314,38 @@ class ManagedTaskAttentionRecoveryTest final : public QObject {
                                             "printf X >> launch-marker; printf "
                                             "'attention-output\\n'; exec /bin/sleep 60"} }
                            } }});
+            id = accepted.value("task").toObject().value("task_id").toString();
             QVERIFY2(accepted.value("ok").toBool(),
                      qPrintable(accepted.value("error_code").toString()));
-            id = accepted.value("task").toObject().value("task_id").toString();
             QVERIFY(!id.isEmpty());
-            QTRY_COMPARE_WITH_TIMEOUT(task(host, id, &latest).value("state"), "running", 6000);
-            latest = task(host, id, &latest);
-            const auto execution = latest.value("execution_identity").toObject();
-            root = execution.value("root_identity").toObject();
-            supervisor = execution.value("supervisor_identity").toObject();
+            const auto observeLaunch = [&] {
+                const auto record = task(host, id, &latest);
+                const auto execution = record.value("execution_identity").toObject();
+                const auto recordedRoot = execution.value("root_identity").toObject();
+                const auto recordedSupervisor = execution.value("supervisor_identity").toObject();
+                if (!recordedRoot.isEmpty())
+                    root = recordedRoot;
+                if (!recordedSupervisor.isEmpty())
+                    supervisor = recordedSupervisor;
+                return record;
+            };
+            QTRY_COMPARE_WITH_TIMEOUT(observeLaunch().value("state"), "running", 6000);
             QVERIFY(!root.value("birth").toString().isEmpty());
             QVERIFY(!supervisor.value("birth").toString().isEmpty());
             QTRY_COMPARE_WITH_TIMEOUT(bytes(cwd + "/launch-marker"), QByteArray("X"), 3000);
             QCOMPARE(stored(databasePath, id).value("holds_slot").toInt(-1), 1);
+            // Marker precedes stdout in the shell: require the API spool sample
+            // before faulting, so all later assertions test preservation.
+            QTRY_COMPARE_WITH_TIMEOUT(command(host, "session.task.output",
+                                              {{ "task_id",
+                                                 id }})
+                                          .value("output"),
+                                      "attention-output\n", 3000);
+            outputPage = command(host, "session.task.output", {{ "task_id", id }});
+            QCOMPARE(outputPage.value("output"), "attention-output\n");
+            QCOMPARE(outputPage.value("total_bytes").toInteger(), 17);
+            QVERIFY(!outputPage.value("next_cursor").toString().isEmpty());
+            output = outputPage.value("output").toString().toUtf8();
             phase = "supervisor-fault";
             QString error;
             QVERIFY2(executor::signalIdentity(identity(supervisor), SIGKILL, &error),
@@ -297,8 +374,12 @@ class ManagedTaskAttentionRecoveryTest final : public QObject {
             QCOMPARE(stored(databasePath, id).value("holds_slot").toInt(-1), 0);
             QTRY_COMPARE(command(host, "session.task.output", {{"task_id", id}}).value("output"),
                          "attention-output\n");
-            outputPage = command(host, "session.task.output", {{"task_id", id}});
-            output = outputPage.value("output").toString().toUtf8();
+            const auto afterFaultOutput = command(host, "session.task.output", {{"task_id", id}});
+            if (outputPage.isEmpty()) { // Linux's explicit injected-result subset.
+                outputPage = afterFaultOutput;
+                output = outputPage.value("output").toString().toUtf8();
+            }
+            QVERIFY(preservesOutput(afterFaultOutput, outputPage));
             QVERIFY(noTurnEvents(events));
         } // Both Host/runtime and the file-backed journal connection really close.
 
@@ -310,9 +391,14 @@ class ManagedTaskAttentionRecoveryTest final : public QObject {
             SessionHost host(&journal, &adapter);
             QSignalSpy events(&host, &SessionHost::eventReady);
             const auto stopAdapter = qScopeGuard([&] { adapter.stop(); });
-            // Observe recovery publication, rather than accepting a persisted true
-            // flag before initialize()'s deferred reconciliation has run.
-            QTRY_VERIFY_WITH_TIMEOUT(!events.isEmpty(), 6000);
+#ifdef Q_OS_MACOS
+            // Runs before adapter/Host/journal destruction and before directory removal.
+            const auto closeNative = qScopeGuard([&] { cleanupNative(journal, host); });
+#endif
+            // Match this incident and generation; native publication must carry
+            // a revision from reconciliation, not a persisted executor-stopped flag.
+            QTRY_VERIFY_WITH_TIMEOUT(
+                publishedIncident(events, id, original.value("revision").toInteger()), 6000);
             QTRY_VERIFY_WITH_TIMEOUT(task(host, id, &latest).value("executor_stopped").toBool(),
                                      6000);
             latest = task(host, id, &latest);
@@ -325,22 +411,34 @@ class ManagedTaskAttentionRecoveryTest final : public QObject {
             QCOMPARE(latest.value("owner_generation").toInteger(), 1);
             QCOMPARE(stored(databasePath, id).value("audit").toArray().size(), 0);
             QVERIFY(noTurnEvents(events));
-            phase = "host-owner-close";
-            const auto closed = command(host, "session.delete", {{"delete_operation_id", "close"}});
-            QVERIFY2(closed.value("ok").toBool(),
-                     qPrintable(closed.value("error_code").toString()));
-            QVERIFY(!journal.sessionTombstone("owner", 1).sessionId.isEmpty());
-            latest =
-                task(host, id, &latest); // Local administration retains a deleted owner's incident.
-            QCOMPARE(latest.value("state"), "needs_attention");
-            QCOMPARE(latest.value("task_id"), id);
+            QVERIFY(preservesOutput(command(host, "session.task.output", {{"task_id", id}}),
+                                    outputPage));
+            beforeOwnerChangeRevision = latest.value("revision").toInteger();
+            if (!replaceGeneration) {
+                phase = "host-owner-close";
+                const auto closed =
+                    command(host, "session.delete", {{"delete_operation_id", "close"}});
+                QVERIFY2(closed.value("ok").toBool(),
+                         qPrintable(closed.value("error_code").toString()));
+                QVERIFY(!journal.sessionTombstone("owner", 1).sessionId.isEmpty());
+                latest = task(host, id, &latest);
+                QCOMPARE(latest.value("state"), "needs_attention");
+            } else {
+                // A close fence/tombstone must not mask generation mismatch.
+                QVERIFY(journal.sessionTombstone("owner", 1).sessionId.isEmpty());
+                QVERIFY(!stored(databasePath, id).contains("owner_fence"));
+            }
             QVERIFY(noTurnEvents(events));
         }
         if (replaceGeneration) {
             phase = "replacement-generation";
             LocalJournal journal(databasePath);
+            QVERIFY(journal.sessionTombstone("owner", 1).sessionId.isEmpty());
+            QVERIFY(!stored(databasePath, id).contains("owner_fence"));
             QVERIFY(seed(journal, cwd, 2));
             QCOMPARE(journal.sessionHead("owner").generation, 2);
+            QVERIFY(journal.sessionTombstone("owner", 1).sessionId.isEmpty());
+            QVERIFY(!stored(databasePath, id).contains("owner_fence"));
         }
         {
             phase = "owner-invalid-reopen";
@@ -350,15 +448,25 @@ class ManagedTaskAttentionRecoveryTest final : public QObject {
             SessionHost host(&journal, &adapter);
             QSignalSpy events(&host, &SessionHost::eventReady);
             const auto stopAdapter = qScopeGuard([&] { adapter.stop(); });
+#ifdef Q_OS_MACOS
+            // Runs before adapter/Host/journal destruction and before directory removal.
+            const auto closeNative = qScopeGuard([&] { cleanupNative(journal, host); });
+#endif
             // Polling the invalid owner durably fences it; this is a real Host
             // event-loop barrier before checking the retained incident.
             QTRY_COMPARE_WITH_TIMEOUT(stored(databasePath, id).value("owner_fence"),
                                       "owner_invalid", 6000);
+#ifdef Q_OS_MACOS
+            QTRY_VERIFY_WITH_TIMEOUT(task(host, id, &latest).value("revision").toInteger() >
+                                         beforeOwnerChangeRevision,
+                                     6000);
+#endif
             QTRY_VERIFY_WITH_TIMEOUT(task(host, id, &latest).value("executor_stopped").toBool(),
                                      6000);
             latest = task(host, id, &latest);
             QCOMPARE(latest.value("state"), "needs_attention");
             QCOMPARE(latest.value("task_id"), id);
+            QVERIFY(latest.value("revision").toInteger() >= beforeOwnerChangeRevision);
             QCOMPARE(latest.value("cleanup_status"), "unverified");
             QCOMPARE(latest.value("owner_generation").toInteger(), 1);
             QVERIFY(latest.value("execution_identity") == original.value("execution_identity"));
@@ -414,6 +522,10 @@ class ManagedTaskAttentionRecoveryTest final : public QObject {
             SessionHost host(&journal, &adapter);
             QSignalSpy events(&host, &SessionHost::eventReady);
             const auto stopAdapter = qScopeGuard([&] { adapter.stop(); });
+#ifdef Q_OS_MACOS
+            // Runs before adapter/Host/journal destruction and before directory removal.
+            const auto closeNative = qScopeGuard([&] { cleanupNative(journal, host); });
+#endif
             bool initializationDispatched = false;
             QTimer::singleShot(0, &host, [&] { initializationDispatched = true; });
             QTRY_VERIFY_WITH_TIMEOUT(initializationDispatched, 6000);
