@@ -28,7 +28,12 @@ std::optional<QByteArray> git(const QString& directory, const QStringList& argum
         if (key.startsWith(QStringLiteral("GIT_")))
             environment.remove(key);
     environment.insert(QStringLiteral("GIT_CONFIG_NOSYSTEM"), QStringLiteral("1"));
+#if defined(Q_OS_WIN)
+    // QProcess::nullDevice() is "\\\\.\\NUL" here, which git rejects as a config path.
+    environment.insert(QStringLiteral("GIT_CONFIG_GLOBAL"), QStringLiteral("NUL"));
+#else
     environment.insert(QStringLiteral("GIT_CONFIG_GLOBAL"), QProcess::nullDevice());
+#endif
     environment.insert(QStringLiteral("GIT_OPTIONAL_LOCKS"), QStringLiteral("0"));
     process.setProcessEnvironment(environment);
     process.start(QStringLiteral("git"),
