@@ -37,6 +37,9 @@ project(
     DESCRIPTION "The full KetPlus desktop product"
     LANGUAGES C CXX
 )
+
+# MSVC options (/utf-8 and friends) for every target of the Pro tree, core/ included.
+include(core/cmake/MsvcOptions.cmake)
 if(APPLE)
     enable_language(OBJCXX)
 endif()
