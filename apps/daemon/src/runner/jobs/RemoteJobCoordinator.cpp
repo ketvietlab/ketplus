@@ -284,9 +284,19 @@ void RemoteJobCoordinator::restore() {
             armDeadline(stored);
         } else if (userStop) {
             cancelOnRelay(stored.taskId, user);
-        } else if (stored.placement == placement::relayQueued) {
-            refresh(stored.taskId);
         }
+    }
+    reconcile();
+}
+
+void RemoteJobCoordinator::reconcile() {
+    const QList<RemoteJobRecord> current = records_.values();
+    for (const RemoteJobRecord& found : current) {
+        if (found.terminal() || found.dispatched() || found.jobId.isEmpty() ||
+            found.state == state::stopping)
+            continue;
+        if (found.placement == placement::relayQueued || found.placement == placement::assigned)
+            refresh(found.taskId);
     }
 }
 

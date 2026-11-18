@@ -99,14 +99,17 @@ void RemoteJobCoordinator::started(const QString& jobId, const QString& runnerId
         armDeadline(records_.value(next.taskId));
 }
 
-void RemoteJobCoordinator::result(const QString& jobId, const QString& runnerId,
-                                  const JobResult& value) {
-    RemoteJobRecord* found = fromRunner(jobId, runnerId);
-    if (!found)
-        return;
-    const RemoteJobRecord next = applyResult(*found, value);
-    if (next != *found)
-        (void)commit(next); // the runner holds its result until it is acknowledged
+JobDecision RemoteJobCoordinator::result(const QString& jobId, const QString& runnerId,
+                                         const JobResult& value) {
+    const auto task = jobs_.constFind(jobId);
+    const auto current = task == jobs_.cend() ? std::nullopt : record(*task);
+    if (!current || current->dispatchedTo != runnerId || !trust_.pinnedName(runnerId))
+        return {jobMismatch};
+    // A result recorded before changes nothing and is acknowledged again.
+    const RemoteJobRecord next = applyResult(*current, value);
+    if (next != *current && !commit(next))
+        return {QStringLiteral("storage_error")};
+    return {};
 }
 
 void RemoteJobCoordinator::rejected(const QString& jobId, const QString& runnerId,
@@ -181,37 +184,40 @@ void RemoteJobCoordinator::windowElapsed(const QString& taskId) {
         clock_.disarm(taskId, JobTimer::Deadline);
 }
 
-void RemoteJobCoordinator::runnerRemoved(const QString& runnerId) {
+JobDecision RemoteJobCoordinator::runnerRemoved(const QString& runnerId) {
+    bool written = true;
     const QList<RemoteJobRecord> current = records_.values();
     for (const RemoteJobRecord& found : current) {
         if (found.terminal())
             continue;
         if (found.dispatchedTo == runnerId) {
-            releaseRunner(found.taskId);
+            written = releaseRunner(found.taskId) && written;
         } else if (!found.dispatched() && found.runner && found.runner->runnerId == runnerId &&
                    !found.jobId.isEmpty()) {
             refresh(found.taskId);
         }
     }
+    return written ? JobDecision{} : JobDecision{QStringLiteral("storage_error")};
 }
 
 // A runner that lost its pin can never report again: its records end at once, acknowledged by
-// the user's removal.
-void RemoteJobCoordinator::releaseRunner(const QString& taskId) {
+// the user's removal. A record that cannot be written stays where it got to.
+bool RemoteJobCoordinator::releaseRunner(const QString& taskId) {
     RemoteJobRecord next = records_.value(taskId);
     if (next.state != state::needsAttention) {
         next.state = state::needsAttention;
         next.reason = QStringLiteral("cleanup_unverified");
         next.cleanupStatus = cleanup::unverified;
         if (!commit(next))
-            return;
+            return false;
         next = records_.value(taskId);
     }
     next.state = state::interrupted;
     next.reason = QStringLiteral("cleanup_acknowledged");
     if (!commit(next))
-        return;
+        return false;
     cancelOnRelay(taskId, QStringLiteral("runner_removed"));
+    return true;
 }
 
 } // namespace ketplus::daemon::runner::jobs

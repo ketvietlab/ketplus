@@ -51,15 +51,21 @@ class RemoteJobCoordinator final {
     JobDecision dispatch(const QString& jobId, const QString& runnerId);
     void accepted(const QString& jobId, const QString& runnerId);
     void started(const QString& jobId, const QString& runnerId);
-    void result(const QString& jobId, const QString& runnerId, const JobResult& result);
+    // Ok once the result is durable (also for a result already recorded), so the session may
+    // acknowledge it; storage_error leaves the record unchanged for the runner to send again.
+    JobDecision result(const QString& jobId, const QString& runnerId, const JobResult& result);
     void rejected(const QString& jobId, const QString& runnerId, const QString& code);
     void peerOpened(const QString& jobId, const QString& runnerId);
     void peerLost(const QString& jobId, const QString& runnerId, const QDateTime& lastContact);
 
     // The user removed or unpaired a runner.
-    void runnerRemoved(const QString& runnerId);
+    // storage_error when a record of the runner could not be written.
+    JobDecision runnerRemoved(const QString& runnerId);
     // After a daemon restart: loads the stored records and resumes each one.
     void restore();
+    // Asks the Relay again about every record whose spec was never dispatched, as after a
+    // restart; for a Relay connection that came back, when hints may have been missed.
+    void reconcile();
     void timerFired(const QString& taskId, JobTimer timer);
 
   private:
@@ -82,7 +88,7 @@ class RemoteJobCoordinator final {
     void armWindow(const QString& taskId, const QDateTime& from);
     void armDeadline(const RemoteJobRecord& record);
     void windowElapsed(const QString& taskId);
-    void releaseRunner(const QString& taskId);
+    [[nodiscard]] bool releaseRunner(const QString& taskId);
     [[nodiscard]] QString runnerName(const QString& runnerId) const;
 
     JobRelay& relay_;

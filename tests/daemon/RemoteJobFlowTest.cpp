@@ -417,10 +417,12 @@ class RemoteJobFlowTest final : public QObject {
         h.relay.log.clear();
         h.jobs->restore();
         QCOMPARE(h.relay.sent("submit"), 1);
-        QCOMPARE(h.relay.sent("get"), 1);
+        QCOMPARE(h.relay.sent("get"), 2);
+        QStringList asked;
         for (const auto& call : h.relay.log)
-            QCOMPARE(call.id, call.operation == "get" ? QStringLiteral("job-queued")
-                                                      : QStringLiteral("submitting"));
+            asked.append(call.operation + ' ' + call.id);
+        asked.sort();
+        QCOMPARE(asked, QStringList({"get job-assigned", "get job-queued", "submit submitting"}));
         QCOMPARE(h.relay.sent("cancel"), 0);
         for (const QString id : {"sent", "syncing", "running"}) {
             QCOMPARE(h.jobs->dispatch("job-" + id, runnerA).code,
@@ -432,6 +434,131 @@ class RemoteJobFlowTest final : public QObject {
         h.clock.advance(1);
         QCOMPARE(h.record("running").state, state::needsAttention);
         QCOMPARE(h.record("assigned").state, state::starting); // waits for the runner's offer
+    }
+
+    void restartReadsTheRelayForAnUndispatchedAssignment_data() {
+        QTest::addColumn<QString>("relayState");
+        QTest::addColumn<QString>("reason");
+        QTest::addColumn<QString>("expectState");
+        QTest::addColumn<QString>("expectPlacement");
+        QTest::addColumn<QString>("expectReason");
+        QTest::newRow("still assigned")
+            << "acquired" << "" << state::starting << placement::assigned << "";
+        QTest::newRow("back in the queue")
+            << "queued" << "" << state::starting << placement::relayQueued << "";
+        QTest::newRow("expired") << "expired" << "" << state::failed << placement::assigned
+                                 << "queue_expired";
+        QTest::newRow("failed") << "failed" << "delivery_exhausted" << state::failed
+                                << placement::assigned << "delivery_exhausted";
+        QTest::newRow("not found")
+            << "" << "" << state::failed << placement::assigned << "runner_unavailable";
+    }
+    void restartReadsTheRelayForAnUndispatchedAssignment() {
+        QFETCH(QString, relayState);
+        QFETCH(QString, reason);
+        QFETCH(QString, expectState);
+        QFETCH(QString, expectPlacement);
+        QFETCH(QString, expectReason);
+        Harness h;
+        QVERIFY(h.assigned());
+        h.reopen();
+        h.relay.log.clear();
+        h.jobs->restore();
+        QCOMPARE(h.relay.sent("get"), 1);
+        if (relayState.isEmpty()) {
+            QVERIFY(h.relay.refuse("get", "job_not_found"));
+        } else {
+            const std::optional<QString> runner =
+                relayState == "queued" ? std::nullopt : std::optional(runnerA);
+            QVERIFY(h.relay.answer(
+                "get", relayJob(relayState, runner, 1,
+                                reason.isEmpty() ? std::nullopt : std::optional(reason))));
+        }
+        QCOMPARE(h.record().state, expectState);
+        QCOMPARE(h.record().placement, expectPlacement);
+        QCOMPARE(h.record().reason, expectReason);
+        QCOMPARE(h.record().runner.has_value(), expectPlacement == placement::assigned);
+        QCOMPARE(h.specs, 0);
+    }
+
+    void restartRetriesAFailedRelayRead_data() {
+        QTest::addColumn<QString>("code");
+        QTest::newRow("network") << "network";
+        QTest::newRow("server error") << "relay_error";
+        QTest::newRow("wrong schema") << "invalid_response";
+    }
+    void restartRetriesAFailedRelayRead() {
+        QFETCH(QString, code);
+        Harness h;
+        QVERIFY(h.assigned());
+        h.reopen();
+        h.relay.log.clear();
+        h.jobs->restore();
+        QVERIFY(h.relay.refuse("get", code));
+        h.clock.advance(999);
+        QCOMPARE(h.relay.sent("get"), 1);
+        h.clock.advance(1);
+        QCOMPARE(h.relay.sent("get"), 2);
+        QVERIFY(h.relay.refuse("get", code));
+        h.clock.advance(1999);
+        QCOMPARE(h.relay.sent("get"), 2);
+        h.clock.advance(1);
+        QCOMPARE(h.relay.sent("get"), 3);
+        QVERIFY(h.relay.answer("get", relayJob("expired", runnerA, 1)));
+        QCOMPARE(h.record().reason, QStringLiteral("queue_expired"));
+    }
+
+    void reconcileReadsOnlyUndispatchedRecords() {
+        Harness h;
+        QVERIFY(h.assigned());
+        h.relay.log.clear();
+        h.jobs->reconcile();
+        QCOMPARE(h.relay.sent("get"), 1);
+        QVERIFY(h.relay.answer("get", relayJob("queued")));
+        QCOMPARE(h.record().placement, placement::relayQueued);
+        QVERIFY(!h.record().runner);
+
+        Harness sent;
+        QVERIFY(sent.sent());
+        sent.relay.log.clear();
+        sent.jobs->reconcile();
+        QCOMPARE(sent.relay.log.size(), 0);
+        QCOMPARE(sent.record().placement, placement::assigned);
+    }
+
+    void aResultIsAcknowledgedOnlyOnceDurable() {
+        Harness h;
+        QVERIFY(h.running());
+        h.store.failWrites = true;
+        QCOMPARE(h.jobs->result(job, runnerA, jobResult("exited", 0)).code,
+                 QStringLiteral("storage_error"));
+        QCOMPARE(h.record().state, state::running);
+        h.store.failWrites = false;
+        QVERIFY(h.jobs->result(job, runnerA, jobResult("exited", 0)).ok());
+        QCOMPARE(h.record().state, state::completed);
+        const qint64 revision = h.record().revision;
+        QVERIFY(h.jobs->result(job, runnerA, jobResult("exited", 0)).ok()); // sent again
+        QVERIFY(h.jobs->result(job, runnerA, jobResult("exited", 4)).ok());
+        QCOMPARE(h.record().revision, revision);
+        QCOMPARE(h.record().state, state::completed);
+        QCOMPARE(h.jobs->result(job, runnerB, jobResult("exited", 0)).code,
+                 QStringLiteral("job_mismatch"));
+        QCOMPARE(h.jobs->result("job-other", runnerA, jobResult("exited", 0)).code,
+                 QStringLiteral("job_mismatch"));
+    }
+
+    void removingARunnerReportsAFailedWrite() {
+        Harness h;
+        QVERIFY(h.running());
+        h.trust.pins.remove(runnerA);
+        h.store.failWrites = true;
+        const int cancels = h.relay.sent("cancel");
+        QCOMPARE(h.jobs->runnerRemoved(runnerA).code, QStringLiteral("storage_error"));
+        QCOMPARE(h.record().state, state::running);
+        QCOMPARE(h.relay.sent("cancel"), cancels);
+        h.store.failWrites = false;
+        QVERIFY(h.jobs->runnerRemoved(runnerA).ok());
+        QCOMPARE(h.record().state, state::interrupted);
     }
 
     void restartRepeatsTheUsersCancel() {
