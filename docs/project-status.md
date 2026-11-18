@@ -954,8 +954,7 @@ Linux store policy, signed upgrade prompts and platform release acceptance remai
   `KetPlus.exe`, `ketplus_daemon.exe`, `ketplusctl.exe` and the Pro test executables.
   Started headless over ssh (`QT_QPA_PLATFORM=offscreen`), `KetPlus.exe` stays up, auto-starts
   `ketplus_daemon.exe` and the daemon creates its state under `%LOCALAPPDATA%`. POSIX-only runner
-  code (`apps/runner`, the worktree snapshot library, the peer-session runner suite) is not built
-  on Windows; computer use reports itself unsupported and the daemon stores credentials with
+  code (`apps/runner` and the peer-session runner suite) is not built on Windows; computer use reports itself unsupported and the daemon stores credentials with
   DPAPI. MSVC links with `/INCREMENTAL:NO` to keep build trees small.
   Not verified: the desktop shell with a visible window (workspace, Agent Workspace, terminal,
   Atlas WebView, computer use hidden in the UI); this is a separate check that needs an interactive
