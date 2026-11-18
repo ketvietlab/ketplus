@@ -693,8 +693,10 @@ void AgentWorkspaceViewTest::linksFileReferencesInInlineCode() {
     // names a local file, so only the guard keeps it from linking.
     const QString local =
         QFileInfo(root.filePath(QStringLiteral("docs/hướng-dẫn/tài-liệu.md"))).absoluteFilePath();
+#if !defined(Q_OS_WIN) // "/C:/…" does not name the file on Windows
     QVERIFY(QFileInfo(QLatin1Char('/') + local).isFile());
     QVERIFY(links.href(QLatin1Char('/') + local).isEmpty());
+#endif
 }
 
 void AgentWorkspaceViewTest::mermaidFillsGetReadableLabels() {
