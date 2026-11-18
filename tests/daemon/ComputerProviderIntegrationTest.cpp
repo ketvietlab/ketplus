@@ -73,7 +73,7 @@ class ComputerProviderIntegrationTest final : public QObject {
         QVERIFY(QFile::setPermissions(front, QFileDevice::ReadOwner | QFileDevice::ExeOwner));
         qputenv("KETPLUS_COMPUTER_APP", app.toUtf8());
 
-        const QString provider = root.filePath(QStringLiteral("provider"));
+        const QString provider = root.filePath(fixtureName(QStringLiteral("provider")));
         const QString log = root.filePath(QStringLiteral("provider.log"));
         QVERIFY(claude ? writeFakeClaude(provider, log) : writeFakeCursor(provider, log));
         ClaudeAdapter claudeAdapter(provider);

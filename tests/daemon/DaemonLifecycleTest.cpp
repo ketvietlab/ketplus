@@ -1908,7 +1908,9 @@ class DaemonLifecycleTest final : public QObject {
         const auto code = [&](const QString& path) {
             return read(path).value(QStringLiteral("error_code")).toString();
         };
+#if !defined(Q_OS_WIN) // QFile::link makes a .lnk shortcut there, not a symbolic link.
         QCOMPARE(code(QStringLiteral("linked.png")), QStringLiteral("symlink_unsupported"));
+#endif
         QCOMPARE(code(QStringLiteral("../outside.png")), QStringLiteral("invalid_path"));
         QCOMPARE(code(QStringLiteral("/etc/hosts")), QStringLiteral("invalid_path"));
         QCOMPARE(code(QStringLiteral("assets/gone.png")), QStringLiteral("missing"));

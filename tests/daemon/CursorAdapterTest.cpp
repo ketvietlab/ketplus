@@ -103,9 +103,13 @@ class CursorAdapterTest final : public QObject {
 
         // An updater that removes the binary it replaced is found again at its new path.
         const QString updated = QDir(directory.filePath(QStringLiteral(".local/bin")))
-                                    .filePath(QStringLiteral("cursor-agent"));
+                                    .filePath(fixtureName(QStringLiteral("cursor-agent")));
         QVERIFY(QDir().mkpath(QFileInfo(updated).path()));
         QVERIFY(QFile::rename(agent, updated));
+#if defined(Q_OS_WIN)
+        // The launcher runs the script that sits next to it (ScriptFixture.h).
+        QVERIFY(QFile::rename(agent + QStringLiteral(".py"), updated + QStringLiteral(".py")));
+#endif
         QTRY_COMPARE_WITH_TIMEOUT(cursor.executable(), updated, 5000);
     }
 
