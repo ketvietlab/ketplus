@@ -1,5 +1,6 @@
 #include "runtime/ManagedTaskRuntime.h"
 #include "runner/entry/RemoteJobPort.h"
+#include "runner/entry/RemoteLiveTasks.h"
 #include "runtime/executor/LinuxJobContainment.h"
 #include "runtime/executor/NativeJobClient.h"
 #include "storage/RemoteJobRows.h"
@@ -25,8 +26,6 @@ uint effectiveUserId() {
     return ::geteuid();
 #endif
 }
-} // namespace
-namespace {
 QJsonObject failure(const QString& code, const QString& message) {
     return {{"ok", false}, {"error_code", code}, {"error_message", message}};
 }
@@ -90,6 +89,7 @@ void ManagedTaskRuntime::setRemoteJobs(runner::entry::RemoteJobPort* port) {
             changed_(task);
     };
     remoteJobs_->setPorts({failReserved, remoteChanged});
+    runner::entry::readStartedAgain(live_, ledger_.database(), remoteChanged);
 }
 
 bool ManagedTaskRuntime::initialize(QString* error) {
