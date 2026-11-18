@@ -109,9 +109,10 @@ ketplus_enable_warnings(ketplus_runner_exec_tests)
 target_link_libraries(ketplus_runner_exec_tests PRIVATE Qt6::Test ketplus_runner_exec)
 add_test(NAME ketplus_runner_exec_tests COMMAND ketplus_runner_exec_tests)
 
-# The command runner over the real job executor of this build, on macOS: environment, cwd,
-# output, kill and restart cleanup with real processes in temporary directories.
-if(APPLE AND TARGET ketplus_runner_exec_native)
+# The command runner over the real job executor of this build, on macOS and Linux: environment,
+# cwd, output, kill and restart cleanup with real processes in temporary directories. On Linux it
+# needs a prepared user session and runs only with KETPLUS_RUN_LINUX_JOB_TESTS=1.
+if((APPLE OR CMAKE_SYSTEM_NAME STREQUAL "Linux") AND TARGET ketplus_runner_exec_native)
     qt_add_executable(ketplus_runner_exec_native_tests RunnerExecNativeTest.cpp)
     ketplus_enable_warnings(ketplus_runner_exec_native_tests)
     target_link_libraries(ketplus_runner_exec_native_tests PRIVATE
@@ -121,4 +122,18 @@ if(APPLE AND TARGET ketplus_runner_exec_native)
     add_dependencies(ketplus_runner_exec_native_tests ketplus_job_executor)
     add_test(NAME ketplus_runner_exec_native_tests COMMAND ketplus_runner_exec_native_tests)
     set_tests_properties(ketplus_runner_exec_native_tests PROPERTIES TIMEOUT 300)
+endif()
+
+# Linux job containment with the real executor: the policy, the job's mounts seen from inside and
+# outside, stop and restart cleanup. Runs only with KETPLUS_RUN_LINUX_JOB_TESTS=1.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND TARGET ketplus_runner_exec_native)
+    qt_add_executable(ketplus_runner_linux_job_tests RunnerLinuxJobTest.cpp)
+    ketplus_enable_warnings(ketplus_runner_linux_job_tests)
+    target_link_libraries(ketplus_runner_linux_job_tests PRIVATE
+        Qt6::Test ketplus_runner_exec_native)
+    target_compile_definitions(ketplus_runner_linux_job_tests PRIVATE
+        KETPLUS_JOB_EXECUTOR_PATH="$<TARGET_FILE:ketplus_job_executor>")
+    add_dependencies(ketplus_runner_linux_job_tests ketplus_job_executor)
+    add_test(NAME ketplus_runner_linux_job_tests COMMAND ketplus_runner_linux_job_tests)
+    set_tests_properties(ketplus_runner_linux_job_tests PROPERTIES TIMEOUT 900)
 endif()

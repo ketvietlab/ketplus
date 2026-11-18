@@ -57,7 +57,10 @@ void LinuxSystemHost::probeContainment(const QString& program, std::function<voi
         [done = std::move(done)](const bool available, const QString&) { done(available); });
 }
 
-// The executor of this version cannot apply a job's mounts: no job runs.
-void LinuxSystemHost::probeMounts(const QString&, std::function<void(bool)> done) { done(false); }
+void LinuxSystemHost::probeMounts(const QString& program, std::function<void(bool)> done) {
+    daemon::executor::linuxMountsAvailableAsync(
+        program, &m_owner,
+        [done = std::move(done)](const bool available, const QString&) { done(available); });
+}
 
 } // namespace ketplus::runner::exec

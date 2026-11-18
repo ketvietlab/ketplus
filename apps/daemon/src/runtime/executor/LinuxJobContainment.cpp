@@ -195,8 +195,9 @@ QJsonObject parseProperties(const QByteArray& output) {
 }
 } // namespace
 
-void linuxContainmentAvailableAsync(const QString& helper, QObject* owner,
-                                    std::function<void(bool, QString)> done) {
+namespace {
+void probeAsync(const QString& helper, const QStringList& extra, QObject* owner,
+                std::function<void(bool, QString)> done) {
 #ifdef Q_OS_LINUX
     if (geteuid() == 0 || linuxBootId().isEmpty()) {
         done(false, "The Linux executor requires a non-root daemon user and a boot identity.");
@@ -206,8 +207,8 @@ void linuxContainmentAvailableAsync(const QString& helper, QObject* owner,
     const auto lease = QUuid::createUuid().toString(QUuid::Id128);
     auto arguments = properties();
     arguments << "--wait" << "--pipe" << "--property=RuntimeMaxSec=10s"
-              << "--unit=" + linuxJobUnit(task, lease) << helper << "--linux-probe" << task
-              << lease;
+              << "--unit=" + linuxJobUnit(task, lease) << helper << "--linux-probe" << task << lease
+              << extra;
     runAsync("/usr/bin/systemd-run", arguments, owner, 6000,
              [done = std::move(done)](bool ok, const QByteArray& output, const QString& error) {
                  const bool available =
@@ -222,9 +223,21 @@ void linuxContainmentAvailableAsync(const QString& helper, QObject* owner,
              });
 #else
     Q_UNUSED(helper)
+    Q_UNUSED(extra)
     Q_UNUSED(owner)
     done(false, "Linux cgroup containment is unavailable on this platform.");
 #endif
+}
+} // namespace
+
+void linuxContainmentAvailableAsync(const QString& helper, QObject* owner,
+                                    std::function<void(bool, QString)> done) {
+    probeAsync(helper, {}, owner, std::move(done));
+}
+
+void linuxMountsAvailableAsync(const QString& helper, QObject* owner,
+                               std::function<void(bool, QString)> done) {
+    probeAsync(helper, {QStringLiteral("--mounts")}, owner, std::move(done));
 }
 
 void linuxUnitPropertiesAsync(const QString& unit, QObject* owner,
