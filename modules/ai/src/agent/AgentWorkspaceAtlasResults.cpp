@@ -20,7 +20,7 @@ QVariantMap AgentWorkspaceView::inspectAtlasResult(const QString& link) const {
         return unavailable(tr("Worktree source unavailable. Open this Atlas from the Atlas list."));
     const QString root = QFileInfo(executionPath()).canonicalFilePath();
     const QString absolute = QFileInfo(QDir(root).absoluteFilePath(path)).canonicalFilePath();
-    if (root.isEmpty() || absolute.isEmpty() || !absolute.startsWith(root + QDir::separator()))
+    if (root.isEmpty() || absolute.isEmpty() || !absolute.startsWith(root + QLatin1Char('/')))
         return unavailable(tr("Atlas unavailable in this worktree."));
     if (!atlasResultInspector_)
         return unavailable(tr("Atlas actions are unavailable in this view."));
