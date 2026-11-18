@@ -44,8 +44,27 @@ target_compile_definitions(ketplus_runner_app PRIVATE
 )
 ketplus_enable_warnings(ketplus_runner_app)
 
+# One job on the peer connection, as a state machine over interfaces: no socket, process or
+# clock of its own.
+add_library(ketplus_runner_session STATIC
+    src/session/JobSession.h
+    src/session/JobSessionChannel.cpp
+    src/session/JobSessionOutput.cpp
+    src/session/JobSessionResult.cpp
+    src/session/JobSessionSpec.cpp
+    src/session/JobSessionStop.cpp
+    src/session/OutputBuffer.cpp
+    src/session/OutputBuffer.h
+    src/session/SessionPorts.h
+)
+target_link_libraries(ketplus_runner_session PUBLIC Qt6::Core ketplus_runner_protocol)
+target_include_directories(ketplus_runner_session PUBLIC
+    "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>"
+)
+ketplus_enable_warnings(ketplus_runner_session)
+
 add_executable(ketplus-runner src/main.cpp)
-target_link_libraries(ketplus-runner PRIVATE ketplus_runner_app)
+target_link_libraries(ketplus-runner PRIVATE ketplus_runner_app ketplus_runner_session)
 ketplus_enable_warnings(ketplus-runner)
 
 # Runners are Linux nodes; the macOS build exists for tests only and ships no runner.
