@@ -18,12 +18,16 @@
 #include <QCoreApplication>
 #include <QCryptographicHash>
 #include <QDir>
+#include <QDirIterator>
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QProcess>
 #include <QTest>
 #include <QTimer>
+
+#include <signal.h>
 
 namespace runner_assembly_test {
 
@@ -130,6 +134,26 @@ QStringList processesHolding(const QByteArray& marker) {
 }
 
 int processesWith(const QByteArray& marker) { return int(processesHolding(marker).size()); }
+
+void removeLeftovers(const QByteArray& marker) {
+    for (const QString& found : processesHolding(marker))
+        ::kill(pid_t(found.section(u' ', 0, 0).toLongLong()), SIGKILL);
+    const QByteArray executor =
+        QFile::encodeName(QCoreApplication::applicationDirPath() + "/ketplus_job_executor");
+    QDirIterator units(
+        QStringLiteral("/sys/fs/cgroup/user.slice"), {QStringLiteral("ketplus-job-*")},
+        QDir::Dirs | QDir::NoDotAndDotDot | QDir::NoSymLinks, QDirIterator::Subdirectories);
+    while (units.hasNext()) {
+        const QString unit = QFileInfo(units.next()).fileName();
+        QProcess show;
+        show.start(QStringLiteral("systemctl"),
+                   {QStringLiteral("--user"), QStringLiteral("show"), QStringLiteral("--value"),
+                    QStringLiteral("-p"), QStringLiteral("ExecStart"), unit});
+        if (show.waitForFinished(10'000) && show.readAllStandardOutput().contains(executor))
+            QProcess::execute(QStringLiteral("systemctl"),
+                              {QStringLiteral("--user"), QStringLiteral("stop"), unit});
+    }
+}
 
 Desktop desktopOf(FakeRelay& relay) {
     const FakeRelay::Desktop& keys = relay.desktop(QStringLiteral("desktop-1"));

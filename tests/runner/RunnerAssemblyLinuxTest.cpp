@@ -6,6 +6,7 @@
 #include <QFileInfo>
 #include <QProcess>
 #include <QRandomGenerator>
+#include <QScopeGuard>
 #include <QTemporaryDir>
 #include <QTest>
 #include <QTextStream>
@@ -121,6 +122,8 @@ void RunnerAssemblyLinuxTest::realJobs() {
     QVERIFY(rig.registerRunner(relay));
     QVERIFY(rig.start());
     const QByteArray marker = sleepMarker();
+    // Every way out of this test, also a failed check, leaves nothing of the job behind.
+    const auto leftovers = qScopeGuard([&] { removeLeftovers(marker); });
     script.replace(QStringLiteral("MARKER"), QString::fromLatin1(marker));
     protocol::JobSpec spec = specFor(script, timeoutMs);
     spec.env = {{QStringLiteral("MARK"), QStringLiteral("linux")}};
@@ -174,6 +177,14 @@ void RunnerAssemblyLinuxTest::killedRunnerFinishesTheJobOnceAfterRestart() {
     QVERIFY(markerFile.open(QIODevice::WriteOnly) && markerFile.write(marker) == marker.size());
     markerFile.close();
     QProcess first;
+    // Every way out of this test, also a failed check, ends the first runner and its job.
+    const auto leftovers = qScopeGuard([&] {
+        if (first.state() != QProcess::NotRunning) {
+            first.kill();
+            first.waitForFinished(10'000);
+        }
+        removeLeftovers(marker);
+    });
     first.setProcessChannelMode(QProcess::ForwardedErrorChannel);
     first.start(QCoreApplication::applicationFilePath(),
                 {helperMode, root.path(), relay.url().toString(), desktop.machineId,
