@@ -74,6 +74,33 @@ job fails with a named mismatch, instead of running stale or missing binaries,
 when a runner image puts any of them elsewhere. Node is pinned to an exact
 version for the same reason. No job in the matrix uses provider quota.
 
+### Lite on a local Windows machine
+
+`tools/windows/win-run.sh` (see `docs/development.md`, Windows) runs the Lite
+suite on a Windows build machine with MSVC 2022 and Qt 6.11:
+`cmake --preset lite-dev`, `cmake --build --preset lite-dev`, then
+`ctest --preset lite-dev -j4 --timeout 120`. All 27 Lite tests pass; none is
+skipped for the platform.
+
+Launching the app for a smoke check needs a desktop. An ssh session has none,
+so the default `windows` Qt platform plugin aborts at startup. Deploy the
+offscreen plugin next to the executable and use the review capture (see
+`docs/design-system.md`):
+
+```bat
+windeployqt --no-translations --compiler-runtime build\lite-dev\core\KetPlusCM.exe
+copy %QT_ROOT%\plugins\platforms\qoffscreend.dll build\lite-dev\core\platforms\
+set QT_QPA_PLATFORM=offscreen
+set KETPLUS_CAPTURE=smoke.png
+build\lite-dev\core\KetPlusCM.exe <repository-folder>
+```
+
+The Debug executable is `core\KetPlusCM.exe` and needs the OpenSSL `bin`
+directory on `PATH`. A capture of a folder holding a Markdown file and a Git
+repository shows the Markdown preview, `Git: <branch>` with the changed-file
+count, the file's CRLF and UTF-8 BOM, and the light and dark themes. The
+Mermaid block falls back to code with a notice until `mmdc` is installed.
+
 ## VS Code importer fixtures
 
 `ketplus_vscode_import_tests` covers original dark/light/include themes, standard
