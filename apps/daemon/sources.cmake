@@ -65,6 +65,20 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/cloud/CloudControlClient.h
     src/cloud/CloudControlDeviceSignIn.cpp
     src/cloud/DevicePins.cpp
+    src/runner/CloudRunnerRelay.cpp
+    src/runner/CloudRunnerRelay.h
+    src/runner/RunnerPairing.cpp
+    src/runner/RunnerPairing.h
+    src/runner/RunnerPairingFlow.cpp
+    src/runner/RunnerPinStore.cpp
+    src/runner/RunnerPinStore.h
+    src/runner/RunnerRelayClient.cpp
+    src/runner/RunnerRelayClient.h
+    src/runner/RunnerRelayPort.h
+    src/runner/RunnerRelaySchema.cpp
+    src/runner/RunnerRelaySchema.h
+    src/runner/RunnerService.cpp
+    src/runner/RunnerService.h
     src/cloud/SessionCredentials.cpp
     src/cloud/CloudControlSignIn.cpp
     src/cloud/CloudControlBatching.h

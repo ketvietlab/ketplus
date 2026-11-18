@@ -439,6 +439,62 @@ class HeadlessDaemonTest final : public QObject {
                  QStringList{QFileInfo(directory.path()).canonicalFilePath()});
 #endif
     }
+
+    // ketplusctl runner commands reach the daemon over its socket. This daemon is not
+    // enrolled, so no Relay offers runners: each answers runner_unavailable and calls nothing.
+    void runnerCommandsAnswerThroughTheSocket() {
+#if defined(Q_OS_UNIX)
+        QTemporaryDir directory("/tmp/kp-headless-XXXXXX");
+        QVERIFY(directory.isValid());
+        QProcess daemon;
+        auto environment = QProcessEnvironment::systemEnvironment();
+        environment.insert("KETPLUS_DAEMON_DATA_DIR", directory.path());
+        environment.insert("KETPLUS_DAEMON_SOCKET", directory.filePath("socket"));
+        daemon.setProcessEnvironment(environment);
+        daemon.start(KETPLUS_TEST_DAEMON,
+                     {"--codex", "/nonexistent/codex", "--claude", "/nonexistent/claude",
+                      "--cursor", "/nonexistent/agent"});
+        QVERIFY(daemon.waitForStarted());
+        const auto stop = qScopeGuard([&] {
+            if (daemon.state() != QProcess::NotRunning) {
+                daemon.kill();
+                daemon.waitForFinished();
+            }
+        });
+        QTRY_VERIFY_WITH_TIMEOUT(QFileInfo::exists(directory.filePath("daemon/local.token")), 5000);
+        const QList<QStringList> commands{{"runner", "pair", "create"},
+                                          {"--runner", "runner-a", "runner", "pair", "create"},
+                                          {"runner", "pair", "status", "ticket-a"},
+                                          {"runner", "pair", "approve", "ticket-a", "AAAAA-AAAAA"},
+                                          {"runner", "pair", "reject", "ticket-a"},
+                                          {"runner", "list"},
+                                          {"runner", "disable", "runner-a"},
+                                          {"runner", "enable", "runner-a"},
+                                          {"runner", "remove", "runner-a"},
+                                          {"runner", "unpair", "runner-a"}};
+        QProcess cli;
+        cli.setProcessEnvironment(environment);
+        for (const QStringList& command : commands) {
+            cli.start(KETPLUS_TEST_CTL, QStringList{"--timeout", "5"} + command);
+            QVERIFY(cli.waitForFinished(8000));
+            QCOMPARE(cli.exitCode(), 1);
+            QVERIFY(cli.readAllStandardOutput().isEmpty());
+            QVERIFY2(cli.readAllStandardError().startsWith("runner_unavailable: "),
+                     qPrintable(command.join(' ')));
+        }
+        // Usage errors never reach the daemon; there is no approval without a code.
+        for (const QStringList& command :
+             QList<QStringList>{{"runner", "pair", "approve", "ticket-a"},
+                                {"--runner", "runner-a", "runner", "list"},
+                                {"runner", "list", "extra"},
+                                {"runner", "pair", "create", "--yes"}}) {
+            cli.start(KETPLUS_TEST_CTL, QStringList{"--timeout", "5"} + command);
+            QVERIFY(cli.waitForFinished(8000));
+            QVERIFY2(cli.exitCode() != 0, qPrintable(command.join(' ')));
+            QVERIFY(!cli.readAllStandardError().startsWith("runner_unavailable"));
+        }
+#endif
+    }
 };
 QTEST_GUILESS_MAIN(HeadlessDaemonTest)
 #include "HeadlessDaemonTest.moc"

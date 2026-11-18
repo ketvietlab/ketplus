@@ -17,14 +17,18 @@ int main(int argc, char** argv) {
     parser.addHelpOption();
     parser.addOptions({{"socket", "Local socket path.", "path"},
                        {"token-file", "Owner-only local token file.", "path"},
-                       {"timeout", "Deadline in seconds.", "seconds", "30"}});
+                       {"timeout", "Deadline in seconds.", "seconds", "30"},
+                       {"runner", "Runner to pair this desktop with (runner pair create).", "id"}});
     parser.addPositionalArgument(
         "command",
-        "status | login | logout | doctor | workspace | pairing | device | sessions | call");
+        "status | login | logout | doctor | workspace | pairing | device | runner | sessions | "
+        "call");
     parser.addPositionalArgument("arguments",
                                  "workspace add/list/remove; pairing create/status/revoke TICKET, "
                                  "pairing approve TICKET CLAIM_DIGEST; "
-                                 "device revoke; call OPERATION [JSON|-]",
+                                 "device revoke; runner pair create|status|approve|reject, "
+                                 "runner list|disable|enable|remove|unpair; "
+                                 "call OPERATION [JSON|-]",
                                  "[arguments...]");
     parser.process(app);
     auto args = parser.positionalArguments();
@@ -69,6 +73,31 @@ int main(int argc, char** argv) {
             operation = "remote." + command + "." + action;
             payload.insert(command == "pairing" ? "ticket_id" : "device_id", args.takeFirst());
         }
+    } else if (command == "runner" && !args.isEmpty()) {
+        // Approval names the code `runner pair status` showed; nothing approves on its own.
+        const auto action = args.takeFirst();
+        if (action == "pair" && !args.isEmpty()) {
+            const auto step = args.takeFirst();
+            if (step == "create" && args.isEmpty()) {
+                operation = "runner.pairing.create";
+                if (parser.isSet("runner"))
+                    payload.insert("runner_id", parser.value("runner"));
+            } else if ((step == "status" || step == "reject") && args.size() == 1) {
+                operation = "runner.pairing." + step;
+                payload.insert("ticket_id", args.takeFirst());
+            } else if (step == "approve" && args.size() == 2) {
+                operation = "runner.pairing.approve";
+                payload.insert("ticket_id", args.takeFirst());
+                payload.insert("code", args.takeFirst());
+            }
+        } else if (action == "list" && args.isEmpty()) {
+            operation = "runner.list";
+        } else if ((action == "disable" || action == "enable" || action == "remove" ||
+                    action == "unpair") &&
+                   args.size() == 1) {
+            operation = "runner." + action;
+            payload.insert("runner_id", args.takeFirst());
+        }
     } else if (command == "call" && !args.isEmpty()) {
         operation = args.takeFirst();
         if (args.size() == 1) {
@@ -91,7 +120,8 @@ int main(int argc, char** argv) {
     }
     bool validTimeout = false;
     const int seconds = parser.value("timeout").toInt(&validTimeout);
-    if (operation.isEmpty() || !args.isEmpty() || !validTimeout || seconds < 1 || seconds > 3600) {
+    if (operation.isEmpty() || !args.isEmpty() || !validTimeout || seconds < 1 || seconds > 3600 ||
+        (parser.isSet("runner") && operation != "runner.pairing.create")) {
         QTextStream(stderr) << "Invalid command or deadline. Use --help.\n";
         return 2;
     }
@@ -108,7 +138,9 @@ int main(int argc, char** argv) {
     poll.setInterval(1000);
     bool statusInFlight = false;
     const auto finish = [&](const QJsonObject& value, const QString& error) {
-        if (!error.isEmpty())
+        if (!error.isEmpty() && value.contains("error_code") && command == "runner")
+            QTextStream(stderr) << value.value("error_code").toString() << ": " << error << '\n';
+        else if (!error.isEmpty())
             QTextStream(stderr) << error << '\n';
         else {
             QTextStream(stdout) << QJsonDocument(value).toJson(QJsonDocument::Indented);

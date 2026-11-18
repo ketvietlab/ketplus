@@ -3,6 +3,7 @@
 
 #include "cloud/CloudControlClient.h"
 #include "protocol/DaemonProtocol.h"
+#include "runner/RunnerService.h"
 #include "runtime/SessionHost.h"
 
 #include "KetPlusProductVersion.h"
@@ -56,6 +57,11 @@ LocalIpcServer::LocalIpcServer(SessionHost* host, const QString& serverName,
     connect(host_, &SessionHost::teamEvent, this, &LocalIpcServer::broadcastTeamEvent);
     connect(host_, &SessionHost::scheduleEvent, this, &LocalIpcServer::broadcastTeamEvent);
     connect(host_, &SessionHost::noticeReady, this, &LocalIpcServer::broadcastNotice);
+    if (cloud_ != nullptr)
+        connect(&cloud_->runners(), &runner::RunnerService::pairingChanged, this,
+                [this](const QJsonObject& payload) {
+                    broadcastNotice(QStringLiteral("runner.pairing.changed"), payload);
+                });
 }
 
 LocalIpcServer::~LocalIpcServer() { close(); }

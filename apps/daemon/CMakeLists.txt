@@ -23,6 +23,7 @@ target_link_libraries(ketplus_daemon_core PUBLIC
     ketplus_remote
     ketplus_team_language
     ketplus_control_crypto
+    ketplus_runner_pairing
     ketplus_browser_tools
     ketplus_computer_tools
     ketplus_product_version

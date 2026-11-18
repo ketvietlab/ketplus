@@ -98,6 +98,10 @@ ketplus_add_daemon_test(ketplus_sender_key_cache_tests cloud-privacy/SenderKeyCa
 target_sources(ketplus_sender_key_cache_tests PRIVATE cloud-privacy/MemoryCredentials.cpp)
 ketplus_add_daemon_test(ketplus_daemon_cloud_privacy_tests cloud-privacy/CloudPrivacyTest.cpp)
 target_sources(ketplus_daemon_cloud_privacy_tests PRIVATE cloud-privacy/MemoryCredentials.cpp)
+ketplus_add_daemon_test(ketplus_runner_relay_tests RunnerRelayTest.cpp)
+target_sources(ketplus_runner_relay_tests PRIVATE cloud-privacy/MemoryCredentials.cpp)
+ketplus_add_daemon_test(ketplus_runner_pairing_daemon_tests RunnerPairingDaemonTest.cpp)
+target_sources(ketplus_runner_pairing_daemon_tests PRIVATE cloud-privacy/MemoryCredentials.cpp)
 # Signed builds may run PCRE2 without JIT; cloud projection must stay linear there too.
 set_tests_properties(ketplus_daemon_cloud_privacy_tests PROPERTIES ENVIRONMENT
     "KETPLUS_DISABLE_DAEMON_AUTOSTART=1;KETPLUS_BROWSER_TOOLS_CONFIG=${CMAKE_CURRENT_BINARY_DIR}/ketplus_daemon_cloud_privacy_tests-browser-tools.json;KETPLUS_COMPUTER_TOOLS_CONFIG=${CMAKE_CURRENT_BINARY_DIR}/ketplus_daemon_cloud_privacy_tests-computer-tools.json;KETPLUS_COMPUTER_DIR=${CMAKE_CURRENT_BINARY_DIR}/ketplus_daemon_cloud_privacy_tests-computer;QT_ENABLE_REGEXP_JIT=0")

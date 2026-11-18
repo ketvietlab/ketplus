@@ -273,6 +273,8 @@ void CloudControlClient::enrollMachine(const quint64 signInEpoch, const QString&
                         });
                     accounts.insert(QStringLiteral("device-pins"),
                                     QByteArrayLiteral("{\"version\":1,\"devices\":{}}"));
+                    // A new enrollment trusts no runner the old one paired.
+                    accounts.remove(QStringLiteral("runner-pins"));
                     accounts.insert(QStringLiteral("control-url"), baseUrl_.toString().toUtf8());
                     accounts.insert(QStringLiteral("machine-id"), machineId.toUtf8());
                     accounts.insert(QStringLiteral("workspace-id"), workspaceId.toUtf8());

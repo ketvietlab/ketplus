@@ -7,6 +7,7 @@
 #include "cloud/RemoteAudit.h"
 #include "cloud/WorktreeBranches.h"
 #include "cloud/WorktreeRepositories.h"
+#include "runner/RunnerService.h"
 #include <QUrlQuery>
 
 #include "KetPlusProductVersion.h"
@@ -186,11 +187,16 @@ bool CloudControlClient::handles(const QString& type) const {
            type == QStringLiteral("remote.pairing.status") ||
            type == QStringLiteral("remote.pairing.approve") ||
            type == QStringLiteral("remote.pairing.revoke") ||
-           type == QStringLiteral("remote.device.revoke") || type == QStringLiteral("remote.audit");
+           type == QStringLiteral("remote.device.revoke") ||
+           type == QStringLiteral("remote.audit") || runner::RunnerService::handlesType(type);
 }
 
 void CloudControlClient::handleLocal(const QString& type, const QJsonObject& payload,
                                      LocalCallback callback) {
+    if (runner::RunnerService::handlesType(type)) {
+        runners().handle(type, payload, std::move(callback));
+        return;
+    }
     if (type == QStringLiteral("remote.status")) {
         callback(status(), {});
     } else if (type == QStringLiteral("remote.sign_in")) {
@@ -351,7 +357,7 @@ void CloudControlClient::signOut(LocalCallback callback) {
         QStringLiteral("machine-id"),          QStringLiteral("workspace-id"),
         QStringLiteral("machine-key-version"), QStringLiteral("control-url"),
         QStringLiteral("device-pins"),         QStringLiteral("account-name"),
-        QStringLiteral("account-username")};
+        QStringLiteral("account-username"),    QStringLiteral("runner-pins")};
     if (otherRelay_.isEmpty() && !credentials_.removeIf(
                                      [&enrollment](const QString& account) {
                                          return enrollment.contains(account) ||
@@ -362,6 +368,7 @@ void CloudControlClient::signOut(LocalCallback callback) {
         return;
     }
     wakeups_.stop();
+    runnerRelayAvailable_ = false;
     credentialRequestInFlight_ = false;
     finishCredentialWaiters(false, QStringLiteral("Signed out."));
     machineId_.clear();
