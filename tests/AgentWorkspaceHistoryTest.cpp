@@ -1,4 +1,3 @@
-#include "daemon/ScriptFixture.h"
 #include "AgentWorkspaceViewTest.h"
 #include "KetProfile.h"
 #include "agent/AgentMessageFormatter.h"
@@ -9,6 +8,7 @@
 #include "agent/McpToolResultMedia.h"
 #include "agent/TranscriptNormalizer.h"
 #include "agent/TranscriptPresentationGrouper.h"
+#include "daemon/ScriptFixture.h"
 #include "ui/Theme.h"
 
 #include <QAbstractItemModelTester>

@@ -1,5 +1,4 @@
 #include "AgentWorkspaceViewTest.h"
-#include "daemon/ScriptFixture.h"
 #include "CodexBrowserTools.h"
 #include "KetAppearance.h"
 #include "KetRecipes.h"
@@ -13,6 +12,7 @@
 #include "agent/MermaidLabelContrast.h"
 #include "agent/ProviderRuntimeStatus.h"
 #include "agent/TranscriptFileLinks.h"
+#include "daemon/ScriptFixture.h"
 #include "ui/Theme.h"
 #include <QQmlComponent>
 #include <QScopeGuard>

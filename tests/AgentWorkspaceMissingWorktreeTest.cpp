@@ -1,9 +1,9 @@
-#include "daemon/ScriptFixture.h"
 #include "AgentWorkspaceViewTest.h"
 #include "agent/AgentMessageFormatter.h"
 #include "agent/AgentSessionManager.h"
 #include "agent/AgentWorkspaceView.h"
 #include "agent/CodexAppServer.h"
+#include "daemon/ScriptFixture.h"
 
 #include <QDir>
 #include <QFile>
