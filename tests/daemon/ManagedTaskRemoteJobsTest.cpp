@@ -32,10 +32,20 @@ class ManagedTaskRemoteJobsTest final : public QObject {
         QVERIFY(j.until([&] { return j.state(id) == "completed"; }));
         QCOMPARE(j.task(id).value("exit_code").toInt(), 0);
         QCOMPARE(j.output(id), QStringLiteral("built\n"));
+        // A remote task's output answers in the shape a local task's does.
+        const QJsonObject remoteOutput = j.run("session.task.output", {{"task_id", id}});
+        const auto local = j.run("session.task.start", j.process(QStringLiteral("local")));
+        QVERIFY2(local.value("ok").toBool(), QJsonDocument(local).toJson());
+        const QJsonObject localOutput =
+            j.run("session.task.output",
+                  {{"task_id", local.value("task").toObject().value("task_id").toString()}});
+        QCOMPARE(remoteOutput.keys(), localOutput.keys());
+        for (const QString& key : localOutput.keys())
+            QCOMPARE(remoteOutput.value(key).type(), localOutput.value(key).type());
         QVERIFY(j.until([&] { return j.completions(id) == 1; }));
         QTest::qWait(600); // the bridge polls the outbox every 500 ms
         QCOMPARE(j.completions(id), 1);
-        QCOMPARE(j.rows("managed_jobs"), 1);
+        QCOMPARE(j.rows("managed_jobs"), 2); // with the local task
         QCOMPARE(j.e->h.relay.sent(QStringLiteral("submit")), 1);
         QVERIFY(!j.runtime()->isLive(id));
     }
@@ -314,20 +324,23 @@ class ManagedTaskRemoteJobsTest final : public QObject {
         QVERIFY2(after.value("ok").toBool(), QJsonDocument(after).toJson());
     }
 
-    // A stop the runner crosses with its result: one end, one completion.
+    // A stop the runner crosses with its result: the record is stopping, and the runner's
+    // verified result decides the end, once, with one completion.
     void aStopRacingTheResultCompletesOnce() {
         Joined j;
         std::unique_ptr<RunnerEnd> end;
         const QString id = j.running(end, hour);
         QVERIFY(!id.isEmpty());
         QVERIFY(j.run("session.task.stop", {{"task_id", id}}).value("ok").toBool());
+        QCOMPARE(j.e->h.jobs->record(id)->state, QStringLiteral("stopping"));
         end->send(resultOf(QStringLiteral("exited"), 0));
         QVERIFY(j.e->play(*end, [&] { return j.e->resultAcked; }));
         QVERIFY(j.until([&] { return j.completions(id) == 1; }));
         QTest::qWait(600);
         j.e->h.run();
-        const QString ended = j.state(id);
-        QVERIFY2(ended == "completed" || ended == "cancelled", qPrintable(ended));
+        const QJsonObject ended = j.task(id);
+        QCOMPARE(ended.value("state").toString(), QStringLiteral("completed"));
+        QCOMPARE(ended.value("exit_code").toInt(-1), 0);
         QCOMPARE(j.completions(id), 1);
         QVERIFY(!j.runtime()->isLive(id));
     }
