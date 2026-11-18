@@ -2173,25 +2173,21 @@ test output.
 - `CodexSessionIsolationTest::twoSessionsKeepHistoryWhileOnlyOneProcessRefreshes` and
   `AcpSessionIsolationTest::twoSessionsKeepHistoryAndIndependentProcesses`: the fixture records its
   exit from a SIGTERM handler, which Windows' forced process termination never runs.
-- Under investigation, each prints its symptom:
-  - `DaemonWorktreeContextTest`, four tests: the provider log has no `provider-input`,
-    `steer-input` or `model-list` line, or the pending question is not found.
-  - `AgentMessagingTest::agentConnectionsOnlyReachAgentOperations`: a `daemon.hello` with an
-    agent token is not reported as an agent connection.
-  - `CursorAdapterTest::findsTheCliInstalledAfterStartup`: no executable is found after the
-    installer moves the CLI.
-  - `ProviderCompatibilityTest::probeCachesUntilTheExecutableChanges`: the probe reports a
-    status other than supported.
-  - `SessionForkTest::destinationCreatedWhileProviderForkIsPendingIsPreserved`: the destination
-    marker is not preserved.
-  - `TeamReviewTest` and `TurnReviewTest`: the Codex review checks and four review-turn tests.
-  - `TeamStorageTest::theMainCheckoutIsRefused`: the task worktree is not created.
-  - `TeamRoutingToolsTest::authenticatedToolsUseRealProducerThenHostLookupThenPolicy`, rows
-    `ordinary-prose`, `concurrent-only`, `ignored-gitlink` and `replaced-base-tree`: the git
-    evidence reports a stale revision.
-  - `TeamFindingRoutingTest::authenticatedClosureUsesRealProducerStoreAndReviewedRecord`: the
-    remote branch cannot be read and the test then crashes.
-  - `TeamAgentToolsTest::theLeadersFirstTurnCarriesTheGoalAndItsInstructions`: hangs.
+- Windows cannot rename or remove the directory a running process uses as its working directory:
+  the `source unavailable` row of `TeamReviewTest::aCodexReviewerIsCheckedAroundEachReview` and
+  the `source removed` row of `TurnReviewTest::aCodexReviewIsCheckedAroundTheTurn`.
+- `TeamStorageTest::theMainCheckoutIsRefused` links the worktree to the main checkout with
+  `QFile::link`, which makes a `.lnk` shortcut on Windows, not a symbolic link.
+
+What the daemon tests learned about Windows, for the next fixture:
+
+- A test that edits the Python source of a fixture edits `scriptSourcePath()`, not the launcher.
+- A test that waits for the daemon to refuse a client and then connects again pauses first: a
+  named-pipe client that connects while the server is closing the refused one gets no reply.
+- Git for Windows converts line endings on checkout, so the evidence Git run in the daemon sets
+  `core.autocrlf=input` to read such a checkout as clean; the review snapshot copies the index
+  to a plain file, because git could not replace the index of a `QTemporaryFile`.
+- A fixture that holds a daemon, a host and adapters tears down the adapters first.
 
 Skipped inside tests on Windows, each with its reason in the test source: fixtures that need POSIX
 symbolic links (`QFile::link` makes a `.lnk` shortcut), file-mode assertions (access is an ACL, see
