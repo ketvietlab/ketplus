@@ -31,6 +31,11 @@ sync::PreparedOutcome preparedIn(const RemoteHarness& h) {
     return {prepared, {}};
 }
 
+QStringList capturedLog;
+void captureLog(QtMsgType, const QMessageLogContext&, const QString& message) {
+    capturedLog.append(message);
+}
+
 } // namespace
 
 class RemoteJobsSubmitTest final : public QObject {
@@ -50,6 +55,39 @@ class RemoteJobsSubmitTest final : public QObject {
         QCOMPARE(record->snapshot->snapshotId, preparedIn(h).prepared->snapshotId);
         QCOMPARE(h.relay.pending(QStringLiteral("submit")), 1);
         QCOMPARE(h.f.store->load().first().snapshot, record->snapshot);
+    }
+
+    // Logs name tasks and jobs only: no worktree, repository or store path, no snapshot id.
+    void logsCarryNoPath() {
+        capturedLog.clear();
+        const auto previous = qInstallMessageHandler(captureLog);
+        {
+            RemoteHarness h;
+            h.prepare = [&](const sync::PrepareRequest&) { return preparedIn(h); };
+            const QString id = h.f.remoteTask();
+            h.jobs->submit(id, request(), [](const QString&) {});
+            QVERIFY(
+                h.f.exec("UPDATE remote_jobs SET record='{not json' WHERE task_id='" + id + "'"));
+            h.build();
+            h.jobs->restore();
+            const QString kept = h.f.remoteTask();
+            QVERIFY(h.write(syncingSteps(kept, QStringLiteral("job-2"), runnerA,
+                                         RemoteSnapshot{QStringLiteral("/work/repo/.git"),
+                                                        QStringLiteral("/work/repo"),
+                                                        QStringLiteral("feedface"),
+                                                        {}})));
+            h.build();
+            h.jobs->restore();
+            (void)h.jobs->runnerRemoved(runnerA, {});
+        }
+        qInstallMessageHandler(previous);
+        QVERIFY(!capturedLog.isEmpty());
+        for (const QString& line : std::as_const(capturedLog)) {
+            QVERIFY2(!line.contains(QStringLiteral("/work/repo")), qPrintable(line));
+            QVERIFY2(!line.contains(QStringLiteral("feedface")), qPrintable(line));
+            QVERIFY2(!line.contains(preparedIn(RemoteHarness()).prepared->snapshotId),
+                     qPrintable(line));
+        }
     }
 
     void aFailedPrepareLeavesNothingAndTellsNoRelay() {
