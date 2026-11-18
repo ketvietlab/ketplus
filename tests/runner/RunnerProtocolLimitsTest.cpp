@@ -222,8 +222,17 @@ void snapshotRows() {
     spec<C>("offset 2^53-1", [](C& f) { f.offset = (1LL << 53) - 1; });
     spec<C>("offset 2^53", [](C& f) { f.offset = 1LL << 53; }, "offset");
     spec<C>("offset -1", [](C& f) { f.offset = -1; }, "offset");
-    spec<SnapshotWant>(
-        "want fromOffset -1", [](SnapshotWant& f) { f.fromOffset = -1; }, "fromOffset");
+    using W = SnapshotWant;
+    spec<W>("want fromOffset -1", [](W& f) { f.fromOffset = -1; }, "fromOffset");
+    const auto want = [](const char* state, const qint64 fromOffset) {
+        return [state, fromOffset](W& f) {
+            f.state = QString::fromLatin1(state);
+            f.fromOffset = fromOffset;
+        };
+    };
+    spec<W>("want have from 0", want("have", 0));
+    spec<W>("want have from 1", want("have", 1), "fromOffset");
+    spec<W>("want need from 1", want("need", 1));
     spec<JobResume>(
         "outputOffset 2^53", [](JobResume& f) { f.outputOffset = 1LL << 53; }, "outputOffset");
     spec<JobOutputAck>("epoch 2^53", [](JobOutputAck& f) { f.epoch = 1LL << 53; }, "epoch");

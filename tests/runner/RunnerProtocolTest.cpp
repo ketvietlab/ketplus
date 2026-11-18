@@ -559,6 +559,53 @@ void RunnerProtocolTest::invalidSpecCarriesItsJobIdentity() {
     QVERIFY(!result.error.jobId);
 }
 
+void RunnerProtocolTest::escapedLoneSurrogatesAreRefused() {
+    // JSON escapes can name a lone surrogate, which has no exact byte form for exec or chdir.
+    const auto decodeWith = [](const Frame& frame, const auto& edit, const QByteArray& escaped) {
+        QJsonObject object = detail::toObject(frame);
+        edit(object);
+        QByteArray message = compact(object);
+        message.replace("\"@@\"", "\"" + escaped + "\"");
+        return decode(message, routeFor(frameType(frame))->channel, senderOf(frame));
+    };
+    const Frame spec = sampleOf(JobSpec::type).frame;
+    const auto argv = [](QJsonObject& o) {
+        o.insert("invocation", QJsonObject{{"argv", QJsonArray{"x", "@@"}}});
+    };
+    const auto shell = [](QJsonObject& o) { o.insert("invocation", QJsonObject{{"shell", "@@"}}); };
+    const auto env = [](QJsonObject& o) { o.insert("env", QJsonObject{{"A", "@@"}}); };
+    const auto cwd = [](QJsonObject& o) { o.insert("cwd", "@@"); };
+    const struct {
+        std::function<void(QJsonObject&)> edit;
+        const char* field;
+    } cases[] = {
+        {argv, "invocation.argv"}, {shell, "invocation.shell"}, {env, "env"}, {cwd, "cwd"}};
+    for (const auto& c : cases) {
+        for (const QByteArray& escaped :
+             {QByteArray("a\\ud800"), QByteArray("\\udc00a"), QByteArray("\\ude00\\ud83d")}) {
+            const DecodeResult result = decodeWith(spec, c.edit, escaped);
+            QVERIFY2(!result.ok(), c.field);
+            QCOMPARE(result.error.kind, FrameError::Kind::InvalidField);
+            QCOMPARE(result.error.field, QString::fromLatin1(c.field));
+        }
+        // A surrogate pair is an ordinary character.
+        QVERIFY2(decodeWith(spec, c.edit, "a\\ud83d\\ude00").ok(), c.field);
+    }
+
+    const auto capability = [](QJsonObject& o) {
+        o.insert("capabilities", QJsonArray{QString(capability::runnerProtocol), "@@"});
+    };
+    const DecodeResult hello =
+        decodeWith(sampleOf(Hello::type).frame, capability, QByteArray("\\ud800"));
+    QCOMPARE(hello.error.field, QStringLiteral("capabilities"));
+
+    // Encode refuses the same text built in memory.
+    JobSpec built = std::get<JobSpec>(spec);
+    built.invocation = Invocation{std::nullopt, QStringLiteral("a") + QChar(0xd800)};
+    QCOMPARE(encode(built, Direction::DesktopToRunner).error->field,
+             QStringLiteral("invocation.shell"));
+}
+
 void RunnerProtocolTest::duplicateWarningsAreDropped() {
     QJsonObject offer = detail::toObject(sampleOf(SnapshotOffer::type).frame);
     offer.insert("warnings", QJsonArray{"lfs_not_synced", "submodules_not_synced", "lfs_not_synced",

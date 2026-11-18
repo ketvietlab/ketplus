@@ -79,7 +79,20 @@ bool isCode(const QString& code, const bool allowEmpty = false) {
            pattern.match(code).hasMatch();
 }
 
-bool hasNul(const QString& text) { return text.contains(QChar()); }
+// Text that survives the conversion to bytes unchanged: no NUL and no unpaired surrogate.
+bool isExactText(const QString& text) {
+    for (qsizetype i = 0; i < text.size(); ++i) {
+        const QChar c = text.at(i);
+        if (c.isNull() || c.isLowSurrogate())
+            return false;
+        if (c.isHighSurrogate()) {
+            if (i + 1 == text.size() || !text.at(i + 1).isLowSurrogate())
+                return false;
+            ++i;
+        }
+    }
+    return true;
+}
 
 class Checker {
   public:
@@ -127,7 +140,8 @@ class Checker {
     void capabilities(const QStringList& values) {
         bool valid = values.size() <= limits::maxCapabilities;
         for (const QString& value : values)
-            valid = valid && !value.isEmpty() && characters(value) <= limits::maxCapabilityChars;
+            valid = valid && !value.isEmpty() && isExactText(value) &&
+                    characters(value) <= limits::maxCapabilityChars;
         require(valid, QLatin1StringView("capabilities"));
     }
     void oneOf(const QString& value, std::initializer_list<QLatin1StringView> allowed,
@@ -177,7 +191,7 @@ void check(Checker& c, const Welcome& f, Direction) {
 bool isRelativePath(const QString& cwd) {
     if (cwd.isEmpty())
         return true;
-    if (utf8Bytes(cwd) > limits::maxCwdBytes || hasNul(cwd))
+    if (utf8Bytes(cwd) > limits::maxCwdBytes || !isExactText(cwd))
         return false;
     for (const QString& segment : cwd.split(u'/')) {
         if (segment.isEmpty() || segment == QLatin1StringView(".") ||
@@ -194,12 +208,13 @@ void checkInvocation(Checker& c, const Invocation& invocation) {
         const QStringList& argv = *invocation.argv;
         bool valid = !argv.isEmpty() && argv.size() <= limits::maxArgv && !argv.front().isEmpty();
         for (const QString& argument : argv)
-            valid = valid && !hasNul(argument);
+            valid = valid && isExactText(argument);
         c.require(valid, QLatin1StringView("invocation.argv"));
     }
     if (invocation.shell) {
         const QString& shell = *invocation.shell;
-        c.require(!shell.isEmpty() && utf8Bytes(shell) <= limits::maxShellBytes && !hasNul(shell),
+        c.require(!shell.isEmpty() && utf8Bytes(shell) <= limits::maxShellBytes &&
+                      isExactText(shell),
                   QLatin1StringView("invocation.shell"));
     }
 }
@@ -211,7 +226,7 @@ void checkEnv(Checker& c, const QMap<QString, std::optional<QString>>& env) {
         valid = valid && isEnvName(it.key()) && !it.key().startsWith(QStringLiteral("KETPLUS_"));
         bytes += utf8Bytes(it.key());
         if (it.value()) {
-            valid = valid && !hasNul(*it.value());
+            valid = valid && isExactText(*it.value());
             bytes += utf8Bytes(*it.value());
         }
     }
@@ -270,6 +285,8 @@ void check(Checker& c, const SnapshotWant& f, Direction) {
     c.oneOf(f.state, {QLatin1StringView("have"), QLatin1StringView("need")},
             QLatin1StringView("state"));
     c.offset(f.fromOffset, QLatin1StringView("fromOffset"));
+    c.require(f.state != QLatin1StringView("have") || f.fromOffset == 0,
+              QLatin1StringView("fromOffset"));
 }
 
 void check(Checker& c, const SnapshotChunk& f, Direction) {

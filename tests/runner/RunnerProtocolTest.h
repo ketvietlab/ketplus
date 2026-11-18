@@ -52,6 +52,7 @@ class RunnerProtocolTest : public QObject {
     void errorCodesBelongToTheirFrame();
     void helloWithoutTheProtocolCapability();
     void invalidSpecCarriesItsJobIdentity();
+    void escapedLoneSurrogatesAreRefused();
     void duplicateWarningsAreDropped();
     void knownWarningsAreTheThreeCodes();
 
