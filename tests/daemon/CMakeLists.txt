@@ -486,6 +486,18 @@ ketplus_enable_warnings(ketplus_peer_link_tests)
 target_link_libraries(ketplus_peer_link_tests PRIVATE Qt6::Test ketplus_peer_link)
 add_test(NAME ketplus_peer_link_tests COMMAND ketplus_peer_link_tests)
 set_tests_properties(ketplus_peer_link_tests PROPERTIES TIMEOUT 90)
+# The desktop's runner peer links: fakes for every port, then the runner's connector against
+# them over real links on this machine.
+qt_add_executable(ketplus_daemon_runner_link_tests
+    runner-link/RunnerLinkTest.cpp runner-link/RunnerLinkTest.h
+    runner-link/RunnerLinkOfferTest.cpp runner-link/RunnerLinkLifecycleTest.cpp
+    runner-link/RunnerLinkChannelsTest.cpp runner-link/RunnerLinkLoopbackTest.cpp)
+ketplus_enable_warnings(ketplus_daemon_runner_link_tests)
+target_link_libraries(ketplus_daemon_runner_link_tests PRIVATE
+    Qt6::Test ketplus_daemon_runner_link ketplus_runner_peer ketplus_runner_pairing
+    ketplus_control_crypto_primitives)
+add_test(NAME ketplus_daemon_runner_link_tests COMMAND ketplus_daemon_runner_link_tests)
+set_tests_properties(ketplus_daemon_runner_link_tests PROPERTIES TIMEOUT 180)
 
 ketplus_add_daemon_test(ketplus_async_question_lifetime_tests AsyncQuestionLifetimeTest.cpp)
 

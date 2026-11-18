@@ -73,6 +73,20 @@ target_sources(ketplus_daemon_core PRIVATE
     src/teams/TeamReviewPolicy.h src/teams/TeamReviewPolicy.cpp
     src/teams/TeamCoordinatorFindingResolutions.cpp)
 ketplus_enable_warnings(ketplus_daemon_core)
+# The desktop's peer links to runners: answers runner offers and carries the three channels.
+add_library(ketplus_daemon_runner_link STATIC
+    src/runner/link/LinkAdapters.cpp src/runner/link/LinkAdapters.h
+    src/runner/link/LinkLog.cpp src/runner/link/LinkLog.h src/runner/link/LinkPorts.h
+    src/runner/link/OfferCheck.cpp src/runner/link/OfferCheck.h
+    src/runner/link/RunnerLinkState.h src/runner/link/RunnerLinks.cpp
+    src/runner/link/RunnerLinks.h src/runner/link/RunnerLinksChannels.cpp)
+target_link_libraries(ketplus_daemon_runner_link
+    PUBLIC Qt6::Core ketplus_daemon_runner_peer ketplus_peer_link ketplus_runner_pairing
+    ketplus_runner_protocol
+    PRIVATE ketplus_control_crypto_primitives)
+target_include_directories(ketplus_daemon_runner_link PUBLIC
+    "$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/src>")
+ketplus_enable_warnings(ketplus_daemon_runner_link)
 # Supported provider CLI versions (ADR 0015).
 set_source_files_properties(src/providers/compat/provider-compatibility.json
     PROPERTIES QT_RESOURCE_ALIAS "provider-compatibility.json")
