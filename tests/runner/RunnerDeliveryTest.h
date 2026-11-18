@@ -32,9 +32,12 @@ class FakeRelayCalls final : public RelayCalls {
 
 class FakeSession final : public SessionLink {
   public:
-    void open(const HeldLease& lease) override {
+    [[nodiscard]] bool open(const HeldLease& lease) override {
+        if (busy)
+            return false;
         opened.append(lease);
         currentPhase = QStringLiteral("assigned");
+        return true;
     }
     [[nodiscard]] bool withdraw() override {
         log.append(QStringLiteral("withdraw"));
@@ -62,6 +65,7 @@ class FakeSession final : public SessionLink {
     QStringList log;
     QString currentPhase;
     bool withdrawable = true;
+    bool busy = false; // the session still holds another job
     std::function<void(const QString&)> onStartRefused;
     std::function<void(const QString&)> onLost;
 };
@@ -159,6 +163,7 @@ class RunnerDeliveryAcquireTest : public QObject {
     void busyLeaseOfUnknownRequesterIsReleased();
     void busyLeaseThatWasStartedIsFinished();
     void sessionGetsATrustedLease();
+    void busySessionGivesTheLeaseBack();
     void untrustedRequesterIsReleased();
     void labelsOutsideTheRunnerAreReleased();
     void unreadableLeaseIsAskedAgain();

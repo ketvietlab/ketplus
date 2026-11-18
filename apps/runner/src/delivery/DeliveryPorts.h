@@ -63,8 +63,9 @@ class RelayCalls {
 class SessionLink {
   public:
     virtual ~SessionLink() = default;
-    // A new job for the session, which then connects to `machineId`.
-    virtual void open(const HeldLease& lease) = 0;
+    // A new job for the session, which then connects to `machineId`. False when the session
+    // still holds another job.
+    [[nodiscard]] virtual bool open(const HeldLease& lease) = 0;
     // Drops the job if no spec came yet; false otherwise.
     [[nodiscard]] virtual bool withdraw() = 0;
     virtual void leaseStarted(const QString& startedAt) = 0;

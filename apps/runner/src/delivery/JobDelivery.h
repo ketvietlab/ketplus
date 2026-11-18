@@ -97,6 +97,7 @@ class JobDelivery {
     [[nodiscard]] QString phase() const;
     bool journal(JournalRecord::Step step);
     void markStorageBroken(const QString& error);
+    void openSession(const HeldLease& lease);
 
     QStringList m_labels;
     DeliveryPorts m_ports;
@@ -116,6 +117,7 @@ class JobDelivery {
     bool m_draining = false;
     bool m_disabled = false;
     bool m_storageBroken = false;
+    bool m_sessionRefusalReported = false;
     bool m_credentialLost = false;
 };
 

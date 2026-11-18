@@ -174,8 +174,21 @@ void JobDelivery::takeLease(const HeldLease& lease) {
         close(true, {}, *reason);
         return;
     }
+    openSession(lease);
+}
+
+// The session takes a job only while it holds none; one that refuses has its lease given back.
+void JobDelivery::openSession(const HeldLease& lease) {
     m_sessionOpen = true;
-    m_ports.session.open(lease);
+    if (m_ports.session.open(lease))
+        return;
+    m_sessionOpen = false;
+    if (!m_sessionRefusalReported) {
+        m_sessionRefusalReported = true;
+        m_ports.report(QStringLiteral("The job session still held another job; the new lease "
+                                      "was given back."));
+    }
+    close(true, {}, QStringLiteral("draining"));
 }
 
 std::optional<QString> JobDelivery::releaseReason(const HeldLease& lease) const {
@@ -208,8 +221,7 @@ void JobDelivery::restore(const std::optional<JournalRecord>& record) {
         } else if (const std::optional<QString> reason = releaseReason(record->lease)) {
             close(true, {}, *reason);
         } else {
-            m_sessionOpen = true;
-            m_ports.session.open(record->lease); // its connection window starts again
+            openSession(record->lease); // its connection window starts again
         }
         renew();
         return;

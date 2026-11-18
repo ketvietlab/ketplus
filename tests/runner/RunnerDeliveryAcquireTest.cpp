@@ -161,6 +161,26 @@ void RunnerDeliveryAcquireTest::sessionGetsATrustedLease() {
     QCOMPARE(system.session.opened.size(), 1);
 }
 
+// A session that still holds a job takes no other; the lease goes back and is not offered again.
+void RunnerDeliveryAcquireTest::busySessionGivesTheLeaseBack() {
+    Host host;
+    host.session.busy = true;
+    host.hold();
+    QVERIFY(host.session.opened.isEmpty());
+    QCOMPARE(host.last().kind, Kind::Release);
+    QCOMPARE(host.last().reason, QStringLiteral("draining"));
+    QCOMPARE(host.reports.size(), 1);
+    QCOMPARE(host.currentJob().toObject().value(QStringLiteral("leaseId")).toString(),
+             QStringLiteral("lease-1"));
+    host.answerOk({{QStringLiteral("requeued"), true}});
+    QCOMPARE(host.delivery->state(), State::Idle);
+    QCOMPARE(host.callKinds().count(QStringLiteral("release")), 1);
+    // Another lease meets the same session: given back again, reported once in all.
+    host.hold();
+    QCOMPARE(host.last().kind, Kind::Release);
+    QCOMPARE(host.reports.size(), 1);
+}
+
 void RunnerDeliveryAcquireTest::untrustedRequesterIsReleased() {
     Host host;
     host.trust.pinned.clear(); // no active pin for desktop-1

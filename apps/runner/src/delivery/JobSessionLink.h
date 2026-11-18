@@ -11,7 +11,7 @@ class JobSessionLink final : public SessionLink {
   public:
     void attach(session::JobSession& session) { m_session = &session; }
 
-    void open(const HeldLease& lease) override;
+    [[nodiscard]] bool open(const HeldLease& lease) override;
     [[nodiscard]] bool withdraw() override { return m_session->withdraw(); }
     void leaseStarted(const QString& startedAt) override { m_session->leaseStarted(startedAt); }
     void leaseStartRefused(const QString& code) override { m_session->leaseStartRefused(code); }

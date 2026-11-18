@@ -4,8 +4,8 @@ namespace ketplus::runner::delivery {
 
 using Phase = session::JobSession::Phase;
 
-void JobSessionLink::open(const HeldLease& lease) {
-    (void)m_session->assign({lease.jobId, lease.attempt, lease.machineId});
+bool JobSessionLink::open(const HeldLease& lease) {
+    return m_session->assign({lease.jobId, lease.attempt, lease.machineId});
 }
 
 QString JobSessionLink::phase() const {

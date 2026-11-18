@@ -208,6 +208,7 @@ class RunnerSessionDeliveryTest : public QObject {
   private slots:
     void unrecordedSpecStopsTakingJobs();
     void sessionPhasesReachTheHeartbeat();
+    void busySessionRefusesTheLease();
 };
 
 class RunnerSessionStopTest : public QObject {
