@@ -5,6 +5,7 @@
 #include <QJsonObject>
 #include <QSet>
 #include <functional>
+#include <iterator>
 #ifdef Q_OS_UNIX
 #include <fcntl.h>
 #include <sys/stat.h>
@@ -107,9 +108,10 @@ bool IncludeResolver::read(const QString& path, QByteArray* data, Error* error) 
         return fail(error, file.errorString(), path);
     }
 #elif defined(Q_OS_WIN)
-    // No openat here. resolve() refused links on every component; the file itself is opened
-    // without following a reparse point and checked through the handle it returned, so it
-    // cannot be swapped for a link between that check and the read.
+    // No openat here. resolve() refused links on every component. The file itself is opened
+    // without following a reparse point and checked through the handle it returned, and the
+    // path the handle really names must still lie under the root, so a directory swapped for a
+    // junction after resolve() is caught as well.
     const auto nativePath = QDir::toNativeSeparators(QDir(root).filePath(normalized));
     const HANDLE handle =
         CreateFileW(reinterpret_cast<const wchar_t*>(nativePath.utf16()), GENERIC_READ,
@@ -123,6 +125,19 @@ bool IncludeResolver::read(const QString& path, QByteArray* data, Error* error) 
         metadata.nFileSizeHigh || metadata.nFileSizeLow > quint64(MaxFileBytes)) {
         CloseHandle(handle);
         return fail(error, QStringLiteral("Include must be a regular file of at most 5 MiB"), path);
+    }
+    wchar_t finalPath[32768];
+    const DWORD finalLength =
+        GetFinalPathNameByHandleW(handle, finalPath, DWORD(std::size(finalPath)), VOLUME_NAME_DOS);
+    QString actual = finalLength > 0 && finalLength < std::size(finalPath)
+                         ? QString::fromWCharArray(finalPath, int(finalLength))
+                         : QString();
+    if (actual.startsWith(QStringLiteral("\\\\?\\")))
+        actual.remove(0, 4);
+    const QString nativeRoot = QDir::toNativeSeparators(root);
+    if (!actual.startsWith(nativeRoot + QLatin1Char('\\'), Qt::CaseInsensitive)) {
+        CloseHandle(handle);
+        return fail(error, QStringLiteral("Include resolves outside the source root"), path);
     }
     const int descriptor =
         _open_osfhandle(reinterpret_cast<qintptr>(handle), _O_RDONLY | _O_BINARY);
