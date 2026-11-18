@@ -396,6 +396,11 @@ void ManagedTaskRuntime::stopTask(const QString& id, const QString& reason) {
     if (!live || live->record.value("state") == "stopping" ||
         live->record.value("state") == "needs_attention")
         return;
+    if (remote_job_rows::phaseOf(ledger_.database(), id) == remote_job_rows::Phase::Started) {
+        if (reason != "timed_out" && remoteJobs_) // the runner keeps the job's time
+            (void)remoteJobs_->stop(id);
+        return;
+    }
     BackgroundTaskChange change;
     change.state = "stopping";
     change.terminalTarget = reason;
