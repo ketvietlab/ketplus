@@ -103,6 +103,14 @@ bool IncludeResolver::read(const QString& path, QByteArray* data, Error* error) 
         return fail(error, file.errorString(), path);
     }
 #else
+    // No openat here, so refuse links and junctions along the path before opening it.
+    QString walked = root;
+    for (const QString& part : normalized.split('/')) {
+        walked = QDir(walked).filePath(part);
+        const QFileInfo step(walked);
+        if (step.isSymLink() || step.isJunction() || step.isShortcut())
+            return fail(error, QStringLiteral("Cannot open include safely"), path);
+    }
     file.setFileName(QDir(root).filePath(normalized));
     if (!QFileInfo(file).isFile())
         return fail(error, QStringLiteral("Include must be a regular file"), path);

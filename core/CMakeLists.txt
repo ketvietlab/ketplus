@@ -28,6 +28,14 @@ set(CMAKE_AUTOUIC ON)
 set(CMAKE_AUTORCC ON)
 set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 
+if(MSVC)
+    # Sources are UTF-8 (string literals with non-ASCII text); MSVC otherwise reads the ANSI code
+    # page. /Zc:__cplusplus makes __cplusplus honest for Qt, /bigobj covers the large moc and
+    # editor units, and NOMINMAX keeps <windows.h> from shadowing std::min and std::max.
+    add_compile_options(/utf-8 /Zc:__cplusplus /bigobj)
+    add_compile_definitions(NOMINMAX _CRT_SECURE_NO_WARNINGS)
+endif()
+
 find_package(Qt6 6.8 REQUIRED COMPONENTS Core Gui Widgets Core5Compat Svg SvgWidgets Concurrent)
 
 include(cmake/CompilerCache.cmake)

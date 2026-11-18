@@ -324,6 +324,14 @@ QString MermaidRenderer::discoverExecutable() {
     }
 
     const QString home = QDir::homePath();
+#if defined(Q_OS_WIN)
+    // npm's global bin directory holds the `mmdc.cmd` shim.
+    const QString appData = qEnvironmentVariable("APPDATA");
+    const QStringList fixedCandidates{
+        QDir(appData).filePath(QStringLiteral("npm/mmdc.cmd")),
+        QDir(home).filePath(QStringLiteral(".volta/bin/mmdc.exe")),
+    };
+#else
     const QStringList fixedCandidates{
         QStringLiteral("/opt/homebrew/bin/mmdc"),
         QStringLiteral("/usr/local/bin/mmdc"),
@@ -333,6 +341,7 @@ QString MermaidRenderer::discoverExecutable() {
         home + QStringLiteral("/.local/share/fnm/aliases/default/bin/mmdc"),
         home + QStringLiteral("/.npm-global/bin/mmdc"),
     };
+#endif
     for (const auto& candidate : fixedCandidates) {
         if (isExecutableFile(candidate)) {
             return candidate;
