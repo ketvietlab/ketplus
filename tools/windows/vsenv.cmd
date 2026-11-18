@@ -6,11 +6,15 @@ rem   vsenv.cmd cmake --preset lite-dev
 rem
 rem KETPLUS_TOOLS_ROOT is where tools\windows\install-toolchain.ps1 installed
 rem everything (default C:\ketplus-tools). With no arguments it only prints the
-rem resolved environment. QT_ROOT / OPENSSL_ROOT_DIR already set are kept.
+rem resolved environment. QT_ROOT / OPENSSL_ROOT_DIR already set are kept;
+rem KETPLUS_QT_VERSION (e.g. 6.11.3) selects a Qt version.
 setlocal
 if not defined KETPLUS_TOOLS_ROOT set "KETPLUS_TOOLS_ROOT=C:\ketplus-tools"
+rem Qt: QT_ROOT wins; else KETPLUS_QT_VERSION picks <root>\Qt\<version>\msvc2022_64;
+rem else the highest installed version (compared as version numbers, so 6.11 > 6.9).
+if not defined QT_ROOT if defined KETPLUS_QT_VERSION set "QT_ROOT=%KETPLUS_TOOLS_ROOT%\Qt\%KETPLUS_QT_VERSION%\msvc2022_64"
 if not defined QT_ROOT (
-    for /d %%Q in ("%KETPLUS_TOOLS_ROOT%\Qt\6.*") do if exist "%%Q\msvc2022_64\bin\qmake.exe" set "QT_ROOT=%%Q\msvc2022_64"
+    for /f "usebackq delims=" %%Q in (`powershell -NoProfile -Command "Get-ChildItem -LiteralPath $env:KETPLUS_TOOLS_ROOT\Qt -Directory -ErrorAction SilentlyContinue | Where-Object { Test-Path (Join-Path $_.FullName 'msvc2022_64\bin\qmake.exe') } | Sort-Object { [version]$_.Name } | Select-Object -Last 1 -ExpandProperty FullName"`) do set "QT_ROOT=%%Q\msvc2022_64"
 )
 if not defined OPENSSL_ROOT_DIR set "OPENSSL_ROOT_DIR=%KETPLUS_TOOLS_ROOT%\openssl"
 

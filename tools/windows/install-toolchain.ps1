@@ -35,11 +35,13 @@ function Get-File([string]$Url, [string]$Name) {
     return $dest
 }
 
-# Python (all users, so a non-interactive ssh session finds it on PATH).
+# Python, installed for all users into $Root\python. PATH is not modified
+# (PrependPath=0); tools\windows\vsenv.cmd adds it for builds.
 $py = "$Root\python\python.exe"
 if (-not (Test-Path $py)) {
     $exe = Get-File "https://www.python.org/ftp/python/$PythonVersion/python-$PythonVersion-amd64.exe" "python-$PythonVersion.exe"
-    Start-Process $exe -Wait -ArgumentList "/quiet InstallAllUsers=1 TargetDir=$Root\python PrependPath=0 Include_test=0 Include_launcher=0"
+    $p = Start-Process $exe -Wait -PassThru -ArgumentList "/quiet InstallAllUsers=1 TargetDir=$Root\python PrependPath=0 Include_test=0 Include_launcher=0"
+    if ($p.ExitCode -notin 0, 3010 -or -not (Test-Path $py)) { throw "Python installer failed: $($p.ExitCode)" }
 }
 
 # CMake
@@ -55,16 +57,24 @@ if (-not (Test-Path "$Root\ninja\ninja.exe")) {
     Expand-Archive $zip -DestinationPath "$Root\ninja" -Force
 }
 
-# MSVC Build Tools 2022 (x64) + Windows SDK.
+# MSVC Build Tools 2022 (x64) + Windows SDK. Qt 6.11 needs a recent toolset
+# (MSVC 14.4x, Visual Studio 17.10 or newer): an older install is updated.
 if (-not $SkipMsvc) {
     $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
-    $have = (Test-Path $vswhere) -and (& $vswhere -products * -latest -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath)
+    $component = 'Microsoft.VisualStudio.Component.VC.Tools.x86.x64'
+    $have = (Test-Path $vswhere) -and (& $vswhere -products * -latest -version '[17.10,)' -requires $component -property installationPath)
     if (-not $have) {
         $bt = Get-File 'https://aka.ms/vs/17/release/vs_BuildTools.exe' 'vs_BuildTools.exe'
-        $p = Start-Process $bt -Wait -PassThru -ArgumentList @(
-            '--quiet', '--wait', '--norestart', '--nocache',
-            '--add', 'Microsoft.VisualStudio.Component.VC.Tools.x86.x64',
-            '--add', 'Microsoft.VisualStudio.Component.Windows11SDK.22621')
+        $old = if (Test-Path $vswhere) { & $vswhere -products * -latest -version '[17.0,)' -property installationPath } else { $null }
+        $add = @('--add', $component, '--add', 'Microsoft.VisualStudio.Component.Windows11SDK.22621')
+        $common = @('--quiet', '--wait', '--norestart', '--nocache')
+        if ($old) {
+            $p = Start-Process $bt -Wait -PassThru -ArgumentList (@('update', '--installPath', "`"$old`"") + $common)
+            if ($p.ExitCode -notin 0, 3010) { throw "vs_BuildTools update failed: $($p.ExitCode)" }
+            $p = Start-Process $bt -Wait -PassThru -ArgumentList (@('modify', '--installPath', "`"$old`"") + $common + $add)
+        } else {
+            $p = Start-Process $bt -Wait -PassThru -ArgumentList ($common + $add)
+        }
         if ($p.ExitCode -notin 0, 3010) { throw "vs_BuildTools failed: $($p.ExitCode)" }
     }
 }
@@ -97,4 +107,4 @@ Write-Host '--- installed ---'
 Write-Host "ninja $(& "$Root\ninja\ninja.exe" --version)"
 if (Test-Path "$Root\Qt\$QtVersion\msvc2022_64\bin\qmake.exe") { Write-Host "Qt $QtVersion at $Root\Qt\$QtVersion\msvc2022_64" }
 if (Test-Path "$Root\openssl\include\openssl\opensslv.h") { Select-String -Path "$Root\openssl\include\openssl\opensslv.h" -Pattern 'OPENSSL_VERSION_STR' | Select-Object -First 1 | ForEach-Object Line }
-Write-Host "Set QT_ROOT=$Root\Qt\$QtVersion\msvc2022_64 and OPENSSL_ROOT_DIR=$Root\openssl (see tools/windows/env.cmd.template)."
+Write-Host "Set QT_ROOT=$Root\Qt\$QtVersion\msvc2022_64 and OPENSSL_ROOT_DIR=$Root\openssl (tools\windows\vsenv.cmd sets both and the compiler environment)."

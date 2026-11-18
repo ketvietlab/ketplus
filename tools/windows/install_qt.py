@@ -9,6 +9,7 @@ Needs `py7zr` (pip install py7zr). No Qt account is required.
       --module qtwebsockets --module qtwebview
 """
 import argparse
+import hashlib
 import os
 import sys
 import tempfile
@@ -25,6 +26,19 @@ def fetch(url, dest=None):
         with open(dest, "wb") as f:
             f.write(data)
     return data
+
+
+def download(url, dest):
+    """Fetch url to dest and verify it against the repository's .sha1 file."""
+    fetch(url, dest)
+    try:
+        expected = fetch(url + ".sha1").decode().split()[0].lower()
+    except Exception:  # noqa: BLE001 - repositories without checksums are allowed
+        print(f"warning: no checksum for {url.rsplit('/', 1)[-1]}", file=sys.stderr)
+        return
+    actual = hashlib.sha1(open(dest, "rb").read()).hexdigest()
+    if actual != expected:
+        sys.exit(f"checksum mismatch for {url}")
 
 
 def main():
@@ -56,17 +70,23 @@ def main():
             print(f"{name}: {arc}", flush=True)
             with tempfile.TemporaryDirectory() as tmp:
                 p = os.path.join(tmp, "a.7z")
-                fetch(url, p)
+                download(url, p)
                 with py7zr.SevenZipFile(p) as z:
                     z.extractall(target)
     print("Qt installed in", target)
     if a.openssl_dest:
         repo = f"{BASE}/tools_opensslv3_x64"
-        pkg = ET.fromstring(fetch(f"{repo}/Updates.xml")).find("PackageUpdate")
-        arc = pkg.findtext("DownloadableArchives").split(",")[0].strip()
+        name = "qt.tools.opensslv3.win_x64"
+        pkg = next(
+            (p for p in ET.fromstring(fetch(f"{repo}/Updates.xml")).iter("PackageUpdate") if p.findtext("Name") == name),
+            None,
+        )
+        if pkg is None:
+            sys.exit(f"package not found: {name}")
+        arc = next(x.strip() for x in pkg.findtext("DownloadableArchives").split(",") if "openssl" in x)
         with tempfile.TemporaryDirectory() as tmp:
             p = os.path.join(tmp, "o.7z")
-            fetch(f"{repo}/{pkg.findtext('Name')}/{pkg.findtext('Version')}{arc}", p)
+            download(f"{repo}/{name}/{pkg.findtext('Version')}{arc}", p)
             with tempfile.TemporaryDirectory() as ex:
                 with py7zr.SevenZipFile(p) as z:
                     z.extractall(ex)

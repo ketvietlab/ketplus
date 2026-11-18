@@ -15,5 +15,6 @@ else
     echo "no sync session $SESSION; run win-sync.sh start first" >&2
     exit 1
 fi
-# The remote shell is cmd.exe: join arguments verbatim.
+# The remote shell is cmd.exe: arguments are joined verbatim, so quote for cmd.exe
+# yourself (win-run.sh 'ctest -R "two words"').
 ssh -o BatchMode=yes "$KETPLUS_WIN_HOST" "cd /d \"$WIN_DIR_BS\" && tools\\windows\\vsenv.cmd $*"

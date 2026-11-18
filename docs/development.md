@@ -48,7 +48,10 @@ an old Build Tools install is brought up to date with
 
 `tools/windows/vsenv.cmd <command>` runs a command with `vcvars64`, CMake,
 Ninja, `QT_ROOT` and `OPENSSL_ROOT_DIR` set from `KETPLUS_TOOLS_ROOT` (default
-`C:\ketplus-tools`); run it without arguments to print the resolved tools. The
+`C:\ketplus-tools`); run it without arguments to print the resolved tools. A
+`QT_ROOT` already set wins; otherwise `KETPLUS_QT_VERSION` (for example
+`6.11.3`) selects a version, and without it the highest installed version is
+used (compared as version numbers). The
 presets already read `$env{QT_ROOT}`, so no Windows-specific preset is needed.
 
 ### Sync and build from a Mac
@@ -71,7 +74,10 @@ worktree directory (`KETPLUS_WIN_NAME` overrides it), so parallel worktrees do
 not collide. The sync is one-way (Mac to Windows) and skips `build/`,
 `build-*`, `.cache/` and `.git`; the Windows build tree stays on the Windows
 machine. `win-run.sh` flushes the sync before it runs, so edits made on the Mac
-are always built. Stop a session with `win-sync.sh stop` when the worktree is
+are always built. The remote shell is `cmd.exe` and `win-run.sh` passes its
+arguments through unchanged, so an argument with spaces or `cmd` metacharacters
+needs `cmd` quoting inside the shell quoting, for example
+`win-run.sh 'ctest -R "two words"'`. Stop a session with `win-sync.sh stop` when the worktree is
 removed.
 
 ## Build presets
