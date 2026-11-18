@@ -31,6 +31,7 @@ target_link_libraries(ketplus_daemon_core PUBLIC
     ketplus_product_version
     LibDataChannel::LibDataChannelStatic
     ketplus_peer_link
+    ketplus_daemon_runner_peer
 )
 add_library(ketplus_daemon_runner_peer STATIC
     src/runner/peer/JobPeerSession.h src/runner/peer/JobPeerSessionJob.cpp

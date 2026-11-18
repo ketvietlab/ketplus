@@ -40,7 +40,8 @@ inline RemoteJobRecord fullRecord(const QString& taskId) {
     record.reason = QStringLiteral("exit_code");
     record.cleanupStatus = cleanup::pending;
     record.jobId = QStringLiteral("job-") + taskId;
-    record.stopReason = QStringLiteral("user");
+    record.stopReason = QStringLiteral("snapshot_failed");
+    record.stopCode = QStringLiteral("disk_full");
     record.dispatchedTo = QStringLiteral("runner-1");
     record.dispatchedAt = at(1, 125);
     record.lastPeerContact = at(2, 250);

@@ -1,4 +1,9 @@
 #include "RemoteJobStoreContract.h"
+#include "runner/jobs/RemoteJobRecordJson.h"
+
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
 
 #include <QTest>
 
@@ -122,6 +127,41 @@ class RemoteJobStoreTest : public QObject {
         QVERIFY(!read->dispatchedAt && !read->lastPeerContact && !read->startedAt);
         QVERIFY(!read->exitCode && !read->signal);
         QCOMPARE(read->runner, record.runner);
+    }
+
+    void theStoredFormReadsBack() {
+        RemoteJobRecord full = fullRecord(taskA);
+        QCOMPARE(decodeRecord(encodeRecord(full)), std::optional(full));
+        RemoteJobRecord bare = newRecord(taskB);
+        QCOMPARE(decodeRecord(encodeRecord(bare)), std::optional(bare));
+        QVERIFY(!encodeRecord(full).contains("revision"));
+    }
+
+    void aStoredFormThatIsNotARecordIsRefused_data() {
+        QTest::addColumn<QString>("field");
+        QTest::addColumn<QJsonValue>("value");
+        QTest::newRow("version") << "version" << QJsonValue(2);
+        QTest::newRow("no task") << "taskId" << QJsonValue("");
+        QTest::newRow("state") << "state" << QJsonValue("paused");
+        QTest::newRow("placement") << "placement" << QJsonValue("elsewhere");
+        QTest::newRow("cleanup") << "cleanupStatus" << QJsonValue("best_effort_complete");
+        QTest::newRow("timeout type") << "timeoutMs" << QJsonValue("60000");
+        QTest::newRow("negative timeout") << "timeoutMs" << QJsonValue(-1);
+        QTest::newRow("labels") << "runsOn" << QJsonValue("os:linux");
+        QTest::newRow("label type") << "runsOn" << QJsonValue(QJsonArray{1});
+        QTest::newRow("time type") << "startedAt" << QJsonValue("today");
+        QTest::newRow("fraction") << "exitCode" << QJsonValue(1.5);
+        QTest::newRow("runner") << "runner" << QJsonValue("runner-1");
+        QTest::newRow("runner id") << "runner" << QJsonValue(QJsonObject{{"attempt", 1}});
+    }
+    void aStoredFormThatIsNotARecordIsRefused() {
+        QFETCH(QString, field);
+        QFETCH(QJsonValue, value);
+        QJsonObject object = QJsonDocument::fromJson(encodeRecord(fullRecord(taskA))).object();
+        object.insert(field, value);
+        QCOMPARE(decodeRecord(QJsonDocument(object).toJson()), std::nullopt);
+        QCOMPARE(decodeRecord("{not json"), std::nullopt);
+        QCOMPARE(decodeRecord("[]"), std::nullopt);
     }
 
   private:
