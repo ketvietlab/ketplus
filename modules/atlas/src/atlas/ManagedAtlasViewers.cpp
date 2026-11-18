@@ -118,6 +118,15 @@ void ManagedAtlasViewers::launch(const AtlasDescriptor& atlas, const QString& cl
         emit changed();
         return;
     }
+    const auto command = AtlasProcess::launchCommand(cli);
+    if (!command) {
+        errors_.insert(atlas.path,
+                       tr("%1 is an npm shim and the ketatlas package next to it was not found. "
+                          "Reinstall it with npm install -g ketatlas or select its executable.")
+                           .arg(cli));
+        emit changed();
+        return;
+    }
     auto* process = new QProcess(this);
     process->setProcessChannelMode(QProcess::MergedChannels);
     process->setWorkingDirectory(atlas.directory);
@@ -168,7 +177,7 @@ void ManagedAtlasViewers::launch(const AtlasDescriptor& atlas, const QString& cl
                                           "content; open again to review a new renderer launch."));
         }
     }
-    process->start(cli, arguments);
+    process->start(command->program, command->leadingArguments + arguments);
     timeout->start();
     emit changed();
 }

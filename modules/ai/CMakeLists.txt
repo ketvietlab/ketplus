@@ -136,6 +136,7 @@ target_link_libraries(ketplus_ai
         Qt6::Widgets
         ketplus_browser_tools
         ketplus_remote
+        ketplus_tool_locations
         ketplus_typography
         KetPlusCM::git
         KetPlusCM::preview

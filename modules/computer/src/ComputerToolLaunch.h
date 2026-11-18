@@ -6,6 +6,7 @@
 #include <QJsonObject>
 #include <QString>
 #include <QStringList>
+#include <QtGlobal>
 
 #include <optional>
 
@@ -16,6 +17,15 @@ namespace ketplus::computer_tools {
 inline constexpr auto serverName = "ketplus_computer";
 inline constexpr auto agentAppName = "KetPlus Computer.app";
 inline constexpr auto frontExecutable = "Contents/MacOS/ketplus-computer-mcp";
+
+// The agent app is macOS-only (ADR 0030), so Windows hosts never offer or launch computer use.
+[[nodiscard]] constexpr bool isSupportedOnThisPlatform() noexcept {
+#if defined(Q_OS_WIN)
+    return false;
+#else
+    return true;
+#endif
+}
 
 struct Settings final {
     // Opt-in: desktop control stays off until the user enables it.

@@ -110,6 +110,8 @@ still takes colours or metrics from that stylesheet or from `ThemePalette`:
   snapshots with the system git; `src/pairing` holds the pairing token, fingerprints,
   confirmation code, signed payloads and pin records shared by the daemon and the runner;
   `src/protocol` encodes, decodes and checks the peer frames.
+- `modules/tools`: where node, npm and Git live and how npm-installed CLIs start,
+  including Windows npm `.cmd` shims; Qt Core only.
 - `tests`: Pro and cross-boundary integration tests.
 - `modules/accounts` and `modules/router`: reserved; create each only with its
   first real implementation.

@@ -1,9 +1,12 @@
 #pragma once
+#include "ToolLocations.h"
 #include "workspace/AtlasIndex.h"
 #include <QObject>
 #include <QProcess>
 #include <QTimer>
 #include <QUrl>
+
+#include <optional>
 
 namespace ketplus {
 class AtlasProcess final : public QObject {
@@ -15,6 +18,9 @@ class AtlasProcess final : public QObject {
     void stop();
     bool running() const { return process_.state() != QProcess::NotRunning; }
     static QString cliPath();
+    // How to start `cli`: an npm `.cmd` shim (Windows) becomes `node <package script>` so the
+    // workspace path never goes through cmd.exe; nullopt when that cannot be resolved.
+    static std::optional<tool_locations::Command> launchCommand(const QString& cli);
     // PATH, then Homebrew, then each nvm Node version from newest to oldest.
     static QStringList toolSearchPaths();
   signals:

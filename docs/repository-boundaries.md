@@ -18,6 +18,7 @@ Place code according to which edition needs it:
 | Provider browser-tool launch settings and runtime discovery | `modules/browser` | Pro; Qt Core only |
 | KetPlus Computer: macOS screen capture, accessibility and input for agents (ADR 0030) | `apps/computer` | Pro; a separately signed Swift app nested in `Contents/Helpers`, never linked |
 | Computer use settings, conversation tokens and MCP launch for providers | `modules/computer` | Pro; Qt Core only |
+| Tool lookup (node, npm, Git) and starting npm-installed CLIs, with Windows `.cmd` shims resolved to `node <script>` | `modules/tools` | Pro; Qt Core only |
 
 These stay outside this repository and are proprietary:
 
