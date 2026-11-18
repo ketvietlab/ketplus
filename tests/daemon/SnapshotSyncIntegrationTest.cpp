@@ -609,7 +609,8 @@ class SnapshotSyncIntegrationTest : public QObject {
         if (!QTest::qWaitFor([&link] { return !link.of<protocol::SnapshotOffer>().isEmpty(); }))
             return {};
         sender.receive(protocol::SnapshotWant{prepared.snapshotId, QStringLiteral("need"), 0});
-        QTest::qWaitFor([&sender] { return sender.sent() > 0; });
+        if (!QTest::qWaitFor([&sender] { return sender.sent() > 0; }))
+            return {};
         drain(worker);
         return link.of<protocol::SnapshotOffer>().first();
     }
