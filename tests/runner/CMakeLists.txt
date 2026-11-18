@@ -53,6 +53,13 @@ target_link_libraries(ketplus_runner_run_tests PRIVATE
     Qt6::Test ketplus_runner_run ketplus_runner_snapshot ketplus_control_crypto_primitives)
 add_test(NAME ketplus_runner_run_tests COMMAND ketplus_runner_run_tests)
 set_tests_properties(ketplus_runner_run_tests PROPERTIES TIMEOUT 180)
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND TARGET ketplus_job_executor)
+    # Real jobs through the run loop; they run only with KETPLUS_RUN_LINUX_JOB_TESTS=1.
+    target_sources(ketplus_runner_run_tests PRIVATE RunnerRunLinuxTest.cpp)
+    target_compile_definitions(ketplus_runner_run_tests PRIVATE
+        KETPLUS_JOB_EXECUTOR_PATH="$<TARGET_FILE:ketplus_job_executor>")
+    add_dependencies(ketplus_runner_run_tests ketplus_job_executor)
+endif()
 
 # The runner's job session over fake channel, lease, snapshot receiver, command and clock.
 qt_add_executable(ketplus_runner_session_tests

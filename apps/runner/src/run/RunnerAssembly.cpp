@@ -3,6 +3,10 @@
 #include "Environment.h"
 #include "delivery/JobDelivery.h"
 #include "exec/NativeExecutor.h"
+#ifdef Q_OS_LINUX
+#include "exec/LinuxPolicy.h"
+#include "exec/LinuxSystemHost.h"
+#endif
 #include "run/ClientRelayPort.h"
 #include "run/ExecutorCommandHost.h"
 #include "run/RunIdentity.h"
@@ -23,6 +27,10 @@ class UnreadableAcceptedJobs final : public session::AcceptedJobs {
     [[nodiscard]] bool contains(const QString&, qint64) const override { return false; }
     [[nodiscard]] bool add(const QString&, qint64) override { return false; }
 };
+
+[[maybe_unused]] QString runtimeDirectory(const Environment& environment) {
+    return environment.variable("XDG_RUNTIME_DIR");
+}
 
 session::RunnerInfo runnerInfo(const RunnerIdentity& identity, const Environment& environment) {
     session::RunnerInfo info;
@@ -51,8 +59,13 @@ struct RunnerAssembly::Parts {
     Parts(PairingContext& context, const StateDirectory& directory, WorkDirectory work,
           std::unique_ptr<receiver::SnapshotStoreReceiver> store)
         : work(std::move(work)), store(std::move(store)), journal(directory), relay(context),
+#ifdef Q_OS_LINUX
+          host(runtimeDirectory(context.environment)),
+          policy(host, exec::NativeExecutor::installedProgram()),
+#endif
           executor(exec::NativeExecutor::installedProgram()), pins(context.state),
-          trust(context.state) {}
+          trust(context.state) {
+    }
 
     WorkDirectory work;
     std::unique_ptr<receiver::SnapshotStoreReceiver> store;
@@ -61,8 +74,14 @@ struct RunnerAssembly::Parts {
     QString acceptedError;
     JobJournalFile journal;
     ClientRelayPort relay;
-    // Closed on every platform in this version: the runner reports draining and takes no job.
+#ifdef Q_OS_LINUX
+    // Ready once this machine can contain a job and hide the runner's own directories from it.
+    exec::LinuxSystemHost host;
+    exec::LinuxPolicy policy;
+#else
+    // Closed elsewhere: the runner reports draining and takes no job.
     exec::ClosedPolicy policy;
+#endif
     exec::NativeExecutor executor;
     std::unique_ptr<ExecutorCommandHost> command;
     std::unique_ptr<IdentitySigner> signer;
@@ -97,6 +116,10 @@ std::unique_ptr<RunnerAssembly> RunnerAssembly::create(PairingContext& context,
         parts->acceptedError = QStringLiteral("The record of accepted jobs cannot be read.");
     exec::ExecutorCommandRunner::Options options;
     options.directory = directory.path() + QStringLiteral("/executor");
+#ifdef Q_OS_LINUX
+    options.mounts = exec::ExecutorCommandRunner::Mounts{directory.path(), parts->work.path(),
+                                                         runtimeDirectory(environment)};
+#endif
     parts->command = std::make_unique<ExecutorCommandHost>(options, parts->executor, parts->policy);
     parts->signer = std::make_unique<IdentitySigner>(identity);
 

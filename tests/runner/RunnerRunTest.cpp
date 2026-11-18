@@ -542,5 +542,11 @@ int main(int argc, char* argv[]) {
         runner_run_test::RunnerRunStopTest test;
         failures += QTest::qExec(&test, argc, argv);
     }
+#ifdef Q_OS_LINUX
+    {
+        runner_run_test::RunnerRunLinuxTest test;
+        failures += QTest::qExec(&test, argc, argv);
+    }
+#endif
     return failures == 0 ? 0 : 1;
 }

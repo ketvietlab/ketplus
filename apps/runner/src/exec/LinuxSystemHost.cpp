@@ -30,9 +30,7 @@ bool LinuxSystemHost::executable(const QString& path) const {
            ::access(QFile::encodeName(path).constData(), X_OK) == 0;
 }
 
-QString LinuxSystemHost::runtimeDirectory() const {
-    return qEnvironmentVariable("XDG_RUNTIME_DIR");
-}
+QString LinuxSystemHost::runtimeDirectory() const { return m_runtime; }
 
 std::optional<uint> LinuxSystemHost::directoryOwner(const QString& path) const {
     const std::optional<struct stat> info = statOf(path, false);

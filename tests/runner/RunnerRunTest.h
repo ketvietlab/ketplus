@@ -282,6 +282,15 @@ class RunnerRunCleanupTest : public QObject {
     void retriedCleanUpLetsTheRunnerAcquire();
 };
 
+// Real jobs on Linux, with the production command runner; see RunnerRunLinuxTest.cpp.
+class RunnerRunLinuxTest : public QObject {
+    Q_OBJECT
+  private slots:
+    void initTestCase();
+    void realJobs_data();
+    void realJobs();
+};
+
 class RunnerRunJobTest : public QObject {
     Q_OBJECT
   private slots:

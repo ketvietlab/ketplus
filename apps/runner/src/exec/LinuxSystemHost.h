@@ -9,6 +9,9 @@ namespace ketplus::runner::exec {
 
 class LinuxSystemHost final : public LinuxHost {
   public:
+    // `runtimeDirectory` is the user's runtime directory, XDG_RUNTIME_DIR; empty when unset.
+    explicit LinuxSystemHost(QString runtimeDirectory) : m_runtime(std::move(runtimeDirectory)) {}
+
     [[nodiscard]] uint effectiveUid() const override;
     [[nodiscard]] QString bootId() const override;
     [[nodiscard]] bool executable(const QString& path) const override;
@@ -20,6 +23,7 @@ class LinuxSystemHost final : public LinuxHost {
     void probeMounts(const QString& program, std::function<void(bool)> done) override;
 
   private:
+    QString m_runtime;
     QObject m_owner; // of the probes still out
 };
 

@@ -122,7 +122,7 @@ struct Linux {
 
     Layout layout;
     NativeExecutor executor{program};
-    LinuxSystemHost host;
+    LinuxSystemHost host{qEnvironmentVariable("XDG_RUNTIME_DIR")};
     LinuxPolicy policy{host, program};
     QByteArray output;
     QList<session::CommandExit> exits;
@@ -273,7 +273,7 @@ class RunnerLinuxJobTest : public QObject {
     }
 
     void policyIsReady() {
-        LinuxSystemHost host;
+        LinuxSystemHost host(qEnvironmentVariable("XDG_RUNTIME_DIR"));
         LinuxPolicy policy(host, program);
         std::optional<bool> available;
         QString code;
@@ -575,7 +575,7 @@ class RunnerLinuxJobTest : public QObject {
         options.directory = base + QStringLiteral("/state/executor");
         options.mounts = ExecutorCommandRunner::Mounts{base + "/state", base + "/work", {}};
         NativeExecutor executor(program);
-        LinuxSystemHost host;
+        LinuxSystemHost host(qEnvironmentVariable("XDG_RUNTIME_DIR"));
         LinuxPolicy policy(host, program);
         int finished = 0;
         ExecutorCommandRunner::Events events;
