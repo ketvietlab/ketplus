@@ -242,7 +242,7 @@ void PeerConnector::started(const QJsonObject& message) {
     }
     const auto pin = m_pins.activePin(m_request->machineId);
     if (!pin) {
-        endAttempt(answerErrorCode(AnswerError::NotPinned), true);
+        endAttempt(answerErrorCode(AnswerError::NotPinned), false);
         return;
     }
     m_context.workspaceId = pin->workspaceId;

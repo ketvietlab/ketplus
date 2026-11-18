@@ -190,7 +190,7 @@ QByteArray FakeSigner::sign(const QByteArray& bytes) const {
 }
 
 std::optional<pairing::RunnerPin> FakePins::activePin(const QString& machineId) const {
-    if (!pin || pin->machineId != machineId)
+    if (!pin || pin->machineId != machineId || pin->state != pairing::RunnerPin::State::Active)
         return std::nullopt;
     return pin;
 }

@@ -319,6 +319,24 @@ void RunnerPeerConnectorTest::anAnswerBeforeTheOfferEndsTheAttempt() {
     QVERIFY(h.sender.ofType(QStringLiteral("signal.offer")).isEmpty());
 }
 
+void RunnerPeerConnectorTest::noActivePinAtStartedStops() {
+    for (const bool pending : {false, true}) {
+        PeerHarness h;
+        if (pending)
+            h.pins.pin->state = pairing::RunnerPin::State::Pending;
+        else
+            h.pins.pin.reset();
+        h.request();
+        h.started();
+        QCOMPARE(h.listener.events, QStringList{QStringLiteral("gaveUp not_paired")});
+        QCOMPARE(endReasons(h.sender), QStringList{QStringLiteral("not_paired")});
+        QVERIFY(h.transports.records.isEmpty());
+        QVERIFY(h.clock.due.isEmpty());
+        h.clock.advance(600'000);
+        QCOMPARE(h.sender.ofType(QStringLiteral("signal.start")).size(), 1);
+    }
+}
+
 void RunnerPeerConnectorTest::theFingerprintComesFromTheSignedAnswer() {
     PeerHarness h;
     h.request();
@@ -513,6 +531,22 @@ void RunnerPeerConnectorTest::relayLossDuringAnAttemptWaitsForReady() {
     h.connector.relayReady();
     QCOMPARE(h.sender.ofType(QStringLiteral("signal.start")).size(), 2);
     QCOMPARE(h.clock.remaining(PeerTimer::AttemptDeadline), attemptDeadlineMs);
+
+    // A Relay that is back at once gets the next start after the 2.5-second spacing only; the
+    // retry delay does not apply to a Relay loss.
+    PeerHarness quick;
+    quick.request();
+    quick.started();
+    quick.describe();
+    quick.clock.advance(1'000);
+    quick.sender.ready = false;
+    quick.connector.relayLost();
+    quick.sender.ready = true;
+    quick.connector.relayReady();
+    QCOMPARE(quick.sender.ofType(QStringLiteral("signal.start")).size(), 1);
+    QCOMPARE(quick.clock.remaining(PeerTimer::AttemptRetry), startSpacingMs - 1'000);
+    quick.clock.advance(startSpacingMs - 1'000);
+    QCOMPARE(quick.sender.ofType(QStringLiteral("signal.start")).size(), 2);
 }
 
 void RunnerPeerConnectorTest::relayLossLeavesAnOpenConnection() {
