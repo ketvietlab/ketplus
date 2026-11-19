@@ -124,9 +124,23 @@ On the Pro tree it also starts `KetPlus.exe` with `QT_QPA_PLATFORM=offscreen` an
 still be running after a few seconds; a missing Qt DLL or plugin shows as an early exit. That
 proves the libraries load, not that the window looks right.
 
-Not done yet: code signing, an installer (NSIS/WiX), the bundled browser runtime and a bundled
-Node for the Claude sidecar (the daemon needs `node` on `PATH` for Claude sessions), and a check
-of the Pro window on a real Windows desktop.
+The Pro package (`release` preset, `KETPLUS_BUNDLE_BROWSER_RUNTIME` default ON for Release) also
+installs the browser runtime in `lib\ketplus\ketplus-browser`, where `KetPlus.exe` finds it
+(ADR 0009): the pinned `node.exe` (win32-x64 zip, sha256 in `apps/browser/runtime/node-runtime.json`),
+the `apps/browser` production dependencies and the skill, staged by
+`apps/browser/scripts/package-runtime.mjs` (`packaging/windows/BrowserRuntime.cmake`). Staging needs
+a build-host `node` 22+ on `PATH` (or `-DKETPLUS_NODE_EXECUTABLE=<node.exe>`) and network for the
+Node archive and the npm packages; `-DKETPLUS_BROWSER_RUNTIME_DIR=<staged dir>` installs a runtime
+staged earlier, `-DKETPLUS_NODE_CACHE=<dir>` supplies the Node archive, and
+`-DKETPLUS_BUNDLE_BROWSER_RUNTIME=OFF` leaves the runtime out. No browser is bundled: the runtime
+drives the installed Microsoft Edge or Google Chrome, and otherwise downloads Chrome for Testing
+on first need or reports `BROWSER_UNAVAILABLE` with the reason. The runtime's notices are also
+installed in `share\licenses\ketplus\browser-runtime`, and `VerifyStagedTree` checks them by name
+and starts the bundled `node.exe` against the browser server.
+
+Not done yet: code signing, an installer (NSIS/WiX), a bundled Node for the Claude sidecar (the
+daemon needs `node` on `PATH` for Claude sessions; it could reuse the browser runtime's `node.exe`
+as on macOS), and a check of the Pro window on a real Windows desktop.
 
 ## Build presets
 
