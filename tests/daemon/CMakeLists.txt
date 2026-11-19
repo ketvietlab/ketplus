@@ -272,6 +272,10 @@ if(APPLE OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
         ketplus_runner_pairing ketplus_control_crypto_primitives)
     add_dependencies(ketplus_managed_task_remote_jobs_tests ketplus_job_executor)
 endif()
+if(NOT WIN32)
+    # The containment probe's bounded wait for an emptied boundary; no cgroup needed.
+    ketplus_add_daemon_test(ketplus_linux_probe_wait_tests LinuxProbeWaitTest.cpp)
+endif()
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
     ketplus_add_daemon_test(ketplus_linux_job_executor_tests LinuxJobExecutorTest.cpp)
     target_compile_definitions(ketplus_linux_job_executor_tests PRIVATE

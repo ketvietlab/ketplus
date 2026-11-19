@@ -1530,6 +1530,12 @@ Linux mirror has no Git metadata; retain the independently verified Mac source
 manifest as provenance rather than claiming the generated `unknown` revision is a
 commit identity. This disposition authorizes no additional verification run.
 
+`ketplus_linux_probe_wait_tests` covers the containment probe's bounded wait for an
+emptied boundary without a cgroup: `populated 1` then `0` succeeds; still populated
+at the one-second deadline fails within the deadline plus a stated slack; an
+unreadable or unclear `cgroup.events` fails at once; a launcher that was not placed,
+exited nonzero or was killed fails without waiting.
+
 The opt-in `ketplus_linux_job_executor_tests` runs the real packaged helper and
 registry. It covers missing-manager admission, durable retry/output, double-fork/
 setsid descendants and migration attempts, timeout during forks, supervisor
