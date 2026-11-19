@@ -6,6 +6,7 @@
 #include "providers/ProviderLineReader.h"
 #include "providers/compat/ProviderCapabilities.h"
 #include "providers/compat/ProviderCompatibility.h"
+#include "providers/compat/ProviderVersionProbe.h"
 
 #include <QDeadlineTimer>
 #include <QElapsedTimer>
@@ -25,10 +26,6 @@ class CodexLaunchReloader;
 }
 
 namespace ketplus::daemon {
-
-namespace compat {
-class ProviderVersionProbe;
-}
 
 class CodexAdapter final : public ProviderAdapter {
     Q_OBJECT
@@ -97,7 +94,9 @@ class CodexAdapter final : public ProviderAdapter {
     void notificationReceived(const QString& method, const QJsonObject& params);
     // A notification too large to read was skipped; the process and its other threads go on.
     void notificationSkipped(const QString& method, const QString& threadId, qsizetype bytes);
-    // A planned restart of an idle provider (reason "browser_settings"); not a failure.
+    // A planned restart of an idle provider; not a failure. Reasons: "browser_settings", and
+    // "executable_updated" when the CLI on disk changed since launch (its model catalog follows
+    // the CLI version, so a long-running process would never list newer models).
     void reloaded(const QString& reason);
 
   private:
@@ -144,6 +143,7 @@ class CodexAdapter final : public ProviderAdapter {
     void noteUnexpectedStop();
     void trackTurn(const QString& method, const QJsonObject& params);
     void restartForBrowserSettings();
+    bool restartForUpdatedExecutable();
     [[nodiscard]] QStringList browserArguments() const;
     [[nodiscard]] static QString findExecutable();
 
@@ -171,6 +171,7 @@ class CodexAdapter final : public ProviderAdapter {
     compat::ProviderVersionProbe* versionProbe_{nullptr};
     bool checkingVersion_{false};
     bool versionCleared_{false};
+    compat::ProviderVersionProbe::Fingerprint launchedExecutable_;
 };
 
 } // namespace ketplus::daemon

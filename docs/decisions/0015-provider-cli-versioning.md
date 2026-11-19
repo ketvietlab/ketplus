@@ -39,6 +39,14 @@ executable's canonical path, size and modification time, so later launches check
 without a new process and an update on disk is noticed at the next launch. A
 probe that prints nothing is not cached.
 
+Codex's model catalog follows the CLI version: OpenAI lists a new model only to
+clients new enough for it. The daemon's app-server can run for days, so the Codex
+adapter records the fingerprint it launched and compares it on every `model/list`.
+When the CLI on disk changed and the provider is idle (no active turn, pending call
+or busy session worker), it stops the process the same planned way as a browser-settings
+reload, emits `reloaded("executable_updated")`, and the listing starts the updated
+CLI. A busy provider keeps the running CLI and moves on at a later listing.
+
 - `outdated` fails the pending requests with a message naming the version, the
   minimum and the update command. The turn ends with the existing
   `runtime.error`, so Desktop shows it without new UI.
