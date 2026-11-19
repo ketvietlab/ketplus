@@ -24,14 +24,14 @@ Basic.ApplicationWindow {
         "workspace/report-running", "workspace/report-details", "workspace/claude",
         "workspace/codex", "workspace/cursor", "workspace/turn-report", "editor", "editor/terminal",
         "editor/markdown", "editor/markdown-source", "editor/samples",
-        "changes", "brand", "teams", "teams/task", "teams/large", "teams/two-reviewers", "teams/empty", "teams/ready", "teams/paused",
+        "changes", "brand", "teams", "teams/board", "teams/task", "teams/large", "teams/two-reviewers", "teams/empty", "teams/ready", "teams/paused",
         // What the team sends into its members' conversations (#468, TranscriptFixtures.team*).
         "workspace/team-assignment", "workspace/team-digest", "workspace/team-review",
         "workspace/team-verdict", "workspace/team-decision",
-        "connections", "connections/no-activity", "connections/signed-out",
+        "connections", "connections/devices", "connections/machines", "connections/no-activity", "connections/signed-out",
         "connections/expired", "connections/sign-in", "settings", "settings/typography", "settings/account",
         "settings/browser", "settings/computer", "settings/providers", "settings/archived",
-        "settings/updates", "settings/storage", "workspace/storage-warning", "atlas", "mobile-picker", "workspace/compact",
+        "settings/updates", "settings/storage", "workspace/storage-warning", "atlas", "atlas/sync", "mobile-picker", "workspace/compact",
         // Provider setup (Fixtures.providerSetup): the provider cannot start a turn, or ended one.
         "workspace/setup-cli-missing", "workspace/setup-cli-outdated", "workspace/setup-signed-out",
         "workspace/setup-claude-signed-out", "workspace/setup-sidecar-missing", "workspace/setup-expired",
@@ -111,7 +111,7 @@ Basic.ApplicationWindow {
     // Conversations the mock started (New team, Add member), by repository, beside the
     // fixtures' own. They outlive the team that started them.
     property var started: ({ [Fixtures.repositories[0].name]: [Object.assign({}, Fixtures.repositories[0].conversations[0], {
-        number: "8116", title: "Recheck CI", transcript: "short", providerId: "codex", provider: "Codex",
+        number: "8116", title: "Retry Linux build check", transcript: "short", providerId: "codex", provider: "Codex",
         status: KetTheme.ConversationStatus.Completed, hasPlan: false
     })].concat(ScheduleSamples.waitingTeam(Fixtures.teams[0]).members.map(m => Object.assign({}, Fixtures.repositories[0].conversations[0], {
         number: m.number, title: m.title, transcript: "welcome", status: KetTheme.ConversationStatus.NotStarted, hasPlan: false
@@ -164,7 +164,7 @@ Basic.ApplicationWindow {
             failures.push("the dragged conversation is still held after the drop")
         const joined = teamOf("9410")
         if (!joined || joined.id !== "release")
-            failures.push("the pointer drag did not add 9410 to Release 1.4")
+            failures.push("the pointer drag did not add 9410 to the release team")
         for (const problem of sidebar.layoutProblems())
             failures.push("sidebar: " + problem)
         for (const failure of failures)
@@ -187,8 +187,8 @@ Basic.ApplicationWindow {
         height = on ? Math.min(height, KetTheme.px(760, KetTheme.zoom)) : wideSize.height
     }
     property var archived: [
-        { number: "1022", title: "Spike the relay handshake", repository: "sample-project", when: "Oct 28" },
-        { number: "0871", title: "Old onboarding copy", repository: "ketplus-desktop", when: "Oct 12" }
+        { number: "1022", title: "Spike the relay handshake", repository: "cinder-trail-lab", when: "Oct 28" },
+        { number: "0871", title: "Old onboarding copy", repository: "cinder-trail", when: "Oct 12" }
     ]
 
     function setProviderIssue(provider, state) {
@@ -279,7 +279,13 @@ Basic.ApplicationWindow {
     readonly property var evidenceWindow: schedules.visible ? schedules : app
     property bool scheduledTranscript: false
     property string scheduledRunId: "web"
-    ScheduleStore { id: scheduleStore }
+    ScheduleStore {
+        id: scheduleStore
+        release: ({
+            team: Fixtures.teams[0], leader: Fixtures.releaseLead,
+            briefName: Fixtures.releaseBriefName, briefPrompt: Fixtures.releaseBriefPrompt
+        })
+    }
     SchedulesWindow {
         id: schedules; window: app; store: scheduleStore
     }
@@ -290,7 +296,7 @@ Basic.ApplicationWindow {
         const found = findConversation(number)
         if (found) openConversation(found.repository, found.conversation)
         else openConversation(Fixtures.repositories[0].name,
-            Object.assign({}, Fixtures.repositories[0].conversations[0], { number: number, title: "Daily website article", transcript: "short" }))
+            Object.assign({}, Fixtures.repositories[0].conversations[0], { number: number, title: Fixtures.releaseBriefName, transcript: "short" }))
         scheduledTranscript = true
         raise(); requestActivate()
     }
@@ -298,8 +304,8 @@ Basic.ApplicationWindow {
         if (schedules.visible) schedules.showFailure(id, message)
         else { scheduleToast.scheduleId = id; scheduleToast.show(message) }
     }
-    function scheduleFailure() { showScheduleFailure("ci", "Schedule “Summarize failing CI” failed — Codex is not signed in.") }
-    function scheduleSkipped() { showScheduleFailure("retry", "Schedule “Recheck CI” skipped — The conversation is busy.") }
+    function scheduleFailure() { showScheduleFailure("ci", "Schedule “Check overnight builds” failed — Codex is not signed in.") }
+    function scheduleSkipped() { showScheduleFailure("retry", "Schedule “Retry the Linux build check” skipped — The conversation is busy.") }
     function scheduleChecks() {
         const found = findConversation(conversation.number)
         const entries = scheduleStore.entries
@@ -315,6 +321,8 @@ Basic.ApplicationWindow {
         if (Mock.initialScreen === "schedules") valid = schedules.evidenceChecks(Mock.initialState)
         if (Mock.initialScreen === "workspace" && ["schedule-new", "schedule-repeat", "schedule-ready", "schedule-more", "schedule-at", "schedule-weekly", "schedule-existing"].includes(Mock.initialState)) valid = workspace.scheduleEvidenceChecks(Mock.initialState)
         if (Mock.initialScreen === "teams") valid = teams.scheduleEvidenceChecks(Mock.initialState, Mock.initialPanel)
+        if (Mock.initialScreen === "atlas" && app.width >= 1440 && app.height >= 900 && KetTheme.zoom === 1)
+            valid = atlas.evidenceChecks()
         if (!valid) console.warn("QML evidence check failed: " + Mock.initialScreen + "/" + Mock.initialState + "/" + Mock.initialPanel)
         return valid
     }
@@ -415,7 +423,9 @@ Basic.ApplicationWindow {
         if (name === "settings")
             settingsTab = state || "appearance"
         if (name === "connections") {
-            remoteActivity = state !== "no-activity"
+            remoteActivity = !["no-activity", "machines"].includes(state)
+            connections.machinesOnly = state === "machines"
+            connections.devicesOnly = state === "devices"
             signedIn = !["signed-out", "expired", "sign-in"].includes(state)
             signInExpired = state === "expired"
             if (state === "sign-in")
@@ -423,9 +433,11 @@ Basic.ApplicationWindow {
         }
         if (name === "teams")
             teams.showState(state)
+        if (name === "atlas")
+            atlas.selectFlow(state === "sync" ? 1 : 0)
         if (name === "editor") {
             editorTerminal = state === "terminal"
-            editorFile = state.startsWith("markdown") ? "licensing.md"
+            editorFile = state.startsWith("markdown") ? "release-checklist.md"
                        : state === "samples" ? "design-system.md" : ""
             editorSource = state === "markdown-source"
         }
@@ -574,7 +586,7 @@ Basic.ApplicationWindow {
             SourceControlScreen { window: app }
             ConnectionsScreen { id: connections; window: app }
             SettingsScreen { window: app }
-            AtlasBuilderScreen { window: app }
+            AtlasBuilderScreen { id: atlas; window: app }
             MobilePickerScreen { window: app }
             TeamsScreen { id: teams; window: app }
             BrandScreen { }
@@ -640,7 +652,7 @@ Basic.ApplicationWindow {
         KetFieldRow {
             width: parent.width
             label: "Branch name"
-            help: "A new folder next to the repository: ketplus-desktop-<name>."
+            help: "A new folder next to the repository: cinder-trail-<name>."
             KetTextField { id: createWorktreeName; width: parent.width; placeholderText: "feature/settings-search" }
         }
         KetFieldRow {

@@ -40,6 +40,44 @@ The kit is pinned by commit in `CMakeLists.txt`. Use a local checkout with
 `-DFETCHCONTENT_SOURCE_DIR_KETQT=<path to ket-qt>`, and an offline copy of the
 KÉT Sans archive with `-DKETPLUS_MOCK_KET_SANS_ARCHIVE=<path>/KETSans-1.100.zip`.
 
+## Product screenshot scenes
+
+Cinder Trail is a fictional field journal. These scenes follow the 1.4 release:
+the trail picker is implemented, the Linux offline check needs a dataset choice,
+and the first offline field note is mapped in an Atlas. Conversations, people,
+routes and machines in the captions are fixture data.
+
+From the repository root on macOS, capture at 1440 × 900 logical pixels and 2×
+scale. Qt writes a 2880 × 1800 PNG. Use `--dark` for the dark variant.
+
+```sh
+mock=build/mock/KetPlusMock.app/Contents/MacOS/KetPlusMock
+QT_QPA_PLATFORM=offscreen QT_SCALE_FACTOR=2 "$mock" \
+  --size=1440x900 --zoom=1 --light --screen=workspace --state=report-details \
+  --screenshot=workspace-report-details-light@2x.png
+```
+
+Use the screen arguments below with the same size, zoom, scale and theme.
+The Teams board opens in English. Schedules captures its own window at the
+requested size.
+
+| Scene | Screen arguments | Use |
+|---|---|---|
+| Work report and diff | `--screen=workspace --state=report-details` | **Agent said done, work isn't**. Completed work, a blocked Linux check, changed files, a diff and the dataset question. |
+| Workspace changes | `--screen=workspace --state=details` | Review the picker update alongside its changed files. |
+| Running turn | `--screen=workspace --state=running` | Follow startup profiling and its background tasks. |
+| Pending question | `--screen=workspace --state=question` | Show where the onboarding review pauses for input. |
+| Team board | `--screen=teams --state=board` | **Agent Manager**. Codex leads, Cursor develops and Claude reviews. The board shows criteria totals, a review verdict and a pending decision. |
+| Atlas map | `--screen=atlas` | **Atlas development way**. Show the three-step offline flow, interactive screen previews and AI Chat. Add `--state=sync` to capture the follow-up flow. |
+| Atlas Builder conversation | `--screen=workspace --state=atlas` | **Atlas development way**. Show the original prompt and the resulting Atlas. |
+| Editor with terminal | `--screen=editor --state=terminal` | See the picker implementation and its test output. |
+| Markdown preview | `--screen=editor --state=markdown` | Read the 1.4 release checklist. |
+| Source Control | `--screen=changes` | Show the picker diff with staged and unstaged changes. |
+| Schedules | `--screen=schedules` | Show the morning release brief and its run history. |
+| Connections | `--screen=connections --state=devices` | Show paired devices and recent actions. |
+| Linux machines | `--screen=connections --state=machines` | Show the trusted SSH and Relay hosts. |
+| Computer use | `--screen=settings --state=computer` | Show display, permission and blocked-app controls. |
+
 ## Evidence
 
 ```sh
@@ -76,10 +114,10 @@ Screens and states (`--screen` / `--state`):
 | `workspace` | `welcome`, `running`, `question`, `error`, `atlas`, `details`, `report`, `report-running`, `report-details`, `compact` | Agent Workspace: 44 px header, transcript activity, gallery, agent messages, changed files, question card, Atlas result, provider error, background tasks, composer (card, then attach, Mode menu, Model & context dialog and the Context & limits ring below it), work report at the end of a turn (counted by the app from the agent's items; live activity while running), right pane with closable document tabs (changes, Atlas, terminal, file, plan and the work report; `report-details` opens the Report tab, also in the pane's Open content menu) |
 | `editor` | | Files & Editor: explorer, tabs, breadcrumb, code, status bars |
 | `editor` | `terminal` | The terminal below the editor, drawn like `mockups/terminal`, with fixture output |
-| `editor` | `markdown`, `markdown-source`, `samples` | `docs/licensing.md` (bundled from the repository) in Preview or Source, with the floating Preview/Source switch 100 px above the bottom; `samples` opens `design-system.md` with QML, C++, shell and JSON code blocks in syntax colours |
+| `editor` | `markdown`, `markdown-source`, `samples` | `docs/release-checklist.md` in Preview or Source, with the floating Preview/Source switch 100 px above the bottom; `samples` opens `design-system.md` with QML, C++, shell and JSON code blocks in syntax colours |
 | `changes` | | Source Control: changes, staged changes, diff |
-| `teams` | `task`, `large`, `two-reviewers`, `empty`, `ready`, `paused`, `live`, `live-task`, `goal-open`, `disk-low`, `disk-stop` | Concept: a team's page (see Teams). `live` is a team as its members write it (choices that are sentences, a long Markdown task description, long lanes and paths, an update that is a paragraph) and `live-task` opens its first task; the page and the dialog must stay inside their width with it. `task` opens a task, `large` adds a fourth developer, `two-reviewers` has a second reviewer reviewing another task, `empty` has no team, `ready` has the user merge and T-1 Ready to merge with "Merge T-1 into release/1.4?" waiting, `paused` has used its automatic turns (banner with Resume, and the daemon's Continue? decision with the team's own budget; the header shows the turns used of it). `--open=new-team-goal` shows New team with a long goal, a drawn mention and the picker open on the next one, `new-team-unknown` a mention no conversation has; the `goal-open` state opens the team page's folded goal. `--open=new-team` (with Permissions: what the leader and the developers may do without asking, Workspace unless chosen; the reviewer stays read-only; and Automatic turns, filled from Settings › Teams), `turn-budget` (the team's own automatic turns, changed while it runs), `team-agent`, `reviewer-agent`, `team-created`, `add-member`, `add-reviewer`, `member-agent`, `remove-member`, `delete-team`, `task` or `handover` opens that dialog, and `repo-menu`, `team-menu` or `row-menu` a sidebar menu, `drag-member` a conversation held over a team's folder; `--scroll=1` starts at Members and Updates. `disk-low` and `disk-stop` show the disk warning under 20 GB and under 12 GB free (it names the free space; nothing is paused or removed), and the page lists the done tasks whose worktree is still on disk with path, size and Remove…; `--open=remove-worktree` is its confirmation, `remove-worktree-refused` the daemon's refusal in words, `remove-worktree-note` a removal after which a conversation could not be moved out of the folder |
-| `connections` | `no-activity` | This Mac, phones, activity from paired devices (the daemon's remote command audit, #86: done and refused requests, a sender that did not verify) or its empty state, Linux machines (SSH or Relay), pairing dialogs, account. `--open=activity` shows all activity, `--open=device` one phone's details, `--open=device-focus` the same with a truncated row focused from the keyboard; `--open=linux` the Connect a Linux machine dialog (SSH), `--open=linux-hostkey` its first-use host key, `--open=linux-relay` its Relay pairing, `--open=linux-details` a machine's Details |
+| `teams` | `board`, `task`, `large`, `two-reviewers`, `empty`, `ready`, `paused`, `live`, `live-task`, `goal-open`, `disk-low`, `disk-stop` | Concept: a team's page (see Teams). `board` focuses the Cinder Trail release team on its review verdict and pending decision. `live` is a team as its members write it (choices that are sentences, a long Markdown task description, long lanes and paths, an update that is a paragraph) and `live-task` opens its first task; the page and the dialog must stay inside their width with it. `task` opens a task, `large` adds a fourth developer, `two-reviewers` has a second reviewer reviewing another task, `empty` has no team, `ready` has the user merge and T-1 Ready to merge with "Merge T-1 into release/1.4?" waiting, `paused` has used its automatic turns (banner with Resume, and the daemon's Continue? decision with the team's own budget; the header shows the turns used of it). `--open=new-team-goal` shows New team with a long goal, a drawn mention and the picker open on the next one, `new-team-unknown` a mention no conversation has; the `goal-open` state opens the team page's folded goal. `--open=new-team` (with Permissions: what the leader and the developers may do without asking, Workspace unless chosen; the reviewer stays read-only; and Automatic turns, filled from Settings › Teams), `turn-budget` (the team's own automatic turns, changed while it runs), `team-agent`, `reviewer-agent`, `team-created`, `add-member`, `add-reviewer`, `member-agent`, `remove-member`, `delete-team`, `task` or `handover` opens that dialog, and `repo-menu`, `team-menu` or `row-menu` a sidebar menu, `drag-member` a conversation held over a team's folder; `--scroll=1` starts at Members and Updates. `disk-low` and `disk-stop` show the disk warning under 20 GB and under 12 GB free (it names the free space; nothing is paused or removed), and the page lists the done tasks whose worktree is still on disk with path, size and Remove…; `--open=remove-worktree` is its confirmation, `remove-worktree-refused` the daemon's refusal in words, `remove-worktree-note` a removal after which a conversation could not be moved out of the folder |
+| `connections` | `devices`, `machines`, `no-activity` | `devices` focuses on paired devices and their activity. `machines` focuses on trusted Linux hosts. The default shows This Mac, phones, activity from paired devices (the daemon's remote command audit, #86: done and refused requests, a sender that did not verify) or its empty state, Linux machines (SSH or Relay), pairing dialogs, account. `--open=activity` shows all activity, `--open=device` one phone's details, `--open=device-focus` the same with a truncated row focused from the keyboard; `--open=linux` the Connect a Linux machine dialog (SSH), `--open=linux-hostkey` its first-use host key, `--open=linux-relay` its Relay pairing, `--open=linux-details` a machine's Details |
 | `connections` | `signed-out`, `expired`, `sign-in` | Signed out: the introduction (this Mac and KetPlus Mobile, the three pairing steps), the expired-login banner, the browser sign-in dialog |
 | `settings` | `typography`, `account`, `teams`, `browser`, `computer`, `providers`, `archived`, `storage`, `updates` | The app's order: Appearance (live theme, follow system, zoom), typography, account, Agent models (opens the model picker), teams (automatic turns per team: what a new team's budget starts from), browser, computer use, providers (CLI status, Claude API access, organization usage), archive, storage (journal size by part, retention, size limit and warning, largest conversations, Compact now), updates |
 | `workspace` | `claude`, `codex`, `cursor` | One transcript per provider with every content type its journal produces (see Transcript content types); the composer follows the conversation's provider and model. `--scroll=0.5` starts the transcript part of the way down |
@@ -92,7 +130,7 @@ Screens and states (`--screen` / `--state`):
 | `workspace` | `setup-expired`, `setup-key-rejected`, `setup-limit`, `setup-capacity`, `setup-plan-blocked` | A turn the provider ended: the guide closes the turn, with Retry (see Provider setup) |
 | `workspace` + `--open=model` or `--open=setup` | any `setup-*` | Model & context names the provider's problem with Show setup steps; `setup` opens that guide in a dialog |
 | `settings` | `providers-setup` | Settings → Providers with Cursor not installed and Claude's sign-in expired; each provider shows its badge, details and the same guide |
-| `atlas` | | Edit an Atlas: flows, map, AI Chat |
+| `atlas` | `sync` | Edit an Atlas with its flows, map and AI Chat. `sync` opens the follow-up sync flow. |
 | `mobile-picker` | | Repository & worktree picker on iPhone |
 
 KétPlus (Lite) runs with `--edition=lite` (`qml/LiteMain.qml`): the editor of

@@ -46,6 +46,8 @@ Item {
         idle: { label: copy("Idle"), color: KetTheme.t.textMuted }
     })
 
+    property bool compactBoard: false
+    readonly property bool releaseBoard: compactBoard && !!team && team.id === Fixtures.teams[0].id
     readonly property var members: team ? team.members : []
     // T-56 (ADR 0125): a team works in English or Vietnamese; a team without one is English.
     readonly property var languages: [{ code: "en", name: "English" }, { code: "vi", name: "Tiếng Việt" }]
@@ -62,9 +64,9 @@ Item {
     property bool removingAll: false
     property var removalOutcome: null
     function gb(value) { return value.toFixed(1) + " GB" }
-    readonly property var scheduledUpdates: team && window.scheduleStore.find("web")
+    readonly property var scheduledUpdates: !releaseBoard && team && window.scheduleStore.find("web")
         && window.scheduleStore.find("web").teamId === team.id
-        ? [{ icon: "clock", text: copy("Scheduled run: Daily website article → leader"), detail: copy("Schedule · @agent/4821"), when: "08:00" }] : []
+        ? [{ icon: "clock", text: copy("Scheduled run: %1 → leader").arg(Fixtures.releaseBriefName), detail: copy("Schedule · @agent/%1").arg(Fixtures.releaseLead.number), when: "08:00" }] : []
     readonly property var decisions: team ? team.decisions : []
     readonly property var shownTasks: filter === "" ? tasks : tasks.filter(t => t.state === filter)
     readonly property var leader: members.find(m => m.role === "leader") || null
@@ -140,6 +142,14 @@ Item {
         if (state === "live")
             teams = [Fixtures.liveTeam]
         teamIndex = 0
+        compactBoard = state === "board"
+        if (releaseBoard)
+            change({
+                tasks: tasks.filter(task => ["T-1", "T-5"].includes(task.id)),
+                decisions: decisions.slice(0, 1),
+                updates: team.updates.slice(0, 1),
+                storage: { free: storage.free, worktrees: [] }
+            })
         if (vietnamese) change({ language: "vi" })
         filter = ""
         if (state === "scheduled") {
@@ -147,12 +157,13 @@ Item {
         }
         if (state === "large" || state === "two-reviewers")
             change({ members: members.concat([{ number: "9079", title: "Check this worktree", role: "developer",
-                provider: "Claude · Opus 5.5", lane: "Onboarding", paths: ["apps/desktop/src/onboarding/"],
+                provider: "Claude · Opus 5.5", lane: "Onboarding", paths: ["src/onboarding/"],
                 state: "idle", now: copy("No task yet") }]) })
         // `teams/two-reviewers` (T-23): the large team with a second reviewer; each reviews one
         // task of its own, so T-1 and T-6 are reviewed at the same time.
         if (state === "two-reviewers")
-            change({ members: members.map(m => m.role !== "reviewer" ? m
+            change({ tasks: tasks.map(t => t.id === "T-1" ? Object.assign({}, t, { state: "review" }) : t),
+                members: members.map(m => m.role !== "reviewer" ? m
                     : Object.assign({}, m, { reviewing: "T-1", queue: [] }))
                 .concat([{ number: "4590", title: "Reviewer 2", role: "reviewer", provider: "Claude · Opus 5.5",
                     lane: "", reviews: [], paths: [], state: "working", now: "Reviewing T-6",
@@ -881,10 +892,10 @@ Item {
         Column {
             id: content
             x: Math.max(screen.px(42), (scroll.availableWidth - width) / 2)
-            y: screen.px(38)
+            y: screen.px(screen.releaseBoard ? 16 : 38)
             width: Math.min(scroll.availableWidth - screen.px(84), screen.px(1120))
-            spacing: screen.px(18)
-            bottomPadding: screen.px(40)
+            spacing: screen.px(screen.releaseBoard ? 6 : 18)
+            bottomPadding: screen.px(screen.releaseBoard ? 8 : 40)
 
             PageHeading {
                 width: parent.width
@@ -906,7 +917,7 @@ Item {
                 }
             }
 
-            TeamSchedules { width: parent.width; window: screen.window; team: screen.team; language: screen.teamLanguage }
+            TeamSchedules { visible: !screen.releaseBoard; width: parent.width; window: screen.window; team: screen.team; language: screen.teamLanguage }
 
             // The goal whole, folded after three lines (ADR 0114); a mention opens its
             // conversation. Everywhere else the goal keeps one line.
@@ -916,7 +927,7 @@ Item {
                 objectName: "teamPageGoal"
                 width: parent.width
                 visible: text !== ""
-                text: screen.team ? screen.team.goal : ""
+                text: screen.team ? (screen.releaseBoard ? screen.team.goal.split("\n\n")[0] : screen.team.goal) : ""
                 foldedLines: 3
                 mentionTitles: {
                     const titles = {}
@@ -1457,7 +1468,7 @@ Item {
                             required property int index
                             readonly property var status: screen.memberStates[modelData.state] || screen.memberStates.idle
                             width: memberList.width
-                            height: screen.px(64)
+                            height: screen.px(screen.releaseBoard ? 42 : 64)
                             Rectangle { visible: memberRow.index > 0; width: parent.width; height: 1; color: KetTheme.t.panelBorder }
                             RowLayout {
                                 anchors.fill: parent
@@ -1467,7 +1478,7 @@ Item {
                                 Column {
                                     Layout.fillWidth: true
                                     Layout.minimumWidth: screen.px(150)
-                                    Layout.preferredWidth: screen.px(190)
+                                    Layout.preferredWidth: screen.px(screen.releaseBoard ? 252 : 190)
                                     spacing: screen.px(5)
                                     // A narrow page has no role column: the role sits beside the name.
                                     Row {
@@ -1657,7 +1668,7 @@ Item {
                 }
             }
             Row {
-                visible: updatesPanel.visible
+                visible: updatesPanel.visible && !screen.releaseBoard
                 spacing: screen.px(8)
                 KetIcon { anchors.verticalCenter: parent.verticalCenter; name: "info"; box: screen.px(13); color: KetTheme.t.textMuted }
                 Label { text: screen.copy("These woke nobody. The leader gets them as one digest when its turn ends."); color: KetTheme.t.textMuted; font.pixelSize: screen.px(12) }
@@ -2504,7 +2515,7 @@ Item {
                         teamId: created, teamName: name, conversation: screen.team.members[0].number, rule: 0,
                         date: teamStart.date, time: teamStart.time, zone: teamStart.zone, days: [], hours: "4", busy: 0, missed: 0 })
                     if (teamStart.recurring) screen.window.scheduleStore.save(Object.assign({}, teamStart.recurringDraft, {
-                        name: screen.copy("Daily website article"), prompt: teamStart.workOrder, target: 2, teamId: created, teamName: name,
+                        name: screen.copy("Morning release brief"), prompt: teamStart.workOrder, target: 2, teamId: created, teamName: name,
                         conversation: screen.team.members[0].number, date: teamStart.date, busy: 0, missed: 0 }))
                 }
             }

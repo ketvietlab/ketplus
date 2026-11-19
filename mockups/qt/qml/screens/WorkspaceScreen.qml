@@ -77,15 +77,15 @@ Item {
     }
     function openContentDemo(kind) {
         contentSession.tabs = []; contentSession.currentId = ""; contentSession.terminalSerial = 0
-        detailsPane.openFile("NavigationRail.qml")
-        detailsPane.openFile("WorktreeItem.qml")
+        detailsPane.openFile("TrailList.qml")
+        detailsPane.openFile("TrailRow.qml")
         const first = contentSession.newTerminal()
         contentSession.patch(first, { draft: "cmake --build build" })
         const second = contentSession.newTerminal()
         contentSession.patch(second, { draft: "ctest --test-dir build" })
         openPlan("continuing")
         if (kind === "terminal") contentSession.select(second)
-        if (kind === "file") detailsPane.openFile("NavigationRail.qml")
+        if (kind === "file") detailsPane.openFile("TrailList.qml")
     }
     function planStatus(number, fallback) {
         const model = planStore.plans[number]
@@ -169,6 +169,8 @@ Item {
                         width: parent.width
                         window: screen.window
                         kind: screen.kind
+                        changesOpen: screen.detailsOpen && screen.kind === "activity"
+                        reportOpen: screen.detailsOpen && screen.detailsTab === "report"
                         conversation: screen.conversation
                         onOpenDetails: tab => screen.openContent(tab)
                     }
@@ -239,6 +241,7 @@ Item {
 
         DetailsPane {
             id: detailsPane
+            reportEvidence: screen.kind === "report"
             visible: screen.detailsOpen
             Layout.fillHeight: true
             // Half of the workspace beside the rule: the pane matches the conversation's width.

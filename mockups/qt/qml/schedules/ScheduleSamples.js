@@ -3,7 +3,7 @@
 
 function waitingTeam(base) {
     return Object.assign({}, base, {
-        id: "website", name: "Website", goal: "Write a new post for the website", branch: "develop",
+        id: "website", name: "Field QA", goal: "Verify that field notes survive an offline restart.", branch: "develop",
         automaticTurns: 0, tasks: [], decisions: [], updates: [], paused: false,
         storage: { free: 64.2, worktrees: [] },
         members: base.members.map((m, i) => Object.assign({}, m, {

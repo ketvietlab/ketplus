@@ -317,9 +317,10 @@ Rectangle {
                         id: repo
                         required property var modelData
                         required property int index
-                        readonly property bool open: sidebar.expanded[modelData.name] !== false
+                        readonly property bool open: sidebar.expanded[modelData.name]
+                            ?? (index === 0 || sidebar.window.repository === modelData.name)
                         readonly property bool all: !!sidebar.showAll[modelData.name]
-                        readonly property int limit: 7
+                        readonly property int limit: index === 0 ? 2 : 7
                         // Its teams come first, as folders; a conversation of a team shows there
                         // and not among the repository's own.
                         readonly property var teams: sidebar.window.teamList.filter(t => t.repository === modelData.name)
@@ -329,6 +330,15 @@ Rectangle {
                                 for (const m of t.members)
                                     taken.push(m.number)
                             return sidebar.window.conversationsOf(modelData.name).filter(c => !taken.includes(c.number))
+                        }
+                        readonly property var recent: {
+                            const rows = loose.slice(0, limit)
+                            const current = sidebar.window.conversation.number
+                            if (sidebar.window.screen === "workspace" && !rows.some(c => c.number === current)) {
+                                const active = loose.find(c => c.number === current)
+                                if (active) rows[rows.length - 1] = active
+                            }
+                            return rows
                         }
                         width: parent.width
 
@@ -397,6 +407,7 @@ Rectangle {
                                         width: repo.width - 2 * sidebar.inset
                                         window: sidebar.window
                                         team: modelData
+                                        expanded: index === 0
                                         conversations: sidebar.window.conversationsOf(repo.modelData.name)
                                         dropPreview: sidebar.dragPreview && index === 0
                                         onContextMenuRequested: conversation => {
@@ -430,7 +441,7 @@ Rectangle {
                                 Repeater {
                                     model: !repo.open ? []
                                            : repo.all ? repo.loose
-                                           : repo.loose.slice(0, repo.limit)
+                                           : repo.recent
 
                                     SidebarRow {
                                         id: row
@@ -543,7 +554,7 @@ Rectangle {
             Layout.fillWidth: true
             Layout.preferredHeight: sidebar.px(48)
             hoverEnabled: true
-            text: "An Nguyen"
+            text: Fixtures.accountName
             onClicked: accountMenu.popup(account, sidebar.px(8), -accountMenu.height)
             background: Rectangle {
                 color: account.hovered ? KetTheme.t.surfaceHover : "transparent"

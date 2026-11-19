@@ -19,6 +19,6 @@ Column {
     KetUserMessage { width: parent.width; text: message.entry ? message.entry.prompt : "Run the scheduled task." }
     KetAssistantMessage {
         width: parent.width; name: "Leader · Codex"; time: "08:00"
-        text: message.entry && message.entry.target === 2 ? "The “Daily website article” schedule has started. Today we will explain how to read CI failures. I will assign research and editing to the team, then send you the draft for approval." : "The scheduled run has started. I will check the CI workflows and report the results in this conversation."
+        text: message.entry && message.entry.target === 2 ? "The morning release brief has started. I will check the overnight build and summarize the open release gates." : "The scheduled run has started. I will check the CI workflows and report the results in this conversation."
     }
 }

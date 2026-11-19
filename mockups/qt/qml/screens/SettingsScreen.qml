@@ -264,7 +264,7 @@ Item {
                     width: parent.width
                     KetTabBar {
                         width: parent.width
-                        KetTabButton { text: "NavigationRail.qml"; iconName: "file-code"; width: implicitWidth }
+                        KetTabButton { text: "TrailList.qml"; iconName: "file-code"; width: implicitWidth }
                         KetTabButton { text: "README.md"; width: implicitWidth }
                     }
                     KetCodeBlock {
@@ -318,7 +318,7 @@ Item {
                     Text { text: "PREVIEW"; color: KetTheme.t.textMuted; font.family: KetTheme.fontFamily; font.pixelSize: screen.px(11); font.letterSpacing: 1 }
                     Text { text: "A space for what you are creating."; color: KetTheme.t.textMain; font.family: KetTheme.fontFamily; font.pixelSize: screen.px(15) }
                     Text { text: "const workspace = \"develop\";\nagent.continue(workspace);"; color: KetTheme.t.textMain; font.family: KetTheme.monoFontFamily; font.pixelSize: screen.px(14) }
-                    Text { text: "➜ ketplus-desktop git:(develop)"; color: KetTheme.t.textMuted; font.family: KetTheme.monoFontFamily; font.pixelSize: screen.px(14) }
+                    Text { text: "➜ cinder-trail git:(develop)"; color: KetTheme.t.textMuted; font.family: KetTheme.monoFontFamily; font.pixelSize: screen.px(14) }
                 }
             }
         }
@@ -331,10 +331,10 @@ Item {
             Body { text: "Your KetPlus account, and the phones and Linux machines that use this Mac." }
             Row {
                 spacing: screen.px(12)
-                KetAvatar { name: "An Nguyen"; diameter: 40 }
+                KetAvatar { name: Fixtures.accountName; diameter: 40 }
                 Column {
                     anchors.verticalCenter: parent.verticalCenter
-                    Text { text: "An Nguyen"; color: KetTheme.t.textMain; font.family: KetTheme.fontFamily; font.pixelSize: screen.px(15); font.weight: Font.Medium }
+                    Text { text: Fixtures.accountName; color: KetTheme.t.textMain; font.family: KetTheme.fontFamily; font.pixelSize: screen.px(15); font.weight: Font.Medium }
                     Text { text: "an · KétPlus Pro"; color: KetTheme.t.textSecondary; font.family: KetTheme.fontFamily; font.pixelSize: screen.px(13) }
                 }
             }
@@ -404,7 +404,7 @@ Item {
             SettingRow { label: "Work display"; help: "The agent works on this display: approved apps move there and screenshots show it. With a single display, it uses the main one."; KetSelect { width: parent.width; model: ["Secondary display", "Main display"] } }
             Divider {}
             SubHeading { text: "Blocked apps" }
-            SettingRow { label: "Blocked app bundle IDs"; help: "Bundle IDs separated by commas. KetPlus, Keychain Access and password managers are always blocked. Terminals and IDEs accept clicks only, and browsers other than Safari are view-only."; KetTextField { width: parent.width; placeholderText: "com.example.Banking, com.example.Mail" } }
+            SettingRow { label: "Blocked app bundle IDs"; help: "Bundle IDs separated by commas. KetPlus, Keychain Access and password managers are always blocked. Terminals and IDEs accept clicks only, and browsers other than Safari are view-only."; KetTextField { width: parent.width; text: "example.cindertrail.qa" } }
             Divider {}
             SubHeading { text: "Safety" }
             Help { text: "Screenshots show only the apps you approved; other apps and KetPlus stay hidden. Agents work in the background without taking your pointer. Press Stop on the banner, or Esc in an approved app, to stop: the agent loses its approvals and must ask again. Turns started from your phone cannot control this Mac." }

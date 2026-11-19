@@ -15,6 +15,10 @@ Item {
     required property var conversation
     readonly property real column: Math.min(width - px(48), px(760))
     readonly property string asset: "qrc:/qt/qml/KetPlusMock/assets/"
+    property bool changesOpen: false
+    property bool reportOpen: false
+    property bool datasetAnswered: false
+    onConversationChanged: datasetAnswered = false
     property int questionStep: 0
     readonly property var blocks: ({ claude: TranscriptFixtures.claude, codex: TranscriptFixtures.codex,
                                      cursor: TranscriptFixtures.cursor,
@@ -117,7 +121,7 @@ Item {
         x: (transcript.width - width) / 2
         y: transcript.px(24)
         width: transcript.column
-        spacing: transcript.px(18)
+        spacing: transcript.px(transcript.reportOpen ? 12 : 18)
 
         // Welcome: a new conversation with starters.
         Column {
@@ -171,44 +175,53 @@ Item {
         KetUserMessage {
             visible: transcript.kind !== "welcome"
             width: parent.width
-            text: transcript.kind === "running" ? "Why does the desktop take four seconds to show the first window? Profile the startup and propose a fix."
-                : transcript.kind === "question" ? "Review the onboarding feature branch before we merge it."
-                : transcript.kind === "atlas" ? "Design an onboarding flow for KetPlus Desktop, from opening a project to the first conversation."
+            text: transcript.kind === "running" ? "Cinder Trail takes four seconds to open the trail picker. Find what blocks the first frame."
+                : transcript.kind === "question" ? "Review the first offline field note before we merge the onboarding branch."
+                : transcript.kind === "atlas" ? Fixtures.atlasPrompt
                 : transcript.kind === "error" ? "Profile the editor startup on a cold cache."
                 : transcript.kind === "short" ? "Check this worktree and tell me if anything is uncommitted."
                 : transcript.kind === "setup" ? (Fixtures.providerSetup[transcript.conversation.setup] || {}).prompt || ""
-                : transcript.kind === "report" ? "Finish the repository picker, then tell me what is left on the new UI."
-                : transcript.kind === "report-running" ? "Carry on with the dialog."
-                : "Make transcript activity explicit and easier to scan."
+                : transcript.kind === "report" ? "Finish the trail picker and verify it for the 1.4 release."
+                : transcript.kind === "report-running" ? "Run the picker checks against the approved dataset."
+                : "Keep keyboard focus in the trail picker after filtering. Show me what changed."
         }
 
         // The work performed, collapsed into groups.
         KetActivityGroup {
             visible: ["activity", "running", "atlas", "error", "setup", "report", "report-running"].includes(transcript.kind)
+                     && !transcript.reportOpen
             width: parent.width
             text: transcript.kind === "running" ? "Explored 6 files, ran 2 commands"
-                : transcript.kind === "report" ? "Edited 4 files, ran 3 commands"
+                : transcript.kind === "report" ? "Edited 3 files, ran picker tests"
+                : transcript.kind === "atlas" ? "Built and validated 2 flows"
                 : transcript.kind === "report-running" ? "Explored 3 files, editing 1"
-                : "Used KetPlus editor and browser"
+                : "Read the worktree and checked the picker"
             expanded: transcript.kind === "running"
-            KetActivityRow { text: "Read"; detail: "apps/desktop/src/main.cpp"; iconName: "file-code" }
-            KetActivityRow { text: "Searched"; detail: "“indexAsync” in modules/"; iconName: "search" }
-            KetActivityRow { text: "Ran"; detail: "ctest --test-dir build -R startup"; iconName: "terminal"; expandable: true }
-            KetActivityRow { text: "Used browser"; detail: "visual compare · 2 captures"; iconName: "image" }
+            KetActivityRow { text: "Read"; detail: "src/trails/TrailList.qml"; iconName: "file-code" }
+            KetActivityRow { text: "Searched"; detail: "“refreshIndex” in src/trails"; iconName: "search" }
+            TranscriptActivityItem {
+                window: transcript.window
+                step: ({
+                    kind: "command", title: "Ran", detail: command, command: command,
+                    output: "2 picker tests passed"
+                })
+                readonly property string command: "ctest --test-dir build -R trail_picker"
+            }
+            KetActivityRow { text: "Compared"; detail: "first-frame timing · 2 runs"; iconName: "clock" }
         }
 
         KetGallery {
-            visible: transcript.kind === "activity"
+            visible: transcript.kind === "activity" && !transcript.changesOpen
             images: Fixtures.captures.map(capture => ({ source: capture.source,
                                                         caption: capture.caption.split(" · ")[1] }))
             onActivated: index => transcript.window.openImages(Fixtures.captures, index)
         }
 
         Note {
-            visible: transcript.kind === "activity"
+            visible: transcript.kind === "activity" && !transcript.changesOpen
             iconName: "send"
             label: "Agent message"
-            message: "Sent to @agent/9410 · Review the startup flow · started a turn · reply requested."
+            message: "Sent the diff to @agent/4583 for keyboard review."
         }
 
         MarkdownView {
@@ -216,7 +229,7 @@ Item {
             width: parent.width
             window: transcript.window
             markdown: transcript.kind === "running" ? Fixtures.runningAnswer
-                : transcript.kind === "report" ? "The daemon now lists another repository's worktrees without switching to it, and the dialog follows the mock flow. Its tests and the call site are next; two decisions are yours."
+                : transcript.kind === "report" ? "The picker changes are in place. **2 macOS picker tests passed.** The offline Linux check is blocked on dataset approval."
                 : transcript.kind === "short" ? "The worktree is **clean**: no staged or unstaged changes, and `develop` is even with `origin/develop`."
                 : Fixtures.activityAnswer
             onLinkActivated: link => transcript.window.notify("Opened " + link)
@@ -227,7 +240,7 @@ Item {
             spacing: transcript.px(8)
             KetActivityIndicator { anchors.verticalCenter: parent.verticalCenter }
             Text {
-                text: "Working · profiling the provider handshake"
+                text: "Working · measuring the first frame"
                 color: KetTheme.t.textSecondary
                 font.family: KetTheme.fontFamily
                 font.pixelSize: transcript.px(13)
@@ -236,7 +249,7 @@ Item {
 
         // The turn closes with the work report; while the next turn runs, it shows that turn's activity.
         TurnReportCard {
-            visible: ["report", "report-running"].includes(transcript.kind)
+            visible: ["report", "report-running"].includes(transcript.kind) && !transcript.reportOpen
             width: parent.width
             report: Fixtures.turnReport
             running: transcript.kind === "report-running"
@@ -246,14 +259,14 @@ Item {
         }
 
         KetIconButton {
-            visible: ["activity", "short", "report"].includes(transcript.kind)
+            visible: ["activity", "short", "report"].includes(transcript.kind) && !transcript.reportOpen
             iconName: "copy"
             text: "Copy answer"
             onClicked: transcript.window.notify("Copied the answer")
         }
 
         Card {
-            visible: transcript.kind === "activity"
+            visible: transcript.kind === "activity" && !transcript.changesOpen
             title: "Referenced design"
             caption: "Code, diff, table, diagram and media detail are loaded on demand."
             KetButton {
@@ -265,15 +278,43 @@ Item {
         }
 
         KetChangedFiles {
-            visible: transcript.kind === "activity"
+            visible: (transcript.kind === "activity" && !transcript.changesOpen) || transcript.kind === "report"
             width: parent.width
             files: Fixtures.changedFiles
             note: "Not committed"
             onFileActivated: transcript.openDetails("changes")
             footer: KetButton {
+                visible: !transcript.reportOpen
                 text: "Review changes"
                 controlSize: KetTheme.ControlSize.Small
                 onClicked: transcript.openDetails("changes")
+            }
+        }
+
+        KetQuestionCard {
+            visible: transcript.kind === "report" && !transcript.datasetAnswered
+            width: parent.width
+            question: Fixtures.datasetQuestion
+            KetChoice {
+                width: parent.width
+                kind: KetTheme.ToggleKind.Radio
+                checked: true
+                text: "Bundled trail dataset"
+                description: "Three trails with synthetic field notes"
+            }
+            KetChoice {
+                width: parent.width
+                kind: KetTheme.ToggleKind.Radio
+                text: "Full QA dataset"
+                description: "Larger route set with sync history"
+            }
+            footer: KetButton {
+                text: "Send answer"
+                variant: KetTheme.ButtonVariant.Primary
+                onClicked: {
+                    transcript.datasetAnswered = true
+                    transcript.window.notify("Dataset selected · the turn can continue")
+                }
             }
         }
 
@@ -282,11 +323,11 @@ Item {
             visible: transcript.kind === "question"
             width: parent.width
             question: transcript.questionStep === 0
-                      ? "The branch changes the first-run copy. Which tone should the review check against?"
+                      ? "What should the app show when no trails are saved for offline use?"
                       : "Should I open a pull request when the review passes?"
             step: (transcript.questionStep + 1) + " of 2"
-            KetChoice { width: parent.width; kind: KetTheme.ToggleKind.Radio; checked: true; text: transcript.questionStep === 0 ? "Friendly and short" : "Yes, into integration"; description: transcript.questionStep === 0 ? "Matches the mobile onboarding" : "Promoted to develop later" }
-            KetChoice { width: parent.width; kind: KetTheme.ToggleKind.Radio; text: transcript.questionStep === 0 ? "Formal" : "No, only report"; description: transcript.questionStep === 0 ? "Matches the Settings copy" : "I will open it myself" }
+            KetChoice { width: parent.width; kind: KetTheme.ToggleKind.Radio; checked: true; text: transcript.questionStep === 0 ? "Offer to save a trail" : "Yes, into integration"; description: transcript.questionStep === 0 ? "Show the trail picker with an offline download action" : "Promoted to develop later" }
+            KetChoice { width: parent.width; kind: KetTheme.ToggleKind.Radio; text: transcript.questionStep === 0 ? "Show the empty journal" : "No, only report"; description: transcript.questionStep === 0 ? "Explain that recording needs a saved trail" : "I will open it myself" }
             footer: [
                 KetButton {
                     text: transcript.questionStep === 0 ? "Next" : "Send answers"
@@ -307,8 +348,8 @@ Item {
         // An Atlas the Agent produced.
         Card {
             visible: transcript.kind === "atlas"
-            title: "Validated preview available"
-            caption: "onboarding.ketatlas · 4 screens · 2 flows · Két Design System"
+            title: "First field entry"
+            caption: "first-field-entry.ketatlas · " + Fixtures.atlasSummary + " · Két Design System"
             Row {
                 spacing: transcript.px(8)
                 KetButton { text: "Edit in KétPlus"; iconName: "edit"; variant: KetTheme.ButtonVariant.Primary; onClicked: transcript.window.showScreen("atlas") }

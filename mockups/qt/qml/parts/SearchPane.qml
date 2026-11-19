@@ -66,7 +66,7 @@ Rectangle {
                 controlSize: KetTheme.ControlSize.Small
                 iconName: "refresh"
                 text: "Search again"
-                onClicked: pane.window.notify("Searched ketplus-desktop again")
+                onClicked: pane.window.notify("Searched cinder-trail again")
             }
         }
 
@@ -76,7 +76,7 @@ Rectangle {
             Layout.leftMargin: pane.px(KetTheme.t.space3)
             Layout.rightMargin: pane.px(KetTheme.t.space3)
             leadingIcon: "search"
-            placeholderText: "Search in ketplus-desktop"
+            placeholderText: "Search in cinder-trail"
             text: pane.query
             onTextEdited: pane.query = text
         }
