@@ -86,6 +86,37 @@ bool write(const QString& path, const QByteArray& bytes) {
     QFile file(path);
     return file.open(QIODevice::WriteOnly) && file.write(bytes) == bytes.size();
 }
+// How the fork fixture publishes its count: the value goes into a temporary file of this process
+// in the same directory, which is closed and then renamed over fork-count. A kill at any point
+// leaves fork-count with the last whole value, or absent before the first rename; never cut.
+constexpr auto forkCountWriter = R"PY(import os
+def stage(value):
+    temporary = 'fork-count.%d.tmp' % os.getpid()
+    with open(temporary, 'w') as stream: stream.write(str(value))
+    return temporary
+def commit(temporary):
+    os.replace(temporary, 'fork-count')
+def publish(value):
+    commit(stage(value))
+)PY";
+// Drives forkCountWriter one step at a time: "stage N" or "commit", each answered with "ok".
+constexpr auto forkCountStepper = R"PY(import sys
+staged = None
+while True:
+    word = sys.stdin.readline().split()
+    if not word: break
+    if word[0] == 'stage': staged = stage(int(word[1]))
+    elif word[0] == 'commit': commit(staged)
+    print('ok', flush=True)
+)PY";
+bool step(QProcess& process, const QByteArray& command) {
+    if (process.write(command + '\n') != command.size() + 1)
+        return false;
+    while (!process.canReadLine())
+        if (!process.waitForReadyRead(10000))
+            return false;
+    return process.readLine() == "ok\n";
+}
 bool gone(const QJsonObject& task) {
     const auto boundary =
         task.value("execution_identity").toObject().value("linux_boundary").toObject();
@@ -283,10 +314,11 @@ print(json.dumps(attempts), flush=True)
             qWarning().noquote() << "Managed fork timeout timing:"
                                  << QJsonDocument(summary).toJson(QJsonDocument::Compact);
         });
-        QVERIFY(write(directory.filePath("fork.py"), R"PY(import os, time, signal
+        QVERIFY(write(directory.filePath("fork.py"),
+                      QByteArray(forkCountWriter) + R"PY(import time, signal
 signal.signal(signal.SIGTERM, signal.SIG_IGN)
 for index in range(300):
-    with open('fork-count', 'w') as stream: stream.write(str(index + 1))
+    publish(index + 1)
     if os.fork() == 0:
         os.setsid()
         while True: time.sleep(.1)
@@ -324,6 +356,44 @@ while True: time.sleep(.1)
         QVERIFY(count > 1 && count < 300);
         QVERIFY(gone(fixture.task(id)));
         QCOMPARE(fixture.task(id).value("cleanup_status"), "verified");
+    }
+    void forkCountKeepsTheLastWholeValueUntilReplaced() {
+        QTemporaryDir directory;
+        QVERIFY(write(directory.filePath("stepper.py"),
+                      QByteArray(forkCountWriter) + forkCountStepper));
+        QProcess writer;
+        writer.setWorkingDirectory(directory.path());
+        writer.start("/usr/bin/python3", {directory.filePath("stepper.py")});
+        QVERIFY(writer.waitForStarted(10000));
+        const auto stop = qScopeGuard([&] {
+            writer.kill();
+            writer.waitForFinished(10000);
+        });
+        const auto count = directory.filePath("fork-count");
+        const auto staged =
+            directory.filePath(QStringLiteral("fork-count.%1.tmp").arg(writer.processId()));
+
+        // The first value staged but not renamed: there is no count at all, not an empty one.
+        QVERIFY(step(writer, "stage 1"));
+        QCOMPARE(read(staged), "1");
+        QVERIFY(!QFile::exists(count));
+        QVERIFY(step(writer, "commit"));
+        QCOMPARE(read(count), "1");
+        QVERIFY(!QFile::exists(staged));
+
+        // A later value staged but not renamed: the count still holds the previous whole value.
+        QVERIFY(step(writer, "stage 2"));
+        QCOMPARE(read(staged), "2");
+        QCOMPARE(read(count), "1");
+        QVERIFY(step(writer, "commit"));
+        QCOMPARE(read(count), "2");
+
+        // Killed in that window, as the timeout does: the last whole value stays.
+        QVERIFY(step(writer, "stage 3"));
+        QCOMPARE(read(staged), "3");
+        writer.kill();
+        QVERIFY(writer.waitForFinished(10000));
+        QCOMPARE(read(count), "2");
     }
     void stopCompleteRaceHasOneImmutableTerminalAndOutbox() {
         QTemporaryDir directory;
