@@ -5,6 +5,8 @@
 if(NOT STAGE OR NOT IS_DIRECTORY "${STAGE}")
     message(FATAL_ERROR "Pass -DSTAGE=<install prefix>")
 endif()
+# Programs below run from other working directories: use an absolute path.
+get_filename_component(STAGE "${STAGE}" ABSOLUTE)
 
 foreach(required
         bin/ketplus_daemon.exe bin/ketplusctl.exe bin/Qt6Core.dll bin/libcrypto-3-x64.dll
