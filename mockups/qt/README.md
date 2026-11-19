@@ -391,7 +391,7 @@ opens it in the kit's image viewer (`KetLightbox`). Captures, viewed and generat
 images attached to a message open there too.
 
 The mock does not run mermaid-cli. Its diagrams (`mermaid/*.mmd`) are rendered ahead of time
-with the app's Két theme (`core/resources/mermaid`):
+with the app's Mermaid configuration (`core/resources/mermaid`):
 
 ```sh
 python3 tools/render_mermaid.py   # needs mmdc on PATH; writes assets/mermaid/*@2x.png
@@ -441,9 +441,7 @@ use explicit `-64` / `-128` names so Qt cannot select a small `@2x` image for th
 Pro lockups are trademarks, all rights reserved; no licence is granted, and the CC BY
 4.0 text in `assets/` covers the Két Symbol only (see [TRADEMARKS.md](../../TRADEMARKS.md)).
 
-The names ketPlus and ketPlus Pro are trademarks and are not licensed. The Mermaid renderings use
-the Két Mermaid theme from Két Design System (MIT,
-`core/resources/mermaid/KetDesignSystem-LICENSE.txt`).
+The names ketPlus and ketPlus Pro are trademarks and are not licensed.
 
 ## Approved brand reference
 

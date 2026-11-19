@@ -5,6 +5,7 @@
 #include "ui/Theme.h"
 
 #include <QByteArrayView>
+#include <QColor>
 #include <QCryptographicHash>
 #include <QDir>
 #include <QFile>
@@ -16,6 +17,9 @@
 #include <QRegularExpression>
 #include <QSet>
 #include <QStandardPaths>
+
+#include <algorithm>
+#include <cmath>
 
 static void initializeMermaidThemeResources() {
     [[maybe_unused]] static const bool initialized = [] {
@@ -31,11 +35,36 @@ namespace {
 // v5: node labels carry an explicit fill; cached state diagrams drew them black.
 // v6: Qt-readable class colours, Két theme, early stylesheets and rounded rectangles.
 // v8: Két Blue theme snapshots from design system 0.1.44 (v7: 12px diagram corners).
-constexpr auto cacheVersion = "ketplus-mermaid-v10";
+// v11: the mermaid.live look (ELK layout, neo look, redux themes) with mermaid's own corners.
+constexpr auto cacheVersion = "ketplus-mermaid-v11";
 
 bool isExecutableFile(const QString& path) {
     const QFileInfo file(path);
     return file.isFile() && file.isExecutable();
+}
+
+// Mermaid's redux themes write stylesheet colours as hsl(), which Qt SVG does not parse: it
+// paints those shapes black. Write them as hex instead; Qt SVG has no hsla() alpha either,
+// so a translucent colour becomes opaque, which is closer than black.
+QString withHexColours(QString css) {
+    static const QRegularExpression hsl(
+        QStringLiteral(
+            R"re(hsla?\(\s*(-?[0-9.]+)(?:deg)?\s*,\s*([0-9.]+)%\s*,\s*([0-9.]+)%\s*(?:,\s*[0-9.]+%?\s*)?\))re"),
+        QRegularExpression::CaseInsensitiveOption);
+    auto colours = hsl.globalMatch(css);
+    QList<QRegularExpressionMatch> matches;
+    while (colours.hasNext())
+        matches.append(colours.next());
+    for (auto it = matches.crbegin(); it != matches.crend(); ++it) {
+        const double hue = std::fmod(std::fmod(it->captured(1).toDouble(), 360.0) + 360.0, 360.0);
+        const double saturation = std::clamp(it->captured(2).toDouble() / 100.0, 0.0, 1.0);
+        const double lightness = std::clamp(it->captured(3).toDouble() / 100.0, 0.0, 1.0);
+        css.replace(it->capturedStart(), it->capturedLength(),
+                    QColor::fromHslF(static_cast<float>(hue / 360.0),
+                                     static_cast<float>(saturation), static_cast<float>(lightness))
+                        .name());
+    }
+    return css;
 }
 
 QByteArray mermaidConfiguration(const bool darkTheme) {
@@ -57,9 +86,11 @@ QByteArray mermaidConfiguration(const bool darkTheme) {
     if (configuration.isEmpty())
         return {};
     QJsonObject variables = configuration.value(QStringLiteral("themeVariables")).toObject();
-    const QString text = variables.value(QStringLiteral("textColor")).toString();
-    // Mermaid state SVG labels need an explicit fill in Qt; the canonical browser theme
-    // supplies the remaining colors, geometry and semantic classes unchanged.
+    QString text = variables.value(QStringLiteral("textColor")).toString();
+    if (text.isEmpty())
+        text = themeTokenColor(QStringLiteral("text-main"), darkTheme).toLower();
+    // Mermaid state SVG labels need an explicit fill in Qt; the mermaid theme supplies the
+    // remaining colors, geometry and semantic classes unchanged.
     variables.insert(QStringLiteral("stateLabelColor"), text);
     configuration.insert(QStringLiteral("themeVariables"), variables);
     configuration.insert(QStringLiteral("themeCSS"),
@@ -156,7 +187,7 @@ QByteArray MermaidRenderer::qtReadableSvg(const QByteArray& svg) {
     while (css.hasNext())
         cssMatches.append(css.next());
     for (auto it = cssMatches.crbegin(); it != cssMatches.crend(); ++it) {
-        const QString cleaned = QString(it->captured(0)).remove(important);
+        const QString cleaned = withHexColours(QString(it->captured(0)).remove(important));
         source.replace(it->capturedStart(), it->capturedLength(), cleaned);
     }
     // Qt applies a stylesheet only to elements parsed after it. Mermaid sequences put
@@ -173,36 +204,7 @@ QByteArray MermaidRenderer::qtReadableSvg(const QByteArray& svg) {
     if (root.hasMatch())
         source.insert(root.capturedEnd(), styles);
 
-    // SVG rx/ry work in both Qt and browsers; CSS border-radius does not round SVG rects.
-    // Use the canonical diagram's 12px radius, retaining larger radii for pill/stadium shapes.
-    static const QRegularExpression rectangle(QStringLiteral(R"re(<rect\b[^>]*>)re"));
-    QString rounded;
-    qsizetype copied = 0;
-    auto rectangles = rectangle.globalMatch(source);
-    while (rectangles.hasNext()) {
-        const auto rect = rectangles.next();
-        rounded += QStringView(source).mid(copied, rect.capturedStart() - copied);
-        copied = rect.capturedEnd();
-        QString element = rect.captured(0);
-        for (const QString& axis : {QStringLiteral("rx"), QStringLiteral("ry")}) {
-            const QRegularExpression attribute(QStringLiteral(R"re(\s%1="([^"]*)")re").arg(axis));
-            const auto existing = attribute.match(element);
-            if (existing.hasMatch()) {
-                bool numeric = false;
-                const double radius = existing.captured(1).toDouble(&numeric);
-                if (numeric && radius < 12.0)
-                    element.replace(existing.capturedStart(), existing.capturedLength(),
-                                    QStringLiteral(" %1=\"12\"").arg(axis));
-            } else {
-                const qsizetype end = element.endsWith(QStringLiteral("/>")) ? element.size() - 2
-                                                                             : element.size() - 1;
-                element.insert(end, QStringLiteral(" %1=\"12\"").arg(axis));
-            }
-        }
-        rounded += element;
-    }
-    rounded += QStringView(source).mid(copied);
-    return flattenLabelRows(rounded.toUtf8());
+    return flattenLabelRows(source.toUtf8());
 }
 
 QByteArray MermaidRenderer::flattenLabelRows(const QByteArray& svg) {

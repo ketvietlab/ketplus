@@ -35,14 +35,12 @@ placing proprietary implementation in CM files.
 | miniz | `77d0dce8627735138c51770d1799a1ef48f2117d` (3.1.2) | Compiled statically into theme input; upstream sources unmodified | MIT; ship `third_party/licenses/miniz-MIT.txt` |
 | KÉT Sans | 1.1 official ZIP pinned by SHA-256 | Four faces embedded in Qt resources | SIL OFL 1.1, Reserved Font Names "KÉT" and "KET" |
 | KÉT Sans Mono | 0.10.4 Medium, `assets/fonts` | Embedded in Qt resources | SIL OFL 1.1, Reserved Font Names "KÉT" and "KET" |
-| Két Design System | 0.1.44 | Mermaid configuration snapshots in Qt resources | MIT |
 | KetQt | `d47638214f80695524cd2724996674da7afdbb6a` | Compiled statically (ADR 0035) | MPL 2.0 |
 | Két Design System tokens | 0.1.44, inside KetQt | Compiled into KetQt | MIT |
 | Két Symbol | 0.12.0 SVGs, inside KetQt; `assets/brand/ketplus-terminal.svg` | Embedded in KetQt Qt resources; rendered into the KétPlus Terminal app icon | CC BY 4.0; credit "Két Symbol © 2026 Két Việt, CC BY 4.0" |
 
-The Mermaid theme snapshots retain their upstream source revision and hashes in
-`resources/mermaid/SOURCE.json`. The publisher's MIT license is bundled alongside
-the configuration as `KetDesignSystem-LICENSE.txt`; no KétSuite service code is copied.
+The Mermaid configuration in `resources/mermaid` is KétPlus's own: it selects
+themes, look and layout built into Mermaid and copies no third-party data.
 
 Git and Mermaid CLI are discovered as separately installed executables. They
 are not linked or bundled by this source build. If a future installer bundles

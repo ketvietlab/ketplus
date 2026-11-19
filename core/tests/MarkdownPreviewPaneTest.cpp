@@ -41,7 +41,8 @@ class MarkdownPreviewPaneTest final : public QObject {
     void classColoursSurviveQtSvg();
     void sequenceColoursSurviveQtSvg();
     void canonicalSemanticColoursSurviveQtSvg();
-    void roundsDiagramRectangles();
+    void keepsDiagramRectangleCorners();
+    void hslColoursSurviveQtSvg();
 };
 
 ketplus::ThemePalette previewTestPalette() {
@@ -277,10 +278,10 @@ fi
 if grep -q '{{' "$config"; then
   exit 15
 fi
-if ! grep -q '"primaryColor":"#202c4b"' "$config"; then
+if ! grep -q '"theme":"redux-dark"' "$config" || ! grep -q '"look":"neo"' "$config"; then
   exit 14
 fi
-if ! grep -q '.node.kv-positive path' "$config" || ! grep -q '"curve":"rounded"' "$config"; then
+if ! grep -q '"layout":"elk"' "$config" || ! grep -q '.label text{fill:#f2f4f7;}' "$config"; then
   exit 13
 fi
 printf '%s' '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="160"><rect x="10" y="10" width="300" height="140" fill="#8b5cf6"/></svg>' > "$output"
@@ -489,16 +490,37 @@ void MarkdownPreviewPaneTest::canonicalSemanticColoursSurviveQtSvg() {
     QCOMPARE(image.pixelColor(80, 20).name(), QStringLiteral("#382b2f"));
 }
 
-void MarkdownPreviewPaneTest::roundsDiagramRectangles() {
+void MarkdownPreviewPaneTest::keepsDiagramRectangleCorners() {
     const QByteArray svg =
         R"(<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 40">)"
         R"(<rect width="40" height="40" fill="#252c42"/>)"
-        R"(<rect x="60" width="40" height="40" rx="3" ry="3" fill="#252c42"/>)"
-        R"(<rect x="45" width="10" height="40" rx="20" ry="20" fill="#252c42"/></svg>)";
+        R"(<rect x="60" width="40" height="40" rx="10" ry="10" fill="#252c42"/></svg>)";
     const QByteArray readable = ketplus::MermaidRenderer::qtReadableSvg(svg);
-    QCOMPARE(readable.count("rx=\"12\""), 2);
-    QCOMPARE(readable.count("ry=\"12\""), 2);
-    QVERIFY(readable.contains("rx=\"20\" ry=\"20\""));
+    // The mermaid theme owns corner radii: square nodes stay square.
+    QVERIFY(readable.contains(R"(<rect width="40" height="40" fill="#252c42"/>)"));
+    QVERIFY(readable.contains(R"(rx="10" ry="10")"));
+    QSvgRenderer renderer(readable);
+    QVERIFY(renderer.isValid());
+    QImage image(100, 40, QImage::Format_ARGB32);
+    image.fill(Qt::transparent);
+    QPainter painter(&image);
+    renderer.render(&painter);
+    painter.end();
+    QCOMPARE(image.pixelColor(0, 0).name(), QStringLiteral("#252c42"));
+    QCOMPARE(image.pixelColor(60, 0).alpha(), 0);
+}
+
+// What the redux themes write: stylesheet colours as hsl(), which Qt SVG paints black.
+void MarkdownPreviewPaneTest::hslColoursSurviveQtSvg() {
+    const QByteArray svg =
+        R"(<svg xmlns="http://www.w3.org/2000/svg" id="d" viewBox="0 0 100 40">)"
+        R"(<style>#d .edgeLabel rect{fill:hsl(-120, 0%, 80%);}#d .cluster rect{fill:HSLA(240deg, 50%, 50%, 0.5);})"
+        R"(</style><g class="edgeLabel"><rect width="40" height="40"/></g>)"
+        R"(<g class="cluster"><rect x="60" width="40" height="40"/></g>)"
+        R"(<text x="0" y="30">hsl(0, 0%, 0%)</text></svg>)";
+    const QByteArray readable = ketplus::MermaidRenderer::qtReadableSvg(svg);
+    QVERIFY(!readable.contains("hsl(-120"));
+    QVERIFY(readable.contains(">hsl(0, 0%, 0%)</text>"));
     QCOMPARE(ketplus::MermaidRenderer::qtReadableSvg(readable), readable);
     QSvgRenderer renderer(readable);
     QVERIFY(renderer.isValid());
@@ -507,10 +529,8 @@ void MarkdownPreviewPaneTest::roundsDiagramRectangles() {
     QPainter painter(&image);
     renderer.render(&painter);
     painter.end();
-    QCOMPARE(image.pixelColor(0, 0).alpha(), 0);
-    QCOMPARE(image.pixelColor(60, 0).alpha(), 0);
-    QCOMPARE(image.pixelColor(20, 20).name(), QStringLiteral("#252c42"));
-    QCOMPARE(image.pixelColor(80, 20).name(), QStringLiteral("#252c42"));
+    QCOMPARE(image.pixelColor(20, 5).name(), QStringLiteral("#cccccc"));
+    QCOMPARE(image.pixelColor(80, 5).name(), QStringLiteral("#4040bf"));
 }
 
 QTEST_MAIN(MarkdownPreviewPaneTest)

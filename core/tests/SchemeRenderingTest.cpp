@@ -76,7 +76,8 @@ class SchemeRenderingTest : public QObject {
         const auto first = renderer.request(QStringLiteral("graph LR; A-->B"), false).cacheKey;
         auto custom = builtinColorScheme(SchemeKind::Light);
         custom.id = QStringLiteral("custom");
-        custom.ui[QStringLiteral("chrome.panelBackground")] = QColor(11, 22, 33);
+        // The diagrams use mermaid's theme; only the Qt state label fill follows the scheme.
+        custom.ui[QStringLiteral("chrome.textMain")] = QColor(11, 22, 33);
         manager.previewColorScheme(custom);
         QTRY_COMPARE(manager.colorScheme().id, QStringLiteral("custom"));
         const auto second = renderer.request(QStringLiteral("graph LR; A-->B"), false).cacheKey;

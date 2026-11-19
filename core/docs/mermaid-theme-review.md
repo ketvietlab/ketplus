@@ -1,52 +1,44 @@
-# Mermaid theme alignment
+# Mermaid appearance
 
-The light/dark configuration snapshots come from the public Két Design System
-0.1.44 `runtime/mermaid-theme.js` and its resolved token palette at upstream
-the published 0.1.44 package (Két Blue). Full revision and source
-hashes live in `resources/mermaid/SOURCE.json`; the publisher's MIT license is
-bundled there. The iOS companion consumes byte-identical snapshots.
+Diagrams look as they do on mermaid.live. `resources/mermaid/light.json` and
+`dark.json` select what Mermaid itself ships, so the same diagram reads the same in
+KétPlus and in the browser:
 
-To refresh them, load the pinned `foundations/tokens.css` in Chromium, run
-`createMermaidTheme(readMermaidPalette(element))` on a `data-kv-design-system`
-element with `data-theme="light"` and then `"dark"`, and write each result as
-`JSON.stringify(config, null, 2)` plus a newline. Re-running this on the
-previous revision the 0.1.41 package reproduced the 0.1.41 snapshots byte for byte.
+- `layout: elk`: orthogonal edges and grouped subgraphs. mermaid-cli registers the
+  ELK layout package it installs with Mermaid; no extra install is needed.
+- `look: neo` with the `redux` (light) or `redux-dark` theme: square white- or
+  dark-bordered nodes, boxed edge labels and outlined subgraphs.
+- KÉT Sans (then Inter), so the widths Mermaid measures in its browser match the font
+  Qt draws with.
 
-Snapshots retain the upstream configuration: KÉT Sans (then Inter) 13px, 12px
-node corners, rounded connectors, compact flow/sequence geometry and semantic
-accent, positive, warning, danger and decision classes. Qt adds explicit
-state-label fills and converts SVG rectangle radii to attributes while
-preserving pills. The v8 cache namespace prevents reuse of earlier themed
-diagrams.
+The configuration keeps the security settings: strict security level, SVG text labels
+instead of HTML (`htmlLabels: false`, since Qt SVG does not draw `<foreignObject>`),
+the text and edge limits, and a `secure` list that stops a diagram's front matter or
+init directive from changing theme, look, layout or styles.
+
+## Qt SVG compatibility
+
+`MermaidRenderer` runs `mmdc` and rewrites each SVG once, before it is cached, for what
+Qt SVG reads differently from a browser:
+
+- `!important` is dropped from colours, which Qt SVG would otherwise paint black.
+- `hsl()` and `hsla()` stylesheet colours, which the redux themes use, become hex.
+  Qt SVG has no alpha for them, so a translucent colour becomes opaque.
+- Stylesheets move to the start of the SVG root, because Qt styles only elements
+  parsed after a stylesheet.
+- Label rows (`text-outer-tspan`) are flattened to positioned `<text>` rows.
+- State labels get an explicit fill from the Két `text-main` token.
+
+Qt SVG does not draw the neo look's drop-shadow filter; diagrams are otherwise drawn
+as in the browser. Changing the configuration or this rewrite bumps the cache version
+in `MermaidRenderer.cpp`, so diagrams cached under the old look are rendered again.
 
 ## Verification
 
-Két Blue update (0.1.44, published package):
-
-- Regenerating 0.1.41 from the 0.1.41 package with the procedure above matched both
-  committed snapshots byte for byte before the new ones were written.
-- All 16 Lite test groups pass. The fake `mmdc` in `MarkdownPreviewPaneTest` now
-  expects the dark `primaryColor` `#202c4b`.
-- The real `mmdc` renders a flowchart with each new configuration.
-- Not yet done: the iOS companion still bundles the 0.1.41 snapshots, and the
-  fixtures below were not recaptured; they show the 0.1.41 palette.
-
-Earlier 0.1.41 alignment:
-
-- All 16 CM test groups pass, including native Qt SVG semantic-color pixel
-  checks, rounded corners and the Mermaid source/popup interaction.
-- The iOS companion's 9 focused Mermaid tests pass. WebKit measures Inter
-  13px, success colors, a dashed decision outline and 12px corners on light
-  and dark, with natural height and syntax-error/source fallback intact.
-- Chromium compared a browser-rendered reference against each consumer's
-  actual bundled configuration: 1440px/light and 390px/dark, using flowchart,
-  sequence, state and pie diagrams. Both consumers match geometry and computed
-  styles in each theme; the two captured comparisons have zero differing pixels.
-- The screenshots below are configuration comparison fixtures, not screenshots
-  of the Desktop or iPhone application shell. Native rendering is covered by
-  the Qt and WebKit tests above. Browser diagnostics reported no errors and
-  neither viewport had horizontal page overflow.
-
-![Light theme configuration fixture](mermaid-theme-review/light.png)
-
-![Dark theme configuration fixture](mermaid-theme-review/dark.png)
+- `ketplus_preview_tests` checks the configuration handed to `mmdc`, hex
+  conversion of `hsl()` colours with Qt SVG pixel checks, and that rectangle corners
+  are left as Mermaid wrote them. `ketplus_scheme_rendering_tests` checks that the cache
+  key follows the scheme's main text colour, the one colour the app still supplies.
+- A flowchart with subgraphs and edge labels, a state, a sequence and a class diagram
+  were rendered with the real `mmdc` in both themes and drawn through Qt SVG after the
+  rewrite above; they match the browser rendering except for drop shadows.
