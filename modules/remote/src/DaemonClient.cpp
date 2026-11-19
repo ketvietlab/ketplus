@@ -307,10 +307,10 @@ void DaemonClient::connectToDaemon() {
                      socket_->state() == QLocalSocket::ConnectingState))) {
         return;
     }
-    // Every attempt uses a new socket: on Windows a named-pipe socket that was aborted and
-    // connected again can connect without ever delivering a reply. The old one is cut off from
-    // this client first, so none of its signals reach it, and is deleted when control returns to
-    // the event loop.
+    // Every attempt uses a new socket. Reusing a named-pipe socket after abort() was seen on
+    // Windows to connect without ever delivering a reply (AgentMessagingTest); a new object has
+    // no such history. The old one is cut off from this client first, so none of its signals
+    // reach it, and is deleted when control returns to the event loop.
     if (socket_) {
         QLocalSocket* previous = socket_.data();
         QObject::disconnect(previous, nullptr, this, nullptr);

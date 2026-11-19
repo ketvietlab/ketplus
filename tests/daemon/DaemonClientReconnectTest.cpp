@@ -1,6 +1,8 @@
-// DaemonClient connects on a new socket for every attempt. A named-pipe socket that was aborted
-// and connected again can connect on Windows without ever delivering a reply; a new socket has no
-// such history. These cases run against a local fake daemon that answers every request.
+// DaemonClient connects on a new socket for every attempt. Reusing a named-pipe socket after
+// abort() was seen on Windows to connect without ever delivering a reply (AgentMessagingTest);
+// these cases do not reproduce that hang, they check that each attempt gets a new socket and
+// that replies arrive after a reconnect. They run against a local fake daemon that answers every
+// request.
 #include "DaemonClient.h"
 
 #include <QDir>
@@ -128,7 +130,7 @@ class DaemonClientReconnectTest final : public QObject {
         ketplus::remote::DaemonClient client;
         QTRY_VERIFY_WITH_TIMEOUT(client.isReady(), 10'000);
         QVERIFY(callAnswered(client));
-        const auto* first = client.findChild<QLocalSocket*>();
+        QPointer<QLocalSocket> first = client.findChild<QLocalSocket*>();
         QVERIFY(first);
 
         daemon.current->disconnectFromServer();
@@ -136,9 +138,9 @@ class DaemonClientReconnectTest final : public QObject {
         QTRY_VERIFY_WITH_TIMEOUT(client.isReady(), 10'000);
         const auto* second = client.findChild<QLocalSocket*>();
         QVERIFY(second);
-        // Not the same socket reconnected: the old one is gone and cannot call back into the
-        // client.
-        QVERIFY(second != first);
+        // Not the same socket reconnected: the old one is destroyed and cannot call back into the
+        // client. (A pointer comparison could be fooled by a new object at the old address.)
+        QTRY_VERIFY(first.isNull());
         QTRY_COMPARE(client.findChildren<QLocalSocket*>().size(), 1);
         QVERIFY(callAnswered(client));
     }
