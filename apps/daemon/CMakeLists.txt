@@ -10,7 +10,8 @@ target_sources(ketplus_daemon_core PRIVATE
     src/teams/TeamRoutingEvidence.cpp src/teams/TeamRoutingEvidence.h
     src/runtime/SessionHostTeamRouting.cpp)
 if(APPLE)
-    target_link_libraries(ketplus_daemon_core PRIVATE "-framework Security" "-framework CoreFoundation" "-framework IOKit" proc)
+    target_sources(ketplus_daemon_core PRIVATE src/service/DaemonApplicationMac.mm)
+    target_link_libraries(ketplus_daemon_core PRIVATE "-framework Security" "-framework CoreFoundation" "-framework Foundation" "-framework IOKit" proc)
 endif()
 target_link_libraries(ketplus_daemon_core PUBLIC
     Qt6::Concurrent

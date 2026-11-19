@@ -1,5 +1,6 @@
 #include "runtime/executor/LinuxJobContainment.h"
 #include "runtime/executor/NativeJobSupervisor.h"
+#include "service/DaemonApplication.h"
 
 #include <QCoreApplication>
 #include <QFile>
@@ -7,7 +8,7 @@
 #include <QTextStream>
 
 int main(int argc, char** argv) {
-    QCoreApplication application(argc, argv);
+    ketplus::daemon::DaemonApplication application(argc, argv);
     const auto arguments = application.arguments();
 #ifdef Q_OS_LINUX
     if (arguments.size() == 4 && arguments[1] == "--linux-probe")

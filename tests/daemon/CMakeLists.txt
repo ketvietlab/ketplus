@@ -146,6 +146,13 @@ target_compile_definitions(ketplus_copilot_cli_tests PRIVATE
     KETPLUS_TEST_DAEMON="$<TARGET_FILE:ketplus_fixture_daemon>")
 add_dependencies(ketplus_copilot_cli_tests ketplus_fixture_daemon)
 ketplus_add_daemon_test(ketplus_daemon_protocol_tests DaemonProtocolTest.cpp)
+if(APPLE)
+    # Each event delivery drains an autorelease pool; QCoreApplication on macOS never does.
+    ketplus_add_daemon_test(ketplus_daemon_autorelease_pool_tests DaemonAutoreleasePoolTest.cpp)
+    target_sources(ketplus_daemon_autorelease_pool_tests PRIVATE
+        AutoreleaseProbe.mm AutoreleaseProbe.h)
+    target_link_libraries(ketplus_daemon_autorelease_pool_tests PRIVATE "-framework Foundation")
+endif()
 ketplus_add_daemon_test(ketplus_schedule_rule_tests ScheduleRuleTest.cpp)
 ketplus_add_daemon_test(ketplus_schedule_protocol_tests ScheduleProtocolTest.cpp)
 ketplus_add_daemon_test(ketplus_schedule_runner_tests ScheduleRunnerTest.cpp)
