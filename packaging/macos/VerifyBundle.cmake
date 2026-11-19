@@ -67,37 +67,7 @@ if(NOT app_version_result EQUAL 0 OR
     )
 endif()
 
-# ADR 0019: a build configured for updates must carry Sparkle and the exact feed and key it
-# was configured with; an unconfigured build must not carry either.
-set(sparkle_framework "${KETPLUS_APP_BUNDLE}/Contents/Frameworks/Sparkle.framework")
-foreach(sparkle_key IN ITEMS SUFeedURL SUPublicEDKey)
-    execute_process(
-        COMMAND /usr/libexec/PlistBuddy -c "Print :${sparkle_key}"
-            "${KETPLUS_APP_BUNDLE}/Contents/Info.plist"
-        RESULT_VARIABLE sparkle_key_result
-        OUTPUT_VARIABLE sparkle_key_value
-        OUTPUT_STRIP_TRAILING_WHITESPACE
-        ERROR_QUIET
-    )
-    set(sparkle_plist_${sparkle_key} "")
-    if(sparkle_key_result EQUAL 0)
-        set(sparkle_plist_${sparkle_key} "${sparkle_key_value}")
-    endif()
-endforeach()
-if(KETPLUS_UPDATES_ENABLED)
-    if(NOT EXISTS "${sparkle_framework}/Versions/B/Sparkle"
-       OR NOT IS_SYMLINK "${sparkle_framework}/Sparkle")
-        message(FATAL_ERROR "KetPlus.app is missing an intact Contents/Frameworks/Sparkle.framework")
-    endif()
-    if(NOT sparkle_plist_SUFeedURL STREQUAL KETPLUS_UPDATE_FEED_URL
-       OR NOT sparkle_plist_SUPublicEDKey STREQUAL KETPLUS_UPDATE_PUBLIC_ED_KEY)
-        message(FATAL_ERROR "KetPlus.app Info.plist does not carry the configured update feed and key")
-    endif()
-elseif(DEFINED KETPLUS_UPDATES_ENABLED)
-    if(EXISTS "${sparkle_framework}" OR NOT sparkle_plist_SUFeedURL STREQUAL "")
-        message(FATAL_ERROR "KetPlus.app carries Sparkle although updates are not configured")
-    endif()
-endif()
+include("${CMAKE_CURRENT_LIST_DIR}/VerifySparkleBundle.cmake")
 
 file(GLOB_RECURSE bundled_codex LIST_DIRECTORIES false
     "${KETPLUS_APP_BUNDLE}/*codex*"

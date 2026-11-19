@@ -4,6 +4,11 @@ if(APPLE)
     find_package(Python3 REQUIRED COMPONENTS Interpreter)
     add_test(NAME ketplus_macos_signing_cli_tests
         COMMAND "${Python3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/tests/packaging/test_signing_cli.py")
+    add_test(NAME ketplus_macos_update_build_policy_tests
+        COMMAND "${Python3_EXECUTABLE}" -I "${PROJECT_SOURCE_DIR}/tests/packaging/test_macos_update_build_policy.py")
+    set_tests_properties(ketplus_macos_update_build_policy_tests PROPERTIES
+        ENVIRONMENT "KETPLUS_TEST_CMAKE=${CMAKE_COMMAND}"
+        LABELS packaging)
 endif()
 
 if(APPLE AND KETPLUS_UPDATES_ENABLED)

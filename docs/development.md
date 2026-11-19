@@ -317,13 +317,17 @@ only a UI label does not upgrade the provider runtime.
 
 ### In-app updates (macOS)
 
-Builds do not check for updates unless they are configured with an appcast and
-its EdDSA public key (ADR 0019):
+Builds do not check for updates by default. Use the
+[`release-macos-updates` preset](release-process.md#building-macos-pro-with-sparkle)
+for operator-configured releases. For an explicit local macOS test build, supply
+a scoped HTTPS appcast, its EdDSA public key and a single target architecture
+(ADR 0019):
 
 ```sh
-cmake --preset release \
-  -DKETPLUS_UPDATE_FEED_URL=https://<update host>/ketplus/appcast.xml \
-  -DKETPLUS_UPDATE_PUBLIC_ED_KEY=<base64 public key from generate_keys>
+cmake --preset dev -B build/dev-sparkle-arm64 \
+  -DCMAKE_OSX_ARCHITECTURES=arm64 -DKETPLUS_UPDATE_CHANNEL=staging \
+  -DKETPLUS_UPDATE_FEED_URL=https://updates.example.invalid/staging/arm64/appcast.xml \
+  -DKETPLUS_UPDATE_PUBLIC_ED_KEY="$QA_SPARKLE_PUBLIC_KEY"
 ```
 
 Configuring then downloads the pinned Sparkle release (set

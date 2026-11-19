@@ -480,6 +480,14 @@ the existing feed as generator input and its mode, no rollback after the feed is
 replaced, and repair/retry using synthetic
 Apple/archive/appcast tools. No signing key or network is used.
 
+macOS Sparkle build configuration changes run
+`python3 -I tests/packaging/test_macos_update_build_policy.py` (also registered as
+`ketplus_macos_update_build_policy_tests`). The test uses the actual CMake
+presets, a synthetic Sparkle framework layout and fixture Mach-O files for both
+architectures. Changes to the compiled update feed also run the standalone
+`ketplus_updater_feed_policy_tests` with the pinned Sparkle SDK as described in
+[Desktop update QA isolation](#desktop-update-qa-isolation).
+
 Update publication and rollback changes run
 `python3 -I tests/packaging/test_update_r2_cli.py`. The fixture uses a local
 S3 CLI stub for conditional writes, archive collisions, scope and QA rejection,
@@ -2058,8 +2066,18 @@ Do not open real workspaces or consume provider quota for update tests.
 The compiled-feed delegate harness in `tests/updates` uses a unique test bundle
 identifier, starts no updater/network operation and restores only its own test domain.
 It verifies that restored staging and HTTP defaults cannot override the compiled feed.
-Run it with `QT_QPA_PLATFORM=offscreen`; production bundle installation and owner-run
-manual UI acceptance remain separate checks.
+Set `SPARKLE_SDK_DIR` to the unpacked pinned SDK and `QT_ROOT` to the Qt prefix,
+then build and run the harness.
+
+```sh
+cmake -S tests/updates -B build/updater-policy -G Ninja \
+  -DCMAKE_PREFIX_PATH="$QT_ROOT" -DKETPLUS_SPARKLE_DIR="$SPARKLE_SDK_DIR"
+cmake --build build/updater-policy --target ketplus_updater_feed_policy_tests
+ctest --test-dir build/updater-policy -R '^ketplus_updater_feed_policy_tests$' --output-on-failure
+```
+
+The test sets `QT_QPA_PLATFORM=offscreen`. Production bundle installation and
+owner-run manual UI acceptance remain separate checks.
 
 `ketplus_machine_toast_tests` renders the production Machine composer in temporary
 INI settings, in light/dark. It checks the exact recipe gap after growth and window

@@ -82,6 +82,10 @@ path that must not trust the download server or the network.
   architecture to the output path, HTTPS download prefix, compiled feed and appcast
   metadata. Feeds and archives are separate for each pair. The mode in the appcast
   distinguishes release output from local QA, including QA feeds prepared over HTTPS.
+  The opt-in `release-macos-updates` preset reads release settings from the operator's
+  environment. CMake requires a single architecture and scoped HTTPS feed, and
+  installation verifies that the embedded appcast scope matches the executable's
+  Mach-O architecture. The default presets leave updates disabled.
 - Cloudflare R2 hosts the static feed and assets under `<channel>/<arch>/`. The
   release owner provisions bucket-scoped credentials outside the checkout and
   approves publication after reviewing the dry run. The separate uploader uses
