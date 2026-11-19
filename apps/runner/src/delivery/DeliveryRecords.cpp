@@ -1,5 +1,7 @@
 #include "delivery/DeliveryRecords.h"
 
+#include "protocol/FrameRules.h"
+
 #include <QDateTime>
 #include <QJsonArray>
 #include <QRegularExpression>
@@ -19,10 +21,7 @@ bool isId(const QString& text) {
     return matches(pattern, text);
 }
 
-bool isReason(const QString& text) {
-    static const QRegularExpression pattern(QStringLiteral("^[a-z][a-z0-9_]{0,63}$"));
-    return matches(pattern, text);
-}
+bool isReason(const QString& text) { return protocol::rules::isReasonCode(text); }
 
 bool isTime(const QString& text) {
     return !text.isEmpty() && QDateTime::fromString(text, Qt::ISODateWithMs).isValid();

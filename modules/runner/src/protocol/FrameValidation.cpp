@@ -72,11 +72,9 @@ bool isEnvName(const QString& name) {
     return pattern.match(name).hasMatch();
 }
 
-// `[a-z0-9_]`, at most 64 characters; `allowEmpty` for `job.result.reason`.
+// A reason code; `allowEmpty` for `job.result.reason`.
 bool isCode(const QString& code, const bool allowEmpty = false) {
-    static const QRegularExpression pattern(QStringLiteral("^[a-z0-9_]*$"));
-    return (allowEmpty || !code.isEmpty()) && code.size() <= limits::maxCodeChars &&
-           pattern.match(code).hasMatch();
+    return (allowEmpty && code.isEmpty()) || rules::isReasonCode(code);
 }
 
 // Text that survives the conversion to bytes unchanged: no NUL and no unpaired surrogate.
@@ -413,6 +411,12 @@ bool rules::isToken(const QString& text, const qsizetype maxChars) {
             return false;
     }
     return true;
+}
+
+bool rules::isReasonCode(const QString& text) {
+    static const QRegularExpression pattern(QStringLiteral("^[a-z][a-z0-9_]{0,63}$"));
+    static_assert(limits::maxCodeChars == 64);
+    return pattern.match(text).hasMatch();
 }
 
 bool rules::isJobId(const QString& text) { return isToken(text, limits::maxIdChars); }

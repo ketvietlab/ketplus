@@ -1,11 +1,12 @@
 #include "exec/ExecutionPlan.h"
 
+#include "protocol/FrameRules.h"
+
 #include <QCryptographicHash>
 #include <QDir>
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
-#include <QRegularExpression>
 
 namespace ketplus::runner::exec {
 namespace {
@@ -152,7 +153,6 @@ QString executorTaskId(const QString& jobId, const qint64 attempt) {
 }
 
 session::CommandExit commandExit(const QJsonObject& result) {
-    static const QRegularExpression code(QStringLiteral("^[a-z0-9_]{1,64}$"));
     session::CommandExit exit;
     const QString cleanup = result.value(QStringLiteral("cleanup_status")).toString();
     const QString state = result.value(QStringLiteral("state")).toString();
@@ -167,7 +167,7 @@ session::CommandExit commandExit(const QJsonObject& result) {
     };
     if (!result.value(QStringLiteral("root_started")).toBool()) {
         const QString error = result.value(QStringLiteral("error")).toString();
-        return fail(code.match(error).hasMatch() ? error : QStringLiteral("spawn_failed"));
+        return fail(protocol::rules::isReasonCode(error) ? error : QStringLiteral("spawn_failed"));
     }
     if (state == QStringLiteral("timed_out"))
         return fail(QStringLiteral("timed_out"));

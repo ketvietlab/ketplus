@@ -365,6 +365,17 @@ class RunnerExecPlanTest : public QObject {
                                      << "failed" << qint64(-1) << "spawn_enoent" << "verified";
         QTest::newRow("bad error code") << result("failed", false, -1, "verified", "No such file")
                                         << "failed" << qint64(-1) << "spawn_failed" << "verified";
+        const QByteArray longest(64, 'e');
+        QTest::newRow("error code 64")
+            << result("failed", false, -1, "verified", longest.constData()) << "failed"
+            << qint64(-1) << QString::fromLatin1(longest) << "verified";
+        const QByteArray tooLong(65, 'e');
+        for (const QByteArray& error :
+             {QByteArray("0spawn"), QByteArray("_spawn"), QByteArray("Spawn_enoent"),
+              QByteArray("spawn-enoent"), tooLong})
+            QTest::addRow("bad error code %s", error.left(12).constData())
+                << result("failed", false, -1, "verified", error.constData()) << "failed"
+                << qint64(-1) << "spawn_failed" << "verified";
         QTest::newRow("backstop") << result("timed_out", true, 137, "verified") << "failed"
                                   << qint64(-1) << "timed_out" << "verified";
         QTest::newRow("interrupted") << result("interrupted", true, -1, "verified") << "failed"
