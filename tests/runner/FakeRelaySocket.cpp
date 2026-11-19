@@ -19,9 +19,7 @@ namespace {
 constexpr qint64 startSpacingMs = 2'000;
 constexpr int connectionsPerRunner = 4;
 
-QString issued(const QDateTime& time) {
-    return ketplus::runner::pairing::issuedAtString(time);
-}
+QString issued(const QDateTime& time) { return ketplus::runner::pairing::issuedAtString(time); }
 
 QByteArray json(const QJsonObject& message) {
     return QJsonDocument(message).toJson(QJsonDocument::Compact);
@@ -158,8 +156,9 @@ void FakeRelay::signalStart(const QString& runnerId, const QJsonObject& message)
     };
     const qint64 now = m_now().toMSecsSinceEpoch();
     QList<qint64>& starts = m_starts[runnerId];
-    const int open = int(std::count_if(connections.cbegin(), connections.cend(),
-                                       [&](const Connection& c) { return c.runnerId == runnerId; }));
+    const int open =
+        int(std::count_if(connections.cbegin(), connections.cend(),
+                          [&](const Connection& c) { return c.runnerId == runnerId; }));
     if ((!starts.isEmpty() && now - starts.last() < startSpacingMs) ||
         open >= connectionsPerRunner) {
         error(QStringLiteral("rate_limited"));

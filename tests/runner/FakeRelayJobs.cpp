@@ -84,8 +84,9 @@ FakeRelay::Reply FakeRelay::acquire(const QString& runnerId, const QJsonObject& 
     if (job == nullptr)
         return refused(QStringLiteral("job_unavailable"));
     if (strict && !activePair(runnerId, job->machineId))
-        return {403, {{QStringLiteral("code"), QStringLiteral("not_paired")},
-                      {QStringLiteral("message"), QStringLiteral("not_paired")}}};
+        return {403,
+                {{QStringLiteral("code"), QStringLiteral("not_paired")},
+                 {QStringLiteral("message"), QStringLiteral("not_paired")}}};
     if (strict && !runnerMatches(runnerId, *job))
         return refused(QStringLiteral("label_mismatch"));
     job->state = QStringLiteral("acquired");

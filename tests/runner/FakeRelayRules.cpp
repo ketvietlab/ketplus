@@ -97,6 +97,16 @@ Check capabilities() {
 
 Check object(const Shape& shape);
 
+// A sealed history event of the daemon: only where it belongs is read, the rest is opaque.
+Check sealedEvent() {
+    return [](const QJsonValue& value) {
+        const QJsonObject event = value.toObject();
+        return value.isObject() && id()(event.value(QStringLiteral("sessionId"))) &&
+               integer(1, 9007199254740991)(event.value(QStringLiteral("sessionGeneration"))) &&
+               integer(1, 9007199254740991)(event.value(QStringLiteral("cursor")));
+    };
+}
+
 QStringList departures(const QJsonObject& body, const Shape& shape) {
     QStringList found;
     QSet<QString> known;
@@ -214,6 +224,10 @@ const QList<Route>& routes() {
             // The daemon's command poll: outside the runner contract, answered with none.
             route("GET", QStringLiteral("/v2/commands:poll\\?limit=([1-9][0-9]?|100)"),
                   Credential::Machine, std::nullopt),
+            // The daemon's history upload: outside the runner contract, every event accepted.
+            route("POST", QStringLiteral("/v2/events:append"), Credential::Machine,
+                  Shape{{QStringLiteral("machineId"), true, id()},
+                        {QStringLiteral("events"), true, array(1, 1000, sealedEvent())}}),
             route("POST", QStringLiteral("/v2/runner-pairing/tickets"), Credential::Machine,
                   Shape{{QStringLiteral("runnerId"), true, nullable(id())}}),
             route("GET", ticket, Credential::Machine, std::nullopt),

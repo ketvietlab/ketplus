@@ -42,9 +42,8 @@ QString randomSecret() {
 }
 
 FakeRelay::FakeRelay(std::function<QDateTime()> now)
-    : m_now(std::move(now)),
-      m_sockets(std::make_unique<QWebSocketServer>(QStringLiteral("relay"),
-                                                   QWebSocketServer::NonSecureMode)) {
+    : m_now(std::move(now)), m_sockets(std::make_unique<QWebSocketServer>(
+                                 QStringLiteral("relay"), QWebSocketServer::NonSecureMode)) {
     m_sockets->setSupportedSubprotocols({QStringLiteral("ketplus.control.v2")});
     QObject::connect(m_sockets.get(), &QWebSocketServer::newConnection, m_sockets.get(), [this] {
         while (QWebSocket* socket = m_sockets->nextPendingConnection())

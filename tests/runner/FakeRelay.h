@@ -191,6 +191,7 @@ class FakeRelay {
     [[nodiscard]] Reply approveTicket(const QString& ticketId, const QJsonObject& body);
     [[nodiscard]] Reply submitJob(const QJsonObject& body);
     [[nodiscard]] Reply cancelJob(const QString& jobId, const QJsonObject& body);
+    [[nodiscard]] static Reply appendEvents(const QJsonObject& body);
     [[nodiscard]] QJsonObject jobJson(const Job& job) const;
     [[nodiscard]] bool activePair(const QString& runnerId, const QString& machineId) const;
     [[nodiscard]] bool runnerMatches(const QString& runnerId, const Job& job) const;

@@ -35,7 +35,7 @@ bool terminal(const QString& state) {
 const QRegularExpression& desktopRoute() {
     static const QRegularExpression route(
         QStringLiteral("^/v2/(runner-pairing/|runner-jobs(/|$)|runners(\\?|$)|runners/[^/:]+/"
-                       "(unpair|disable|enable|remove)$|commands:poll(\\?|$))"));
+                       "(unpair|disable|enable|remove)$|commands:poll(\\?|$)|events:append$)"));
     return route;
 }
 
@@ -112,6 +112,9 @@ std::optional<FakeRelay::Reply> FakeRelay::handleDesktop(const Request& request)
     // The daemon polls its commands whenever the socket wakes it; this Relay has none.
     if (!post && path.startsWith(QStringLiteral("/v2/commands:poll")))
         return Reply{200, {{QStringLiteral("commands"), QJsonArray()}}};
+    // The daemon uploads its sessions' history; this Relay takes every event and keeps none.
+    if (post && path == QStringLiteral("/v2/events:append"))
+        return appendEvents(request.body);
     if (post && path == QStringLiteral("/v2/runner-pairing/tickets"))
         return createTicket(request.body);
     if (const auto match = ticketPath.match(path); match.hasMatch()) {
@@ -158,6 +161,25 @@ std::optional<FakeRelay::Reply> FakeRelay::handleDesktop(const Request& request)
     violate(QStringLiteral("desktop route not served: %1 %2")
                 .arg(QString::fromLatin1(request.method), path));
     return refusal(404, QStringLiteral("invalid_request"));
+}
+
+// Accepted through the highest cursor of each session generation the request carried.
+FakeRelay::Reply FakeRelay::appendEvents(const QJsonObject& body) {
+    QMap<QPair<QString, qint64>, qint64> highest;
+    for (const QJsonValue& value : body.value(QStringLiteral("events")).toArray()) {
+        const QJsonObject event = value.toObject();
+        const QPair<QString, qint64> place{
+            event.value(QStringLiteral("sessionId")).toString(),
+            event.value(QStringLiteral("sessionGeneration")).toInteger()};
+        highest[place] =
+            qMax(highest.value(place), event.value(QStringLiteral("cursor")).toInteger());
+    }
+    QJsonArray accepted;
+    for (auto it = highest.cbegin(); it != highest.cend(); ++it)
+        accepted.append(QJsonObject{{QStringLiteral("sessionId"), it.key().first},
+                                    {QStringLiteral("sessionGeneration"), it.key().second},
+                                    {QStringLiteral("cursor"), it.value()}});
+    return Reply{202, {{QStringLiteral("acceptedThrough"), accepted}}};
 }
 
 FakeRelay::Reply FakeRelay::createTicket(const QJsonObject& body) {
