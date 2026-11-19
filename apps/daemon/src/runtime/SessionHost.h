@@ -298,6 +298,32 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     [[nodiscard]] std::optional<QString>
     sidebarRepositoryAtCreation(const QString& path) const override;
     [[nodiscard]] QJsonObject sessionWorktrees(const QJsonObject& request);
+    // What session.worktrees asks git, read without the journal so a deferred request reads
+    // it on worktreeListingReads_ and the listing holds up no other command or event.
+    struct WorktreeListing final {
+        QString sessionWorktree;
+        QString recordedRoot;
+        QString requested;
+        bool sessionExists{false};
+        // The git common directory of the conversation's checkout, when it exists.
+        QString sessionCommon;
+        // worktreeCatalogRoot's answer, and the common directory of that root.
+        QString sessionCatalogRoot;
+        QString sessionCatalogCommon;
+        // The repository listed: the requested one, or the conversation's.
+        QString catalogRoot;
+        QString catalogCommon;
+        QJsonArray entries;
+    };
+    [[nodiscard]] static WorktreeListing readWorktreeListing(const QString& sessionWorktree,
+                                                             const QString& recordedRoot,
+                                                             const QString& requested);
+    [[nodiscard]] QJsonObject worktreePage(Session& current, const QJsonObject& payload,
+                                           const WorktreeListing& listing);
+    void sessionWorktreesDeferred(const QJsonObject& request, const QString& clientId,
+                                  CommandCallback done);
+    // Set only while handleCommand answers a deferred session.worktrees that read it.
+    const WorktreeListing* prefetchedWorktreeListing_{nullptr};
     [[nodiscard]] QJsonObject switchWorktree(const QJsonObject& request);
     // What git says about a switch's target; read on any thread.
     struct WorktreeFacts final {
@@ -683,6 +709,9 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     // ADR 0118: the remote's pull requests, apart from git, so a slow network holds no merge
     // check, review diff or worktree. Set when the host stops, to end a batch early.
     QThreadPool teamRemote_;
+    // session.worktrees listings, apart from the team's git so a picker never waits on a team.
+    static constexpr int worktreeListingThreads = 2;
+    QThreadPool worktreeListingReads_;
     std::shared_ptr<std::atomic_bool> teamRemoteStopping_{
         std::make_shared<std::atomic_bool>(false)};
 };

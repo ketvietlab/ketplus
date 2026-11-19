@@ -333,6 +333,7 @@ SessionHost::SessionHost(LocalJournal* journal, CodexAdapter* adapter,
     mediaReads_.setMaxThreadCount(mediaReadThreads);
     teamGit_.setMaxThreadCount(1);
     teamBranchNames_.setMaxThreadCount(1);
+    worktreeListingReads_.setMaxThreadCount(worktreeListingThreads);
     teamRemote_.setMaxThreadCount(1);
     // A generated image whose inline pixels history retention drops keeps a 512 px preview.
     journal_->setImagePreviewWriter([this](const QByteArray& image, const QString& sessionId) {
@@ -1925,6 +1926,11 @@ void SessionHost::handleCommandDeferred(const QJsonObject& incoming, const QStri
     if (request.value(QStringLiteral("message_type")).toString() ==
         QStringLiteral("session.media.read")) {
         mediaReadDeferred(request, std::move(done));
+        return;
+    }
+    if (request.value(QStringLiteral("message_type")).toString() ==
+        QStringLiteral("session.worktrees")) {
+        sessionWorktreesDeferred(request, clientId, std::move(done));
         return;
     }
     if (isManagedTaskCommand(request.value("message_type").toString())) {
