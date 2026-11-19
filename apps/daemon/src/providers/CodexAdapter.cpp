@@ -164,6 +164,9 @@ void CodexAdapter::call(const QString& method, const QJsonObject& params, Callba
         callback({}, QStringLiteral("Codex CLI was not found."));
         return;
     }
+    // Listing models is when an updated CLI matters: restart onto it first, once idle.
+    if (method == QStringLiteral("model/list"))
+        restartForUpdatedExecutable();
     if (!ready_) {
         queued_.append({method, params, std::move(callback)});
         ensureStarted();
@@ -282,6 +285,17 @@ void CodexAdapter::restartForBrowserSettings() {
     emit reloaded(QStringLiteral("browser_settings"));
 }
 
+bool CodexAdapter::restartForUpdatedExecutable() {
+    if (process_->state() == QProcess::NotRunning || !ready_ || !isIdle() ||
+        compat::ProviderVersionProbe::fingerprintOf(executable_.path()) == launchedExecutable_)
+        return false;
+    // The same planned stop as a browser settings reload; the next call launches the new CLI,
+    // which the version probe checks again because its fingerprint changed.
+    stop();
+    emit reloaded(QStringLiteral("executable_updated"));
+    return true;
+}
+
 void CodexAdapter::noteUnexpectedStop() {
     // A crash after a long healthy run is a fresh failure, not part of a crash loop.
     const bool stable = readySince_.isValid() && readySince_.elapsed() >= stableRunMs;
@@ -364,6 +378,7 @@ void CodexAdapter::ensureStarted() {
     process_->setNativeArguments(launch.nativeArguments);
 #endif
     reloader_->launched(browserArguments);
+    launchedExecutable_ = compat::ProviderVersionProbe::fingerprintOf(executable_.path());
     process_->start();
 }
 
