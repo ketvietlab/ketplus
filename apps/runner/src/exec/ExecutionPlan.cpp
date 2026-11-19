@@ -32,7 +32,8 @@ PreparedLaunch refused(const QString& error) { return {{}, error}; }
 } // namespace
 
 PreparedLaunch prepareLaunch(const session::LaunchRequest& request,
-                             const QMap<QString, QString>& runnerEnvironment) {
+                             const QMap<QString, QString>& runnerEnvironment,
+                             const MountPlan* mounts) {
     QJsonObject execution;
     const protocol::Invocation& invocation = request.invocation;
     if (invocation.argv && !invocation.argv->isEmpty() && !invocation.shell) {
@@ -77,6 +78,18 @@ PreparedLaunch prepareLaunch(const session::LaunchRequest& request,
         delta.insert(it.key(), it.value());
     }
     execution.insert(QStringLiteral("env_delta"), delta);
+    if (mounts) {
+        if (!mounts->error.isEmpty() || mounts->workspace.isEmpty() || mounts->tmp.isEmpty())
+            return refused(mounts->error.isEmpty() ? QStringLiteral("mounts_missing")
+                                                   : mounts->error);
+        if (mounts->workspace != workspace)
+            return refused(QStringLiteral("workspace_outside_work"));
+        execution.insert(
+            QStringLiteral("mounts"),
+            QJsonObject{{QStringLiteral("hidden"), QJsonArray::fromStringList(mounts->hidden)},
+                        {QStringLiteral("workspace"), mounts->workspace},
+                        {QStringLiteral("tmp"), mounts->tmp}});
+    }
     if (QJsonDocument(execution).toJson(QJsonDocument::Compact).size() +
             QJsonDocument(base).toJson(QJsonDocument::Compact).size() >
         maxLaunchBytes)
@@ -84,31 +97,49 @@ PreparedLaunch prepareLaunch(const session::LaunchRequest& request,
     return {execution, {}};
 }
 
+bool directoriesNested(const QStringList& directories) {
+    for (qsizetype i = 0; i < directories.size(); ++i)
+        for (qsizetype j = 0; j < directories.size(); ++j)
+            if (i != j && !directories.at(i).isEmpty() && !directories.at(j).isEmpty() &&
+                inside(directories.at(i), directories.at(j)))
+                return true;
+    return false;
+}
+
 MountPlan planMounts(const QString& stateDirectory, const QString& workDirectory,
-                     const QString& runtimeDirectory, const QString& workspace) {
+                     const QString& runtimeDirectory, const QString& workspace,
+                     const QString& tmp) {
     MountPlan plan;
     const QString state = realDirectory(stateDirectory);
     const QString work = realDirectory(workDirectory);
-    const QString job = realDirectory(workspace);
     if (state.isEmpty() || work.isEmpty()) {
         plan.error = QStringLiteral("runner_directory_missing");
         return plan;
     }
-    if (job.isEmpty() || job == work || !inside(job, work) || inside(job, state)) {
+    const QString runtime =
+        runtimeDirectory.isEmpty() ? QString() : realDirectory(runtimeDirectory);
+    if ((!runtimeDirectory.isEmpty() && runtime.isEmpty()) ||
+        directoriesNested({state, work, runtime})) {
+        plan.error = QStringLiteral("runtime_directory_invalid");
+        return plan;
+    }
+    // With the three apart, a directory inside the work directory is outside the other two.
+    const QString job = realDirectory(workspace);
+    if (job.isEmpty() || job == work || !inside(job, work)) {
         plan.error = QStringLiteral("workspace_outside_work");
         return plan;
     }
-    plan.hidden = {state, work};
-    if (!runtimeDirectory.isEmpty()) {
-        const QString runtime = realDirectory(runtimeDirectory);
-        if (runtime.isEmpty() || inside(job, runtime)) {
-            plan.error = QStringLiteral("runtime_directory_invalid");
-            plan.hidden.clear();
-            return plan;
-        }
-        plan.hidden.append(runtime);
+    const QString jobTmp = realDirectory(tmp);
+    if (jobTmp.isEmpty() || jobTmp == work || !inside(jobTmp, work) || inside(jobTmp, job) ||
+        inside(job, jobTmp)) {
+        plan.error = QStringLiteral("tmp_directory_invalid");
+        return plan;
     }
+    plan.hidden = {state, work};
+    if (!runtime.isEmpty())
+        plan.hidden.append(runtime);
     plan.workspace = job;
+    plan.tmp = jobTmp;
     return plan;
 }
 

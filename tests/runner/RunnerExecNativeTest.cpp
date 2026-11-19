@@ -6,11 +6,13 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QRandomGenerator>
 #include <QTemporaryDir>
 #include <QTest>
 
 #include <csignal>
 #include <memory>
+#include <optional>
 
 #include <unistd.h>
 
@@ -77,7 +79,29 @@ struct Native {
     std::unique_ptr<ExecutorCommandRunner> runner;
 };
 
-bool gone(const qint64 pid) { return pid > 0 && ::kill(static_cast<pid_t>(pid), 0) != 0; }
+[[maybe_unused]] bool gone(const qint64 pid) {
+    return pid > 0 && ::kill(static_cast<pid_t>(pid), 0) != 0;
+}
+
+#ifdef Q_OS_LINUX
+// A job's pids are its own namespace's: from here its processes are found by a marker in their
+// command line.
+int processesWith(const QByteArray& marker) {
+    int found = 0;
+    for (const QString& pid : QDir(QStringLiteral("/proc")).entryList(QDir::Dirs)) {
+        QFile file(QStringLiteral("/proc/") + pid + QStringLiteral("/cmdline"));
+        if (pid.toLongLong() > 0 && file.open(QIODevice::ReadOnly) &&
+            file.readAll().contains(marker))
+            ++found;
+    }
+    return found;
+}
+
+QByteArray nonce() {
+    return "300." + QByteArray::number(::getpid()) +
+           QByteArray::number(QRandomGenerator::global()->bounded(100000));
+}
+#endif
 
 } // namespace
 
@@ -86,6 +110,10 @@ class RunnerExecNativeTest : public QObject {
 
   private slots:
     void initTestCase() {
+#ifdef Q_OS_LINUX
+        if (qEnvironmentVariable("KETPLUS_RUN_LINUX_JOB_TESTS") != QStringLiteral("1"))
+            QSKIP("set KETPLUS_RUN_LINUX_JOB_TESTS=1 in a prepared Linux user session");
+#endif
         QVERIFY(QFileInfo(QStringLiteral(KETPLUS_JOB_EXECUTOR_PATH)).isExecutable());
     }
 
@@ -122,15 +150,22 @@ class RunnerExecNativeTest : public QObject {
         QCOMPARE(n.output, QByteArray("out\nerr\n")); // stdout and stderr in one stream
     }
 
-    // macOS reports no exit code for a command a signal ended.
+    // macOS reports no exit code for a command a signal ended; Linux reports 128 + the signal.
     void signalledCommandHasNoExitCode() {
         Native n;
+#ifdef Q_OS_LINUX
+        // The command is its namespace's init, which no signal of its own ends: a child is killed.
+        n.runner->launch(n.shell(QStringLiteral("sh -c 'kill -KILL $$'; exit $?")));
+        QVERIFY(n.finished());
+        QCOMPARE(n.exits.first().exitCode, 137);
+#else
         n.runner->launch(n.shell(QStringLiteral("kill -KILL $$")));
         QVERIFY(n.finished());
         QCOMPARE(n.exits.first().state, QStringLiteral("failed"));
         QCOMPARE(n.exits.first().reason, QStringLiteral("exit_status_unknown"));
         QVERIFY(!n.exits.first().exitCode);
         QVERIFY(!n.exits.first().signal);
+#endif
     }
 
     // Many MiB of binary and UTF-8 bytes arrive whole and in order, all before the end.
@@ -160,6 +195,20 @@ class RunnerExecNativeTest : public QObject {
     // SIGTERM end too, and the end is reported once.
     void killEndsTheGroupIgnoringTerm() {
         Native n;
+#ifdef Q_OS_LINUX
+        const QByteArray marker = nonce();
+        n.runner->launch(n.shell(QStringLiteral("trap '' TERM; sh -c 'trap \"\" TERM; sleep ") +
+                                 QString::fromLatin1(marker) +
+                                 QStringLiteral("' & echo ready; wait; wait")));
+        QTRY_VERIFY_WITH_TIMEOUT(n.output.contains("ready") && processesWith(marker) >= 1, 20'000);
+        n.runner->kill();
+        QVERIFY(n.finished(70'000));
+        QCOMPARE(processesWith(marker), 0);
+        QTest::qWait(200);
+        QCOMPARE(n.exits.size(), 1);
+        QCOMPARE(n.exits.first().cleanupStatus, QStringLiteral("verified"));
+        QVERIFY(n.runner->admit());
+#else
         n.runner->launch(n.shell(
             QStringLiteral("trap '' TERM; sh -c 'trap \"\" TERM; echo $$ > child.pid; sleep 300' & "
                            "echo $$ > root.pid; echo ready; wait; wait")));
@@ -175,11 +224,30 @@ class RunnerExecNativeTest : public QObject {
         // On macOS the executor's cleanup is best effort: the job's directory stays.
         QCOMPARE(n.exits.first().cleanupStatus, QStringLiteral("unverified"));
         QVERIFY(!n.runner->admit());
+#endif
     }
 
     // A job left by a runner that went away is stopped by the next one, never run again.
     void leftJobIsStoppedAfterARestart() {
         Native n;
+#ifdef Q_OS_LINUX
+        const QByteArray marker = nonce();
+        n.runner->launch(n.shell(QStringLiteral("exec sleep ") + QString::fromLatin1(marker),
+                                 QStringLiteral("team/job.1")));
+        QTRY_COMPARE_WITH_TIMEOUT(processesWith(marker), 1, 20'000);
+        n.runner.reset();
+        QCOMPARE(processesWith(marker), 1);
+        n.runner = n.make();
+        std::optional<bool> clean;
+        n.runner->cleanUpLeftovers(
+            [&clean](const bool isClean, const QString&) { clean = isClean; });
+        QTRY_VERIFY_WITH_TIMEOUT(clean.has_value(), 90'000);
+        QVERIFY(*clean);
+        QCOMPARE(processesWith(marker), 0);
+        QVERIFY(ExecutorDirectories(n.root + QStringLiteral("/state/executor")).names().isEmpty());
+        QVERIFY(n.runner->admit());
+        QVERIFY(n.exits.isEmpty());
+#else
         n.runner->launch(n.shell(QStringLiteral("echo $$ > root.pid; exec sleep 300"),
                                  QStringLiteral("team/job.1")));
         QTRY_VERIFY_WITH_TIMEOUT(n.pidIn(QStringLiteral("root.pid")) > 0, 20'000);
@@ -206,6 +274,7 @@ class RunnerExecNativeTest : public QObject {
         QVERIFY(directories.read(directories.names().first()));
         QVERIFY(!n.runner->admit());
         QVERIFY(n.exits.isEmpty());
+#endif
     }
 };
 

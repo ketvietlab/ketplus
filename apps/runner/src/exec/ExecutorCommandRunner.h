@@ -1,7 +1,9 @@
 #pragma once
 
 #include "exec/ExecPorts.h"
+#include "exec/ExecutionPlan.h"
 #include "exec/ExecutorDirectories.h"
+#include "exec/JobTmpDirectories.h"
 #include "exec/Readiness.h"
 #include "session/SessionPorts.h"
 
@@ -22,8 +24,16 @@ namespace ketplus::runner::exec {
 
 class ExecutorCommandRunner final : public QObject, public session::CommandRunner {
   public:
+    // The directories a job's mounts hide. The job's own /tmp is made under `work`.
+    struct Mounts {
+        QString state;
+        QString work;
+        QString runtime; // the user's runtime directory, or empty
+    };
     struct Options {
         QString directory; // the executor's job directories, under the runner's state directory
+        // Where the executor applies them: every command runs with them, or not at all.
+        std::optional<Mounts> mounts;
         // The runner's own environment, read at each launch.
         std::function<QMap<QString, QString>()> environment;
         qint64 backstopMs = 60'000;          // added to the job's time limit for the executor's
@@ -77,6 +87,10 @@ class ExecutorCommandRunner final : public QObject, public session::CommandRunne
     };
 
     void fail(const session::LaunchRequest& request, const QString& reason);
+    [[nodiscard]] PreparedLaunch prepareMounted(const session::LaunchRequest& request,
+                                                const QString& taskId);
+    void removeTmp(const QString& taskId);
+    void sweepTmp(); // job tmp directories of no job left
     void onEvent(const Running* running, const QJsonObject& event);
     void poll();
     bool readOutput(int pages);
@@ -97,6 +111,7 @@ class ExecutorCommandRunner final : public QObject, public session::CommandRunne
     PlatformPolicy& m_policy;
     Events m_events;
     ExecutorDirectories m_directories;
+    std::optional<JobTmpDirectories> m_tmp; // with mounts
     std::unique_ptr<Running> m_running;
     std::unique_ptr<Running> m_unsettled; // reported unverified, waiting for its cleanup
     QTimer m_poll;
