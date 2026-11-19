@@ -177,7 +177,7 @@ AtlasDescriptor AtlasIndex::readManifest(const QString& path, const QString& roo
     const QFileInfo info(path);
     const auto canonicalPath = info.canonicalFilePath();
     if (canonicalRoot.isEmpty() || !info.isFile() || info.isSymLink() ||
-        !canonicalPath.startsWith(canonicalRoot + QDir::separator()) ||
+        !canonicalPath.startsWith(canonicalRoot + QLatin1Char('/')) ||
         !canonicalPath.endsWith(".ketatlas/atlas.json") || info.size() > maximumManifestBytes)
         return {};
     return parseManifest(QFileInfo(canonicalPath), canonicalRoot);

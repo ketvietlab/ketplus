@@ -83,11 +83,13 @@ class AtlasTest final : public QObject {
         QCOMPARE(actual.flowCount, 1);
         QVERIFY(ketplus::AtlasIndex::readManifest(atlas.path, outside.path()).path.isEmpty());
         const auto foreign = fixture(outside.path());
+#if !defined(Q_OS_WIN) // QFile::link makes a .lnk shortcut on Windows, not a symbolic link
         QVERIFY(QFile::link(QFileInfo(foreign.path).absolutePath(),
                             workspace.filePath("link.ketatlas")));
         QVERIFY(ketplus::AtlasIndex::readManifest(workspace.filePath("link.ketatlas/atlas.json"),
                                                   workspace.path())
                     .path.isEmpty());
+#endif
         QVERIFY(write(atlas.path, "{invalid"));
         QVERIFY(ketplus::AtlasIndex::readManifest(atlas.path, workspace.path()).path.isEmpty());
         QVERIFY(write(atlas.path, QByteArray(ketplus::AtlasIndex::maximumManifestBytes + 1, ' ')));
@@ -167,6 +169,9 @@ class AtlasTest final : public QObject {
     }
 
     void newestNodeVersionIsSearchedFirst() {
+#if defined(Q_OS_WIN)
+        QSKIP("The nvm layout (~/.nvm/versions/node/<v>/bin/ketatlas) is a POSIX convention");
+#endif
         if (QFileInfo::exists("/opt/homebrew/bin/ketatlas") ||
             QFileInfo::exists("/usr/local/bin/ketatlas"))
             QSKIP("a system ketatlas is found before nvm");

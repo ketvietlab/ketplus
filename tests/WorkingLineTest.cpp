@@ -1,6 +1,7 @@
 #include "agent/AgentSessionManager.h"
 #include "agent/CodexAppServer.h"
 #include "agent/ReasoningHeading.h"
+#include "daemon/ScriptFixture.h"
 
 #include <QDir>
 #include <QFile>
@@ -57,7 +58,7 @@ class WorkingLineTest final : public QObject {
         QVERIFY(directory.isValid());
         const QString worktree = directory.filePath("worktree");
         QVERIFY(QDir().mkpath(worktree));
-        const QString serverPath = directory.filePath("fake-codex");
+        const QString serverPath = fixtureName(directory.filePath("fake-codex"));
         QFile server(serverPath);
         QVERIFY(server.open(QIODevice::WriteOnly));
         const QByteArray source = R"PY(#!/usr/bin/python3
@@ -89,8 +90,7 @@ for line in sys.stdin:
 )PY";
         QCOMPARE(server.write(source), source.size());
         server.close();
-        QVERIFY(QFile::setPermissions(serverPath, QFileDevice::ReadOwner | QFileDevice::WriteOwner |
-                                                      QFileDevice::ExeOwner));
+        QVERIFY(finalizeScriptFixture(server));
 
         ketplus::CodexAppServer appServer(serverPath);
         ketplus::AgentSessionManager manager(&appServer);
@@ -108,13 +108,56 @@ for line in sys.stdin:
             QVERIFY(!emitted.at(1).toString().contains(QStringLiteral("secret")));
     }
 
+    // The manager can be destroyed before the server it talks to. A request still waiting for its
+    // reply must then be dropped, not failed into the freed manager (this crashed on Windows).
+    void serverOutlivingTheManagerDropsPendingReplies() {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString worktree = directory.filePath("worktree");
+        QVERIFY(QDir().mkpath(worktree));
+        const QString serverPath = fixtureName(directory.filePath("fake-codex"));
+        QFile server(serverPath);
+        QVERIFY(server.open(QIODevice::WriteOnly));
+        const QByteArray source = R"PY(#!/usr/bin/python3
+import json
+import sys
+import time
+
+def send(value):
+    print(json.dumps(value, separators=(",", ":")), flush=True)
+
+for line in sys.stdin:
+    message = json.loads(line)
+    method = message.get("method")
+    request_id = message.get("id")
+    if method == "initialize":
+        send({"id": request_id, "result": {"codexHome": "/tmp", "platformFamily": "unix", "platformOs": "macos", "userAgent": "fake"}})
+    elif method == "thread/start":
+        send({"id": request_id, "result": {"thread": {"id": "thread-1", "turns": []}}})
+    elif method == "turn/start":
+        time.sleep(60)  # the reply never comes while the test runs
+)PY";
+        QCOMPARE(server.write(source), source.size());
+        server.close();
+        QVERIFY(finalizeScriptFixture(server));
+
+        ketplus::CodexAppServer appServer(serverPath);
+        {
+            ketplus::AgentSessionManager manager(&appServer);
+            manager.submitPrompt(worktree, QStringLiteral("Wait forever"));
+            QTRY_VERIFY_WITH_TIMEOUT(manager.isRunning(worktree), 3000);
+            QTest::qWait(500); // thread/start answered, turn/start is the pending request
+        }
+        // appServer is destroyed here with the request still pending, and no stop() before it.
+    }
+
     // A background conversation in the same worktree ending its turn leaves the active one's line.
     void keepsTheActiveConversationsLine() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
         const QString worktree = directory.filePath("worktree");
         QVERIFY(QDir().mkpath(worktree));
-        const QString serverPath = directory.filePath("fake-codex");
+        const QString serverPath = fixtureName(directory.filePath("fake-codex"));
         QFile server(serverPath);
         QVERIFY(server.open(QIODevice::WriteOnly));
         const QByteArray source = R"PY(#!/usr/bin/python3
@@ -156,8 +199,7 @@ for line in sys.stdin:
 )PY";
         QCOMPARE(server.write(source), source.size());
         server.close();
-        QVERIFY(QFile::setPermissions(serverPath, QFileDevice::ReadOwner | QFileDevice::WriteOwner |
-                                                      QFileDevice::ExeOwner));
+        QVERIFY(finalizeScriptFixture(server));
 
         ketplus::CodexAppServer appServer(serverPath);
         ketplus::AgentSessionManager manager(&appServer);

@@ -2,6 +2,7 @@
 #include "agent/AgentSessionManager.h"
 #include "agent/CodexAppServer.h"
 #include "app/WaitingBadge.h"
+#include "daemon/ScriptFixture.h"
 #include "ui/Theme.h"
 #include "workspace/ActivityBar.h"
 #include "workspace/SymbolIcons.h"
@@ -36,7 +37,7 @@ class ConversationAttentionTest final : public QObject {
         QFETCH(bool, approval);
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const QString executable = directory.filePath("fake-codex");
+        const QString executable = fixtureName(directory.filePath("fake-codex"));
         QFile file(executable);
         QVERIFY(file.open(QIODevice::WriteOnly));
         file.write(R"PY(#!/usr/bin/python3
@@ -56,8 +57,7 @@ for line in sys.stdin:
         send({"method":"item/completed","params":{"threadId":"attention-thread","turnId":"attention-turn","item":item}})
 )PY");
         file.close();
-        QVERIFY(file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner |
-                                    QFileDevice::ExeOwner));
+        QVERIFY(finalizeScriptFixture(file));
         CodexAppServer server(executable);
         AgentSessionManager manager(&server);
         ActivityBar bar;
@@ -140,7 +140,7 @@ for line in sys.stdin:
     void awaitingReplyFromCompletedTurn() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const QString executable = directory.filePath("fake-codex");
+        const QString executable = fixtureName(directory.filePath("fake-codex"));
         QFile file(executable);
         QVERIFY(file.open(QIODevice::WriteOnly));
         file.write(R"PY(#!/usr/bin/python3
@@ -159,8 +159,7 @@ for line in sys.stdin:
         send({"method":"item/completed","params":{"threadId":"waiting-thread","turnId":"waiting-turn","item":item}})
 )PY");
         file.close();
-        QVERIFY(file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner |
-                                    QFileDevice::ExeOwner));
+        QVERIFY(finalizeScriptFixture(file));
         CodexAppServer server(executable);
         AgentSessionManager manager(&server);
         ActivityBar bar;

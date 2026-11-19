@@ -167,7 +167,9 @@ class TranscriptFileOpeningTest final : public QObject {
         QVERIFY(write("ảnh #1.png", QByteArray::fromHex("89504e470d0a1a0a0000")));
         QVERIFY(write("report.pdf", "%PDF-1.7\n"));
         QVERIFY(root.mkpath("Example.app/Contents"));
+#if !defined(Q_OS_WIN) // QFile::link makes a .lnk shortcut on Windows, not a symbolic link
         QVERIFY(QFile::link(root.filePath("ảnh #1.png"), root.filePath("image-link")));
+#endif
         QVERIFY(write("report", QByteArray::fromHex("cffaedfe07000001")));
         QVERIFY(QFile(root.filePath("report"))
                     .setPermissions(QFile(root.filePath("report")).permissions() |
@@ -219,7 +221,11 @@ class TranscriptFileOpeningTest final : public QObject {
         QCOMPARE(opened_.size(), 0);
         const auto editorCount = window.findChildren<ketplus::EditorWidget*>().size();
 
+#if defined(Q_OS_WIN)
+        const QStringList names{"ảnh #1.png", "report.pdf"};
+#else
         const QStringList names{"ảnh #1.png", "report.pdf", "image-link"};
+#endif
         for (const auto& name : names) {
             const QString path = root.filePath(name);
             agent->openRelativeFile(QUrl::fromLocalFile(path).toString(QUrl::FullyEncoded));

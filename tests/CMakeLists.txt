@@ -1,5 +1,17 @@
 include("${CMAKE_CURRENT_LIST_DIR}/daemon/credential-store/FixtureDaemon.cmake")
 
+# Provider fixtures written as Python scripts run on Windows through ketplus_script_launcher
+# (daemon/ScriptFixture.h). Tests outside tests/daemon need the launcher path too; the launcher
+# target itself is defined in tests/daemon.
+if(WIN32)
+    find_package(Python3 COMPONENTS Interpreter)
+    if(Python3_Interpreter_FOUND)
+        add_compile_definitions(KETPLUS_SCRIPT_LAUNCHER="$<TARGET_FILE:ketplus_script_launcher>")
+    else()
+        add_compile_definitions(KETPLUS_SCRIPT_LAUNCHER="") # no interpreter: those tests are disabled
+    endif()
+endif()
+
 if(APPLE)
     find_package(Python3 REQUIRED COMPONENTS Interpreter)
     add_test(NAME ketplus_macos_signing_cli_tests
@@ -187,11 +199,19 @@ target_link_libraries(ketplus_team_page_language_tests PRIVATE Qt6::Test ketplus
 target_compile_definitions(ketplus_team_page_language_tests PRIVATE
     KETPLUS_TEAM_TS="${PROJECT_SOURCE_DIR}/modules/remote/translations/ketplus_teams_vi.ts")
 # Historical catalogs remain complete; new English UI text needs no Vietnamese translation.
-add_test(NAME ketplus_team_translation_catalog_tests
-    COMMAND Python3::Interpreter
-        "${PROJECT_SOURCE_DIR}/modules/remote/translations/update_team_translations.py"
-        --check-preserved "$<TARGET_FILE:Qt6::lupdate>" "${PROJECT_SOURCE_DIR}"
-        "${PROJECT_SOURCE_DIR}/modules/remote/translations/ketplus_teams_vi.ts")
+# Needs a Python 3 interpreter; without one the test is not registered.
+if(NOT TARGET Python3::Interpreter)
+    find_package(Python3 COMPONENTS Interpreter)
+endif()
+if(TARGET Python3::Interpreter)
+    add_test(NAME ketplus_team_translation_catalog_tests
+        COMMAND Python3::Interpreter
+            "${PROJECT_SOURCE_DIR}/modules/remote/translations/update_team_translations.py"
+            --check-preserved "$<TARGET_FILE:Qt6::lupdate>" "${PROJECT_SOURCE_DIR}"
+            "${PROJECT_SOURCE_DIR}/modules/remote/translations/ketplus_teams_vi.ts")
+else()
+    message(STATUS "ketplus_team_translation_catalog_tests: no Python 3 interpreter, not registered")
+endif()
 # ADR 0114 §10: the disk warning and the removal of a done task's worktree.
 ketplus_add_gui_test(ketplus_team_storage_page_tests TeamStoragePageTest.cpp)
 target_link_libraries(ketplus_team_storage_page_tests PRIVATE Qt6::Test ketplus_desktop_shell)

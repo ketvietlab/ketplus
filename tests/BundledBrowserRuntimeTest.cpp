@@ -28,12 +28,19 @@ void writeFile(const QString& path, const QByteArray& bytes = {},
         QVERIFY(file.setPermissions(permissions));
 }
 
+// Windows only treats a file with an executable suffix as executable.
+#if defined(Q_OS_WIN)
+const QString nodeRelative = QStringLiteral("bin/node.exe");
+#else
+const QString nodeRelative = QStringLiteral("bin/node");
+#endif
+
 QJsonObject validManifest() {
     return QJsonObject{
         {QStringLiteral("name"), QStringLiteral("ketplus-browser")},
         {QStringLiteral("version"), QStringLiteral("0.1.0")},
         {QStringLiteral("nodeVersion"), QStringLiteral("v24.21.0")},
-        {QStringLiteral("node"), QStringLiteral("bin/node")},
+        {QStringLiteral("node"), nodeRelative},
         {QStringLiteral("protocols"), QJsonArray{QStringLiteral("browser.v0")}},
         {QStringLiteral("entrypoints"),
          QJsonObject{{QStringLiteral("mcp"), QStringLiteral("src/mcp.mjs")},
@@ -57,7 +64,7 @@ struct FakeBundle final {
 
     void create(const QJsonObject& manifest = validManifest(), const bool executableNode = true) {
         QDir().mkpath(macos());
-        writeFile(runtime() + QStringLiteral("/bin/node"), "#!/bin/sh\n",
+        writeFile(runtime() + QLatin1Char('/') + nodeRelative, "#!/bin/sh\n",
                   executableNode ? QFileDevice::ReadOwner | QFileDevice::ExeOwner
                                  : QFileDevice::ReadOwner | QFileDevice::WriteOwner);
         writeFile(runtime() + QStringLiteral("/src/mcp.mjs"));
@@ -85,7 +92,7 @@ class BundledBrowserRuntimeTest final : public QObject {
             const auto runtime = findBundledBrowserRuntime(appDir);
             QVERIFY2(runtime.has_value(), qPrintable(appDir));
             QCOMPARE(runtime->rootDir, canonicalRoot);
-            QCOMPARE(runtime->nodePath, canonicalRoot + QStringLiteral("/bin/node"));
+            QCOMPARE(runtime->nodePath, canonicalRoot + QLatin1Char('/') + nodeRelative);
             QCOMPARE(runtime->mcpEntry, canonicalRoot + QStringLiteral("/src/mcp.mjs"));
             QCOMPARE(runtime->jsonRpcEntry, canonicalRoot + QStringLiteral("/src/cli.mjs"));
             QCOMPARE(runtime->skillFile,
@@ -123,12 +130,14 @@ class BundledBrowserRuntimeTest final : public QObject {
     }
 
     void rejectsInvalidRuntimes() {
+#if !defined(Q_OS_WIN) // a .exe is executable whatever its mode bits
         {
             FakeBundle bundle;
             bundle.create(validManifest(), false);
             QVERIFY(
                 !loadBundledBrowserRuntime(bundle.runtime()).has_value()); // node not executable
         }
+#endif
         const auto rejects = [](const std::function<void(QJsonObject&)>& mutate) {
             FakeBundle bundle;
             bundle.create();
@@ -156,6 +165,7 @@ class BundledBrowserRuntimeTest final : public QObject {
                             {QStringLiteral("jsonrpc"), QStringLiteral("src/cli.mjs")}};
         }));
 
+#if !defined(Q_OS_WIN) // QFile::link makes a .lnk shortcut on Windows, not a symbolic link
         {
             // A symlinked entrypoint that resolves outside the runtime root is rejected.
             FakeBundle bundle;
@@ -168,6 +178,7 @@ class BundledBrowserRuntimeTest final : public QObject {
             QVERIFY(QFileInfo(link).isFile());
             QVERIFY(!loadBundledBrowserRuntime(bundle.runtime()).has_value());
         }
+#endif
         {
             // Manifests over 64 KiB are not parsed, even when otherwise valid.
             FakeBundle bundle;
@@ -202,15 +213,17 @@ class BundledBrowserRuntimeTest final : public QObject {
             provider.resolve(QLatin1String(browserToolId), QLatin1String(mcpStdioProtocol));
         QVERIFY(launch.has_value());
         const QString root = QFileInfo(bundle.runtime()).canonicalFilePath();
-        QCOMPARE(launch->command, root + QStringLiteral("/bin/node"));
+        QCOMPARE(launch->command, root + QLatin1Char('/') + nodeRelative);
         QCOMPARE(launch->args, QStringList{root + QStringLiteral("/src/mcp.mjs")});
         QCOMPARE(launch->workingDirectory, root);
         QCOMPARE(launch->env.value(QStringLiteral("KETPLUS_BROWSER_CACHE")), cacheDir);
         QVERIFY(QFileInfo(cacheDir).isDir());
+#if !defined(Q_OS_WIN) // Windows reports group and other bits from the ACL, not from a mode
         QCOMPARE(QFile::permissions(cacheDir) &
                      (QFileDevice::ReadGroup | QFileDevice::WriteGroup | QFileDevice::ExeGroup |
                       QFileDevice::ReadOther | QFileDevice::WriteOther | QFileDevice::ExeOther),
                  QFileDevice::Permissions{});
+#endif
         // Inherited NODE_OPTIONS and Playwright download hosts are overridden with empty values.
         for (const auto* name :
              {"NODE_OPTIONS", "PLAYWRIGHT_DOWNLOAD_HOST", "PLAYWRIGHT_CHROMIUM_DOWNLOAD_HOST"}) {
@@ -282,11 +295,13 @@ class BundledBrowserRuntimeTest final : public QObject {
         writeFile(skills + QStringLiteral("/ketatlas/SKILL.md"), "---\n");
         // Not shipped by KetPlus, and a link out of the bundle is not a shipped skill.
         writeFile(skills + QStringLiteral("/other/SKILL.md"), "---\n");
+#if !defined(Q_OS_WIN) // QFile::link makes a .lnk shortcut on Windows, not a symbolic link
         QTemporaryDir outside;
         writeFile(outside.filePath(QStringLiteral("SKILL.md")), "---\n");
         QVERIFY(QDir().mkpath(skills + QStringLiteral("/enterprise-grade")));
         QVERIFY(QFile::link(outside.filePath(QStringLiteral("SKILL.md")),
                             skills + QStringLiteral("/enterprise-grade/SKILL.md")));
+#endif
 
         for (const QString& appDir : {bundle.macos(), bundle.helpers()}) {
             const auto found = bundledSkills(appDir);

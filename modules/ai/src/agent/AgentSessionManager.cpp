@@ -782,7 +782,7 @@ void AgentSessionManager::submitPrompt(const QString& worktreePath, const QStrin
                 return value.isLetterOrNumber() || value == '-' || value == '_' || value == '.';
             });
         if (!atlasPath.isEmpty() && !root.isEmpty() &&
-            atlasPath.startsWith(root + QDir::separator())) {
+            atlasPath.startsWith(root + QLatin1Char('/'))) {
             preferredContext =
                 QStringLiteral("\nPreferred Atlas context: bundle `%1`%2. This is a focus hint, "
                                "not an isolation boundary; shared files can affect other flows.\n")

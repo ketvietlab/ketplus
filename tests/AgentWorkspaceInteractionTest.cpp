@@ -12,6 +12,7 @@
 #include "agent/MermaidLabelContrast.h"
 #include "agent/ProviderRuntimeStatus.h"
 #include "agent/TranscriptFileLinks.h"
+#include "daemon/ScriptFixture.h"
 #include "ui/Theme.h"
 #include <QQmlComponent>
 #include <QScopeGuard>
@@ -45,7 +46,7 @@ using namespace agent_workspace_test;
 void AgentWorkspaceViewTest::compactionLifecycleAndCommand() {
     QTemporaryDir directory;
     QVERIFY(directory.isValid());
-    const auto serverPath = directory.filePath("fake-codex");
+    const auto serverPath = fixtureName(directory.filePath("fake-codex"));
     QFile server(serverPath);
     QVERIFY(server.open(QIODevice::WriteOnly));
     const QByteArray source = R"PY(#!/usr/bin/python3
@@ -81,8 +82,7 @@ for line in sys.stdin:
 )PY";
     QCOMPARE(server.write(source), source.size());
     server.close();
-    QVERIFY(QFile::setPermissions(serverPath, QFileDevice::ReadOwner | QFileDevice::WriteOwner |
-                                                  QFileDevice::ExeOwner));
+    QVERIFY(finalizeScriptFixture(server));
     ketplus::CodexAppServer appServer(serverPath);
     ketplus::AgentSessionManager manager(&appServer);
     QSignalSpy errors(&manager, &ketplus::AgentSessionManager::errorOccurred);
@@ -205,7 +205,7 @@ for line in sys.stdin:
 void AgentWorkspaceViewTest::directModeAutoApprovesOnlyInjectedBrowserTools() {
     QTemporaryDir directory;
     QVERIFY(directory.isValid());
-    const QString serverPath = directory.filePath("fake-codex-elicitation");
+    const QString serverPath = fixtureName(directory.filePath("fake-codex-elicitation"));
     const QString logPath = directory.filePath("responses.log");
     QFile server(serverPath);
     QVERIFY(server.open(QIODevice::WriteOnly));
@@ -241,8 +241,7 @@ for line in sys.stdin:
         QJsonDocument(QJsonArray{logPath}).toJson(QJsonDocument::Compact).mid(1).chopped(1));
     server.write(source);
     server.close();
-    QVERIFY(QFile::setPermissions(serverPath, QFileDevice::ReadOwner | QFileDevice::WriteOwner |
-                                                  QFileDevice::ExeOwner));
+    QVERIFY(finalizeScriptFixture(server));
     const auto logText = [&logPath] {
         QFile log(logPath);
         return log.open(QIODevice::ReadOnly) ? log.readAll() : QByteArray();
@@ -277,7 +276,7 @@ void AgentWorkspaceViewTest::answersAgentQuestionsSequentially() {
     ket::Appearance::instance().setMode(ket::Appearance::Mode::Dark);
     QTemporaryDir directory;
     QVERIFY(directory.isValid());
-    const auto serverPath = directory.filePath("fake-codex-question");
+    const auto serverPath = fixtureName(directory.filePath("fake-codex-question"));
     QFile server(serverPath);
     QVERIFY(server.open(QIODevice::WriteOnly));
     const QByteArray source = R"PY(#!/usr/bin/python3
@@ -332,8 +331,7 @@ for line in sys.stdin:
 )PY";
     QCOMPARE(server.write(source), source.size());
     server.close();
-    QVERIFY(QFile::setPermissions(serverPath, QFileDevice::ReadOwner | QFileDevice::WriteOwner |
-                                                  QFileDevice::ExeOwner));
+    QVERIFY(finalizeScriptFixture(server));
 
     ketplus::CodexAppServer appServer(serverPath);
     ketplus::AgentSessionManager manager(&appServer);
@@ -695,8 +693,10 @@ void AgentWorkspaceViewTest::linksFileReferencesInInlineCode() {
     // names a local file, so only the guard keeps it from linking.
     const QString local =
         QFileInfo(root.filePath(QStringLiteral("docs/hướng-dẫn/tài-liệu.md"))).absoluteFilePath();
+#if !defined(Q_OS_WIN) // "/C:/…" does not name the file on Windows
     QVERIFY(QFileInfo(QLatin1Char('/') + local).isFile());
     QVERIFY(links.href(QLatin1Char('/') + local).isEmpty());
+#endif
 }
 
 void AgentWorkspaceViewTest::mermaidFillsGetReadableLabels() {
@@ -1652,8 +1652,10 @@ void AgentWorkspaceViewTest::mentionsOnlyFilesInConversationWorktree() {
     QVERIFY(writeFile(QDir(worktree).filePath(QStringLiteral("src/app/main.cpp"))));
     QVERIFY(writeFile(QDir(worktree).filePath(QStringLiteral("README.md"))));
     QVERIFY(writeFile(outside.filePath(QStringLiteral("secret.txt"))));
+#if !defined(Q_OS_WIN) // QFile::link makes a .lnk shortcut on Windows, not a symbolic link
     QVERIFY(QFile::link(outside.filePath(QStringLiteral("secret.txt")),
                         QDir(worktree).filePath(QStringLiteral("escape.txt"))));
+#endif
 
     const QVector<mentions::Mention> parsed = mentions::parseMentions(
         QStringLiteral("See @src/app/main.cpp, @\"a b/c.txt\" and mail me@example.com."));
@@ -1673,8 +1675,10 @@ void AgentWorkspaceViewTest::mentionsOnlyFilesInConversationWorktree() {
              mentions::Resolution::Outside);
     QCOMPARE(mentions::resolve(worktree, outside.filePath(QStringLiteral("secret.txt"))).resolution,
              mentions::Resolution::Outside);
+#if !defined(Q_OS_WIN)
     QCOMPARE(mentions::resolve(worktree, QStringLiteral("escape.txt")).resolution,
              mentions::Resolution::Outside);
+#endif
     // Paths that name nothing on disk are ordinary text, wherever they would point.
     QCOMPARE(mentions::resolve(worktree, QStringLiteral("/api/users")).resolution,
              mentions::Resolution::Missing);
@@ -1717,12 +1721,18 @@ void AgentWorkspaceViewTest::mentionsOnlyFilesInConversationWorktree() {
     view.submitConfiguredPrompt(QStringLiteral("Read @../secret.txt"), {});
     QCOMPARE(configured.count(), 0);
     QCOMPARE(rejected.count(), 1);
+#if !defined(Q_OS_WIN) // needs the symbolic link above
     view.submitConfiguredPrompt(QStringLiteral("Read @escape.txt"), {});
     QCOMPARE(configured.count(), 0);
     QCOMPARE(rejected.count(), 2);
+#endif
     view.submitConfiguredPrompt(QStringLiteral("Call @/api/users"), {});
     QCOMPARE(configured.count(), 1);
+#if defined(Q_OS_WIN)
+    QCOMPARE(rejected.count(), 1); // without the escape.txt symbolic link
+#else
     QCOMPARE(rejected.count(), 2);
+#endif
 
     // Typing `@` in the composer opens the file palette.
     auto* root = view.quickView()->rootObject();

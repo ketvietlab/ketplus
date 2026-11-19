@@ -3,6 +3,7 @@
 #include "agent/AgentSessionManager.h"
 #include "agent/AgentWorkspaceView.h"
 #include "agent/CodexAppServer.h"
+#include "daemon/ScriptFixture.h"
 
 #include <QDir>
 #include <QFile>
@@ -14,11 +15,15 @@
 #include <QtTest>
 
 void AgentWorkspaceViewTest::missingWorktreeKeepsHistoryAndCanStop() {
+#if defined(Q_OS_WIN)
+    QSKIP("Windows cannot remove a directory that a running process uses as its working "
+          "directory, so the worktree cannot be deleted under the running provider");
+#endif
     QTemporaryDir directory;
     QVERIFY(directory.isValid());
     const QString path = QDir(QFileInfo(directory.path()).canonicalFilePath()).filePath("worktree");
     QVERIFY(QDir().mkdir(path));
-    const QString scriptPath = directory.filePath("fake-codex");
+    const QString scriptPath = fixtureName(directory.filePath("fake-codex"));
     QFile script(scriptPath);
     QVERIFY(script.open(QIODevice::WriteOnly));
     script.write(R"PY(#!/usr/bin/env python3
@@ -38,8 +43,7 @@ for line in sys.stdin:
         send({"method":"turn/completed","params":{"threadId":"missing-thread","turn":{"id":"running-turn","status":"interrupted"}}})
 )PY");
     script.close();
-    QVERIFY(script.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner |
-                                  QFileDevice::ExeOwner));
+    QVERIFY(finalizeScriptFixture(script));
     ketplus::CodexAppServer server(scriptPath);
     ketplus::AgentSessionManager manager(&server);
     manager.submitPrompt(path, "Keep running until interrupted");

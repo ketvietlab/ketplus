@@ -32,6 +32,9 @@ class SettingsComputerPageTest final : public QObject {
     }
 
     void togglesAndDenyListPersist() {
+#if defined(Q_OS_WIN)
+        QSKIP("Computer use ships only with the macOS app bundle (KetPlus Computer.app)");
+#endif
         QTemporaryDir root;
         const QString helpers = root.filePath(QStringLiteral("Helpers"));
         const QString front = helpers + QStringLiteral("/KetPlus Computer.app/") +
@@ -80,6 +83,9 @@ class SettingsComputerPageTest final : public QObject {
     }
 
     void failedSaveRevertsTheToggle() {
+#if defined(Q_OS_WIN)
+        QSKIP("Computer use ships only with the macOS app bundle (KetPlus Computer.app)");
+#endif
         QTemporaryDir root;
         const QString helpers = root.filePath(QStringLiteral("Helpers"));
         const QString front = helpers + QStringLiteral("/KetPlus Computer.app/") +

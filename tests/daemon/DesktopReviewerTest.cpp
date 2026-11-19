@@ -1,3 +1,4 @@
+#include "TestSettings.h"
 #include "TranscriptWindowTestSupport.h"
 
 #include <QSignalSpy>
@@ -7,7 +8,10 @@
 class DesktopReviewerTest final : public QObject {
     Q_OBJECT
   private slots:
-    void initTestCase() { QStandardPaths::setTestModeEnabled(true); }
+    void initTestCase() {
+        isolateTestSettings(QStringLiteral("DesktopReviewerTest"));
+        QStandardPaths::setTestModeEnabled(true);
+    }
 
     void assignsAndClearsTheReviewerByConversationNumber() {
         Environment env;
@@ -123,7 +127,7 @@ class DesktopReviewerTest final : public QObject {
                         }
                 });
         desktop.activate(path);
-        QCOMPARE(reads, 1);
+        QTRY_COMPARE(reads, 1); // the connection completes asynchronously on a Windows pipe
         QTRY_VERIFY_WITH_TIMEOUT(!results.isEmpty() &&
                                      results.last()
                                              .at(2)

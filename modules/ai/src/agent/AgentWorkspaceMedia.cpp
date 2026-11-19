@@ -516,6 +516,16 @@ QVariantMap AgentWorkspaceView::mermaidViewerImage(const QUrl& url) {
             {QStringLiteral("diagram"), url}};
 }
 
+namespace {
+// An image name is a URL, a "~/" path or a plain path. QUrl reads "C:/dir/a.png" as scheme "c",
+// so a drive path is turned into a file URL first.
+QUrl imageNameUrl(const QString& name) {
+    const bool drivePath = name.size() >= 3 && name.at(0).isLetter() && name.at(1) == u':' &&
+                           (name.at(2) == u'/' || name.at(2) == u'\\');
+    return drivePath ? QUrl::fromLocalFile(name) : QUrl(name);
+}
+} // namespace
+
 QUrl AgentWorkspaceView::messageImageAt(QObject* document, int position) const {
     auto* quickDocument = qobject_cast<QQuickTextDocument*>(document);
     if (!quickDocument || !quickDocument->textDocument() || position < 0 ||
@@ -530,7 +540,7 @@ QUrl AgentWorkspaceView::messageImageAt(QObject* document, int position) const {
     const QString name = format.toImageFormat().name();
     if (name.startsWith(QStringLiteral("~/")))
         return QUrl::fromLocalFile(QDir::home().filePath(name.mid(2)));
-    return messageBaseUrl().resolved(QUrl(name));
+    return messageBaseUrl().resolved(imageNameUrl(name));
 }
 
 QString AgentWorkspaceView::messageLinkAt(QObject* document, int position) const {
@@ -875,7 +885,7 @@ QVariantMap AgentWorkspaceView::mermaidLayout(QObject* document, const QString& 
             const bool placeholder = name == QStringLiteral("qrc:/agent/mermaid-pending.svg") ||
                                      name == QStringLiteral("qrc:/agent/mermaid-placeholder.svg");
             if (!placeholder &&
-                !mermaidImages_.contains(messageBaseUrl().resolved(QUrl(name)).toString()))
+                !mermaidImages_.contains(messageBaseUrl().resolved(imageNameUrl(name)).toString()))
                 continue;
             // The block's rect gives up the room that centers the diagram; the frame does not.
             const qreal centering =

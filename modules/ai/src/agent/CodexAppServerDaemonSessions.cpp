@@ -68,7 +68,13 @@ void CodexAppServer::setupDaemonTransport() {
     connect(daemon_, &remote::DaemonClient::disconnected, this, [](const QString&) {});
 }
 
-CodexAppServer::~CodexAppServer() { stop(); }
+CodexAppServer::~CodexAppServer() {
+    // A pending reply's owner (an AgentSessionManager that was destroyed first) is already gone,
+    // so a failure callback now would call into freed memory; nobody is left to tell.
+    pending_.clear();
+    queued_.clear();
+    stop();
+}
 
 void CodexAppServer::prioritizeDaemonRestore(const QString& worktreePath,
                                              const QString& sessionId) {

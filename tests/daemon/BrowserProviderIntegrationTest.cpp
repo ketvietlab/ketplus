@@ -130,7 +130,7 @@ class BrowserProviderIntegrationTest final : public QObject {
         writeFile(app + QStringLiteral("/src/mcp.mjs"));
         QVERIFY(QDir().mkpath(app + QStringLiteral("/node_modules/@modelcontextprotocol/server")));
         QVERIFY(QDir().mkpath(app + QStringLiteral("/node_modules/playwright-core")));
-        const QString node = root.filePath(QStringLiteral("node with spaces"));
+        const QString node = root.filePath(fixtureName(QStringLiteral("node with spaces")));
         writeFile(node);
         QVERIFY(QFile::setPermissions(node, QFileDevice::ReadOwner | QFileDevice::ExeOwner));
         browser::Settings settings;

@@ -2,6 +2,7 @@
 #include "agent/AgentSessionManager.h"
 #include "agent/AgentWorkspaceView.h"
 #include "agent/CodexAppServer.h"
+#include "daemon/ScriptFixture.h"
 #include "ui/Theme.h"
 
 #include <QAbstractItemModelTester>
@@ -139,7 +140,7 @@ void AgentWorkspaceViewTest::streamsAndKeepsSessionsByWorktree() {
     QVERIFY(QDir().mkpath(firstWorktree));
     QVERIFY(QDir().mkpath(secondWorktree));
 
-    const QString serverPath = directory.filePath(QStringLiteral("fake-codex"));
+    const QString serverPath = fixtureName(directory.filePath(QStringLiteral("fake-codex")));
     QFile server(serverPath);
     QVERIFY(server.open(QIODevice::WriteOnly));
     const QByteArray source = R"PY(#!/usr/bin/python3
@@ -190,8 +191,7 @@ for line in sys.stdin:
 )PY";
     QCOMPARE(server.write(source), source.size());
     server.close();
-    QVERIFY(QFile::setPermissions(serverPath, QFileDevice::ReadOwner | QFileDevice::WriteOwner |
-                                                  QFileDevice::ExeOwner));
+    QVERIFY(finalizeScriptFixture(server));
 
     ketplus::CodexAppServer appServer(serverPath);
     ketplus::AgentSessionManager manager(&appServer);
@@ -269,7 +269,7 @@ for line in sys.stdin:
 
 void AgentWorkspaceViewTest::configuredTurnsAndAttachments() {
     QTemporaryDir directory;
-    const QString scriptPath = directory.filePath("server.py");
+    const QString scriptPath = fixtureName(directory.filePath("server.py"));
     QFile script(scriptPath);
     QVERIFY(script.open(QIODevice::WriteOnly));
     script.write(R"PY(#!/usr/bin/env python3
@@ -292,8 +292,7 @@ for line in sys.stdin:
         send({"method":"turn/completed","params":{"threadId":"test-thread","turn":{"id":"test-turn","status":"completed"}}})
 )PY");
     script.close();
-    QVERIFY(QFile::setPermissions(scriptPath, QFileDevice::ReadOwner | QFileDevice::WriteOwner |
-                                                  QFileDevice::ExeOwner));
+    QVERIFY(finalizeScriptFixture(script));
     ketplus::CodexAppServer server(scriptPath);
     ketplus::AgentSessionManager manager(&server);
     QSignalSpy catalog(&manager, &ketplus::AgentSessionManager::modelsLoaded);
@@ -437,7 +436,7 @@ void AgentWorkspaceViewTest::doesNotShowEmptyJsonWhenTurnFailsAfterError() {
     QVERIFY(directory.isValid());
     const QString worktree = directory.filePath(QStringLiteral("worktree"));
     QVERIFY(QDir().mkpath(worktree));
-    const QString scriptPath = directory.filePath(QStringLiteral("server.py"));
+    const QString scriptPath = fixtureName(directory.filePath(QStringLiteral("server.py")));
     QFile script(scriptPath);
     QVERIFY(script.open(QIODevice::WriteOnly));
     script.write(R"PY(#!/usr/bin/env python3
@@ -460,8 +459,7 @@ for line in sys.stdin:
         send({"method": "turn/completed", "params": {"threadId": "fail-thread", "turn": {"id": "fail-turn", "status": "failed"}}})
 )PY");
     script.close();
-    QVERIFY(QFile::setPermissions(scriptPath, QFileDevice::ReadOwner | QFileDevice::WriteOwner |
-                                                  QFileDevice::ExeOwner));
+    QVERIFY(finalizeScriptFixture(script));
     ketplus::CodexAppServer server(scriptPath);
     ketplus::AgentSessionManager manager(&server);
     manager.activate(worktree);
