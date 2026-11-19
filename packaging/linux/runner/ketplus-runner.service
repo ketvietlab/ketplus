@@ -25,8 +25,11 @@ Restart=on-failure
 RestartSec=5
 NoNewPrivileges=yes
 ProtectSystem=strict
-# No private /tmp: the job supervisor runs in the account's user manager and listens in the
-# account's control directory under the host's /tmp, which the drop-in makes writable here.
+# The job supervisor runs in the account's user manager and listens under the host's /tmp, where
+# the runner must reach it, and the runner's Git runs in temporary directories there: no private
+# /tmp, and /tmp writable under ProtectSystem=strict (its usual permissions for an unprivileged
+# account).
+ReadWritePaths=/tmp
 ProtectKernelModules=yes
 ProtectKernelLogs=yes
 ProtectClock=yes

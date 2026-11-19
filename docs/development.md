@@ -342,9 +342,9 @@ Removing the package stops and disables the service, unloads the AppArmor profil
 and turns off the linger the package turned on; it keeps the account, the
 registration, the state and the profile file. Purging deletes the state, the work
 directory, the job control directory, the profile file and its compiled cache, the
-service drop-in and the `tmpfiles.d` entry, and the account and its group only when
-the package created them. Maintainer scripts make no network call: deregister before
-purging, or remove the runner on the Relay afterwards. An upgrade restarts a running
+service drop-in, and the account and its group only when the package created them.
+Maintainer scripts make no network call: deregister before purging, or remove the
+runner on the Relay afterwards. An upgrade restarts a running
 service.
 
 A package built for an `http` loopback Relay needs `--test-only`; it is named
