@@ -6,12 +6,14 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonDocument>
+#include <QRandomGenerator>
 #include <QRegularExpression>
 #include <utility>
 #if defined(Q_OS_WIN)
 #include <qt_windows.h>
 #endif
 #if defined(Q_OS_UNIX)
+#include <cerrno>
 #include <fcntl.h>
 #include <sys/file.h>
 #include <sys/stat.h>
@@ -67,6 +69,60 @@ class StoreLock {
         return fail(error, QStringLiteral(
                                "Credential storage is busy or inaccessible; retry the operation."));
     }
+    // The lock file's content names the last commit, so a cached record can be checked
+    // against it. Empty until the first commit by a build that writes generations.
+    bool generation(QByteArray* value, QString* error) const {
+        char buffer[generationBytes + 1];
+#if defined(Q_OS_UNIX)
+        ssize_t count;
+        do {
+            count = ::pread(descriptor_, buffer, sizeof buffer, 0);
+        } while (count < 0 && errno == EINTR);
+        if (count >= 0) {
+            *value = QByteArray(buffer, qsizetype(count));
+            return true;
+        }
+#elif defined(Q_OS_WIN)
+        LARGE_INTEGER start{};
+        DWORD count = 0;
+        if (::SetFilePointerEx(handle_, start, nullptr, FILE_BEGIN) &&
+            ::ReadFile(handle_, buffer, DWORD(sizeof buffer), &count, nullptr)) {
+            *value = QByteArray(buffer, qsizetype(count));
+            return true;
+        }
+#else
+        Q_UNUSED(buffer);
+        Q_UNUSED(value);
+#endif
+        return fail(error, QStringLiteral("Unable to read the credential lock generation."));
+    }
+    bool advance(QByteArray* value, QString* error) const {
+        QByteArray next(generationBytes, Qt::Uninitialized);
+        QRandomGenerator::system()->fillRange(reinterpret_cast<quint32*>(next.data()),
+                                              generationBytes / sizeof(quint32));
+#if defined(Q_OS_UNIX)
+        ssize_t count;
+        do {
+            count = ::pwrite(descriptor_, next.constData(), size_t(next.size()), 0);
+        } while (count < 0 && errno == EINTR);
+        if (count != next.size() || ::ftruncate(descriptor_, next.size()) != 0)
+            return fail(error, QStringLiteral("Unable to record the credential lock generation."));
+#elif defined(Q_OS_WIN)
+        LARGE_INTEGER start{};
+        DWORD count = 0;
+        if (!::SetFilePointerEx(handle_, start, nullptr, FILE_BEGIN) ||
+            !::WriteFile(handle_, next.constData(), DWORD(next.size()), &count, nullptr) ||
+            count != DWORD(next.size()) || !::SetEndOfFile(handle_))
+            return fail(error, QStringLiteral("Unable to record the credential lock generation."));
+#else
+        return fail(error, QStringLiteral("Unable to record the credential lock generation."));
+#endif
+        *value = std::move(next);
+        return true;
+    }
+
+  private:
+    static constexpr qsizetype generationBytes = 16;
 };
 QString credentialPath(const QString& service) {
     return QDir(remote::DaemonPaths::dataDirectory())
@@ -172,22 +228,44 @@ bool CredentialStore::transaction(const std::function<bool(QHash<QString, QByteA
     StoreLock lock;
     if (!lock.acquire(legacyPath_ + QStringLiteral(".lock"), error))
         return false;
-    QByteArray bytes;
-    const auto read = backend_->read(service_, &bytes, error);
-    if (read == CredentialBackend::Result::Error)
+    QByteArray generation;
+    if (!lock.generation(&generation, error))
         return false;
+    const QFileInfo legacy(legacyPath_);
+    const bool legacyPresent = legacy.exists() || legacy.isSymLink();
     QJsonObject record;
     QHash<QString, QByteArray> accounts;
-    if (read == CredentialBackend::Result::Found) {
-        if (!parse(bytes, &record, error))
-            return false;
-        if (record.value("version") != QJsonValue(1) || !record.value("accounts").isObject())
-            return fail(error, QStringLiteral("Unsupported credential record format."));
-        if (!decode(record.value("accounts").toObject(), &accounts, error))
-            return false;
+    auto read = CredentialBackend::Result::Found;
+    bool cached = false;
+    {
+        std::lock_guard guard(cacheMutex_);
+        // A legacy file still needs the migration checks below, which compare it with the OS
+        // record itself.
+        if (cache_.valid && !legacyPresent && cache_.generation == generation) {
+            record = cache_.record;
+            accounts = cache_.accounts;
+            cached = true;
+        } else {
+            cache_ = {};
+        }
     }
-    const QFileInfo legacy(legacyPath_);
-    if (legacy.exists() || legacy.isSymLink()) {
+    if (cached && !backend_->accessible(service_, error))
+        return false;
+    if (!cached) {
+        QByteArray bytes;
+        read = backend_->read(service_, &bytes, error);
+        if (read == CredentialBackend::Result::Error)
+            return false;
+        if (read == CredentialBackend::Result::Found) {
+            if (!parse(bytes, &record, error))
+                return false;
+            if (record.value("version") != QJsonValue(1) || !record.value("accounts").isObject())
+                return fail(error, QStringLiteral("Unsupported credential record format."));
+            if (!decode(record.value("accounts").toObject(), &accounts, error))
+                return false;
+        }
+    }
+    if (legacyPresent) {
         QByteArray legacyBytes;
         if (!readLegacy(legacyPath_, &legacyBytes, error))
             return false;
@@ -197,7 +275,8 @@ bool CredentialStore::transaction(const std::function<bool(QHash<QString, QByteA
                 return false;
             record = {{"version", 1}, {"accounts", values}, {"legacyDigest", digest(legacyBytes)}};
             const auto migrated = QJsonDocument(record).toJson(QJsonDocument::Compact);
-            if (migrated.size() > maximumRecordBytes || !backend_->write(service_, migrated, error))
+            if (migrated.size() > maximumRecordBytes || !lock.advance(&generation, error) ||
+                !backend_->write(service_, migrated, error))
                 return fail(error, QStringLiteral("Credential migration could not commit to the OS "
                                                   "store; the legacy file is retained."));
             QByteArray verified;
@@ -228,11 +307,22 @@ bool CredentialStore::transaction(const std::function<bool(QHash<QString, QByteA
         const auto updated = QJsonDocument(record).toJson(QJsonDocument::Compact);
         if (updated.size() > maximumRecordBytes)
             return fail(error, QStringLiteral("The credential record exceeds the storage limit."));
-        if (!backend_->write(service_, updated, error))
+        {
+            // The OS record may change below even if the write reports failure.
+            std::lock_guard guard(cacheMutex_);
+            cache_ = {};
+        }
+        // The generation moves before the record does, so no store keeps a record that a
+        // failed or partial write here might have replaced.
+        if (!lock.advance(&generation, error) || !backend_->write(service_, updated, error))
             return false;
     }
+    {
+        std::lock_guard guard(cacheMutex_);
+        cache_ = {true, generation, record, accounts};
+    }
     if (result)
-        *result = accounts;
+        *result = std::move(accounts);
     return true;
 }
 QByteArray CredentialStore::read(const QString& account, QString* error) const {

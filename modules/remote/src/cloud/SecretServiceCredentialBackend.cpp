@@ -41,7 +41,7 @@ class SecretService final : public CredentialBackend {
                 "collection for the daemon's OS user and retry; no plaintext fallback is used.");
         return false;
     }
-    bool find(const QString& service, QString* item, QString* error) const {
+    bool unlocked(QString* error) const {
         const auto locked = call(collectionPath, "org.freedesktop.DBus.Properties", "Get",
                                  {collectionInterface, "Locked"});
         if (!valid(locked, "v", error))
@@ -53,6 +53,11 @@ class SecretService final : public CredentialBackend {
                                         "it outside KetPlus and retry.");
             return false;
         }
+        return true;
+    }
+    bool find(const QString& service, QString* item, QString* error) const {
+        if (!unlocked(error))
+            return false;
         const auto reply = call(collectionPath, collectionInterface, "SearchItems",
                                 {QVariant::fromValue(attributes(service))});
         if (!valid(reply, "ao", error))
@@ -95,6 +100,7 @@ class SecretService final : public CredentialBackend {
         qDBusRegisterMetaType<QMap<QString, QString>>();
         qDBusRegisterMetaType<QList<QDBusObjectPath>>();
     }
+    bool accessible(const QString&, QString* error) override { return unlocked(error); }
     Result read(const QString& service, QByteArray* value, QString* error) override {
         value->clear();
         QString item;
