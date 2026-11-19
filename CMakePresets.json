@@ -32,6 +32,24 @@
       }
     },
     {
+      "name": "release-macos-updates",
+      "displayName": "KetPlus Pro macOS release with Sparkle updates",
+      "inherits": "release",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Darwin"
+      },
+      "binaryDir": "${sourceDir}/build/release-macos-updates/$env{KETPLUS_UPDATE_CHANNEL}/$env{KETPLUS_UPDATE_ARCH}",
+      "cacheVariables": {
+        "CMAKE_OSX_ARCHITECTURES": "$env{KETPLUS_UPDATE_ARCH}",
+        "KETPLUS_REQUIRE_UPDATES": "ON",
+        "KETPLUS_UPDATE_CHANNEL": "$env{KETPLUS_UPDATE_CHANNEL}",
+        "KETPLUS_UPDATE_FEED_URL": "$env{KETPLUS_UPDATE_FEED_URL}",
+        "KETPLUS_UPDATE_PUBLIC_ED_KEY": "$env{KETPLUS_UPDATE_PUBLIC_ED_KEY}"
+      }
+    },
+    {
       "name": "daemon-dev",
       "displayName": "Headless daemon development",
       "generator": "Ninja",
@@ -85,6 +103,10 @@
     {
       "name": "release",
       "configurePreset": "release"
+    },
+    {
+      "name": "release-macos-updates",
+      "configurePreset": "release-macos-updates"
     },
     {
       "name": "daemon-dev",

@@ -141,6 +141,66 @@ notes before creating an archive. Existing archive or notes destinations, includ
 dangling symlinks, are refused rather than overwritten (ADR 0082). This preflight
 does not make artifact generation transactional or safe for concurrent writers.
 
+### Building macOS Pro with Sparkle
+
+Use the opt-in `release-macos-updates` preset for a release that checks an R2
+appcast. The `dev` and `release` presets leave updates disabled by default.
+The release owner supplies `QT_ROOT` for the target architecture,
+the approved `KETPLUS_UPDATE_BASE_URL` (the public HTTPS base before channel
+and architecture), and `KETPLUS_UPDATE_PUBLIC_ED_KEY` (the Sparkle public key
+for that feed). Keep operator configuration outside this repository.
+
+Run once per channel and architecture. This example stages a production Apple
+Silicon build in fresh operator-supplied `INSTALL_STAGE` and `SIGNED_STAGE`
+directories outside the checkout.
+
+```sh
+export KETPLUS_UPDATE_CHANNEL=production
+export KETPLUS_UPDATE_ARCH=arm64
+: "${KETPLUS_UPDATE_BASE_URL:?set the approved public HTTPS base}"
+: "${KETPLUS_UPDATE_PUBLIC_ED_KEY:?export the public key for this feed}"
+UPDATE_DOWNLOAD_PREFIX="${KETPLUS_UPDATE_BASE_URL%/}/$KETPLUS_UPDATE_CHANNEL/$KETPLUS_UPDATE_ARCH/"
+export KETPLUS_UPDATE_FEED_URL="${UPDATE_DOWNLOAD_PREFIX}appcast.xml"
+
+cmake --preset release-macos-updates
+cmake --build --preset release-macos-updates
+cmake --install "build/release-macos-updates/$KETPLUS_UPDATE_CHANNEL/$KETPLUS_UPDATE_ARCH" \
+  --prefix "$INSTALL_STAGE" --component Runtime
+```
+
+Use `x86_64` with the corresponding Qt/toolchain for the Intel release. The
+bundle check compares `SUFeedURL` and `SUPublicEDKey` with the build settings,
+then checks that the feed ends in the selected channel and architecture and
+that the executable carries exactly that Mach-O architecture. Each pair has a
+separate build directory. For a staging build, set the update channel to
+`staging`. When targeting staging for daemon Control as well, pass the same
+production-mode and Control URL overrides described above.
+
+After the owner approves signing and notarization, stage the signed app and
+prepare its scoped feed. Use the `bin` directory of the pinned Sparkle SDK as
+`SPARKLE_BIN` and provision the Sparkle signing key through the release Keychain.
+Keep the same update prefix, channel and architecture through the R2 upload.
+
+```sh
+packaging/macos/sign-notarize-dmg.sh --app "$INSTALL_STAGE/KetPlus.app" \
+  --output "$SIGNED_STAGE/KetPlus.app" --identity "$DEVELOPER_ID_IDENTITY" \
+  --notary-profile "$NOTARY_PROFILE"
+
+UPDATE_DIR="$UPDATE_ROOT/$KETPLUS_UPDATE_CHANNEL/$KETPLUS_UPDATE_ARCH"
+packaging/macos/publish-update.sh --app "$SIGNED_STAGE/KetPlus.app" \
+  --updates-dir "$UPDATE_DIR" --download-url-prefix "$UPDATE_DOWNLOAD_PREFIX" \
+  --channel "$KETPLUS_UPDATE_CHANNEL" --arch "$KETPLUS_UPDATE_ARCH" \
+  --sparkle-bin "$SPARKLE_BIN"
+
+python3 -I packaging/macos/upload-update-r2.py publish \
+  --updates-dir "$UPDATE_DIR" --download-url-prefix "$UPDATE_DOWNLOAD_PREFIX" \
+  --channel "$KETPLUS_UPDATE_CHANNEL" --arch "$KETPLUS_UPDATE_ARCH"
+```
+
+The last command is a dry run. The owner follows the R2 review and execution
+steps below before adding `--execute`. Run the publication sequence manually,
+outside the build and promotion workflows.
+
 ### Preparing a scoped macOS update
 
 `publish-update.sh` defaults to `--mode release`: strict code-signature verification,
