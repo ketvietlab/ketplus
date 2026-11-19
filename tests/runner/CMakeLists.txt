@@ -33,14 +33,24 @@ ketplus_enable_warnings(ketplus_runner_protocol_tests)
 target_link_libraries(ketplus_runner_protocol_tests PRIVATE Qt6::Test ketplus_runner_protocol)
 add_test(NAME ketplus_runner_protocol_tests COMMAND ketplus_runner_protocol_tests)
 
+# An in-process Relay on 127.0.0.1 for the runner, and for a desktop with the runner.
+add_library(ketplus_runner_fake_relay STATIC
+    FakeRelay.cpp FakeRelay.h FakeRelayDesktop.cpp FakeRelayJobs.cpp FakeRelayRules.cpp
+    FakeRelaySocket.cpp)
+ketplus_enable_warnings(ketplus_runner_fake_relay)
+target_include_directories(ketplus_runner_fake_relay PUBLIC "${CMAKE_CURRENT_SOURCE_DIR}")
+target_link_libraries(ketplus_runner_fake_relay PUBLIC
+    Qt6::Network Qt6::WebSockets ketplus_runner_pairing ketplus_control_crypto_primitives
+    OpenSSL::Crypto)
+
 # ketplus-runner against an in-process Relay on loopback: state directory, registration,
 # pairing, access tokens, heartbeat and job calls. No network beyond 127.0.0.1.
 qt_add_executable(ketplus_runner_app_tests
-    FakeRelay.cpp FakeRelay.h FakeRelayJobs.cpp RunnerAppDeliveryFilesTest.cpp RunnerAppLoopHost.cpp RunnerAppJobCallsTest.cpp RunnerAppPairingTest.cpp
+    RunnerAppDeliveryFilesTest.cpp RunnerAppLoopHost.cpp RunnerAppJobCallsTest.cpp RunnerAppPairingTest.cpp
     RunnerAppRunTest.cpp RunnerAppSecretsTest.cpp RunnerAppStateTest.cpp RunnerAppTest.cpp RunnerAppTest.h)
 ketplus_enable_warnings(ketplus_runner_app_tests)
 target_link_libraries(ketplus_runner_app_tests PRIVATE
-    Qt6::Test Qt6::Network ketplus_runner_run OpenSSL::Crypto)
+    Qt6::Test Qt6::Network ketplus_runner_run ketplus_runner_fake_relay OpenSSL::Crypto)
 add_test(NAME ketplus_runner_app_tests COMMAND ketplus_runner_app_tests)
 
 # `ketplus-runner run`: the run loop over a fake Relay, socket, peer transport, command
@@ -151,12 +161,11 @@ endif()
 # KETPLUS_RUN_LINUX_JOB_TESTS=1.
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND TARGET ketplus_job_executor)
     qt_add_executable(ketplus_runner_assembly_linux_tests
-        FakeRelay.cpp FakeRelay.h FakeRelayJobs.cpp RunnerAssemblyLinuxTest.cpp
-        RunnerAssemblyRig.cpp RunnerAssemblyRig.h)
+        RunnerAssemblyLinuxTest.cpp RunnerAssemblyRig.cpp RunnerAssemblyRig.h)
     ketplus_enable_warnings(ketplus_runner_assembly_linux_tests)
     target_link_libraries(ketplus_runner_assembly_linux_tests PRIVATE
-        Qt6::Test Qt6::Network ketplus_runner_run ketplus_runner_snapshot
-        ketplus_control_crypto_primitives OpenSSL::Crypto)
+        Qt6::Test Qt6::Network ketplus_runner_fake_relay ketplus_runner_run
+        ketplus_runner_snapshot)
     add_dependencies(ketplus_runner_assembly_linux_tests ketplus_job_executor)
     add_test(NAME ketplus_runner_assembly_linux_tests COMMAND ketplus_runner_assembly_linux_tests)
     set_tests_properties(ketplus_runner_assembly_linux_tests PROPERTIES TIMEOUT 900)

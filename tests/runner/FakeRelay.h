@@ -12,11 +12,20 @@
 #include <QUrl>
 
 #include <functional>
+#include <memory>
 #include <optional>
+
+class QWebSocket;
+class QWebSocketServer;
 
 // An in-process Relay on 127.0.0.1 that speaks the runner operations of the contract, checks
 // every signature and the refresh credential rotation rule, and plays the desktop's part in a
 // pairing. Tests change its answers through `intercept` and `rewrite`.
+//
+// It also serves the `/v2/relay` socket on the same port, to runners by their access token and,
+// with `machineToken` set, to one desktop, whose pairing and job routes it then answers too.
+// With `strict` set, every request and socket message is checked against the contract and each
+// departure is recorded in `violations`.
 namespace runner_app_test {
 
 class FakeRelay {
@@ -64,6 +73,7 @@ class FakeRelay {
         QString digest;
         QString approvalSignature;
         int polls = 0;
+        QJsonObject claim; // what runner.pairing.status shows once claimed
     };
     // A queued job and the lease a runner holds on it.
     struct Job {
@@ -74,6 +84,12 @@ class FakeRelay {
         QString state = QStringLiteral("queued");
         QString reason; // when the Relay ended it
         int attempt = 0;
+        QString submitKey; // jobs a desktop submitted
+        QString runnerId;
+        QString outcome;
+        QDateTime queuedAt;
+        QDateTime startedAt;
+        QDateTime endedAt;
     };
     struct Lease {
         QString id;
@@ -93,6 +109,16 @@ class FakeRelay {
         QString current;
         QString previous;
         bool removed = false;
+        QString name;
+        QString arch;
+        QStringList labels; // user labels
+    };
+    // A signaling attempt between a runner and a desktop.
+    struct Connection {
+        QString id;
+        QString runnerId;
+        QString machineId;
+        QString jobId;
     };
 
     explicit FakeRelay(std::function<QDateTime()> now);
@@ -104,6 +130,9 @@ class FakeRelay {
     [[nodiscard]] QByteArray createToken(const QString& machineId,
                                          const std::optional<QString>& runnerId = std::nullopt);
     [[nodiscard]] int count(const QString& method, const QString& pathPart) const;
+    // The queue time of a job not taken ran out: it is `expired`, and the desktop hears
+    // job.changed. False when the job is unknown or not queued.
+    bool expire(const QString& jobId);
     // Every secret this Relay handed out or was handed, to scan output and files for.
     [[nodiscard]] QStringList secrets() const;
 
@@ -124,6 +153,20 @@ class FakeRelay {
     // After it: may change the answer.
     std::function<void(const Request&, Reply&)> rewrite;
 
+    // The desktop (FakeRelayDesktop.cpp) and the socket (FakeRelaySocket.cpp).
+    QString machineToken; // the desktop's bearer token; empty serves no desktop
+    QString machineId = QStringLiteral("desktop-1");
+    // Socket messages in both directions as {"from", "message"}, "from" naming a runner id or
+    // "desktop"; SDP and candidates included, for the test's own checks only.
+    QList<QJsonObject> socketLog;
+    QMap<QString, Connection> connections;
+    [[nodiscard]] bool runnerOnline(const QString& runnerId) const;
+    [[nodiscard]] bool desktopOnline() const { return m_desktopSocket != nullptr; }
+    bool strict = false;
+    QStringList violations;
+    // Every desktop job route call, as "METHOD path".
+    [[nodiscard]] int jobCalls(const QString& method, const QString& pathPart) const;
+
   private:
     [[nodiscard]] Reply handle(const Request& request);
     [[nodiscard]] Reply registerRunner(const QJsonObject& body);
@@ -141,6 +184,34 @@ class FakeRelay {
                                 const QString& action, const QJsonObject& body);
     [[nodiscard]] QJsonObject leaseJson(const Lease& lease) const;
     [[nodiscard]] Job* jobOf(const QString& jobId);
+    // FakeRelayDesktop.cpp.
+    [[nodiscard]] std::optional<Reply> handleDesktop(const Request& request);
+    [[nodiscard]] Reply createTicket(const QJsonObject& body);
+    [[nodiscard]] Reply ticketStatus(const QString& ticketId);
+    [[nodiscard]] Reply approveTicket(const QString& ticketId, const QJsonObject& body);
+    [[nodiscard]] Reply submitJob(const QJsonObject& body);
+    [[nodiscard]] Reply cancelJob(const QString& jobId, const QJsonObject& body);
+    [[nodiscard]] QJsonObject jobJson(const Job& job) const;
+    [[nodiscard]] bool activePair(const QString& runnerId, const QString& machineId) const;
+    [[nodiscard]] bool runnerMatches(const QString& runnerId, const Job& job) const;
+    // The job's state changed: job.changed to the desktop.
+    void jobChanged(const Job& job);
+    // job.available to every runner whose socket is open and that could take the job.
+    void announce(const Job& job);
+    // FakeRelaySocket.cpp.
+    bool upgrade(QTcpSocket* socket);
+    void opened(QWebSocket* socket);
+    void fromRunner(const QString& runnerId, const QString& text);
+    void fromDesktop(const QString& text);
+    void sendRunner(const QString& runnerId, const QJsonObject& message);
+    void sendDesktop(const QJsonObject& message);
+    void signalStart(const QString& runnerId, const QJsonObject& message);
+    // A signal.offer, answer, candidate or end, sent on to the other side of its connection.
+    void relaySignal(const QString& from, QJsonObject message);
+    // FakeRelayRules.cpp: the contract's rules for a request and for a socket message.
+    void checkRequest(const Request& request);
+    void checkMessage(const QString& from, const QJsonObject& message);
+    void violate(const QString& what);
     [[nodiscard]] QJsonObject desktopKeys(const QString& machineId) const;
     // The ticket's pairing digest from the runner's key, as the desktop computes it.
     void claimTicket(Ticket& ticket, const Runner& runner);
@@ -153,6 +224,10 @@ class FakeRelay {
     QHash<QString, QString> m_bearers;      // access token -> runner id
     QHash<QTcpSocket*, QByteArray> m_input; // unparsed bytes per connection
     int m_nextId = 1;
+    std::unique_ptr<QWebSocketServer> m_sockets;
+    QHash<QString, QWebSocket*> m_runnerSockets; // by runner id
+    QWebSocket* m_desktopSocket = nullptr;
+    QHash<QString, QList<qint64>> m_starts; // signal.start times per runner, ms
 };
 
 [[nodiscard]] QString randomSecret();

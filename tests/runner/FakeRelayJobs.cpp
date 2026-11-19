@@ -76,13 +76,20 @@ FakeRelay::Reply FakeRelay::acquire(const QString& runnerId, const QJsonObject& 
     Job* job = nullptr;
     for (Job& candidate : jobs)
         if (candidate.state == QStringLiteral("queued") &&
-            (wanted.isEmpty() || candidate.id == wanted)) {
+            (wanted.isEmpty() || candidate.id == wanted) &&
+            (!strict || !wanted.isEmpty() || runnerMatches(runnerId, candidate))) {
             job = &candidate;
             break;
         }
     if (job == nullptr)
         return refused(QStringLiteral("job_unavailable"));
+    if (strict && !activePair(runnerId, job->machineId))
+        return {403, {{QStringLiteral("code"), QStringLiteral("not_paired")},
+                      {QStringLiteral("message"), QStringLiteral("not_paired")}}};
+    if (strict && !runnerMatches(runnerId, *job))
+        return refused(QStringLiteral("label_mismatch"));
     job->state = QStringLiteral("acquired");
+    job->runnerId = runnerId;
     ++job->attempt;
     Lease lease;
     lease.id = QStringLiteral("lease-%1").arg(leases.size() + 1);
@@ -91,6 +98,7 @@ FakeRelay::Reply FakeRelay::acquire(const QString& runnerId, const QJsonObject& 
     lease.acquireId = acquireId;
     lease.expiresAt = m_now().addSecs(300);
     leases.insert(lease.id, lease);
+    jobChanged(*job);
     return {200, leaseJson(lease)};
 }
 
@@ -116,6 +124,8 @@ FakeRelay::Reply FakeRelay::onLease(const QString& runnerId, const QString& leas
         if (lease.startedAt.isEmpty()) {
             lease.startedAt = utc(m_now());
             job.state = QStringLiteral("started");
+            job.startedAt = m_now();
+            jobChanged(job);
         }
         return {200, {{QStringLiteral("startedAt"), lease.startedAt}}};
     }
@@ -139,9 +149,16 @@ FakeRelay::Reply FakeRelay::onLease(const QString& runnerId, const QString& leas
         if (release) {
             lease.requeued = job.attempt < 3;
             job.state = lease.requeued ? QStringLiteral("queued") : QStringLiteral("failed");
+            job.runnerId.clear();
         } else {
             job.state = QStringLiteral("finished");
+            job.outcome = outcome;
+            job.reason = reason;
+            job.endedAt = m_now();
         }
+        jobChanged(job);
+        if (lease.requeued)
+            announce(job);
     }
     if (release)
         return {200, {{QStringLiteral("requeued"), lease.requeued}}};
