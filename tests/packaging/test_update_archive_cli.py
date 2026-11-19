@@ -79,7 +79,8 @@ if os.environ.get("UPDATE_APPCAST_FAIL"): sys.exit("synthetic signing failure")
     def feed(self, channel="production", architecture="arm64"):
         return ('<rss xmlns:ketplus="urn:ketplus:release"><channel><title>published appcast</title>'
                 + "<ketplus:releaseChannel>" + channel + "</ketplus:releaseChannel>"
-                + "<ketplus:architecture>" + architecture + "</ketplus:architecture></channel></rss>")
+                + "<ketplus:architecture>" + architecture + "</ketplus:architecture>"
+                + "<ketplus:releaseMode>release</ketplus:releaseMode></channel></rss>")
 
     def stub(self, name, body):
         path = self.bin / name
@@ -115,6 +116,16 @@ if os.environ.get("UPDATE_APPCAST_FAIL"): sys.exit("synthetic signing failure")
         result = self.run_update(["--mode", "local-qa"])
         self.assertEqual(result.returncode, 0, result.stderr)
         self.assertIn("Do not publish", result.stderr)
+        feed = ET.parse(self.updates / "appcast.xml").getroot()
+        self.assertEqual(feed.findtext("channel/{urn:ketplus:release}releaseMode"), "local-qa")
+
+    def test_release_cannot_reuse_local_qa_feed(self):
+        self.updates.mkdir()
+        feed = self.updates / "appcast.xml"
+        original = self.feed().replace(">release<", ">local-qa<")
+        feed.write_text(original)
+        self.assert_rejected_before_archive(self.run_update())
+        self.assertEqual(feed.read_text(), original)
 
     def test_local_qa_still_requires_valid_signature(self):
         self.env["UPDATE_INVALID_SIGNATURE"] = "1"
@@ -161,7 +172,8 @@ if os.environ.get("UPDATE_APPCAST_FAIL"): sys.exit("synthetic signing failure")
         original = ('<?xml version="1.0"?><rss xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" '
                     'xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:ketplus="urn:ketplus:release">'
                     '<channel><title>ketPlus Pro</title><ketplus:releaseChannel>production</ketplus:releaseChannel>'
-                    '<ketplus:architecture>arm64</ketplus:architecture><!-- preserve this -->'
+                    '<ketplus:architecture>arm64</ketplus:architecture>'
+                    '<ketplus:releaseMode>release</ketplus:releaseMode><!-- preserve this -->'
                     '<item><sparkle:version>1</sparkle:version><sparkle:shortVersionString>0.1.1</sparkle:shortVersionString>'
                     '<enclosure url="https://updates.example.invalid/production/arm64/KetPlus-0.1.1.zip" '
                     'sparkle:edSignature="synthetic-signature" /></item></channel></rss>').encode()

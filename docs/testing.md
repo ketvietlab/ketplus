@@ -480,6 +480,12 @@ the existing feed as generator input and its mode, no rollback after the feed is
 replaced, and repair/retry using synthetic
 Apple/archive/appcast tools. No signing key or network is used.
 
+Update publication and rollback changes run
+`python3 -I tests/packaging/test_update_r2_cli.py`. The fixture uses a local
+S3 CLI stub for conditional writes, archive collisions, scope and QA rejection,
+upload ordering and metadata, failure recovery, and appcast snapshot restore.
+No Cloudflare account, credentials, or network is used.
+
 Local IPC receive-buffer changes run the lifecycle loopback flood and resume
 regression before/after hello, plus the directly affected protocol, headless,
 credential, upgrade and desktop IPC targets. The fixture uses valid exact-limit
