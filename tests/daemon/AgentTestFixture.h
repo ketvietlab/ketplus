@@ -59,6 +59,16 @@ struct Fixture final {
     std::unique_ptr<CursorAdapter> cursor;
     std::unique_ptr<SessionHost> host;
 
+    // Stopping an adapter fails its pending calls, and those callbacks run in the host, so the
+    // adapters go first while the host is still alive (members would otherwise be destroyed in
+    // reverse order, host first).
+    ~Fixture() {
+        codex.reset();
+        claude.reset();
+        cursor.reset();
+        host.reset();
+    }
+
     bool open(const bool endpoint = false) {
         if (!directory.isValid())
             return false;

@@ -8,12 +8,18 @@
 inline QString absoluteTestPath(const QString& name) { return QDir::rootPath() + name; }
 
 // A test or data row that cannot run on Windows says why; the reason lands in the test output
-// and in docs/testing.md. Elsewhere these expand to nothing.
+// and in docs/testing.md. Elsewhere these expand to nothing. Setting KETPLUS_RUN_SKIPPED runs
+// them anyway, to investigate one.
 #if defined(Q_OS_WIN)
-#define KETPLUS_SKIP_ON_WINDOWS(reason) QSKIP(reason)
+#define KETPLUS_SKIP_ON_WINDOWS(reason)                                                            \
+    do {                                                                                           \
+        if (qEnvironmentVariableIsEmpty("KETPLUS_RUN_SKIPPED"))                                    \
+            QSKIP(reason);                                                                         \
+    } while (false)
 #define KETPLUS_SKIP_ROW_ON_WINDOWS(tag, reason)                                                   \
     do {                                                                                           \
-        if (QByteArray(QTest::currentDataTag()) == QByteArray(tag))                                \
+        if (QByteArray(QTest::currentDataTag()) == QByteArray(tag) &&                              \
+            qEnvironmentVariableIsEmpty("KETPLUS_RUN_SKIPPED"))                                    \
             QSKIP(reason);                                                                         \
     } while (false)
 #else

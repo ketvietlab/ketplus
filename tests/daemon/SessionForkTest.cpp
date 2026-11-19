@@ -334,14 +334,12 @@ class SessionForkTest final : public QObject {
     }
 
     void destinationCreatedWhileProviderForkIsPendingIsPreserved() {
-        KETPLUS_SKIP_ON_WINDOWS(
-            "the destination marker is not preserved on Windows; cause not yet diagnosed");
         QTemporaryDir dir;
         const auto executable = dir.filePath(fixtureName("fake-codex"));
         const auto log = dir.filePath("codex.log");
         const auto gate = dir.filePath("release-fork");
         QVERIFY(writeFakeCodex(executable, log));
-        QFile script(executable);
+        QFile script(scriptSourcePath(executable));
         QVERIFY(script.open(QIODevice::ReadOnly));
         auto bytes = script.readAll();
         script.close();

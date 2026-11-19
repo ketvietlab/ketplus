@@ -19,6 +19,16 @@ inline QString fixtureName(const QString& name) {
 #endif
 }
 
+// The file that holds a fixture's Python source: the executable itself on POSIX, the `.py` next
+// to the launcher on Windows. A test that edits the source of a fixture it wrote edits this file.
+inline QString scriptSourcePath(const QString& executable) {
+#if defined(Q_OS_WIN)
+    return executable + QStringLiteral(".py");
+#else
+    return executable;
+#endif
+}
+
 // Makes the script just written to `script` runnable as an executable. `script` must be
 // closed or closable; on Windows its file name must end in `.exe` (use fixtureName()).
 inline bool finalizeScriptFixture(QFile& script) {

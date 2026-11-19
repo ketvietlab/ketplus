@@ -64,7 +64,10 @@ output/time and disable external diff, textconv, fsmonitor and inherited Git
 repository overrides. Every operation disables replacement-object resolution,
 including base/tree/blob reads and receipt lookup. Diff enumeration, whitespace
 checks and clean-status fences explicitly include submodules regardless of local
-ignore configuration; a changed gitlink is an unsupported mode, never omitted
+ignore configuration; on Windows the evidence Git sets `core.autocrlf=input`, because Git for
+Windows rewrites checkouts with CRLF endings; a file that only swaps LF for CRLF still reads as
+modified when the index entry is not refreshed (a test covers that case; on Windows, an index
+refreshed under `core.autocrlf=true` can read the same file as clean); a changed gitlink is an unsupported mode, never omitted
 from the proof. No repository script, build or provider is executed.
 
 Opaque receipt IDs and per-check/scope/rollback references are minted by the host.

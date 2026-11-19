@@ -12,7 +12,6 @@
 #include <QPointer>
 #include <QProcess>
 #include <QRegularExpression>
-#include <QTemporaryFile>
 #include <QTimer>
 #include <QUuid>
 
@@ -168,15 +167,19 @@ void AgentBroker::snapshotWorktree(const QString& worktree,
            [self, worktree, done](std::optional<QString> indexPath) {
                if (!self || !indexPath)
                    return done(std::nullopt);
-               auto index = std::make_shared<QTemporaryFile>(
-                   QDir::temp().filePath(QStringLiteral("ketplus-review-XXXXXX.index")));
-               if (!index->open())
-                   return done(std::nullopt);
-               index->close();
-               // A new repository has no index yet; git then starts from an empty one.
+               // The copy is a plain file under a unique name, removed with its lock when the
+               // snapshot ends. (A QTemporaryFile left git unable to replace the index on
+               // Windows.) A new repository has no index yet; git then starts from an empty one,
+               // which is a missing file, because an empty file is not a valid index.
+               const QString indexName =
+                   QDir::temp().filePath(QStringLiteral("ketplus-review-%1.index").arg(newId()));
+               auto index = std::shared_ptr<QString>(new QString(indexName), [](QString* name) {
+                   QFile::remove(*name);
+                   QFile::remove(*name + QStringLiteral(".lock"));
+                   delete name;
+               });
                const QString source = QDir(worktree).absoluteFilePath(indexPath->trimmed());
-               QFile::remove(index->fileName());
-               if (QFileInfo::exists(source) && !QFile::copy(source, index->fileName()))
+               if (QFileInfo::exists(source) && !QFile::copy(source, *index))
                    return done(std::nullopt);
                runGit(
                    self, worktree, {QStringLiteral("add"), QStringLiteral("-A")},
@@ -190,9 +193,9 @@ void AgentBroker::snapshotWorktree(const QString& worktree,
                                         ? std::optional<QString>(tree->trimmed())
                                         : std::nullopt);
                            },
-                           index->fileName());
+                           *index);
                    },
-                   index->fileName());
+                   *index);
            });
 }
 

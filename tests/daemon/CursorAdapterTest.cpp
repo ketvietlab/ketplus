@@ -73,8 +73,6 @@ class CursorAdapterTest final : public QObject {
 
   private slots:
     void findsTheCliInstalledAfterStartup() {
-        KETPLUS_SKIP_ON_WINDOWS("finding an updated Cursor CLI after startup returns no executable "
-                                "on Windows; cause not yet diagnosed");
         // The daemon outlives a CLI install: Cursor's installer runs while KetPlus is open and
         // the setup banner's Retry has to see it without restarting KetPlus.
         QTemporaryDir directory;
@@ -82,9 +80,14 @@ class CursorAdapterTest final : public QObject {
         const QByteArray oldPath = qgetenv("PATH");
         const QByteArray oldHome = qgetenv("HOME");
         const QByteArray oldOverride = qgetenv("KETPLUS_CURSOR_AGENT");
+        const QByteArray oldLocalAppData = qgetenv("LOCALAPPDATA");
         const auto restore = qScopeGuard([&] {
             qputenv("PATH", oldPath);
             qputenv("HOME", oldHome);
+            if (oldLocalAppData.isNull())
+                qunsetenv("LOCALAPPDATA");
+            else
+                qputenv("LOCALAPPDATA", oldLocalAppData);
             if (oldOverride.isNull())
                 qunsetenv("KETPLUS_CURSOR_AGENT");
             else
@@ -94,6 +97,8 @@ class CursorAdapterTest final : public QObject {
         QVERIFY(QDir().mkpath(bin));
         qputenv("PATH", QFile::encodeName(bin));
         qputenv("HOME", QFile::encodeName(directory.path()));
+        // On Windows the installer's well-known place is under %LOCALAPPDATA%, not ~/.local/bin.
+        qputenv("LOCALAPPDATA", QFile::encodeName(directory.path()));
         qunsetenv("KETPLUS_CURSOR_AGENT");
 
         CursorAdapter cursor;
@@ -105,8 +110,13 @@ class CursorAdapterTest final : public QObject {
         QCOMPARE(cursor.executable(), agent);
 
         // An updater that removes the binary it replaced is found again at its new path.
-        const QString updated = QDir(directory.filePath(QStringLiteral(".local/bin")))
-                                    .filePath(fixtureName(QStringLiteral("cursor-agent")));
+#if defined(Q_OS_WIN)
+        const QString updatedDirectory = directory.filePath(QStringLiteral("cursor-agent"));
+#else
+        const QString updatedDirectory = directory.filePath(QStringLiteral(".local/bin"));
+#endif
+        const QString updated =
+            QDir(updatedDirectory).filePath(fixtureName(QStringLiteral("cursor-agent")));
         QVERIFY(QDir().mkpath(QFileInfo(updated).path()));
         QVERIFY(QFile::rename(agent, updated));
 #if defined(Q_OS_WIN)

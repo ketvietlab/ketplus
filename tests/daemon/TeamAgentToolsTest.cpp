@@ -398,8 +398,6 @@ class TeamAgentToolsTest final : public QObject {
     }
 
     void theLeadersFirstTurnCarriesTheGoalAndItsInstructions() {
-        KETPLUS_SKIP_ON_WINDOWS(
-            "the test hangs on Windows until the 240 s limit; cause not yet diagnosed");
         Fixture fixture;
         QVERIFY(fixture.open(true));
         const Team team = create(fixture, "Ship the cart");
