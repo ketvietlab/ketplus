@@ -12,16 +12,24 @@ the existing promise: long-lived credentials belong in an OS credential store.
 remote client. Each service namespace has one versioned secret record containing
 its accounts. An `update` or `removeIf` replaces that record atomically; unchanged
 transactions do not write. A per-service process lock serializes migration and
-read/modify/write operations by cooperating clients. The empty owner-only lock file
-is not a credential store; its kernel lock is released on close or process exit,
-including when migration cleanup fails. Do not unlink it while writers are running.
+read/modify/write operations by cooperating clients. The owner-only lock file holds
+only a random 16-byte commit generation and is not a credential store; its kernel
+lock is released on close or process exit, including when migration cleanup fails.
+Do not unlink it while writers are running.
 `CredentialStore::batch` provides an operation-scoped view under that same lock.
 After any required migration, it decodes one fresh record and commits staged
 changes at most once. Read-only batches do not write. The view must not escape its
 synchronous callback, dispatch events, call external callbacks or perform network
 requests. Aborting a callback discards its staged changes. Failed commits do not
 publish envelopes or retain metadata encrypted with uncommitted keys. There is no
-process-wide snapshot or TTL: each subsequent operation reads the store again.
+TTL. Each store keeps the last record it read or committed in memory, and every
+operation still takes the lock and compares the lock file's generation with the
+one cached. A commit advances the generation before it writes the OS record, so a
+write by another store or process, or a write that failed partway, makes the next
+operation read the OS record again. Decrypting the whole record for each read put a
+keychain round trip on every event a daemon uploaded. A running process therefore
+keeps serving the secrets it already holds while the OS store is locked; a process
+with nothing cached, and any write, still fails there.
 A cooperating writer that encounters the held lock receives a retryable error;
 a successful later operation sees its committed changes.
 
