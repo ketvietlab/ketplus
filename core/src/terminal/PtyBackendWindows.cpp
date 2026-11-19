@@ -15,6 +15,7 @@
 #include <deque>
 #include <mutex>
 #include <thread>
+#include <utility>
 #include <vector>
 
 #ifndef WIN32_LEAN_AND_MEAN
@@ -139,6 +140,9 @@ class WindowsPtyBackend final : public PtyBackend {
         }
         const HRESULT created =
             ::CreatePseudoConsole(consoleSize(rows, columns), inputRead, outputWrite, 0, &console_);
+        createdSize_ = {rows, columns};
+        requestedSize_ = createdSize_;
+        consoleStarted_ = false;
         closeHandle(inputRead);
         closeHandle(outputWrite);
         if (FAILED(created)) {
@@ -224,6 +228,7 @@ class WindowsPtyBackend final : public PtyBackend {
     }
 
     void resize(const int rows, const int columns) override {
+        requestedSize_ = {rows, columns};
         if (console_ != nullptr) {
             ::ResizePseudoConsole(console_, consoleSize(rows, columns));
         }
@@ -251,10 +256,25 @@ class WindowsPtyBackend final : public PtyBackend {
                 this,
                 [this, generation, chunk = std::move(chunk)] {
                     if (generation == generation_) {
+                        reapplyEarlyResize();
                         emit outputReceived(chunk);
                     }
                 },
                 Qt::QueuedConnection);
+        }
+    }
+
+    // The console host of Windows 10 and Server 2022 (build 20348) drops a resize sent before it
+    // has finished starting, and keeps the creation size for good. Its first output shows it has
+    // started, so a size requested before then is sent again. Owner thread only, like stop().
+    void reapplyEarlyResize() {
+        if (consoleStarted_) {
+            return;
+        }
+        consoleStarted_ = true;
+        if (console_ != nullptr && requestedSize_ != createdSize_) {
+            ::ResizePseudoConsole(console_,
+                                  consoleSize(requestedSize_.first, requestedSize_.second));
         }
     }
 
@@ -349,6 +369,9 @@ class WindowsPtyBackend final : public PtyBackend {
     }
 
     HPCON console_{nullptr};
+    std::pair<int, int> createdSize_; // rows, columns
+    std::pair<int, int> requestedSize_;
+    bool consoleStarted_{false};
     HANDLE inputWrite_{nullptr};
     HANDLE outputRead_{nullptr};
     HANDLE process_{nullptr};

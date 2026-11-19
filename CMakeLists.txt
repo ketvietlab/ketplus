@@ -40,6 +40,9 @@ project(
 
 # MSVC options (/utf-8 and friends) for every target of the Pro tree, core/ included.
 include(core/cmake/MsvcOptions.cmake)
+# The compiler cache launcher, before any target: a target takes it when it is created, and
+# core/ (which sets it again for the Lite tree) comes after modules/ and apps/.
+include(core/cmake/CompilerCache.cmake)
 if(APPLE)
     enable_language(OBJCXX)
 endif()

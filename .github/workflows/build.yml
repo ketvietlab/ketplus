@@ -37,6 +37,8 @@ jobs:
   linux-daemon:
     runs-on: ubuntu-24.04
     timeout-minutes: 35
+    env:
+      SCCACHE_GHA_ENABLED: "true"
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -51,10 +53,16 @@ jobs:
           cache: true
       - name: Guard public repository boundaries
         run: python3 tests/hygiene/test_public_tree.py
+      - name: Restore compiler objects
+        uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba # v0.0.11
       - name: Install headless build dependencies
         run: sudo apt-get update && sudo apt-get install -y ninja-build libssl-dev libgl1-mesa-dev patchelf
       - name: Configure independent daemon
         run: cmake -S . -B build/daemon -G Ninja -DCMAKE_BUILD_TYPE=Release -DKETPLUS_PRODUCTION_RELEASE=ON -DKETPLUS_EDITION=pro -DKETPLUS_BUILD_DESKTOP=OFF -DKETPLUS_BUILD_TESTS=ON
+      # Job containment needs unprivileged user namespaces, which Ubuntu 24.04 restricts through
+      # AppArmor (EACCES); a Linux build node allows them.
+      - name: Allow unprivileged user namespaces
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - name: Build and test without a display or provider quota
         run: |
           cmake --build build/daemon --parallel 4

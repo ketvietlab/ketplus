@@ -20,3 +20,4 @@ jobs:
       - run: python3 tests/hygiene/test_public_tree.py
       # The build workflow's test sharding; needs no build tree.
       - run: python3 tests/ci/test_shard_tests.py
+      - run: python3 tests/ci/test_prune_caches.py
