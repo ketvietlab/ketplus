@@ -27,7 +27,7 @@ def validate_prefix(prefix, channel, architecture, mode):
         raise ValueError("download prefix must end with /<channel>/<arch>/")
 
 
-def process_feed(path, channel, architecture, prefix):
+def process_feed(path, channel, architecture, prefix, mode):
     parser = ET.XMLParser(target=ET.TreeBuilder(insert_comments=True))
     tree = ET.parse(path, parser=parser)
     node = tree.getroot().find("channel")
@@ -40,7 +40,10 @@ def process_feed(path, channel, architecture, prefix):
             raise ValueError("appcast channel/architecture identity mismatch")
         if not entries:
             raise ValueError("existing appcast lacks identity; use a clean scoped directory")
-    for enclosure in node.findall("item/enclosure"):
+    modes = node.findall("{" + NAMESPACE + "}releaseMode")
+    if len(modes) != 1 or modes[0].text != mode:
+        raise ValueError("appcast release mode is missing or mismatched; use a clean scoped directory")
+    for enclosure in node.findall(".//enclosure"):
         url = enclosure.get("url", "")
         if not url.startswith(prefix):
             raise ValueError("appcast archive URL does not match release download prefix")
@@ -49,6 +52,7 @@ def process_feed(path, channel, architecture, prefix):
                 or "?" in tail or "#" in tail):
             raise ValueError("appcast archive must be directly in the scoped directory")
     # Existing XML is validation-only: preserve prefixes, declarations and signature bytes.
+    return node
 
 
 def main():
@@ -81,8 +85,9 @@ def main():
                 ET.SubElement(node, "title").text = "ketPlus Pro"
                 ET.SubElement(node, "{" + NAMESPACE + "}releaseChannel").text = args.channel
                 ET.SubElement(node, "{" + NAMESPACE + "}architecture").text = args.arch
+                ET.SubElement(node, "{" + NAMESPACE + "}releaseMode").text = args.mode
                 ET.ElementTree(root).write(args.appcast, encoding="utf-8", xml_declaration=True)
-            process_feed(args.appcast, args.channel, args.arch, args.download_prefix)
+            process_feed(args.appcast, args.channel, args.arch, args.download_prefix, args.mode)
     except (ValueError, OSError, ET.ParseError) as error:
         parser.exit(1, "update-release-policy: " + str(error) + "\n")
 

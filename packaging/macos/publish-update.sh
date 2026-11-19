@@ -180,4 +180,4 @@ mv -f -- "$appcast_staging/appcast.xml" "$updates_dir/appcast.xml"
 created=()
 
 echo "Prepared ketPlus Pro $version in $updates_dir"
-echo "The installed app reads $feed; upload appcast.xml and the archive only after approval."
+echo "The installed app reads $feed; review the upload-update-r2.py dry run before publishing."

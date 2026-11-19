@@ -80,7 +80,16 @@ path that must not trust the download server or the network.
   disposable local fixtures only; its output must never be published.
 - Update preparation binds an explicit staging/production channel and arm64/x86_64
   architecture to the output path, HTTPS download prefix, compiled feed and appcast
-  metadata. Feeds and archives are separate for each pair.
+  metadata. Feeds and archives are separate for each pair. The mode in the appcast
+  distinguishes release output from local QA, including QA feeds prepared over HTTPS.
+- Cloudflare R2 hosts the static feed and assets under `<channel>/<arch>/`. The
+  release owner provisions bucket-scoped credentials outside the checkout and
+  approves publication after reviewing the dry run. The separate uploader uses
+  conditional writes for immutable assets and changes the short-cached appcast
+  last. Before replacing a live feed it saves a version and digest-addressed
+  snapshot under `<channel>/<arch>/snapshots/`. Restoring a snapshot withdraws a
+  release from future checks without downgrading installed clients. See the
+  [release process](../release-process.md#publishing-the-macos-update-to-r2).
 - Every published version needs a higher `PROJECT_VERSION`, which is both
   `CFBundleVersion` and `CFBundleShortVersionString`.
 - Sparkle replaces the bundle while the old daemon may still be running from
