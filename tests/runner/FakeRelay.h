@@ -95,7 +95,8 @@ class FakeRelay {
         bool removed = false;
     };
 
-    explicit FakeRelay(std::function<QDateTime()> now);
+    // On 127.0.0.1, at `port` or, when 0, a free one.
+    explicit FakeRelay(std::function<QDateTime()> now, quint16 port = 0);
     ~FakeRelay();
 
     [[nodiscard]] QUrl url() const;

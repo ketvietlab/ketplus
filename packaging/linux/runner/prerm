@@ -1,0 +1,17 @@
+#!/bin/sh
+# SPDX-License-Identifier: MPL-2.0
+# On removal, stops and disables the service. An upgrade leaves it running; postinst restarts
+# it once the new files are in place.
+set -e
+
+service=ketplus-runner.service
+
+case "$1" in
+remove | deconfigure)
+    if [ -d /run/systemd/system ]; then
+        systemctl stop "$service" || true
+        systemctl disable "$service" || true
+    fi
+    ;;
+esac
+exit 0

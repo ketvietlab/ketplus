@@ -1,0 +1,93 @@
+#!/bin/sh
+# SPDX-License-Identifier: MPL-2.0
+# /usr/bin/ketplus-runner of the runner package: runs the runner as its account with the
+# package's state and work directories, and starts or stops the service around registration.
+# Root and the account may use it. It never prints or stores its arguments; pass the token on
+# standard input (`register -`) so it stays out of the process list and sudo's log.
+set -eu
+
+runner=/usr/lib/ketplus-runner/bin/ketplus-runner
+account=ketplus-runner
+service=ketplus-runner.service
+state=/var/lib/ketplus-runner/state
+work=/var/cache/ketplus-runner/work
+
+fail() {
+    echo "ketplus-runner: $1" >&2
+    exit "${2:-1}"
+}
+
+for argument in "$@"; do
+    case "$argument" in
+    --state-dir | --state-dir=* | --work-dir | --work-dir=*)
+        fail "the package sets --state-dir and --work-dir; leave them out" 64
+        ;;
+    esac
+done
+
+command=${1:-}
+case "$command" in
+register | pair | unpair | deregister | status) set -- "$@" --state-dir "$state" ;;
+run) set -- "$@" --state-dir "$state" --work-dir "$work" ;;
+esac
+
+uid=$(id -u)
+if [ "$uid" != 0 ]; then
+    [ "$(id -un)" = "$account" ] || case "$command" in
+    register | pair | unpair | deregister | status | run)
+        fail "run this as root (sudo ketplus-runner $command ...)" 77
+        ;;
+    esac
+    exec "$runner" "$@"
+fi
+
+systemd=no
+[ -d /run/systemd/system ] && systemd=yes
+
+active() {
+    [ "$systemd" = yes ] && systemctl -q is-active "$service"
+}
+
+as_account() {
+    cd /
+    runuser -u "$account" -- "$runner" "$@"
+}
+
+case "$command" in
+run)
+    if active; then
+        fail "the service runs this runner; use systemctl status $service"
+    fi
+    cd /
+    exec runuser -u "$account" -- "$runner" "$@"
+    ;;
+register)
+    as_account "$@"
+    if [ "$systemd" = yes ]; then
+        systemctl start "$service"
+        echo "Started $service."
+    fi
+    ;;
+pair | unpair | deregister)
+    # These take the state directory's lock, which the running service holds.
+    was_active=no
+    if active; then
+        was_active=yes
+        systemctl stop "$service"
+    fi
+    status=0
+    as_account "$@" || status=$?
+    if [ "$was_active" = yes ]; then
+        if [ "$status" != 0 ] || [ "$command" != deregister ]; then
+            systemctl start "$service"
+        else
+            echo "Stopped $service."
+        fi
+    fi
+    exit "$status"
+    ;;
+*)
+    cd /
+    exec runuser -u "$account" -- "$runner" "$@"
+    ;;
+esac

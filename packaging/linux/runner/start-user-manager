@@ -1,0 +1,7 @@
+#!/bin/sh
+# SPDX-License-Identifier: MPL-2.0
+# ExecStartPre (as root) of ketplus-runner.service: the account's user manager, where jobs run,
+# must be up before the runner starts. Only looks up the account and starts user@UID.
+set -eu
+uid=$(id -u ketplus-runner)
+exec systemctl start "user@${uid}.service"

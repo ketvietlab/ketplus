@@ -1,0 +1,41 @@
+# SPDX-License-Identifier: MPL-2.0
+# The runner as a system service under its own account. Jobs run in that account's user
+# manager (systemd-run --user), which linger keeps running; postinst adds a drop-in with the
+# account's runtime directory and session bus. The service starts once the runner is
+# registered.
+[Unit]
+Description=KetPlus runner
+Wants=network-online.target
+After=network-online.target
+ConditionPathExists=/var/lib/ketplus-runner/state/credential.json
+
+[Service]
+Type=simple
+User=ketplus-runner
+Group=ketplus-runner
+ExecStartPre=+/usr/lib/ketplus-runner/libexec/start-user-manager
+ExecStart=/usr/lib/ketplus-runner/bin/ketplus-runner run --state-dir /var/lib/ketplus-runner/state --work-dir /var/cache/ketplus-runner/work
+StateDirectory=ketplus-runner/state
+StateDirectoryMode=0700
+CacheDirectory=ketplus-runner/work
+CacheDirectoryMode=0700
+WorkingDirectory=/var/lib/ketplus-runner/state
+UMask=0077
+Restart=on-failure
+RestartSec=5
+NoNewPrivileges=yes
+ProtectSystem=strict
+# The job supervisor runs in the account's user manager and listens under the host's /tmp, where
+# the runner must reach it, and the runner's Git runs in temporary directories there: no private
+# /tmp, and /tmp writable under ProtectSystem=strict (its usual permissions for an unprivileged
+# account).
+ReadWritePaths=/tmp
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectClock=yes
+ProtectHostname=yes
+LockPersonality=yes
+RestrictRealtime=yes
+
+[Install]
+WantedBy=multi-user.target

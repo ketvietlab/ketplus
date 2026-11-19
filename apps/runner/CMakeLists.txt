@@ -226,4 +226,32 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
         NO_TRANSLATIONS EXCLUDE_PLUGIN_TYPES platforms platformthemes styles
         EXCLUDE_PLUGINS qxcb qoffscreen ${ketplus_linux_excluded_runtime_plugins})
     install(SCRIPT "${ketplus_runner_deploy}" COMPONENT Runtime)
+
+    # The runner package (packaging/linux/runner): the runner, the job executor it starts from
+    # its own directory, and their Qt runtime, as the Runner component. Off by default, because
+    # a plain `cmake --install` installs every component and the desktop package is one.
+    option(KETPLUS_LINUX_RUNNER_PACKAGE "Install the Runner component for the runner package" OFF)
+    if(KETPLUS_LINUX_RUNNER_PACKAGE)
+        if(KETPLUS_LINUX_DESKTOP_PACKAGE)
+            message(FATAL_ERROR "The runner package and the desktop package need separate builds")
+        endif()
+        if(NOT TARGET ketplus_job_executor)
+            message(FATAL_ERROR "The runner package needs the job executor")
+        endif()
+        install(TARGETS ketplus-runner ketplus_job_executor RUNTIME DESTINATION bin
+            COMPONENT Runner EXCLUDE_FROM_ALL)
+        list(JOIN ketplus_linux_excluded_runtime_plugins " " ketplus_runner_excluded_plugins)
+        # The built files, as qt_generate_deploy_app_script names them: the deploy tool reads
+        # their dependencies and copies the libraries and plugins into the install prefix.
+        qt_generate_deploy_script(TARGET ketplus-runner NAME ketplus_runner_package
+            OUTPUT_SCRIPT ketplus_runner_package_deploy CONTENT "
+qt_deploy_runtime_dependencies(
+    EXECUTABLE \"$<TARGET_FILE:ketplus-runner>\"
+    ADDITIONAL_EXECUTABLES \"$<TARGET_FILE:ketplus_job_executor>\"
+    GENERATE_QT_CONF NO_TRANSLATIONS
+    EXCLUDE_PLUGIN_TYPES platforms platformthemes styles
+    EXCLUDE_PLUGINS qxcb qoffscreen ${ketplus_runner_excluded_plugins})
+")
+        install(SCRIPT "${ketplus_runner_package_deploy}" COMPONENT Runner EXCLUDE_FROM_ALL)
+    endif()
 endif()

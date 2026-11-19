@@ -1,0 +1,70 @@
+#!/bin/sh
+# SPDX-License-Identifier: MPL-2.0
+# Creates the runner account when it does not exist, keeps its user manager running (linger),
+# writes the service drop-in with the account's runtime directory and loads the executor's
+# AppArmor profile. No network. What the package created is recorded for purge.
+set -e
+
+account=ketplus-runner
+base=/var/lib/ketplus-runner
+record=$base/package-created
+dropin=/etc/systemd/system/ketplus-runner.service.d
+service=ketplus-runner.service
+profile=/etc/apparmor.d/ketplus-job-executor
+
+[ "$1" = configure ] || exit 0
+
+install -d -o root -g root -m 0755 "$base" /var/cache/ketplus-runner
+touch "$record"
+chmod 0644 "$record"
+
+remember() {
+    grep -qx "$1" "$record" || echo "$1" >>"$record"
+}
+
+if ! getent group "$account" >/dev/null; then
+    groupadd --system "$account"
+    remember group
+fi
+if ! getent passwd "$account" >/dev/null; then
+    useradd --system --gid "$account" --home-dir "$base/home" --no-create-home \
+        --shell /usr/sbin/nologin --comment "KetPlus runner" "$account"
+    remember account
+fi
+install -d -o "$account" -g "$account" -m 0700 "$base/home" "$base/state" \
+    /var/cache/ketplus-runner/work
+uid=$(id -u "$account")
+
+install -d -m 0755 "$dropin"
+cat >"$dropin/50-account.conf.new" <<UNIT
+# Written by the ketplus-runner package for account uid $uid.
+[Unit]
+Wants=user@$uid.service
+After=user@$uid.service
+
+[Service]
+Environment=XDG_RUNTIME_DIR=/run/user/$uid
+Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$uid/bus
+ReadWritePaths=/run/user/$uid
+UNIT
+chmod 0644 "$dropin/50-account.conf.new"
+mv "$dropin/50-account.conf.new" "$dropin/50-account.conf"
+
+if command -v apparmor_parser >/dev/null 2>&1 && [ -d /sys/kernel/security/apparmor ]; then
+    apparmor_parser -r -T -W "$profile"
+fi
+
+if [ -d /run/systemd/system ]; then
+    # After a remove, the record still says the package turned linger on: turn it on again.
+    if [ ! -e "/var/lib/systemd/linger/$account" ]; then
+        loginctl enable-linger "$account"
+        remember linger
+    fi
+    systemctl daemon-reload
+    if [ -z "$2" ]; then
+        systemctl enable "$service"
+    else
+        systemctl try-restart "$service"
+    fi
+fi
+exit 0
