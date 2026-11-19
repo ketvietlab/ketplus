@@ -81,5 +81,6 @@ add_custom_target(ketplus_linux_packages
         --build-dir "${CMAKE_BINARY_DIR}" --out "${KETPLUS_LINUX_PACKAGE_OUTPUT_DIR}"
         --version "${PROJECT_VERSION}" --architecture "${CMAKE_SYSTEM_PROCESSOR}"
         --expected-control-url "${KETPLUS_CONTROL_URL}" --qt-version "${Qt6_VERSION}"
-    DEPENDS ketplus ketplus_daemon ketplusctl ketplus_bundle_browser_runtime
+    # Every target the Runtime component installs, or `cmake --install` finds it missing.
+    DEPENDS ketplus ketplus_daemon ketplusctl ketplus-runner ketplus_bundle_browser_runtime
     USES_TERMINAL VERBATIM)
