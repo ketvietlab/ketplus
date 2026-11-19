@@ -130,6 +130,42 @@ class RelayWakeupsTest final : public QObject {
         client->stop();
     }
 
+    // Signaling, revocations and job changes are passed on in order; ready, resync and commands
+    // wake the poll; anything else is dropped.
+    void passesOnSignalingRevocationsAndJobChanges() {
+        FakeRelay relay;
+        QStringList tokens{QStringLiteral("synthetic")};
+        auto client = wakeups(relay.baseUrl(), &tokens);
+        QSignalSpy messages(client.get(), &RelayWakeups::message);
+        QSignalSpy wake(client.get(), &RelayWakeups::wake);
+        client->start();
+        QTRY_VERIFY(client->isOpen());
+        const QList<QJsonObject> passed{{{"type", "job.changed"}, {"jobId", "job-1"}},
+                                        {{"type", "device.revoked"}, {"deviceId", "device-1"}},
+                                        {{"type", "signal.candidate"}, {"connectionId", "pc-1"}},
+                                        {{"type", "job.changed"}}};
+        const QList<QJsonObject> sent{passed[0],
+                                      {{"type", "ready"}},
+                                      passed[1],
+                                      {{"type", "job.updated"}, {"jobId", "job-1"}},
+                                      {{"type", "resync"}},
+                                      passed[2],
+                                      {{"type", "something.else"}},
+                                      {{"type", "commands"}},
+                                      passed[3],
+                                      {{"kind", "job.changed"}}};
+        for (const QJsonObject& message : sent)
+            relay.last()->sendTextMessage(
+                QString::fromUtf8(QJsonDocument(message).toJson(QJsonDocument::Compact)));
+        QTRY_COMPARE(wake.size(), 3);
+        QTRY_COMPARE(messages.size(), passed.size());
+        QTest::qWait(50);
+        QCOMPARE(messages.size(), passed.size());
+        for (int i = 0; i < passed.size(); ++i)
+            QCOMPARE(messages.at(i).first().toJsonObject(), passed.at(i));
+        client->stop();
+    }
+
     void expiredCredentialIsDroppedAndTheSocketReopens() {
         FakeRelay relay;
         QStringList tokens{QStringLiteral("first"), QStringLiteral("second")};
