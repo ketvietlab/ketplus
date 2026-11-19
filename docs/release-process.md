@@ -124,6 +124,9 @@ source recorded in Qt's SBOM, and includes the texts of the licenses that SBOM d
 (`LicenseRef-*`). Texts of standard SPDX identifiers (MIT, Zlib, BSD, ...) are not in the Qt
 installation and are not copied here: supplying them is left to the legal review before a public
 Windows release.
+The Pro package carries the browser runtime with the pinned `node.exe`; its Node.js and npm
+licenses are in `share\licenses\ketplus\browser-runtime`. The runtime's `node.exe` and the
+`.exe`/`.dll` files in `node_modules` are signed with the others before publication.
 
 A production desktop release additionally requires:
 

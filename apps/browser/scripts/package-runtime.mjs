@@ -27,6 +27,7 @@ import { smokeRuntime } from "./runtime-smoke.mjs";
 const appDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const pin = JSON.parse(fs.readFileSync(path.join(appDir, "runtime", "node-runtime.json"), "utf8"));
 const hostPlatform = `${process.platform}-${process.arch}`;
+const windows = process.platform === "win32";
 
 const { values } = parseArgs({
   options: {
@@ -53,10 +54,15 @@ const log = (message) => process.stderr.write(`[package-runtime] ${message}\n`);
 const run = (command, args, options = {}) => execFileSync(command, args, { stdio: ["ignore", "inherit", "inherit"], ...options });
 const sha256 = (bytes) => createHash("sha256").update(bytes).digest("hex");
 
+// nodejs.org names the Windows build "win-x64" and ships it as a zip; the other platforms are
+// tarballs. The pin is keyed by process.platform, so Windows is "win32-x64".
+function nodeDistName() { return `node-${pin.version}-${target.replace(/^win32-/, "win-")}`; }
+function nodeArchiveName() { return `${nodeDistName()}${windows ? ".zip" : ".tar.gz"}`; }
+
 // Returns the verified archive bytes; the caller extracts exactly these bytes from a
 // private copy, so the cache file can change after hashing without effect.
 async function obtainNodeArchive() {
-  const name = `node-${pin.version}-${target}.tar.gz`;
+  const name = nodeArchiveName();
   const cacheDir = path.resolve(values["node-cache"] || path.join(os.tmpdir(), "ketplus-node-cache"));
   fs.mkdirSync(cacheDir, { recursive: true });
   const archive = path.join(cacheDir, name);
@@ -205,14 +211,16 @@ async function main() {
   const archiveBytes = await obtainNodeArchive();
   const work = fs.mkdtempSync(path.join(os.tmpdir(), "ketplus-browser-runtime-"));
   try {
-    const archive = path.join(work, "node.tar.gz");
+    const archive = path.join(work, windows ? "node.zip" : "node.tar.gz");
     fs.writeFileSync(archive, archiveBytes, { mode: 0o600 });
-    run("tar", ["-xzf", archive, "-C", work]);
-    const nodeDist = path.join(work, `node-${pin.version}-${target}`);
+    // Windows' own tar.exe (bsdtar) reads zip archives; -z would force gzip.
+    run("tar", [windows ? "-xf" : "-xzf", archive, "-C", work]);
+    const nodeDist = path.join(work, nodeDistName());
     const stage = path.join(work, "stage");
     fs.mkdirSync(path.join(stage, "bin"), { recursive: true });
     const stagedNode = path.join(stage, "bin", process.platform === "win32" ? "node.exe" : "node");
-    fs.copyFileSync(path.join(nodeDist, "bin", "node"), stagedNode);
+    // The Windows distribution keeps node.exe and npm at its top level.
+    fs.copyFileSync(path.join(nodeDist, windows ? "node.exe" : path.join("bin", "node")), stagedNode);
     fs.chmodSync(stagedNode, 0o755);
 
     for (const item of ["src", "package.json", "package-lock.json"]) {
@@ -221,7 +229,7 @@ async function main() {
     fs.cpSync(path.join(appDir, ".claude", "skills", "ketplus-browser"), path.join(stage, ".claude", "skills", "ketplus-browser"), { recursive: true });
 
     log("npm ci --omit=dev with the pinned npm");
-    const npmCli = path.join(nodeDist, "lib", "node_modules", "npm", "bin", "npm-cli.js");
+    const npmCli = path.join(nodeDist, ...(windows ? [] : ["lib"]), "node_modules", "npm", "bin", "npm-cli.js");
     run(stagedNode, [npmCli, "ci", "--omit=dev", "--ignore-scripts", "--no-audit", "--no-fund", "--loglevel=error", "--update-notifier=false"], {
       cwd: stage,
       env: { ...process.env, PATH: `${path.dirname(stagedNode)}${path.delimiter}${process.env.PATH}`, PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD: "1", npm_config_cache: path.join(work, "npm-cache") },
@@ -238,7 +246,7 @@ async function main() {
       version: pkg.version,
       nodeVersion: pin.version,
       platform: target,
-      node: path.relative(stage, stagedNode),
+      node: path.relative(stage, stagedNode).split(path.sep).join("/"),
       protocols: ["browser.v0"],
       entrypoints: { mcp: "src/mcp.mjs", jsonrpc: "src/cli.mjs" },
       skill: ".claude/skills/ketplus-browser/SKILL.md",

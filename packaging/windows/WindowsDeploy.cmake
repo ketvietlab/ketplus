@@ -73,3 +73,5 @@ install(CODE "
     set(QT_SBOM_DIR \"${ketplus_qt_prefix}/sbom\")
     include(\"${CMAKE_CURRENT_LIST_DIR}/QtNotices.cmake\")
 " COMPONENT Runtime)
+
+include("${CMAKE_CURRENT_LIST_DIR}/BrowserRuntime.cmake")

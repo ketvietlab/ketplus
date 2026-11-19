@@ -17,6 +17,13 @@ using namespace ketplus::browser_tools;
 
 namespace {
 
+// The program a runtime starts: Windows executables are recognised by their extension.
+#ifdef Q_OS_WIN
+constexpr auto nodeRelativePath = "bin/node.exe";
+#else
+constexpr auto nodeRelativePath = "bin/node";
+#endif
+
 void writeFile(const QString& path, const QByteArray& bytes = {},
                const QFileDevice::Permissions permissions = {}) {
     QDir().mkpath(QFileInfo(path).absolutePath());
@@ -33,7 +40,7 @@ QJsonObject validManifest() {
         {QStringLiteral("name"), QStringLiteral("ketplus-browser")},
         {QStringLiteral("version"), QStringLiteral("0.1.0")},
         {QStringLiteral("nodeVersion"), QStringLiteral("v24.21.0")},
-        {QStringLiteral("node"), QStringLiteral("bin/node")},
+        {QStringLiteral("node"), QString::fromLatin1(nodeRelativePath)},
         {QStringLiteral("protocols"), QJsonArray{QStringLiteral("browser.v0")}},
         {QStringLiteral("entrypoints"),
          QJsonObject{{QStringLiteral("mcp"), QStringLiteral("src/mcp.mjs")},
@@ -57,9 +64,15 @@ struct FakeBundle final {
 
     void create(const QJsonObject& manifest = validManifest(), const bool executableNode = true) {
         QDir().mkpath(macos());
-        writeFile(runtime() + QStringLiteral("/bin/node"), "#!/bin/sh\n",
+#ifdef Q_OS_WIN
+        // No permission bits to withhold: a program without a runnable name is simply absent.
+        if (executableNode)
+            writeFile(runtime() + QLatin1Char('/') + QLatin1String(nodeRelativePath), "MZ");
+#else
+        writeFile(runtime() + QLatin1Char('/') + QLatin1String(nodeRelativePath), "#!/bin/sh\n",
                   executableNode ? QFileDevice::ReadOwner | QFileDevice::ExeOwner
                                  : QFileDevice::ReadOwner | QFileDevice::WriteOwner);
+#endif
         writeFile(runtime() + QStringLiteral("/src/mcp.mjs"));
         writeFile(runtime() + QStringLiteral("/src/cli.mjs"));
         writeFile(runtime() + QStringLiteral("/.claude/skills/ketplus-browser/SKILL.md"));
@@ -85,7 +98,8 @@ class BundledBrowserRuntimeTest final : public QObject {
             const auto runtime = findBundledBrowserRuntime(appDir);
             QVERIFY2(runtime.has_value(), qPrintable(appDir));
             QCOMPARE(runtime->rootDir, canonicalRoot);
-            QCOMPARE(runtime->nodePath, canonicalRoot + QStringLiteral("/bin/node"));
+            QCOMPARE(runtime->nodePath,
+                     canonicalRoot + QLatin1Char('/') + QLatin1String(nodeRelativePath));
             QCOMPARE(runtime->mcpEntry, canonicalRoot + QStringLiteral("/src/mcp.mjs"));
             QCOMPARE(runtime->jsonRpcEntry, canonicalRoot + QStringLiteral("/src/cli.mjs"));
             QCOMPARE(runtime->skillFile,
@@ -156,6 +170,9 @@ class BundledBrowserRuntimeTest final : public QObject {
                             {QStringLiteral("jsonrpc"), QStringLiteral("src/cli.mjs")}};
         }));
 
+#ifndef Q_OS_WIN
+        // (Windows: QFile::link makes a shell .lnk file, which is not a link the file system
+        // follows, so there is no escape to reject.)
         {
             // A symlinked entrypoint that resolves outside the runtime root is rejected.
             FakeBundle bundle;
@@ -168,6 +185,7 @@ class BundledBrowserRuntimeTest final : public QObject {
             QVERIFY(QFileInfo(link).isFile());
             QVERIFY(!loadBundledBrowserRuntime(bundle.runtime()).has_value());
         }
+#endif
         {
             // Manifests over 64 KiB are not parsed, even when otherwise valid.
             FakeBundle bundle;
@@ -202,15 +220,17 @@ class BundledBrowserRuntimeTest final : public QObject {
             provider.resolve(QLatin1String(browserToolId), QLatin1String(mcpStdioProtocol));
         QVERIFY(launch.has_value());
         const QString root = QFileInfo(bundle.runtime()).canonicalFilePath();
-        QCOMPARE(launch->command, root + QStringLiteral("/bin/node"));
+        QCOMPARE(launch->command, root + QLatin1Char('/') + QLatin1String(nodeRelativePath));
         QCOMPARE(launch->args, QStringList{root + QStringLiteral("/src/mcp.mjs")});
         QCOMPARE(launch->workingDirectory, root);
         QCOMPARE(launch->env.value(QStringLiteral("KETPLUS_BROWSER_CACHE")), cacheDir);
         QVERIFY(QFileInfo(cacheDir).isDir());
+#ifndef Q_OS_WIN // Windows has no group/other permission bits to report.
         QCOMPARE(QFile::permissions(cacheDir) &
                      (QFileDevice::ReadGroup | QFileDevice::WriteGroup | QFileDevice::ExeGroup |
                       QFileDevice::ReadOther | QFileDevice::WriteOther | QFileDevice::ExeOther),
                  QFileDevice::Permissions{});
+#endif
         // Inherited NODE_OPTIONS and Playwright download hosts are overridden with empty values.
         for (const auto* name :
              {"NODE_OPTIONS", "PLAYWRIGHT_DOWNLOAD_HOST", "PLAYWRIGHT_CHROMIUM_DOWNLOAD_HOST"}) {
@@ -282,12 +302,14 @@ class BundledBrowserRuntimeTest final : public QObject {
         writeFile(skills + QStringLiteral("/ketatlas/SKILL.md"), "---\n");
         // Not shipped by KetPlus, and a link out of the bundle is not a shipped skill.
         writeFile(skills + QStringLiteral("/other/SKILL.md"), "---\n");
+#ifndef Q_OS_WIN // QFile::link makes a shell .lnk on Windows, not a link out of the bundle.
         QTemporaryDir outside;
         writeFile(outside.filePath(QStringLiteral("SKILL.md")), "---\n");
         QVERIFY(QDir().mkpath(skills + QStringLiteral("/enterprise-grade")));
         QVERIFY(QFile::link(outside.filePath(QStringLiteral("SKILL.md")),
                             skills + QStringLiteral("/enterprise-grade/SKILL.md")));
 
+#endif
         for (const QString& appDir : {bundle.macos(), bundle.helpers()}) {
             const auto found = bundledSkills(appDir);
             QCOMPARE(found.size(), 2);

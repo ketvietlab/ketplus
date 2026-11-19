@@ -5,6 +5,8 @@
 if(NOT STAGE OR NOT IS_DIRECTORY "${STAGE}")
     message(FATAL_ERROR "Pass -DSTAGE=<install prefix>")
 endif()
+# Programs below run from other working directories: use an absolute path.
+get_filename_component(STAGE "${STAGE}" ABSOLUTE)
 
 foreach(required
         bin/ketplus_daemon.exe bin/ketplusctl.exe bin/Qt6Core.dll bin/libcrypto-3-x64.dll
@@ -25,6 +27,37 @@ foreach(license_text OpenSSL-Apache-2.0.txt Qt-LGPL-3.0.txt GPL-3.0.txt
         message(FATAL_ERROR "Missing license text in the staged tree: ${license_text}")
     endif()
 endforeach()
+# The Pro desktop carries the browser runtime (lib\ketplus\ketplus-browser) unless the package was
+# configured without it. Its Node.js and npm licenses must be named in share\licenses.
+set(browser_runtime "${STAGE}/lib/ketplus/ketplus-browser")
+if(EXISTS "${STAGE}/bin/KetPlus.exe" AND NOT EXISTS "${browser_runtime}")
+    # A desktop package without the runtime lacks the agent browser tools: only a deliberate
+    # -DALLOW_NO_BROWSER_RUNTIME=ON (a package configured with KETPLUS_BUNDLE_BROWSER_RUNTIME=OFF)
+    # accepts that.
+    if(NOT ALLOW_NO_BROWSER_RUNTIME)
+        message(FATAL_ERROR
+            "The staged desktop has no browser runtime (lib/ketplus/ketplus-browser). Pass "
+            "-DALLOW_NO_BROWSER_RUNTIME=ON only for a package built without it.")
+    endif()
+    message(STATUS "No browser runtime in the staged tree (allowed)")
+elseif(EXISTS "${browser_runtime}")
+    foreach(required bin/node.exe runtime.json src/mcp.mjs src/cli.mjs
+            node_modules/playwright-core/package.json THIRD_PARTY_NOTICES.md)
+        if(NOT EXISTS "${browser_runtime}/${required}")
+            message(FATAL_ERROR "Missing from the browser runtime: ${required}")
+        endif()
+    endforeach()
+    foreach(required Node.js-LICENSE THIRD_PARTY_NOTICES.md)
+        if(NOT EXISTS "${STAGE}/share/licenses/ketplus/browser-runtime/${required}")
+            message(FATAL_ERROR "Missing browser runtime license file: ${required}")
+        endif()
+    endforeach()
+    file(GLOB playwright_licenses
+        "${STAGE}/share/licenses/ketplus/browser-runtime/playwright-core@*")
+    if(NOT playwright_licenses)
+        message(FATAL_ERROR "Missing the playwright-core license text in browser-runtime")
+    endif()
+endif()
 if(EXISTS "${STAGE}/bin/vc_redist.x64.exe")
     message(FATAL_ERROR "vc_redist.x64.exe must not be staged; the runtime DLLs are app-local")
 endif()
@@ -47,6 +80,23 @@ endif()
 execute_process(COMMAND "${STAGE}/bin/ketplusctl.exe" --help RESULT_VARIABLE result OUTPUT_QUIET)
 if(NOT result EQUAL 0)
     message(FATAL_ERROR "ketplusctl --help failed (${result})")
+endif()
+if(EXISTS "${browser_runtime}/runtime.json")
+    # The bundled node.exe must start the entry KetPlus launches (src/mcp.mjs) and answer an MCP
+    # initialize request; stdin ending then stops the server.
+    set(initialize_request "$ENV{TEMP}/ketplus-verify-initialize.json")
+    file(WRITE "${initialize_request}"
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-06-18\",\"capabilities\":{},\"clientInfo\":{\"name\":\"verify\",\"version\":\"0\"}}}\n")
+    execute_process(COMMAND "${browser_runtime}/bin/node.exe" src/mcp.mjs
+        WORKING_DIRECTORY "${browser_runtime}"
+        INPUT_FILE "${initialize_request}"
+        OUTPUT_VARIABLE mcp_reply RESULT_VARIABLE result ERROR_VARIABLE node_error TIMEOUT 60)
+    file(REMOVE "${initialize_request}")
+    if(NOT mcp_reply MATCHES "\"serverInfo\"")
+        message(FATAL_ERROR
+            "The bundled browser runtime did not answer initialize (${result}): ${node_error}")
+    endif()
+    message(STATUS "Browser runtime answered initialize")
 endif()
 if(EXISTS "${STAGE}/bin/KetPlus.exe")
     # A GUI program has no console output to read: started without a display (offscreen) it must

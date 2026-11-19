@@ -176,6 +176,9 @@ Mermaid CLI: https://github.com/mermaid-js/mermaid-cli
 `apps/browser` is not linked into KetPlus, but macOS Release bundles built with
 `KETPLUS_BUNDLE_BROWSER_RUNTIME` (default ON) redistribute it as a separate
 helper process in `KetPlus.app/Contents/Resources/ketplus-browser`
+(on Windows, the Pro package installs the same tree in `lib\ketplus\ketplus-browser` with the
+same pinned Node.js, as `node.exe`, and copies its notices to
+`share\licenses\ketplus\browser-runtime`)
 (`decisions/0009-bundled-browser-runtime.md`). That directory contains:
 
 | Component | Pinned version | Integration | License | Distribution requirement |
