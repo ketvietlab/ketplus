@@ -107,6 +107,7 @@ class RunnerDesktopTest final : public QObject {
         QCOMPARE(record->state, state::failed);
         QCOMPARE(record->reason, QStringLiteral("exit_code"));
         QCOMPARE(record->exitCode, std::optional<qint64>(7));
+        QCOMPARE(record->cleanupStatus, cleanup::verified);
         QCOMPARE(rig.desktop->output(task), QByteArray("bad\n"));
         verifyClean(rig, {}, m_unitsBefore, {"bad\n"});
         QVERIFY(limit.within());
@@ -129,6 +130,8 @@ class RunnerDesktopTest final : public QObject {
         QVERIFY(record);
         QCOMPARE(record->state, state::cancelled);
         QCOMPARE(record->reason, QStringLiteral("user"));
+        QCOMPARE(record->cleanupStatus, cleanup::verified);
+        QCOMPARE(rig.desktop->output(task), QByteArray("begin\n"));
         QCOMPARE(processesWith(marker), 0);
         QVERIFY(rig.runner->running());
         verifyClean(rig, {marker}, m_unitsBefore, {QString::fromLatin1(marker)});
@@ -149,6 +152,7 @@ class RunnerDesktopTest final : public QObject {
         QVERIFY(record);
         QCOMPARE(record->state, state::timedOut);
         QCOMPARE(record->reason, QStringLiteral("deadline"));
+        QCOMPARE(record->cleanupStatus, cleanup::verified);
         QCOMPARE(rig.desktop->output(task), QByteArray("begin\n"));
         verifyClean(rig, {marker}, m_unitsBefore, {QString::fromLatin1(marker)});
         QVERIFY(limit.within());
