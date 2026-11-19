@@ -25,9 +25,8 @@ Restart=on-failure
 RestartSec=5
 NoNewPrivileges=yes
 ProtectSystem=strict
-# The job supervisor runs in the account's user manager and listens under the host's /tmp, where
-# the runner must reach it: no private /tmp, and /tmp writable under ProtectSystem=strict.
-ReadWritePaths=/tmp
+# No private /tmp: the job supervisor runs in the account's user manager and listens in the
+# account's control directory under the host's /tmp, which the drop-in makes writable here.
 ProtectKernelModules=yes
 ProtectKernelLogs=yes
 ProtectClock=yes

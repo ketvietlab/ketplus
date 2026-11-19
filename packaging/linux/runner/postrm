@@ -2,10 +2,10 @@
 # SPDX-License-Identifier: MPL-2.0
 # remove: unloads the executor's AppArmor profile and turns off the linger the package turned
 # on; the account, its registration, the state and work directories and the profile file (a
-# conffile) stay. purge: deletes the state and work directories, the service drop-in and the
-# profile's compiled cache, and the account and group when the package created them; dpkg
-# deletes the conffile. No network: a runner purged without `ketplus-runner deregister` stays
-# listed on the Relay until removed there.
+# conffile) stay. purge: deletes the state, work and control directories, the service drop-in,
+# the tmpfiles.d entry and the profile's compiled cache, and the account and group when the
+# package created them; dpkg deletes the conffile. No network: a runner purged without
+# `ketplus-runner deregister` stays listed on the Relay until removed there.
 set -e
 
 account=ketplus-runner
@@ -30,13 +30,15 @@ remove)
     [ ! -d /run/systemd/system ] || systemctl daemon-reload
     ;;
 purge)
-    rm -f "$dropin/50-account.conf" "$dropin/50-account.conf.new"
+    rm -f "$dropin/50-account.conf" "$dropin/50-account.conf.new" \
+        /etc/tmpfiles.d/ketplus-runner.conf /etc/tmpfiles.d/ketplus-runner.conf.new
     rmdir "$dropin" 2>/dev/null || true
     if created account && getent passwd "$account" >/dev/null; then
         uid=$(id -u "$account")
         if [ -d /run/systemd/system ]; then
             systemctl stop "user@$uid.service" || true
         fi
+        rm -rf "/tmp/ketplus-jobs-$uid"
         userdel "$account"
     fi
     if created group && getent group "$account" >/dev/null; then

@@ -1,8 +1,9 @@
 #!/bin/sh
 # SPDX-License-Identifier: MPL-2.0
 # Creates the runner account when it does not exist, keeps its user manager running (linger),
-# writes the service drop-in with the account's runtime directory and loads the executor's
-# AppArmor profile. No network. What the package created is recorded for purge.
+# writes the service drop-in with the account's runtime and control directories, keeps the
+# control directory with tmpfiles.d and loads the executor's AppArmor profile. No network. What
+# the package created is recorded for purge.
 set -e
 
 account=ketplus-runner
@@ -11,6 +12,7 @@ record=$base/package-created
 dropin=/etc/systemd/system/ketplus-runner.service.d
 service=ketplus-runner.service
 profile=/etc/apparmor.d/ketplus-job-executor
+tmpfiles=/etc/tmpfiles.d/ketplus-runner.conf
 
 [ "$1" = configure ] || exit 0
 
@@ -45,10 +47,18 @@ After=user@$uid.service
 [Service]
 Environment=XDG_RUNTIME_DIR=/run/user/$uid
 Environment=DBUS_SESSION_BUS_ADDRESS=unix:path=/run/user/$uid/bus
-ReadWritePaths=/run/user/$uid
+ReadWritePaths=/run/user/$uid -/tmp/ketplus-jobs-$uid
 UNIT
 chmod 0644 "$dropin/50-account.conf.new"
 mv "$dropin/50-account.conf.new" "$dropin/50-account.conf"
+
+# The job supervisor's control directory, kept across /tmp clean-ups and made at boot, so it
+# exists when the service starts and the drop-in can make it writable.
+cat >"$tmpfiles.new" <<CONF
+d /tmp/ketplus-jobs-$uid 0700 $account $account -
+CONF
+chmod 0644 "$tmpfiles.new"
+mv "$tmpfiles.new" "$tmpfiles"
 
 if command -v apparmor_parser >/dev/null 2>&1 && [ -d /sys/kernel/security/apparmor ]; then
     apparmor_parser -r -T -W "$profile"
@@ -60,6 +70,7 @@ if [ -d /run/systemd/system ]; then
         loginctl enable-linger "$account"
         remember linger
     fi
+    systemd-tmpfiles --create "$tmpfiles"
     systemctl daemon-reload
     if [ -z "$2" ]; then
         systemctl enable "$service"
