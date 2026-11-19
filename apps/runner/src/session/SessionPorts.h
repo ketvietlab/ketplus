@@ -81,7 +81,7 @@ struct CommandExit {
     QString state = QStringLiteral("exited"); // "exited", or "failed" when it never ran
     std::optional<qint64> exitCode;
     std::optional<qint64> signal;
-    QString reason;        // [a-z0-9_]{0,64}, for "failed"
+    QString reason;        // a reason code, for "failed"
     QString cleanupStatus; // "verified" or "unverified"
 };
 

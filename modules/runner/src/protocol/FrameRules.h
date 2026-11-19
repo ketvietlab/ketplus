@@ -11,6 +11,8 @@ namespace ketplus::runner::protocol::rules {
 [[nodiscard]] bool isAttempt(qint64 value);
 // `workspaceKey` and `repositoryKey`: exactly 32 base64url characters.
 [[nodiscard]] bool isKey(const QString& text);
+// A reason or error code: `^[a-z][a-z0-9_]{0,63}$`.
+[[nodiscard]] bool isReasonCode(const QString& text);
 // `snapshotId` and other object ids: lowercase hex, 40 or 64 characters.
 [[nodiscard]] bool isObjectId(const QString& text);
 // Exactly `length` lowercase hex characters, such as a SHA-256 or a transferId.

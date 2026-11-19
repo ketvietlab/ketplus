@@ -317,11 +317,21 @@ void RunnerSessionStopTest::relayCancelWithoutChannel() {
     other.session->leaseLost(QStringLiteral("job_cancelled"), QStringLiteral("owner_stopped"));
     other.session->commandFinished(killed);
     QCOMPARE(other.sentOf<JobResult>().first().reason, QStringLiteral("owner_stopped"));
-    Host odd;
-    odd.launch(makeSpec());
-    odd.session->leaseLost(QStringLiteral("job_cancelled"), QStringLiteral("Not A Code"));
-    odd.session->commandFinished(killed);
-    QCOMPARE(odd.sentOf<JobResult>().first().reason, QStringLiteral("cancelled"));
+    const QString longest(64, u'o');
+    Host kept;
+    kept.launch(makeSpec());
+    kept.session->leaseLost(QStringLiteral("job_cancelled"), longest);
+    kept.session->commandFinished(killed);
+    QCOMPARE(kept.sentOf<JobResult>().first().reason, longest);
+    for (const QString& reason :
+         {QStringLiteral("Not A Code"), QStringLiteral("0owner"), QStringLiteral("_owner"),
+          QStringLiteral("owner-stopped"), QString(65, u'o')}) {
+        Host odd;
+        odd.launch(makeSpec());
+        odd.session->leaseLost(QStringLiteral("job_cancelled"), reason);
+        odd.session->commandFinished(killed);
+        QCOMPARE(odd.sentOf<JobResult>().first().reason, QStringLiteral("cancelled"));
+    }
 }
 
 void RunnerSessionStopTest::leaseLostWhileHoldingTheResult() {

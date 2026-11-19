@@ -2,6 +2,8 @@
 
 #include "runner/RunnerRelaySchema.h"
 
+#include "protocol/FrameRules.h"
+
 #include <QJsonObject>
 #include <QRegularExpression>
 #include <QSet>
@@ -54,8 +56,7 @@ bool isJobId(const QString& value) {
 bool isSubmitKey(const QString& value) { return isJobId(value); }
 
 bool isReasonCode(const QString& value) {
-    static const QRegularExpression pattern(QStringLiteral("^[a-z][a-z0-9_]{0,63}$"));
-    return pattern.match(value).hasMatch();
+    return ::ketplus::runner::protocol::rules::isReasonCode(value);
 }
 
 std::optional<RelayJob> parseRelayJob(const QJsonValue& value) {

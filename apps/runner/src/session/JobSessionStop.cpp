@@ -1,6 +1,6 @@
 #include "session/JobSession.h"
 
-#include <QRegularExpression>
+#include "protocol/FrameRules.h"
 
 namespace ketplus::runner::session {
 
@@ -11,8 +11,7 @@ const QString interrupted = QStringLiteral("interrupted");
 
 // The Relay's cancel reason when it fits a result reason, otherwise "cancelled".
 QString relayCancelReason(const QString& reason) {
-    static const QRegularExpression code(QStringLiteral("^[a-z0-9_]{1,64}$"));
-    return code.match(reason).hasMatch() ? reason : cancelled;
+    return protocol::rules::isReasonCode(reason) ? reason : cancelled;
 }
 
 } // namespace

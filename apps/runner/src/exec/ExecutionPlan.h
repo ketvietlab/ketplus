@@ -18,7 +18,7 @@ inline constexpr qsizetype maxLaunchBytes = 192 * 1024;
 
 struct PreparedLaunch {
     QJsonObject execution; // argv or shell_command, cwd, env_delta, and mounts when planned
-    QString error;         // [a-z0-9_]: why nothing may run
+    QString error;         // a reason code: why nothing may run
 };
 
 struct MountPlan {
