@@ -170,3 +170,10 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND TARGET ketplus_job_executor)
     add_test(NAME ketplus_runner_assembly_linux_tests COMMAND ketplus_runner_assembly_linux_tests)
     set_tests_properties(ketplus_runner_assembly_linux_tests PROPERTIES TIMEOUT 900)
 endif()
+
+# The runner binary against the desktop daemon's remote job parts (tests/runner-desktop).
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND TARGET ketplus_runner_exec_native AND
+   TARGET ketplus_daemon_core AND TARGET ketplus-runner)
+    add_subdirectory("${PROJECT_SOURCE_DIR}/tests/runner-desktop"
+        "${CMAKE_BINARY_DIR}/tests/runner-desktop")
+endif()
