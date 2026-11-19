@@ -23,13 +23,23 @@ jobs:
           --build-arg KETPLUS_DESKTOP=1
           --build-arg 'QT_MODULES=qt5compat qtwebengine qtwebview qtwebsockets qtwebchannel qtpositioning qtshadertools'
           -f packaging/linux/Dockerfile.build -t ketplus-pro-builder .
+      # The statically linked sccache of the host, inside the build container, on the
+      # repository's Actions cache: the action exports the cache service URL and token.
+      - name: Restore compiler objects
+        uses: mozilla-actions/sccache-action@fc920bf0ec8de6ee65d409111f7ec508035751ba # v0.0.11
       - name: Build and package
+        env:
+          SCCACHE_GHA_ENABLED: "true"
         run: |
           mkdir -p "$RUNNER_TEMP/ketplus-pro-build/home"
           docker run --rm --user "$(id -u):$(id -g)" \
             -e HOME=/build/home -v "$PWD:/src:ro" \
             -v "$RUNNER_TEMP/ketplus-pro-build:/build" \
-            ketplus-pro-builder bash /src/packaging/linux/build-desktop.sh /src /build/desktop
+            -v "$SCCACHE_PATH:/usr/local/bin/sccache:ro" \
+            -e SCCACHE_GHA_ENABLED -e ACTIONS_RESULTS_URL -e ACTIONS_RUNTIME_TOKEN \
+            -e ACTIONS_CACHE_SERVICE_V2 \
+            ketplus-pro-builder bash -c \
+            'status=0; bash /src/packaging/linux/build-desktop.sh /src /build/desktop || status=$?; sccache --show-stats || true; exit $status'
       - name: Verify engineering artifact checksums
         run: |
           cd "$RUNNER_TEMP/ketplus-pro-build/desktop/linux-packages"

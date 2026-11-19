@@ -99,10 +99,27 @@ python3 tests/ci/test_shard_tests.py
 The public-tree workflow runs `tests/ci/test_shard_tests.py` on every pull
 request.
 
-The FetchContent cache (`.cache/fetchcontent`) is keyed on the suite, OS,
-architecture, compiler version, Qt version and the hash of `CMakeLists.txt`,
-every `*.cmake` file and the Claude sidecar `package-lock.json`; compiler
-objects go through sccache. CTest files hold absolute paths, so the build job
+The FetchContent cache (`.cache/fetchcontent`, sources only, without the
+`*-build` directories) is keyed on the suite, OS, architecture, compiler
+version, Qt version and the hash of the files that pin dependencies
+(`core/cmake/Dependencies.cmake`, `KetFonts.cmake`, `ThemeInput.cmake`,
+`cmake/WebRtc.cmake`, `cmake/Sparkle.cmake`) and the Claude sidecar
+`package-lock.json`. Keying it on every CMake file stored a new 350 MB entry
+per build change and evicted compiler objects from the repository's 10 GB
+Actions cache. Compiler objects go through sccache on the Actions cache in every
+C++ job: the OS suites, `linux-daemon`, and the Linux package build, which
+mounts the runner's static sccache into its container. The root
+`CMakeLists.txt` sets the launcher before any target; set only from `core/`, it
+missed the Pro targets created before `core/` (667 of 2,037 objects).
+
+`cache-cleanup.yml` deletes cache entries no later run restores, with
+`tools/ci/prune_caches.py`: every entry of a pull request when it closes, and
+daily (or on `workflow_dispatch`) the entries of any closed pull request plus
+each FetchContent or npm entry that a newer entry of the same key family on the
+same ref supersedes. sccache objects and Qt installs are left to GitHub's LRU
+eviction. `python3 tools/ci/prune_caches.py --repo <owner/name> --dry-run`
+lists what it would delete; `tests/ci/test_prune_caches.py` runs on every pull
+request. CTest files hold absolute paths, so the build job
 records the checkout, Qt and Node paths in `build/ci-paths.txt` and each test
 job fails with a named mismatch, instead of running stale or missing binaries,
 when a runner image puts any of them elsewhere. Node is pinned to an exact

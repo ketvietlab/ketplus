@@ -1,0 +1,38 @@
+name: cache-cleanup
+
+# Deletes Actions cache entries that no later run restores (tools/ci/prune_caches.py): those of
+# a closed pull request and superseded FetchContent/npm entries. Left alone they fill the
+# repository's 10 GB cache and GitHub evicts the compiler objects every build needs.
+on:
+  pull_request:
+    types: [closed]
+  schedule:
+    - cron: "17 3 * * *"
+  workflow_dispatch:
+permissions:
+  actions: write
+  contents: read
+  pull-requests: read
+concurrency:
+  group: cache-cleanup
+  cancel-in-progress: false
+jobs:
+  prune:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          persist-credentials: false
+      # A closed pull request prunes its own merge ref; the daily run also catches refs whose
+      # close event could not delete (a fork's read-only token) and superseded entries.
+      - name: Prune unreachable cache entries
+        env:
+          GH_TOKEN: ${{ github.token }}
+          CLOSED_REF: ${{ github.event_name == 'pull_request' && format('refs/pull/{0}/merge', github.event.pull_request.number) || '' }}
+        run: |
+          if [ -n "$CLOSED_REF" ]; then
+            python3 tools/ci/prune_caches.py --repo "$GITHUB_REPOSITORY" --closed-ref "$CLOSED_REF"
+          else
+            python3 tools/ci/prune_caches.py --repo "$GITHUB_REPOSITORY"
+          fi
