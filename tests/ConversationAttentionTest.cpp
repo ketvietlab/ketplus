@@ -12,7 +12,6 @@
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QLabel>
-#include <QScopeGuard>
 #include <QSettings>
 #include <QSignalSpy>
 #include <QTemporaryDir>
@@ -61,8 +60,6 @@ for line in sys.stdin:
         QVERIFY(finalizeScriptFixture(file));
         CodexAppServer server(executable);
         AgentSessionManager manager(&server);
-        // Stop the server first: pending replies still call back into the manager on shutdown.
-        const auto stopServer = qScopeGuard([&] { server.stop(); });
         ActivityBar bar;
         bar.show();
         const QString path = QFileInfo(directory.path()).canonicalFilePath();
@@ -165,8 +162,6 @@ for line in sys.stdin:
         QVERIFY(finalizeScriptFixture(file));
         CodexAppServer server(executable);
         AgentSessionManager manager(&server);
-        // Stop the server first: pending replies still call back into the manager on shutdown.
-        const auto stopServer = qScopeGuard([&] { server.stop(); });
         ActivityBar bar;
         const QString path = QFileInfo(directory.path()).canonicalFilePath();
         connect(&manager, &AgentSessionManager::conversationsChanged, &bar,

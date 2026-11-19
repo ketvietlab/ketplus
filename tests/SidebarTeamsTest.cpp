@@ -6,6 +6,7 @@
 #include "KetProfile.h"
 #include "KetSidebarTree.h"
 #include "KetStyle.h"
+#include "daemon/TestSettings.h"
 #include "teams/TeamDirectory.h"
 #include "teams/TeamMenus.h"
 #include "ui/InterfaceZoom.h"
@@ -27,7 +28,6 @@
 #include <QSettings>
 #include <QSignalSpy>
 #include <QStandardPaths>
-#include <QTemporaryDir>
 #include <QTimer>
 #include <QtTest>
 
@@ -133,18 +133,9 @@ struct FakeDaemon {
 class SidebarTeamsTest final : public QObject {
     Q_OBJECT
 
-  private:
-    QTemporaryDir settingsRoot_;
-
   private slots:
     void initTestCase() {
-        // QSettings() needs an organization on every platform (Windows would otherwise write
-        // nothing); keep the files in a temporary directory instead of the user's settings.
-        QVERIFY(settingsRoot_.isValid());
-        QCoreApplication::setOrganizationName(QStringLiteral("KetPlusTests"));
-        QCoreApplication::setApplicationName(QStringLiteral("SidebarTeamsTest"));
-        QSettings::setDefaultFormat(QSettings::IniFormat);
-        QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settingsRoot_.path());
+        isolateTestSettings(QStringLiteral("SidebarTeamsTest"));
         QStandardPaths::setTestModeEnabled(true);
         ket::Style::install(*qApp);
     }

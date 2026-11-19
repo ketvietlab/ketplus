@@ -2232,18 +2232,27 @@ and `ketplus_claude_sidecar_posix_tests` is disabled.
 
 Fixed for Windows: a path containment check compared a canonical path with `QDir::separator()`
 (a backslash) instead of `/`; `~CodexAppServer` called pending replies back into an
-`AgentSessionManager` that was already destroyed.
+`AgentSessionManager` that was already destroyed (covered by
+`WorkingLineTest::serverOutlivingTheManagerDropsPendingReplies`); an image name with a drive path
+(`C:/dir/a.png`) was read by `QUrl` as scheme `c`, so it is now turned into a file URL first.
 
-Skipped inside a test on Windows, each with its reason in the test output: computer use (macOS app
-bundle only), symbolic-link fixtures (`QFile::link` makes a `.lnk`), the nvm install layout,
-file-mode assertions, the Unix-shell CLI fixtures of the Atlas tests, and layout checks that depend
-on text metrics (`SettingsStoragePageTest` narrow width, `SidebarTeamsTest` list width at 180 px,
+Skipped on Windows (the `QSKIP` or comment in the test gives the reason; the assertion-level
+ones are not visible in the test output): computer use (macOS app bundle only), symbolic-link
+fixtures (`QFile::link` makes a `.lnk`; also the escape.txt checks of
+`AgentWorkspaceInteractionTest`), the nvm install layout, file-mode assertions, the Unix-shell CLI
+fixtures of the Atlas tests, `AgentWorkspaceMissingWorktreeTest::missingWorktreeKeepsHistoryAndCanStop`
+(a running provider's working directory cannot be removed), `AgentWorkspaceViewTest::
+streamingResponseStaysAnchoredAboveRunStatus` and `inlineImageIsResolvedAndPainted` (offscreen:
+`messageImageAt()` is empty and the inline image paints nothing, cause not found, follow-up task),
+the `"/C:/…"` file-link expectation in `linksFileReferencesInInlineCode`, the accessible-name
+check of `SettingsStoragePageTest`, and layout checks that depend on text metrics
+(`SettingsStoragePageTest` narrow width, `SidebarTeamsTest` list width at 180 px,
 `TeamPageTest::longContentStaysInsideThePage`, two `TeamDialogsTest` tests,
 `RemoteControlViewTest` intro and sign-in font checks, `MachineEndToEndTest` picker label). These
 layout checks need a look on a real Windows desktop. Not diagnosed:
 `DesktopSessionDiscoveryTest::discoversAnotherClientThroughRealDaemon` (the unread marker is not
 set reliably after a quick select and select back). `ketplus_team_translation_catalog_tests` is
-registered only where a real Python 3 exists (Windows has only the Store alias).
+registered wherever a Python 3 interpreter is found.
 
 ## English chrome and multilingual team content (T30)
 

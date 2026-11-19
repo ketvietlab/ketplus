@@ -7,7 +7,6 @@
 #include <QFile>
 #include <QFileInfo>
 #include <QJsonArray>
-#include <QScopeGuard>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QtTest>
@@ -95,8 +94,6 @@ for line in sys.stdin:
 
         ketplus::CodexAppServer appServer(serverPath);
         ketplus::AgentSessionManager manager(&appServer);
-        // Stop the server first: pending replies still call back into the manager on shutdown.
-        const auto stopServer = qScopeGuard([&] { appServer.stop(); });
         QSignalSpy details(&manager, &ketplus::AgentSessionManager::workingDetailChanged);
         manager.submitPrompt(worktree, QStringLiteral("Profile it"));
         QTRY_COMPARE_WITH_TIMEOUT(manager.workingDetail(worktree),
@@ -109,6 +106,49 @@ for line in sys.stdin:
         QCOMPARE(details.constLast().at(1).toString(), QString());
         for (const auto& emitted : std::as_const(details))
             QVERIFY(!emitted.at(1).toString().contains(QStringLiteral("secret")));
+    }
+
+    // The manager can be destroyed before the server it talks to. A request still waiting for its
+    // reply must then be dropped, not failed into the freed manager (this crashed on Windows).
+    void serverOutlivingTheManagerDropsPendingReplies() {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString worktree = directory.filePath("worktree");
+        QVERIFY(QDir().mkpath(worktree));
+        const QString serverPath = fixtureName(directory.filePath("fake-codex"));
+        QFile server(serverPath);
+        QVERIFY(server.open(QIODevice::WriteOnly));
+        const QByteArray source = R"PY(#!/usr/bin/python3
+import json
+import sys
+import time
+
+def send(value):
+    print(json.dumps(value, separators=(",", ":")), flush=True)
+
+for line in sys.stdin:
+    message = json.loads(line)
+    method = message.get("method")
+    request_id = message.get("id")
+    if method == "initialize":
+        send({"id": request_id, "result": {"codexHome": "/tmp", "platformFamily": "unix", "platformOs": "macos", "userAgent": "fake"}})
+    elif method == "thread/start":
+        send({"id": request_id, "result": {"thread": {"id": "thread-1", "turns": []}}})
+    elif method == "turn/start":
+        time.sleep(60)  # the reply never comes while the test runs
+)PY";
+        QCOMPARE(server.write(source), source.size());
+        server.close();
+        QVERIFY(finalizeScriptFixture(server));
+
+        ketplus::CodexAppServer appServer(serverPath);
+        {
+            ketplus::AgentSessionManager manager(&appServer);
+            manager.submitPrompt(worktree, QStringLiteral("Wait forever"));
+            QTRY_VERIFY_WITH_TIMEOUT(manager.isRunning(worktree), 3000);
+            QTest::qWait(500); // thread/start answered, turn/start is the pending request
+        }
+        // appServer is destroyed here with the request still pending, and no stop() before it.
     }
 
     // A background conversation in the same worktree ending its turn leaves the active one's line.
@@ -163,8 +203,6 @@ for line in sys.stdin:
 
         ketplus::CodexAppServer appServer(serverPath);
         ketplus::AgentSessionManager manager(&appServer);
-        // Stop the server first: pending replies still call back into the manager on shutdown.
-        const auto stopServer = qScopeGuard([&] { appServer.stop(); });
         manager.submitPrompt(worktree, QStringLiteral("First"));
         QTRY_COMPARE_WITH_TIMEOUT(manager.workingDetail(worktree),
                                   QStringLiteral("profiling the first"), 3000);

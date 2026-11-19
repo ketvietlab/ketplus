@@ -199,8 +199,8 @@ target_link_libraries(ketplus_team_page_language_tests PRIVATE Qt6::Test ketplus
 target_compile_definitions(ketplus_team_page_language_tests PRIVATE
     KETPLUS_TEAM_TS="${PROJECT_SOURCE_DIR}/modules/remote/translations/ketplus_teams_vi.ts")
 # Historical catalogs remain complete; new English UI text needs no Vietnamese translation.
-# Needs a real Python 3; Windows only has the Microsoft Store stub, so it is not registered there.
-if(NOT TARGET Python3::Interpreter AND NOT WIN32)
+# Needs a Python 3 interpreter; without one the test is not registered.
+if(NOT TARGET Python3::Interpreter)
     find_package(Python3 COMPONENTS Interpreter)
 endif()
 if(TARGET Python3::Interpreter)
