@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: MPL-2.0
 import QtQuick
+import QtQuick.Layouts
 import Ket
 import KetPlusMock
 
@@ -43,6 +44,45 @@ Column {
         iconName: item.running ? "loading" : item.failed ? "error" : (item.icons[item.step.kind] || "sliders")
         expandable: item.hasDetails
         checked: !!item.step.expanded
+
+        // The kit's detail label uses its natural width. Give the detail the
+        // space left after the label, icon and disclosure control.
+        contentItem: RowLayout {
+            spacing: row.recipe.spacing
+            KetIcon {
+                visible: row.iconName !== ""
+                name: row.iconName
+                box: row.recipe.iconSize
+                color: row.recipe.text
+            }
+            Text {
+                Layout.maximumWidth: details.visible
+                    ? Math.max(0, (parent.width - 2 * parent.spacing) / 2) : Infinity
+                Layout.fillWidth: !details.visible
+                text: row.text
+                elide: Text.ElideRight
+                color: row.recipe.text
+                font.family: KetTheme.fontFamily
+                font.pixelSize: row.recipe.fontPixels
+            }
+            Text {
+                id: details
+                Layout.fillWidth: true
+                Layout.minimumWidth: 0
+                visible: row.detail !== ""
+                text: row.detail
+                elide: Text.ElideRight
+                color: row.recipe.detail
+                font.family: KetTheme.fontFamily
+                font.pixelSize: row.recipe.detailPixels
+            }
+            KetIcon {
+                visible: row.expandable
+                name: row.checked ? "chevron-up" : "chevron-down"
+                box: row.recipe.chevronSize
+                color: row.recipe.text
+            }
+        }
     }
 
     // Status the title cannot carry: a failure, an interruption or a running step.

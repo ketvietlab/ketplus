@@ -199,7 +199,14 @@ Item {
             expanded: transcript.kind === "running"
             KetActivityRow { text: "Read"; detail: "src/trails/TrailList.qml"; iconName: "file-code" }
             KetActivityRow { text: "Searched"; detail: "“refreshIndex” in src/trails"; iconName: "search" }
-            KetActivityRow { text: "Ran"; detail: "ctest --test-dir build -R trail_picker"; iconName: "terminal"; expandable: true }
+            TranscriptActivityItem {
+                window: transcript.window
+                step: ({
+                    kind: "command", title: "Ran", detail: command, command: command,
+                    output: "2 picker tests passed"
+                })
+                readonly property string command: "ctest --test-dir build -R trail_picker"
+            }
             KetActivityRow { text: "Compared"; detail: "first-frame timing · 2 runs"; iconName: "clock" }
         }
 

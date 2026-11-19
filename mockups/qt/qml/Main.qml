@@ -164,7 +164,7 @@ Basic.ApplicationWindow {
             failures.push("the dragged conversation is still held after the drop")
         const joined = teamOf("9410")
         if (!joined || joined.id !== "release")
-            failures.push("the pointer drag did not add 9410 to Release 1.4")
+            failures.push("the pointer drag did not add 9410 to the release team")
         for (const problem of sidebar.layoutProblems())
             failures.push("sidebar: " + problem)
         for (const failure of failures)
@@ -279,7 +279,13 @@ Basic.ApplicationWindow {
     readonly property var evidenceWindow: schedules.visible ? schedules : app
     property bool scheduledTranscript: false
     property string scheduledRunId: "web"
-    ScheduleStore { id: scheduleStore }
+    ScheduleStore {
+        id: scheduleStore
+        release: ({
+            team: Fixtures.teams[0], leader: Fixtures.releaseLead,
+            briefName: Fixtures.releaseBriefName, briefPrompt: Fixtures.releaseBriefPrompt
+        })
+    }
     SchedulesWindow {
         id: schedules; window: app; store: scheduleStore
     }
@@ -290,7 +296,7 @@ Basic.ApplicationWindow {
         const found = findConversation(number)
         if (found) openConversation(found.repository, found.conversation)
         else openConversation(Fixtures.repositories[0].name,
-            Object.assign({}, Fixtures.repositories[0].conversations[0], { number: number, title: "Morning release brief", transcript: "short" }))
+            Object.assign({}, Fixtures.repositories[0].conversations[0], { number: number, title: Fixtures.releaseBriefName, transcript: "short" }))
         scheduledTranscript = true
         raise(); requestActivate()
     }

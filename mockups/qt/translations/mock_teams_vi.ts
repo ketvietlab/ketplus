@@ -359,8 +359,8 @@
             <translation>Đã tạo </translation>
         </message>
         <message>
-            <source>Daily website article</source>
-            <translation>Bài viết website hằng ngày</translation>
+            <source>Morning release brief</source>
+            <translation>Tóm tắt phát hành buổi sáng</translation>
         </message>
         <message>
             <source>Delete </source>
@@ -619,12 +619,12 @@
             <translation>Các lượt review sẽ xếp hàng. Một reviewer theo kịp hai hoặc ba developer; thêm reviewer thứ hai sẽ rút ngắn hàng chờ.</translation>
         </message>
         <message>
-            <source>Schedule · @agent/4821</source>
-            <translation>Lịch chạy · @agent/4821</translation>
+            <source>Schedule · @agent/%1</source>
+            <translation>Lịch chạy · @agent/%1</translation>
         </message>
         <message>
-            <source>Scheduled run: Daily website article → leader</source>
-            <translation>Lượt theo lịch: Bài viết website hằng ngày → leader</translation>
+            <source>Scheduled run: %1 → leader</source>
+            <translation>Lượt theo lịch: %1 → leader</translation>
         </message>
         <message>
             <source>Sent to </source>

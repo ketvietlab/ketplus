@@ -75,7 +75,7 @@ KetDialog {
         KetFieldRow {
             width: parent.width; label: "Name"
             error: editor.tried && !nameField.text.trim() ? "Name is required" : ""
-            KetTextField { id: nameField; width: parent.width; placeholderText: "Daily website article"; invalid: editor.tried && !text.trim(); Accessible.name: "Schedule name" }
+            KetTextField { id: nameField; width: parent.width; placeholderText: Fixtures.releaseBriefName; invalid: editor.tried && !text.trim(); Accessible.name: "Schedule name" }
         }
         KetFieldRow {
             width: parent.width; label: "Send to"; stacked: true

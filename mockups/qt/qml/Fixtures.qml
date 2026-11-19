@@ -72,7 +72,8 @@ QtObject {
                   unread: true, worktree: "develop", transcript: "report", provider: "Codex",
                   providerId: "codex", model: "GPT-5.6 Sol", effort: "Medium" },
                 { number: "8215", title: "Offline settings", status: KetTheme.ConversationStatus.Working,
-                  worktree: "develop", transcript: "report-running" },
+                  worktree: "develop", transcript: "report-running", provider: "Claude",
+                  providerId: "claude", model: "Opus 5.5", effort: "Medium" },
                 { number: "9410", title: "Profile cold start", status: KetTheme.ConversationStatus.Working,
                   canReview: true, worktree: "develop", transcript: "running" },
                 { number: "3372", title: "Atlas Builder", status: KetTheme.ConversationStatus.Completed,
@@ -629,115 +630,109 @@ QtObject {
     readonly property int diskStopGb: 12
     readonly property string unmovedConversationNote: "“Quick search” (Wait for startup or shutdown to finish, or answer the pending request before switching.) could not be moved to the main checkout and still points at the removed folder. Open it on another folder before its next turn."
     readonly property string dirtyWorktreeRefusal: "The worktree has uncommitted or untracked changes (2 files). Commit or discard them, then remove it again."
+    readonly property string releaseBriefName: "Morning release brief"
+    readonly property string releaseBriefPrompt: "Summarize the Cinder Trail release checks and surface any blockers before the 09:00 handoff."
+    readonly property var releaseLead: repositories[0].conversations[0]
+
+    function releaseMember(number, assignment) {
+        const conversation = repositories[0].conversations.find(entry => entry.number === number)
+        return Object.assign({
+            number: conversation.number,
+            title: conversation.title,
+            provider: conversation.provider + " · " + conversation.model,
+            lane: "",
+            paths: []
+        }, assignment)
+    }
+
     readonly property var teams: [
         {
-            id: "release", name: "Release 1.4",
-            goal: "Ship the new navigation, the repository picker and Settings in ketPlus Pro 1.4.\n\n"
-                  + "Context: the 1.3 sidebar confused people who work in several repositories, so the tree groups "
-                  + "conversations under their repository and team. @agent/8213 rebuilt the repository picker and knows "
-                  + "its empty and error states; ask it before splitting that work.\n\n"
-                  + "Done means: every screen of the mock matches the app in light and dark, and the release notes say what moved.\n"
-                  + "Out of scope: the account flow and pricing.",
-            repository: "cinder-trail", branch: "release/1.4", paused: false, merges: "leader",
+            id: "release", name: "Cinder Trail 1.4",
+            goal: "Ship offline field notes. Keep the trail picker fast, prove notes survive a restart, and sign off the Linux release check.\n\n"
+                  + "Context: the offline library now keeps the last selected trail and restores saved notes. "
+                  + "Ask @agent/8213 about the bundled dataset and Linux smoke plan.\n\n"
+                  + "Done means the keyboard review has passed, a note survives an offline restart, "
+                  + "and the guide explains what happens to queued uploads.",
+            repository: repositories[0].name, branch: releaseLead.worktree, paused: false, merges: "leader",
             turnBudget: 60, automaticTurns: 23,
-            // T-37: the disk that holds the team's worktrees, in GB, and the done tasks whose
-            // worktree is still on it, as the daemon measures them.
             storage: { free: 64.2, worktrees: [
-                { id: "T-2", path: "/workspace/cinder-trail-quick-search", size: "4.2 GB" }] },
+                { id: "T-2", path: "/workspace/cinder-trail-offline-notes", size: "4.2 GB" }] },
             members: [
-                { number: "4821", title: "Release handoff", role: "leader", provider: "Codex · GPT-5.6 Luna",
-                  lane: "", paths: [], state: "working", now: "Ordering the merges into release/1.4" },
-                { number: "2035", title: "Trail picker focus", role: "developer", provider: "Claude · Opus 5.5",
-                  lane: "Navigation", paths: ["apps/desktop/src/workspace/"], state: "waiting", now: "T-1 is in review" },
-                { number: "8213", title: "Verify trail picker", role: "developer", provider: "Claude · Opus 5.5",
-                  lane: "Repository picker", paths: ["apps/desktop/src/app/picker/"], state: "working", now: "T-3 · step 3 of 4" },
-                { number: "8215", title: "Offline settings", role: "developer", provider: "Claude · Opus 5.5",
-                  lane: "Settings", paths: ["apps/desktop/src/settings/", "apps/desktop/src/overlays/"], state: "blocked", now: "T-5 waits for your decision" },
-                { number: "4583", title: "Picker review", role: "reviewer", provider: "Claude · Opus 5.5",
-                  lane: "", reviews: ["Navigation", "Repository picker", "Settings"], paths: [], state: "working", now: "Reviewing T-1 · #412" }
+                releaseMember("4821", { role: "leader", state: "working", now: "Tracking release checks" }),
+                releaseMember("2035", { role: "developer", lane: "Trail picker", paths: ["src/trails/"],
+                    state: "idle", now: "T-1 · review passed" }),
+                releaseMember("8213", { role: "developer", lane: "Offline QA", paths: ["tests/"],
+                    state: "blocked", now: "T-5 · waiting for D-1" }),
+                releaseMember("8215", { role: "developer", lane: "Offline settings", paths: ["src/settings/"],
+                    state: "working", now: "T-6 · preparing review" }),
+                releaseMember("4583", { role: "reviewer", reviews: ["Trail picker", "Offline QA", "Offline settings"],
+                    state: "idle", now: "T-1 · keyboard review passed" })
             ],
             tasks: [
-                { id: "T-1", title: "Sidebar destinations and their counts", owner: "2035", lane: "Navigation", state: "review",
-                  pr: "#412", branch: "feat/nav-destinations", worktree: "cinder-trail-nav", dependsOn: "",
+                { id: "T-1", title: "Keep keyboard focus after filtering", owner: "2035", lane: "Trail picker",
+                  state: "done", pr: "#412", branch: "fix/trail-picker", worktree: "", dependsOn: "",
                   criteria: [
-                      { text: "The four destinations match the mock at 100% and 125% zoom", done: true },
-                      { text: "Source Control shows the number of changed files", done: true },
-                      { text: "Every destination is reachable by keyboard", done: true }],
+                      { text: "Enter moves focus from the filter to the results", done: true },
+                      { text: "Opening the selected trail works with the keyboard", done: true }],
                   history: [
-                      { when: "Today, 09:10", text: "@agent/4821 wrote the acceptance criteria and assigned @agent/2035" },
-                      { when: "Today, 11:42", text: "@agent/2035 opened #412 and moved the task to In review" },
-                      { when: "Today, 11:43", text: "@agent/4583 started the review" }] },
-                { id: "T-2", title: "Quick search opens with ⌘K", owner: "2035", lane: "Navigation", state: "done",
-                  pr: "#405", branch: "feat/quick-search-shortcut", worktree: "cinder-trail-quick-search", dependsOn: "",
+                      { when: "Today, 10:12", text: "@agent/2035 submitted #412 for review" },
+                      { when: "Today, 10:42", text: "@agent/4583 passed review: both keyboard checks passed" }] },
+                { id: "T-2", title: "Restore a saved note after restart", owner: "8213", lane: "Offline QA",
+                  state: "done", pr: "#405", branch: "fix/restore-note", worktree: "cinder-trail-offline-notes", dependsOn: "",
                   criteria: [
-                      { text: "⌘K opens Quick search from every screen", done: true },
-                      { text: "Escape returns focus to where it was", done: true }],
-                  history: [
-                      { when: "Yesterday, 16:20", text: "@agent/4583 passed the review with one finding" },
-                      { when: "Yesterday, 16:48", text: "@agent/2035 fixed the finding and merged #405 into release/1.4" }] },
-                { id: "T-3", title: "Repository picker: recent and pinned repositories", owner: "8213", lane: "Repository picker", state: "doing",
-                  pr: "", branch: "feat/picker-recents", worktree: "cinder-trail-picker", dependsOn: "",
-                  outsideLane: { path: "apps/desktop/src/workspace/ActivityBar.cpp", lane: "Navigation", owner: "2035" },
+                      { text: "Restarting offline restores the note text and its trail", done: true },
+                      { text: "Restoring a note does not queue a duplicate upload", done: true }],
+                  history: [{ when: "Yesterday, 16:20", text: "@agent/4583 verified restore and sync; #405 merged" }] },
+                { id: "T-3", title: "Verify trail picker with a large library", owner: "8213", lane: "Offline QA",
+                  state: "doing", pr: "", branch: "test/large-trail-library", worktree: "cinder-trail-library", dependsOn: "",
+                  outsideLane: { path: "src/trails/TrailList.qml", lane: "Trail picker", owner: "2035" },
                   criteria: [
-                      { text: "The five most recent repositories come first", done: true },
-                      { text: "A pinned repository stays above the recent ones", done: true },
-                      { text: "Typing filters by name and by path", done: false },
-                      { text: "The list works with 0, 1 and 200 repositories", done: false }],
-                  criteriaNote: "Changed today at 10:05: “200 repositories” was added. @agent/8213 was told.",
-                  history: [
-                      { when: "Today, 09:12", text: "@agent/4821 wrote the acceptance criteria and assigned @agent/8213" },
-                      { when: "Today, 10:05", text: "@agent/4821 changed the acceptance criteria" },
-                      { when: "Today, 11:30", text: "@agent/8213 edited ActivityBar.cpp, a file of the Navigation lane" }] },
-                { id: "T-4", title: "Repository picker: empty and error states", owner: "8213", lane: "Repository picker", state: "todo",
-                  pr: "", branch: "", worktree: "", dependsOn: "T-3",
+                      { text: "Recently opened trails appear first", done: true },
+                      { text: "Filtering preserves keyboard focus", done: true },
+                      { text: "The picker handles 0, 1 and 200 saved trails", done: false }],
+                  criteriaNote: "The leader added the 200-trail case this morning.",
+                  history: [{ when: "Today, 11:30", text: "@agent/8213 found a picker change outside the Offline QA lane" }] },
+                { id: "T-4", title: "Check the empty offline library", owner: "8213", lane: "Offline QA",
+                  state: "todo", pr: "", branch: "", worktree: "", dependsOn: "T-3",
+                  criteria: [{ text: "An empty library offers a way to save a trail", done: false }],
+                  history: [{ when: "Today, 09:14", text: "@agent/4821 wrote the acceptance criteria" }] },
+                { id: "T-5", title: "Verify an offline note on Linux", owner: "8213", lane: "Offline QA",
+                  state: "blocked", pr: "", branch: "develop", worktree: "", dependsOn: "", decision: "D-1",
                   criteria: [
-                      { text: "No repository yet: one action that opens a folder", done: false },
-                      { text: "A repository that moved says so and offers Locate", done: false }],
-                  history: [
-                      { when: "Today, 09:14", text: "@agent/4821 wrote the acceptance criteria and assigned @agent/8213" }] },
-                { id: "T-5", title: "Settings: zoom and text size", owner: "8215", lane: "Settings", state: "blocked",
-                  pr: "", branch: "feat/settings-zoom", worktree: "cinder-trail-settings", dependsOn: "", decision: "D-1",
+                      { text: "A note saves with the network off", done: false },
+                      { text: "The note survives a restart", done: false }],
+                  history: [{ when: "Today, 11:05", text: "The smoke test is waiting for the dataset choice" }] },
+                { id: "T-6", title: "Show pending sync in settings", owner: "8215", lane: "Offline settings",
+                  state: "review", pr: "#418", branch: "feat/pending-sync", worktree: "", dependsOn: "",
                   criteria: [
-                      { text: "Zoom offers 90% to 150% in steps of 10", done: true },
-                      { text: "Text size is in pixels, from 12 to 18", done: true },
-                      { text: "A change applies as the decision says", done: false }],
-                  history: [
-                      { when: "Today, 09:15", text: "@agent/4821 wrote the acceptance criteria and assigned @agent/8215" },
-                      { when: "Today, 11:05", text: "@agent/8215 asked whether a change applies at once; @agent/4821 put it to you" }] },
-                { id: "T-6", title: "Settings: the update reminder", owner: "8215", lane: "Settings", state: "review",
-                  pr: "#418", branch: "feat/update-reminder", worktree: "", dependsOn: "",
+                      { text: "Settings show how many notes are waiting to sync", done: true },
+                      { text: "The count clears once the queued notes upload", done: true }],
+                  history: [{ when: "Today, 10:50", text: "@agent/8215 submitted #418 for review" }] },
+                { id: "T-7", title: "Verify keyboard navigation in the field editor", owner: "", lane: "Trail picker",
+                  state: "todo", pr: "", branch: "", worktree: "", dependsOn: "T-1",
+                  criteria: [{ text: "Tab reaches the observation field and Save offline", done: false }],
+                  history: [{ when: "Today, 09:20", text: "@agent/4821 wrote the acceptance criteria" }] },
+                { id: "T-8", title: "Publish the offline release notes", owner: "4821", lane: "",
+                  state: "todo", pr: "", branch: "", worktree: "", dependsOn: "T-1, T-3, T-5", decision: "D-2",
                   criteria: [
-                      { text: "The reminder shows the version and what Restart does", done: true },
-                      { text: "It stays out of the way of a running turn", done: true }],
-                  history: [
-                      { when: "Today, 10:50", text: "@agent/8215 opened #418 and moved the task to In review" }] },
-                { id: "T-7", title: "Keyboard path through the sidebar", owner: "", lane: "Navigation", state: "todo",
-                  pr: "", branch: "", worktree: "", dependsOn: "T-1",
-                  criteria: [
-                      { text: "Tab reaches every row in reading order", done: false },
-                      { text: "Arrow keys move inside a repository's conversations", done: false }],
-                  history: [
-                      { when: "Today, 09:20", text: "@agent/4821 wrote the acceptance criteria" }] },
-                { id: "T-8", title: "Release notes and the version number", owner: "4821", lane: "", state: "todo",
-                  pr: "", branch: "", worktree: "", dependsOn: "T-1, T-3, T-5", decision: "D-2",
-                  criteria: [
-                      { text: "The full test suite passes on release/1.4", done: false },
-                      { text: "The notes name every change a user can see", done: false }],
-                  history: [
-                      { when: "Today, 09:22", text: "@agent/4821 kept this task for the end of the epic" }] }
+                      { text: "The Linux release gate passes", done: false },
+                      { text: "The guide explains where queued notes appear", done: false }],
+                  history: [{ when: "Today, 09:22", text: "@agent/4821 added the release gate as a dependency" }] }
             ],
             decisions: [
-                { id: "D-1", question: "Should a change of zoom or text size apply at once, or after Apply?",
-                  detail: "Applying at once is what Appearance already does for the theme. An Apply button lets you compare before the window changes.",
-                  askedBy: "4821", task: "T-5", when: "42 min ago", options: ["Apply at once", "After Apply"], recommended: 0 },
-                { id: "D-2", question: "Which languages do the 1.4 release notes ship in?",
-                  detail: "Vietnamese adds about a day: the notes are reviewed by a person, not by the team.",
-                  askedBy: "4821", task: "T-8", when: "2 hours ago", options: ["English only", "English and Vietnamese"], recommended: 0 }
+                { id: "D-1", question: datasetQuestion, detail: "The bundled set covers the release gate. The full QA set adds sync history.",
+                  askedBy: releaseLead.number, task: "T-5", when: "8 min ago",
+                  options: ["Bundled trail dataset", "Full QA dataset"], recommended: 0 },
+                { id: "D-2", question: "Which languages should the offline guide ship in?",
+                  detail: "The Vietnamese guide needs one more editorial review.",
+                  askedBy: releaseLead.number, task: "T-8", when: "2 hours ago",
+                  options: ["English only", "English and Vietnamese"], recommended: 0 }
             ],
             updates: [
-                { icon: "pull-request", text: "T-1 moved to In review", detail: "@agent/2035 · #412", when: "18 min ago" },
-                { icon: "warning", text: "T-3 edited a file of another lane", detail: "@agent/8213 · ActivityBar.cpp belongs to Navigation", when: "30 min ago", warning: true },
-                { icon: "clock", text: "T-5 is blocked on a decision", detail: "@agent/8215 · D-1 waits for you", when: "55 min ago" },
+                { icon: "check", text: "T-1 review passed · 2/2 criteria",
+                  detail: "@agent/4583 · Keyboard focus and trail selection verified", when: "24 min ago" },
+                { icon: "warning", text: "T-3 edited a file in the Trail picker lane", detail: "@agent/8213 · TrailList.qml", when: "30 min ago", warning: true },
+                { icon: "clock", text: "T-5 is blocked on a decision", detail: "@agent/8213 · D-1 waits for you", when: "55 min ago" },
                 { icon: "pull-request", text: "T-6 moved to In review", detail: "@agent/8215 · #418", when: "1 hour ago" }
             ]
         },
