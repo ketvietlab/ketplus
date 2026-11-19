@@ -91,6 +91,7 @@ ketplus_enable_warnings(ketplus_runner_delivery_tests)
 target_link_libraries(ketplus_runner_delivery_tests PRIVATE Qt6::Test ketplus_runner_delivery)
 add_test(NAME ketplus_runner_delivery_tests COMMAND ketplus_runner_delivery_tests)
 ketplus_tests_offscreen()
+ketplus_label_tests(runner)
 
 # The runner's snapshot receiver with real packs from the snapshot library and the system git;
 # temporary directories only, no network.

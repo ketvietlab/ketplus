@@ -44,9 +44,10 @@ cancels the obsolete run. See `docs/release-process.md`.
 `build.yml` calls `os-suite.yml` once per edition and OS. Its `build` job
 compiles the suite once, on the oldest runner of the set so the binaries load
 on the newer ones, and uploads the build tree (without object files or static
-libraries) as a three-day artifact. A `test` job per runner version
-(`fail-fast: false`) restores the same Qt and Node, unpacks the tree and runs
-`ctest` with `QT_QPA_PLATFORM=offscreen`.
+libraries) as a three-day artifact. `test-shards` test jobs per runner version
+(`fail-fast: false`) restore the same Qt and Node, unpack the tree and run
+`ctest` with `QT_QPA_PLATFORM=offscreen`, each on its share of the suite. A
+`tests-passed` job reports one result for the whole matrix.
 
 The macOS Pro build configures `Python3_EXECUTABLE` as the checked-in
 `packaging/macos/ci-python3` launcher. CTest keeps this workspace-stable command
@@ -63,7 +64,40 @@ replaced on PATH, plus missing-interpreter and child failure/skip behavior.
 | `lite-linux` | `ubuntu-22.04` | `ubuntu-22.04`, `ubuntu-24.04` |
 | `lite-macos` | `macos-15` | `macos-15`, `macos-26` |
 | `lite-windows` | `windows-2022` | `windows-2022`, `windows-2025` |
-| `pro-macos` | `macos-15` | `macos-15`, `macos-26` (serial CTest) |
+| `pro-macos` | `macos-15` | `macos-15`, `macos-26`, 16 shards each (serial CTest) |
+
+### Test labels, costs and CI shards
+
+`ketplus_label_tests(<area>)` (`cmake/TestLabels.cmake`) labels every test of
+its directory `desktop`, `daemon`, `runner` or `packaging`. `tests/test-costs.txt`
+lists measured durations of the longer tests. Each becomes the test's CTest
+`COST`, so long tests start first, and a test of 30 seconds or more is also
+labelled `slow`:
+
+```sh
+ctest --preset dev -L daemon       # one area
+ctest --preset dev -LE slow -j4    # quick pass without the slow tests
+ctest --preset dev -L slow         # only the slow ones
+```
+
+A sharded CI job runs `tools/ci/shard_tests.py plan`, which reads the tests
+and costs from the build tree (`ctest --show-only=json-v1`), puts the longest
+first, each into the shard with the least total cost (unlisted tests count 3
+seconds), and prints the name regex of its own shard. Every shard plans from
+the same tree, so all tests run exactly once. The Pro suite runs serially on one
+runner for about 35 minutes. On 16 shards each takes about as long as its
+longest test, and more shards would only add the 3 to 4 minutes of setup per
+job. Each test job keeps its `CTestCostData.txt` as a `test-costs-*` artifact
+for 14 days. When the shards drift apart, refresh the file from a run's
+artifacts or a local tree:
+
+```sh
+python3 tools/ci/shard_tests.py costs path/to/CTestCostData.txt... > tests/test-costs.txt
+python3 tests/ci/test_shard_tests.py
+```
+
+The public-tree workflow runs `tests/ci/test_shard_tests.py` on every pull
+request.
 
 The FetchContent cache (`.cache/fetchcontent`) is keyed on the suite, OS,
 architecture, compiler version, Qt version and the hash of `CMakeLists.txt`,

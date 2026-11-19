@@ -156,6 +156,11 @@ jobs:
       configure-args: -DCMAKE_BUILD_TYPE=Release -DKETPLUS_PRODUCTION_RELEASE=ON -DKETPLUS_EDITION=pro
       node: true
       build-timeout: 60
-      # One test at a time: the desktop/daemon integration tests time out when
-      # they share the runner's three cores. The suite takes about 30 minutes.
-      test-timeout: 60
+      # One test at a time per runner: the desktop/daemon integration tests
+      # time out when they share its three cores. Run serially, the suite takes
+      # about 35 minutes, so it is split into cost-balanced shards on separate
+      # runners. Beyond 16 the longest single test bounds each shard, so more
+      # shards only add setup time.
+      test-shards: 16
+      # Room for the 900-second journal tests on a slow runner.
+      test-timeout: 30
