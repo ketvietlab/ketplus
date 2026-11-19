@@ -27,9 +27,10 @@ operation still takes the lock and compares the lock file's generation with the
 one cached. A commit advances the generation before it writes the OS record, so a
 write by another store or process, or a write that failed partway, makes the next
 operation read the OS record again. Decrypting the whole record for each read put a
-keychain round trip on every event a daemon uploaded. A running process therefore
-keeps serving the secrets it already holds while the OS store is locked; a process
-with nothing cached, and any write, still fails there.
+keychain round trip on every event a daemon uploaded. Before it uses a cached
+record, the store asks the backend whether the OS store is accessible without
+decrypting anything (the keychain's lock state, the Secret Service collection's
+`Locked` property), so a locked store still refuses a running process.
 A cooperating writer that encounters the held lock receives a retryable error;
 a successful later operation sees its committed changes.
 

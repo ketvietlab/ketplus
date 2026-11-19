@@ -125,6 +125,16 @@ class Keychain final : public CredentialBackend {
                             CFDataGetLength(data));
         return Result::Found;
     }
+    bool accessible(const QString&, QString* error) override {
+        InteractionGuard interaction;
+        if (failed(interaction.status, error))
+            return false;
+        SecKeychainRef keychain = nullptr;
+        if (!available(&keychain, error))
+            return false;
+        CFRelease(keychain);
+        return true;
+    }
     bool write(const QString& service, const QByteArray& value, QString* error) override {
         InteractionGuard interaction;
         if (failed(interaction.status, error))

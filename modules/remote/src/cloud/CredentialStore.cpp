@@ -249,6 +249,8 @@ bool CredentialStore::transaction(const std::function<bool(QHash<QString, QByteA
             cache_ = {};
         }
     }
+    if (cached && !backend_->accessible(service_, error))
+        return false;
     if (!cached) {
         QByteArray bytes;
         read = backend_->read(service_, &bytes, error);

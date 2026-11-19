@@ -46,6 +46,11 @@ class Backend final : public CredentialBackend {
             afterWrite();
         return true;
     }
+    bool accessible(const QString&, QString* error) override {
+        if (locked && error)
+            *error = "Synthetic store unavailable";
+        return !locked;
+    }
 };
 struct Fixture {
     QTemporaryDir directory;
@@ -262,12 +267,11 @@ class CredentialStoreTest final : public QObject {
         QVERIFY(error.contains("busy"));
         lock.close();
         f.backend->locked = true;
-        // A store with nothing cached must reach the OS store, and its failure is not Missing.
-        CredentialStore cold("test", f.backend, f.path);
-        QVERIFY(cold.read("key", &error).isEmpty());
+        // A cached record is not served while the OS store refuses access.
+        QVERIFY(f.store.read("key", &error).isEmpty());
         QVERIFY(!error.isEmpty());
         f.backend->locked = false;
-        QCOMPARE(cold.read("key"), "synthetic");
+        QCOMPARE(f.store.read("key"), "synthetic");
 #else
         QSKIP("Native credential locking is supported on macOS and Linux.");
 #endif
