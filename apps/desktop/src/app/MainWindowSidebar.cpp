@@ -214,6 +214,9 @@ void MainWindow::refreshSidebarRepositories() {
     }
 
     // Placement is independent of a team's mutable execution repository (ADR 0123).
+    const QHash<QString, QList<QJsonObject>> sidebarTeams =
+        teams_ != nullptr && teams_->hasTeams() ? teams_->sidebarTeamsByRepository()
+                                                : QHash<QString, QList<QJsonObject>>{};
     if (teams_ != nullptr)
         for (const auto& team : teams_->teams()) {
             const auto root = team.value(QStringLiteral("sidebar_repository"))
@@ -224,7 +227,7 @@ void MainWindow::refreshSidebarRepositories() {
     // Members stay under their team, whichever execution worktree a task gives them.
     QHash<QString, QVector<SidebarTeam>> teamsByRepository;
     for (const QString& root : std::as_const(roots)) {
-        auto folders = takeSidebarTeams(root, conversationsByRepository);
+        auto folders = takeSidebarTeams(root, sidebarTeams, conversationsByRepository);
         for (const auto& team : folders)
             for (const auto& member : team.members)
                 if (member.toMap().value(QStringLiteral("selected")).toBool()) {

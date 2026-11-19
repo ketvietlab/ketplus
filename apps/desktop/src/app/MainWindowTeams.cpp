@@ -67,11 +67,12 @@ void MainWindow::setupTeams() {
 
 QVector<SidebarTeam>
 MainWindow::takeSidebarTeams(const QString& repository,
+                             const QHash<QString, QList<QJsonObject>>& teams,
                              QHash<QString, QVariantList>& conversationsByRepository) const {
     QVector<SidebarTeam> folders;
     if (teams_ == nullptr || !teams_->hasTeams())
         return folders;
-    for (const QJsonObject& team : teams_->sidebarTeams(repository)) {
+    for (const QJsonObject& team : teams.value(TeamDirectory::normalizedRepository(repository))) {
         SidebarTeam folder{
             .id = team.value(QStringLiteral("id")).toString(),
             .name = team.value(QStringLiteral("name")).toString(),

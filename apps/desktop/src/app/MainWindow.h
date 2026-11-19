@@ -9,6 +9,7 @@
 #include "workspace/WorkspaceSearch.h"
 
 #include <QHash>
+#include <QJsonObject>
 #include <QKeySequence>
 #include <QList>
 #include <QMainWindow>
@@ -258,8 +259,9 @@ class MainWindow final : public QMainWindow {
     void setupTeams();
     void setupSchedules();
     // Takes the members of the repository's teams out of `conversations`, into their folders.
+    // `teams` is TeamDirectory::sidebarTeamsByRepository(), read once per sidebar refresh.
     [[nodiscard]] QVector<SidebarTeam>
-    takeSidebarTeams(const QString& repository,
+    takeSidebarTeams(const QString& repository, const QHash<QString, QList<QJsonObject>>& teams,
                      QHash<QString, QVariantList>& conversationsByRepository) const;
     // Each member conversation's role for the Agent Workspace header (#467).
     void updateTeamRoles();

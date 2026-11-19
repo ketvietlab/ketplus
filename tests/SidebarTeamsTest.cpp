@@ -671,6 +671,14 @@ class SidebarTeamsTest final : public QObject {
         auto legacy = team("9", 1);
         teams.applyEvent("team.changed", {{"team", legacy}});
         QCOMPARE(teams.sidebarTeams("/repo").size(), 1);
+        // The sidebar reads every group from one pass; each group matches sidebarTeams().
+        const auto grouped = teams.sidebarTeamsByRepository();
+        QCOMPARE(grouped.size(), 3);
+        for (const QString& repository :
+             {QStringLiteral("/origin/repository"), QString{}, QStringLiteral("/repo")})
+            QCOMPARE(grouped.value(TeamDirectory::normalizedRepository(repository)),
+                     teams.sidebarTeams(repository));
+        QVERIFY(grouped.value(TeamDirectory::normalizedRepository("/execution/other")).isEmpty());
     }
 
     void theDirectoryFollowsTheDaemon() {
