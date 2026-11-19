@@ -170,6 +170,9 @@ class BundledBrowserRuntimeTest final : public QObject {
                             {QStringLiteral("jsonrpc"), QStringLiteral("src/cli.mjs")}};
         }));
 
+#ifndef Q_OS_WIN
+        // (Windows: QFile::link makes a shell .lnk file, which is not a link the file system
+        // follows, so there is no escape to reject.)
         {
             // A symlinked entrypoint that resolves outside the runtime root is rejected.
             FakeBundle bundle;
@@ -182,6 +185,7 @@ class BundledBrowserRuntimeTest final : public QObject {
             QVERIFY(QFileInfo(link).isFile());
             QVERIFY(!loadBundledBrowserRuntime(bundle.runtime()).has_value());
         }
+#endif
         {
             // Manifests over 64 KiB are not parsed, even when otherwise valid.
             FakeBundle bundle;
@@ -221,10 +225,12 @@ class BundledBrowserRuntimeTest final : public QObject {
         QCOMPARE(launch->workingDirectory, root);
         QCOMPARE(launch->env.value(QStringLiteral("KETPLUS_BROWSER_CACHE")), cacheDir);
         QVERIFY(QFileInfo(cacheDir).isDir());
+#ifndef Q_OS_WIN // Windows has no group/other permission bits to report.
         QCOMPARE(QFile::permissions(cacheDir) &
                      (QFileDevice::ReadGroup | QFileDevice::WriteGroup | QFileDevice::ExeGroup |
                       QFileDevice::ReadOther | QFileDevice::WriteOther | QFileDevice::ExeOther),
                  QFileDevice::Permissions{});
+#endif
         // Inherited NODE_OPTIONS and Playwright download hosts are overridden with empty values.
         for (const auto* name :
              {"NODE_OPTIONS", "PLAYWRIGHT_DOWNLOAD_HOST", "PLAYWRIGHT_CHROMIUM_DOWNLOAD_HOST"}) {
@@ -296,12 +302,14 @@ class BundledBrowserRuntimeTest final : public QObject {
         writeFile(skills + QStringLiteral("/ketatlas/SKILL.md"), "---\n");
         // Not shipped by KetPlus, and a link out of the bundle is not a shipped skill.
         writeFile(skills + QStringLiteral("/other/SKILL.md"), "---\n");
+#ifndef Q_OS_WIN // QFile::link makes a shell .lnk on Windows, not a link out of the bundle.
         QTemporaryDir outside;
         writeFile(outside.filePath(QStringLiteral("SKILL.md")), "---\n");
         QVERIFY(QDir().mkpath(skills + QStringLiteral("/enterprise-grade")));
         QVERIFY(QFile::link(outside.filePath(QStringLiteral("SKILL.md")),
                             skills + QStringLiteral("/enterprise-grade/SKILL.md")));
 
+#endif
         for (const QString& appDir : {bundle.macos(), bundle.helpers()}) {
             const auto found = bundledSkills(appDir);
             QCOMPARE(found.size(), 2);
