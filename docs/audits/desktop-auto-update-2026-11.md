@@ -262,5 +262,9 @@ executable inside a correctly signed archive. A full Intel build and automatic
 relaunch were outside this test. Existing publisher scope checks still cover
 production feed pairing.
 
+F1 is the sole documented exception to T-4's requirement that each completed
+case preserve N or install the correct N+1. T-5 tracks client-side architecture
+validation and a rerun of the F1 fixture.
+
 Run the fixture using the
 [Desktop update QA procedure](../testing.md#desktop-update-qa-isolation).
