@@ -6,6 +6,7 @@
 #include <QString>
 #include <functional>
 #include <memory>
+#include <mutex>
 
 namespace ketplus::daemon {
 class CredentialBackend;
@@ -36,5 +37,16 @@ class CredentialStore final {
     std::shared_ptr<CredentialBackend> backend_;
     QString legacyPath_;
     QHash<QString, QByteArray>* stagedAccounts_{nullptr};
+    // The last record this store read or committed. Every transaction still takes the lock,
+    // and the lock file carries a generation that each commit advances, so a write by another
+    // store or process is seen. Decrypting the OS record on every read was the cost.
+    struct Cache {
+        bool valid{false};
+        QByteArray generation;
+        QJsonObject record;
+        QHash<QString, QByteArray> accounts;
+    };
+    mutable std::mutex cacheMutex_;
+    mutable Cache cache_;
 };
 } // namespace ketplus::daemon
