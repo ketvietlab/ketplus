@@ -38,7 +38,7 @@ FetchContent_Declare(
 FetchContent_Declare(
     ketqt
     GIT_REPOSITORY https://github.com/ketvietlab/ket-qt.git
-    GIT_TAG ad2ebc89c6fcff41a595409d3624def49212fcc2 # ket-qt develop: merged #58 (QuickTheme MSVC C3246)
+    GIT_TAG 023d9dc049c0270e2d96f0f577fea993a094b1c6 # ket-qt develop: merged #59 (cached font families)
     # Unlike the source-only dependencies above, the kit builds its own targets. Keep them in this
     # build tree: the shared cache is used by every build and edition at once.
     BINARY_DIR "${CMAKE_BINARY_DIR}/_deps/ketqt-build"
