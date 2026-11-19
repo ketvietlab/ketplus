@@ -672,6 +672,34 @@ class DaemonWorktreeContextTest final : public QObject {
         QCOMPARE(f.journal->sessions().first().worktreePath, f.b);
     }
 
+    // A deferred listing runs git off the event loop and answers like the direct one; when the
+    // conversation moves meanwhile it answers for where the conversation is now.
+    void listsWorktreesOffTheEventLoop() {
+        Fixture f;
+        QVERIFY(f.initialize());
+        const auto direct = f.call("session.worktrees", "direct");
+        QVERIFY(direct.value("ok").toBool());
+        QJsonObject deferred;
+        f.host->handleCommandDeferred(request("session.worktrees", "deferred"),
+                                      "isolated-context-test",
+                                      [&](const QJsonObject& result) { deferred = result; });
+        QVERIFY(deferred.isEmpty());
+        QTRY_VERIFY_WITH_TIMEOUT(!deferred.isEmpty(), 5000);
+        QCOMPARE(deferred.value("worktrees"), direct.value("worktrees"));
+        QCOMPARE(deferred.value("repository_path"), direct.value("repository_path"));
+        QCOMPARE(deferred.value("current_branch").toString(), QStringLiteral("main"));
+
+        QJsonObject moved;
+        f.host->handleCommandDeferred(request("session.worktrees", "moved"),
+                                      "isolated-context-test",
+                                      [&](const QJsonObject& result) { moved = result; });
+        QVERIFY(f.move(f.b, 1, "switch").value("ok").toBool());
+        QTRY_VERIFY_WITH_TIMEOUT(!moved.isEmpty(), 5000);
+        QVERIFY(moved.value("ok").toBool());
+        QCOMPARE(moved.value("worktree_path").toString(), f.b);
+        QCOMPARE(moved.value("current_branch").toString(), QStringLiteral("feature"));
+    }
+
     // ADR 0105: the desktop picker lists another repository's worktrees before choosing one.
     void listsAnotherRepositoryWithoutSwitchingOrEnrollingIt() {
         Fixture f;

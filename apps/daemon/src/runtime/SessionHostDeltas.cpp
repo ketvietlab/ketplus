@@ -48,6 +48,7 @@ SessionHost::~SessionHost() {
     teamGit_.clear();
     teamBranchNames_.clear();
     teamRemote_.clear();
+    worktreeListingReads_.clear();
     teamRemoteStopping_->store(true);
     // The journal outlives this host and its media store.
     journal_->setImagePreviewWriter({});
