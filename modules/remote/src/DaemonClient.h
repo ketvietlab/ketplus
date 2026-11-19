@@ -109,6 +109,8 @@ class DaemonClient final : public QObject {
     // ~/Library/Logs/KetPlus/daemon.log, rotated once past 8 MiB; empty if it cannot be made.
     [[nodiscard]] static QString daemonLogPath();
     void launchDaemon();
+    // A new socket for the daemon connection, already attached to this client.
+    QLocalSocket* newSocket();
     void authenticate();
     void finishAuthentication();
     // Queues a call, merged into an identical read already waiting to be sent.
