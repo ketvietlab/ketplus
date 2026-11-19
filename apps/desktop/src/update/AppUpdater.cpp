@@ -14,6 +14,8 @@ QPointer<AppUpdater>& currentInstance() {
     return updater;
 }
 
+bool updaterDisabledForQa = false;
+
 } // namespace
 
 // Used when no feed is compiled in, or on platforms without Sparkle: never contacts a server.
@@ -37,10 +39,20 @@ AppUpdater* createPlatformAppUpdater(QObject* parent) { return new DisabledAppUp
 
 AppUpdater::AppUpdater(QObject* parent) : QObject(parent) {}
 
+void AppUpdater::disableForQa() {
+    Q_ASSERT(currentInstance().isNull());
+    updaterDisabledForQa = true;
+}
+
 AppUpdater& AppUpdater::instance() {
     auto& updater = currentInstance();
-    if (updater.isNull())
-        updater = createPlatformAppUpdater(QCoreApplication::instance());
+    if (updater.isNull()) {
+        auto* parent = QCoreApplication::instance();
+        if (updaterDisabledForQa)
+            updater = new DisabledAppUpdater(parent);
+        else
+            updater = createPlatformAppUpdater(parent);
+    }
     return *updater;
 }
 

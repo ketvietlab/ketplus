@@ -2045,16 +2045,38 @@ installed journal or live provider is used.
 A desktop QA launch must isolate native settings before any application code reads
 or writes them. On macOS, changing `HOME` and `CFFIXED_USER_HOME` alone is insufficient:
 QSettings NativeFormat can still use the logged-in user's preferences via cfprefsd.
-Use a separate OS user, or an external, uncommitted QA-only hook that selects
-QSettings IniFormat and an explicit disposable settings directory. Gate such a hook
-to a unique QA bundle identifier; never enable it in a shipping app.
+For a QA session that does not exercise Sparkle itself, launch a disposable app
+bundle directly with `KETPLUS_QA_SETTINGS_DIR` pointing to an absolute scratch
+directory:
 
-Before launch, a probe using the same setup must prove that `QSettings().fileName()`
-is inside the QA home and `contains("workspace/lastRoot")` is false. Sparkle defaults
-must also belong only to the unique QA bundle domain. Never write, delete or migrate
-preferences in the normal application domain during QA. Record only key namespaces
-and counts in public evidence; do not commit values, path-derived key suffixes or
-digests. Keep any necessary comparison evidence outside the repository.
+```sh
+qa_home="$(mktemp -d)"
+HOME="$qa_home" CFFIXED_USER_HOME="$qa_home" \
+  KETPLUS_QA_SETTINGS_DIR="$qa_home/settings" KETPLUS_DISABLE_DAEMON_AUTOSTART=1 \
+  "$qa_bundle/Contents/MacOS/KetPlus"
+```
+
+Desktop routes default QSettings to INI files under the directory's `user` and
+`system` subdirectories, including organization-level fallbacks. It exits with a
+startup error on stderr if the requested location is unusable. The QA directory
+takes precedence over `KETPLUS_PROFILE_DIR`, and the updater is disabled for the
+entire process, including manual checks. Use a separate OS user and leave
+`KETPLUS_QA_SETTINGS_DIR` unset when testing Sparkle download, install, or relaunch.
+Use a separate daemon if the scenario needs one. Record only key namespaces and
+counts in public evidence. Keep any comparison evidence outside the repository.
+
+The regression for audit finding M5 is `ketplus_qa_settings_isolation_tests`.
+It checks that the default settings use INI before writing, verifies isolation
+from ordinary INI fallbacks, and exercises startup rejection and the disabled
+updater. On macOS, it intercepts Qt's native key lookup and verifies that the
+isolated settings perform no native lookups. The test writes settings only to
+scratch INI files. Run it with a Sparkle-enabled build to cover the macOS
+updater selection:
+
+```sh
+cmake --build build/dev --target ketplus_qa_settings_isolation_tests
+ctest --preset dev -R '^ketplus_qa_settings_isolation_tests$' --output-on-failure
+```
 
 Use a throwaway EdDSA key, loopback-only feed and fake providers. Verify the complete
 bundle's destination before install/relaunch; it must be disposable and outside the

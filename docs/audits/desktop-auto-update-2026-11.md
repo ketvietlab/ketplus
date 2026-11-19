@@ -81,6 +81,10 @@ remote HTTP is accepted by the application's transport policy.
 
 ### M5 — Medium: isolated HOME does not isolate native macOS settings
 
+Status: addressed by Desktop's explicit `KETPLUS_QA_SETTINGS_DIR` mode. See
+[Desktop update QA isolation](../testing.md#desktop-update-qa-isolation) for the
+startup procedure and regression test.
+
 References: apps/desktop/src/main.cpp:35–38 keeps the settings identifiers;
 apps/desktop/src/app/RepositoryRouter.cpp:91–97 uses default QSettings.
 

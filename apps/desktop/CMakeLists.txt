@@ -306,6 +306,7 @@ endif()
 
 qt_add_executable(ketplus WIN32 MACOSX_BUNDLE
     src/main.cpp
+    src/app/QaSettingsIsolation.cpp
     ${ketplus_platform_sources}
 )
 target_link_libraries(ketplus PRIVATE ketplus_desktop_shell ketplus_product_version)
