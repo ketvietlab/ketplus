@@ -95,6 +95,39 @@ needs `cmd` quoting inside the shell quoting, for example
 `win-run.sh 'ctest -R "two words"'`. Stop a session with `win-sync.sh stop` when the worktree is
 removed.
 
+### Windows package
+
+One command produces the ZIP (from a Windows shell with the toolchain; over ssh use
+`tools/windows/win-run.sh`):
+
+```sh
+cmake --preset daemon-release            # Pro: `cmake --preset release`
+cmake --build --preset daemon-release --target package
+```
+
+`package` runs `cmake --install` into CPack's staging tree, so nothing is copied from the build
+tree by hand, and zips `bin\`, `plugins\`, `lib\ketplus\` and `share\licenses\ketplus\` as
+`KetPlus-Daemon-<version>-Windows-AMD64.zip` (`KetPlus-<version>-windows-AMD64.zip` for the
+desktop). The install rules are in `packaging/windows/WindowsDeploy.cmake`: `windeployqt` runs on
+every executable (Qt DLLs and plugins), the MSVC runtime DLLs and the two OpenSSL 3 DLLs are
+installed beside them, and the license texts come from the shared rules. `Qt-Third-Party-Notices.txt` is generated at install time by `packaging/windows/QtNotices.cmake` from the SBOM that the Qt build installs in its `sbom/` folder, for the Qt libraries and image-format plugins actually staged; the Qt installation must contain `sbom/`, otherwise `cmake --install` fails. To install without
+zipping: `cmake --install build\daemon-release --prefix <dir> --component Runtime`.
+
+Check a staged or unzipped tree as a user's machine would meet it (PATH reduced to the Windows
+directories, so a local Qt or OpenSSL cannot hide a missing DLL):
+
+```sh
+cmake -DSTAGE=<dir> -DKETPLUS_VERSION=<x.y.z> -P packaging/windows/VerifyStagedTree.cmake
+```
+
+On the Pro tree it also starts `KetPlus.exe` with `QT_QPA_PLATFORM=offscreen` and expects it to
+still be running after a few seconds; a missing Qt DLL or plugin shows as an early exit. That
+proves the libraries load, not that the window looks right.
+
+Not done yet: code signing, an installer (NSIS/WiX), the bundled browser runtime and a bundled
+Node for the Claude sidecar (the daemon needs `node` on `PATH` for Claude sessions), and a check
+of the Pro window on a real Windows desktop.
+
 ## Build presets
 
 For the independent Linux server target, see

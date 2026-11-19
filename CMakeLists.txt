@@ -202,8 +202,10 @@ endif()
 if(NOT APPLE OR NOT KETPLUS_BUILD_DESKTOP)
     install(FILES LICENSE THIRD_PARTY_NOTICES.md
         DESTINATION share/licenses/ketplus
+        COMPONENT Runtime
     )
     install(DIRECTORY third_party/licenses/
         DESTINATION share/licenses/ketplus
+        COMPONENT Runtime
     )
 endif()
