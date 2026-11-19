@@ -17,7 +17,7 @@ foreach(required
 endforeach()
 # Every license text the shipped files need, by name (docs/licensing.md, "Required distribution
 # files"): an unrelated extra file must not make up for a missing one.
-foreach(license_text OpenSSL-Apache-2.0.txt Qt-LGPL-3.0.txt GPL-3.0.txt Scintilla.txt Lexilla.txt KetPlus-Syntax-MPL-2.0.txt
+foreach(license_text OpenSSL-Apache-2.0.txt Qt-LGPL-3.0.txt GPL-3.0.txt Qt-Third-Party-Notices.txt Scintilla.txt Lexilla.txt KetPlus-Syntax-MPL-2.0.txt
         libvterm-MIT.txt KET-Sans-OFL-1.1.txt KET-Sans-Mono-OFL-1.1.txt KetQt-MPL-2.0.txt
         Ket-Design-System-MIT.txt Ket-Symbol-CC-BY-4.0.txt)
     if(NOT EXISTS "${STAGE}/share/licenses/ketplus/${license_text}")

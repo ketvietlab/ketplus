@@ -64,3 +64,12 @@ if(TARGET ketplus_daemon OR TARGET ketplus)
     install(FILES "${KETPLUS_OPENSSL_CRYPTO_DLL}" "${KETPLUS_OPENSSL_SSL_DLL}"
         DESTINATION bin COMPONENT Runtime)
 endif()
+
+# Qt's own third-party notices, from the SBOM beside the Qt that was deployed. Installed after the
+# deploy scripts so the libraries it reads are already in the tree.
+get_filename_component(ketplus_qt_prefix "${Qt6_DIR}/../../.." ABSOLUTE)
+install(CODE "
+    set(STAGE \"\$ENV{DESTDIR}\${CMAKE_INSTALL_PREFIX}\")
+    set(QT_SBOM_DIR \"${ketplus_qt_prefix}/sbom\")
+    include(\"${CMAKE_CURRENT_LIST_DIR}/QtNotices.cmake\")
+" COMPONENT Runtime)
