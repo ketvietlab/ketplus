@@ -233,7 +233,6 @@ qt_add_resources(ketplus_preview "ketplus_mermaid_themes"
     PREFIX "/ketplus/mermaid"
     BASE "resources/mermaid"
     FILES resources/mermaid/light.json resources/mermaid/dark.json
-          resources/mermaid/SOURCE.json resources/mermaid/KetDesignSystem-LICENSE.txt
 )
 target_link_libraries(ketplus_preview
     PUBLIC Qt6::Widgets Qt6::Svg Qt6::SvgWidgets ketplus_ui
