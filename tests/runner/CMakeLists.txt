@@ -165,9 +165,9 @@ endif()
 # The test Relay as a program, for the loopback test package of packaging/linux/runner. Never
 # installed or packaged.
 if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
-    qt_add_executable(ketplus_runner_fake_relay
+    qt_add_executable(ketplus_runner_fake_relay_server
         FakeRelay.cpp FakeRelay.h FakeRelayJobs.cpp FakeRelayServer.cpp)
-    ketplus_enable_warnings(ketplus_runner_fake_relay)
-    target_link_libraries(ketplus_runner_fake_relay PRIVATE
+    ketplus_enable_warnings(ketplus_runner_fake_relay_server)
+    target_link_libraries(ketplus_runner_fake_relay_server PRIVATE
         Qt6::Network ketplus_runner_run OpenSSL::Crypto)
 endif()

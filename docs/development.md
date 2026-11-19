@@ -348,7 +348,7 @@ service.
 
 A package built for an `http` loopback Relay needs `--test-only`; it is named
 `..._test-only.deb`, says so in its description, and is never published.
-`ketplus_runner_fake_relay --port N --token-file PATH` (from `tests/runner`) serves
+`ketplus_runner_fake_relay_server --port N --token-file PATH` (from `tests/runner`) serves
 the test Relay on that port, writes a registration token to `PATH` and prints one
 line per registration, heartbeat (with the state the runner reported) and
 deregistration.

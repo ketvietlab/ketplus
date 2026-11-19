@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: MPL-2.0
 // The test Relay as a program, for an installed runner built against a loopback Relay URL:
-//   ketplus_runner_fake_relay --port N --token-file PATH
+//   ketplus_runner_fake_relay_server --port N --token-file PATH
 // writes one registration token to PATH (mode 0600) and serves until stopped. It prints one
 // line per registration, heartbeat and deregistration with the runner id and the state it
 // reported, never a token or credential. Test-only: not installed, not part of any package.
@@ -19,7 +19,7 @@ void say(const QString& line) {
 }
 
 int usage() {
-    QTextStream(stderr) << "Usage: ketplus_runner_fake_relay --port N --token-file PATH\n";
+    QTextStream(stderr) << "Usage: ketplus_runner_fake_relay_server --port N --token-file PATH\n";
     return 64;
 }
 

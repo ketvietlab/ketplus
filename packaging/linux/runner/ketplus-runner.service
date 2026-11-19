@@ -25,7 +25,9 @@ Restart=on-failure
 RestartSec=5
 NoNewPrivileges=yes
 ProtectSystem=strict
-PrivateTmp=yes
+# The job supervisor runs in the account's user manager and listens under the host's /tmp, where
+# the runner must reach it: no private /tmp, and /tmp writable under ProtectSystem=strict.
+ReadWritePaths=/tmp
 ProtectKernelModules=yes
 ProtectKernelLogs=yes
 ProtectClock=yes
