@@ -119,6 +119,11 @@ unzipping; see [development](development.md#windows-package). They are unsigned:
 Authenticode signing exists, sign every `.exe` and `.dll` under `bin\` before the ZIP is
 published, and do not publish an unsigned Windows build as a production release. Windows
 artifacts are audited for the license notices in `share\licenses\ketplus` like the others.
+The Qt notice file lists each bundled third-party component with the license, copyright and
+source recorded in Qt's SBOM, and includes the texts of the licenses that SBOM defines itself
+(`LicenseRef-*`). Texts of standard SPDX identifiers (MIT, Zlib, BSD, ...) are not in the Qt
+installation and are not copied here: supplying them is left to the legal review before a public
+Windows release.
 
 A production desktop release additionally requires:
 

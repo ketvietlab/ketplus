@@ -110,7 +110,7 @@ tree by hand, and zips `bin\`, `plugins\`, `lib\ketplus\` and `share\licenses\ke
 `KetPlus-Daemon-<version>-Windows-AMD64.zip` (`KetPlus-<version>-windows-AMD64.zip` for the
 desktop). The install rules are in `packaging/windows/WindowsDeploy.cmake`: `windeployqt` runs on
 every executable (Qt DLLs and plugins), the MSVC runtime DLLs and the two OpenSSL 3 DLLs are
-installed beside them, and the license texts come from the shared rules. To install without
+installed beside them, and the license texts come from the shared rules. `Qt-Third-Party-Notices.txt` is generated at install time by `packaging/windows/QtNotices.cmake` from the SBOM that the Qt build installs in its `sbom/` folder, for the Qt libraries and image-format plugins actually staged; the Qt installation must contain `sbom/`, otherwise `cmake --install` fails. To install without
 zipping: `cmake --install build\daemon-release --prefix <dir> --component Runtime`.
 
 Check a staged or unzipped tree as a user's machine would meet it (PATH reduced to the Windows
