@@ -6,6 +6,7 @@
 #import <Sparkle/Sparkle.h>
 
 #include <cstdio>
+#include <cstdlib>
 
 namespace ketplus {
 bool sparkleQaBundleAllowed(NSString* bundleIdentifier);
@@ -16,10 +17,60 @@ bool sparkleQaBundleAllowed(NSString* bundleIdentifier);
 - (instancetype)initWithOwner:(void*)owner;
 @end
 
+namespace {
+int probeArchitecture(NSBundle* bundle, bool expectOffer) {
+    NSString* domain = bundle.bundleIdentifier;
+    NSURL* feed = [NSURL URLWithString:[bundle objectForInfoDictionaryKey:@"SUFeedURL"] ?: @""];
+    if (![domain hasPrefix:@"dev.ketplus.tests.updater-architecture."] ||
+        ![feed.scheme isEqualToString:@"http"] || ![feed.host isEqualToString:@"127.0.0.1"] ||
+        feed.port == nil || std::getenv("KETPLUS_QA_SETTINGS_DIR") == nullptr)
+        return 3;
+
+    NSUserDefaults* defaults = NSUserDefaults.standardUserDefaults;
+    [defaults setPersistentDomain:@{@"SUEnableAutomaticChecks" : @NO} forName:domain];
+    auto* delegate = [[KetPlusSparkleDelegate alloc] initWithOwner:nullptr];
+    auto* userDriver = [[SPUStandardUserDriver alloc] initWithHostBundle:bundle delegate:nil];
+    auto* updater = [[SPUUpdater alloc] initWithHostBundle:bundle
+                                       applicationBundle:bundle
+                                               userDriver:userDriver
+                                                 delegate:delegate];
+    __block bool offered = false;
+    id observer = [NSNotificationCenter.defaultCenter
+        addObserverForName:SUUpdaterDidFindValidUpdateNotification
+                    object:updater
+                     queue:nil
+                usingBlock:^(NSNotification*) {
+                  offered = true;
+                }];
+    NSError* error = nil;
+    const bool started = [updater startUpdater:&error];
+    if (started) {
+        [updater checkForUpdateInformation];
+        NSDate* deadline = [NSDate dateWithTimeIntervalSinceNow:10];
+        while (updater.sessionInProgress && deadline.timeIntervalSinceNow > 0)
+            [NSRunLoop.currentRunLoop runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.05]];
+    }
+    [NSNotificationCenter.defaultCenter removeObserver:observer];
+    [defaults removePersistentDomainForName:domain];
+    [defaults synchronize];
+    std::fprintf(stdout, "Architecture probe: offered=%d started=%d finished=%d\n", offered,
+                 started, !updater.sessionInProgress);
+    if (!started)
+        std::fprintf(stderr, "%s\n", error.localizedDescription.UTF8String);
+    return started && !updater.sessionInProgress && offered == expectOffer ? 0 : 4;
+}
+} // namespace
+
 int main(int argc, char** argv) {
     QCoreApplication app(argc, argv);
     @autoreleasepool {
         NSBundle* bundle = [NSBundle mainBundle];
+        if (app.arguments().size() == 2) {
+            const auto option = app.arguments().at(1);
+            if (option == QStringLiteral("--expect-offer") || option == QStringLiteral("--expect-no-offer"))
+                return probeArchitecture(bundle, option == QStringLiteral("--expect-offer"));
+            return 3;
+        }
         NSString* domain = @"dev.ketplus.tests.updater-feed";
         if (![bundle.bundleIdentifier isEqualToString:domain])
             return 1;

@@ -172,6 +172,7 @@ fi
 /usr/bin/python3 "$policy" seed-feed "${identity_arguments[@]}" --appcast "$appcast_staging/appcast.xml" || fail "cannot seed scoped appcast"
 "$sparkle_bin/generate_appcast" "${key_arguments[@]+"${key_arguments[@]}"}" \
     --download-url-prefix "$download_prefix" \
+    --channel "ketplus-$architecture" \
     --embed-release-notes \
     -o "$appcast_staging/appcast.xml" \
     "$updates_dir"

@@ -6,6 +6,19 @@
 
 #include <QMetaObject>
 #include <QPointer>
+#include <QtLogging>
+
+namespace {
+NSString* updateArchitectureChannel() {
+#if defined(__arm64__)
+    return @"ketplus-arm64";
+#elif defined(__x86_64__)
+    return @"ketplus-x86_64";
+#else
+#error Unrecognized Sparkle update architecture
+#endif
+}
+} // namespace
 
 namespace ketplus {
 class SparkleAppUpdater;
@@ -112,6 +125,43 @@ bool platformAppUpdaterAllowedInQa() {
 - (NSString*)feedURLStringForUpdater:(SPUUpdater*)updater {
     id feed = [updater.hostBundle objectForInfoDictionaryKey:@"SUFeedURL"];
     return [feed isKindOfClass:[NSString class]] ? feed : @"";
+}
+
+// The Sparkle item channel identifies the executable slice. The release channel is
+// independent and is pinned by the build's feed URL.
+- (NSSet<NSString*>*)allowedChannelsForUpdater:(SPUUpdater*)updater {
+    (void)updater;
+    return [NSSet setWithObject:updateArchitectureChannel()];
+}
+
+- (void)updater:(SPUUpdater*)updater didFinishLoadingAppcast:(SUAppcast*)appcast {
+    (void)updater;
+    for (SUAppcastItem* item in appcast.items) {
+        if (item.channel == nil)
+            qWarning("Sparkle ignored an update with missing or invalid architecture metadata");
+        else if (![item.channel isEqualToString:updateArchitectureChannel()])
+            qWarning("Sparkle ignored an update for a different architecture");
+    }
+}
+
+- (BOOL)updater:(SPUUpdater*)updater
+    shouldProceedWithUpdate:(SUAppcastItem*)item
+                updateCheck:(SPUUpdateCheck)updateCheck
+                      error:(NSError* __autoreleasing*)error {
+    (void)updater;
+    (void)updateCheck;
+    // Sparkle always includes untagged items in its default channel selection.
+    if ([item.channel isEqualToString:updateArchitectureChannel()])
+        return YES;
+    if (error != nullptr) {
+        NSString* reason = item.channel == nil
+                               ? @"This update does not declare a supported architecture."
+                               : @"This update is for a different architecture.";
+        *error = [NSError errorWithDomain:@"dev.ketplus.updates"
+                                     code:1
+                                 userInfo:@{NSLocalizedDescriptionKey : reason}];
+    }
+    return NO;
 }
 
 - (void)detach {
