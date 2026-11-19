@@ -103,8 +103,8 @@ class Rig {
 // Processes whose command line holds `marker`: their pid and command line, and their number.
 [[nodiscard]] QStringList processesHolding(const QByteArray& marker);
 [[nodiscard]] int processesWith(const QByteArray& marker);
-// What a test that ends early may leave on the machine: kills every process holding `marker`
-// and stops the job units of the executor next to this binary.
+// What a test that ends early may leave on the machine: stops each job unit whose cgroup holds a
+// process with `marker`, then kills any such process still there. No other unit is touched.
 void removeLeftovers(const QByteArray& marker);
 
 } // namespace runner_assembly_test
