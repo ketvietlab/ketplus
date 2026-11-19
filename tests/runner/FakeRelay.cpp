@@ -10,6 +10,8 @@
 #include <QRandomGenerator>
 #include <QRegularExpression>
 #include <QTcpSocket>
+#include <QWebSocket>
+#include <QWebSocketServer>
 
 #include <openssl/evp.h>
 
@@ -39,7 +41,14 @@ QString randomSecret() {
     return text(random);
 }
 
-FakeRelay::FakeRelay(std::function<QDateTime()> now) : m_now(std::move(now)) {
+FakeRelay::FakeRelay(std::function<QDateTime()> now)
+    : m_now(std::move(now)), m_sockets(std::make_unique<QWebSocketServer>(
+                                 QStringLiteral("relay"), QWebSocketServer::NonSecureMode)) {
+    m_sockets->setSupportedSubprotocols({QStringLiteral("ketplus.control.v2")});
+    QObject::connect(m_sockets.get(), &QWebSocketServer::newConnection, m_sockets.get(), [this] {
+        while (QWebSocket* socket = m_sockets->nextPendingConnection())
+            opened(socket);
+    });
     m_server.listen(QHostAddress::LocalHost, 0);
     QObject::connect(&m_server, &QTcpServer::newConnection, &m_server, [this] {
         while (QTcpSocket* socket = m_server.nextPendingConnection()) {
@@ -55,6 +64,19 @@ FakeRelay::FakeRelay(std::function<QDateTime()> now) : m_now(std::move(now)) {
 
 FakeRelay::~FakeRelay() {
     // Connections die before the members their handlers use.
+    for (QWebSocket* socket : std::as_const(m_runnerSockets)) {
+        socket->disconnect();
+        socket->abort();
+        delete socket;
+    }
+    m_runnerSockets.clear();
+    if (m_desktopSocket) {
+        m_desktopSocket->disconnect();
+        m_desktopSocket->abort();
+        delete m_desktopSocket;
+        m_desktopSocket = nullptr;
+    }
+    m_sockets->close();
     for (QTcpSocket* socket : m_server.findChildren<QTcpSocket*>()) {
         socket->disconnect();
         delete socket;
@@ -157,11 +179,21 @@ Reply FakeRelay::registerRunner(const QJsonObject& body) {
                         {runner.publicKey, 1}, m_now()))
         return refusal(401, QStringLiteral("invalid_signature"));
     runner.id = QStringLiteral("runner-%1").arg(m_nextId++);
+    runner.name = body.value(QStringLiteral("name")).toString();
+    runner.arch = body.value(QStringLiteral("arch")).toString();
+    for (const QJsonValue& label : body.value(QStringLiteral("labels")).toArray())
+        runner.labels.append(label.toString());
     runner.current = randomSecret();
     refreshCredentials.append(runner.current);
     runners.insert(runner.id, runner);
     lastRunnerId = runner.id;
     claimTicket(ticket, runner);
+    sendDesktop({{QStringLiteral("type"), QStringLiteral("runner.pairing.claimed")},
+                 {QStringLiteral("ticketId"), ticket.id}});
+    ticket.claim = body;
+    for (const char* secret : {"ticketId", "ticketSecret", "capabilities", "runnerVersion"})
+        ticket.claim.remove(QLatin1StringView(secret));
+    ticket.claim.insert(QStringLiteral("runnerId"), runner.id);
     return {201,
             {{QStringLiteral("runnerId"), runner.id},
              {QStringLiteral("workspaceId"), workspaceId},
@@ -242,6 +274,17 @@ Reply FakeRelay::claim(const QString& runnerId, const QString& ticketId, const Q
             return refusal(409, QStringLiteral("already_paired"));
     }
     claimTicket(ticket, runner);
+    sendDesktop({{QStringLiteral("type"), QStringLiteral("runner.pairing.claimed")},
+                 {QStringLiteral("ticketId"), ticket.id}});
+    ticket.claim = {{QStringLiteral("runnerId"), runner.id},
+                    {QStringLiteral("publicKey"), text(runner.publicKey)},
+                    {QStringLiteral("keyVersion"), 1},
+                    {QStringLiteral("name"), runner.name},
+                    {QStringLiteral("os"), QStringLiteral("linux")},
+                    {QStringLiteral("arch"), runner.arch},
+                    {QStringLiteral("labels"), QJsonArray::fromStringList(runner.labels)},
+                    {QStringLiteral("issuedAt"), body.value(QStringLiteral("issuedAt"))},
+                    {QStringLiteral("signature"), body.value(QStringLiteral("signature"))}};
     return {200,
             {{QStringLiteral("desktop"), desktopKeys(ticket.machineId)},
              {QStringLiteral("pairState"), QStringLiteral("claimed")}},
@@ -294,7 +337,7 @@ Reply FakeRelay::state(const QString& runnerId, const QString& ticketId) {
     return {200, body, false};
 }
 
-Reply FakeRelay::heartbeat(const QString&) {
+Reply FakeRelay::heartbeat(const QString& runnerId) {
     return {200,
             {{QStringLiteral("compatibility"),
               QJsonObject{{QStringLiteral("capabilities"),
@@ -303,7 +346,10 @@ Reply FakeRelay::heartbeat(const QString&) {
              {QStringLiteral("serverTime"), pairing::issuedAtString(m_now())},
              {QStringLiteral("pending"),
               std::any_of(jobs.cbegin(), jobs.cend(),
-                          [](const Job& job) { return job.state == QStringLiteral("queued"); })}},
+                          [&](const Job& job) {
+                              return job.state == QStringLiteral("queued") &&
+                                     (!strict || runnerMatches(runnerId, job));
+                          })}},
             false};
 }
 
@@ -328,6 +374,8 @@ Reply FakeRelay::handle(const Request& request) {
         return challenge(request.body);
     if (request.method == "POST" && path == QStringLiteral("/v2/runners/credentials"))
         return credential(request.body);
+    if (std::optional<Reply> reply = handleDesktop(request))
+        return *reply;
 
     const QString runnerId =
         request.authorization.startsWith("Bearer ")
@@ -361,6 +409,8 @@ Reply FakeRelay::handle(const Request& request) {
 }
 
 void FakeRelay::serve(QTcpSocket* socket) {
+    if (!m_input.contains(socket) && upgrade(socket))
+        return;
     QByteArray& input = m_input[socket];
     input += socket->readAll();
     while (true) {
@@ -388,6 +438,8 @@ void FakeRelay::serve(QTcpSocket* socket) {
         request.body = QJsonDocument::fromJson(request.raw).object();
         input.remove(0, headerEnd + 4 + length);
         requests.append(request);
+        if (strict)
+            checkRequest(request);
 
         std::optional<Reply> reply = intercept ? intercept(request) : std::nullopt;
         if (!reply)
