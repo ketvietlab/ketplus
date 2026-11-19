@@ -48,28 +48,27 @@ void AgentSessionManager::ensureThread(const SessionPtr& session) {
             applyModelOverride(params, false);
         }
         const QPointer<AgentSessionManager> guard(this);
-        server_->call(QStringLiteral("thread/start"), params,
-                      [guard, this, session](const QJsonObject& result, const QString& error) {
-                          if (!guard)
-                              return;
-                          if (!error.isEmpty()) {
-                              failSession(session, error);
-                              return;
-                          }
-                          const QJsonObject thread =
-                              result.value(QStringLiteral("thread")).toObject();
-                          session->threadId = thread.value(QStringLiteral("id")).toString();
-                          if (session->threadId.isEmpty()) {
-                              failSession(session, QStringLiteral("Codex returned no thread id."));
-                              return;
-                          }
-                          session->readyInProcess = true;
-                          session->historyLoaded = true;
-                          emitHistoryState(session);
-                          sessionsByThread_.insert(session->threadId, session);
-                          persistWorkspace(session->path);
-                          startTurn(session);
-                      });
+        serverCall(QStringLiteral("thread/start"), params,
+                   [guard, this, session](const QJsonObject& result, const QString& error) {
+                       if (!guard)
+                           return;
+                       if (!error.isEmpty()) {
+                           failSession(session, error);
+                           return;
+                       }
+                       const QJsonObject thread = result.value(QStringLiteral("thread")).toObject();
+                       session->threadId = thread.value(QStringLiteral("id")).toString();
+                       if (session->threadId.isEmpty()) {
+                           failSession(session, QStringLiteral("Codex returned no thread id."));
+                           return;
+                       }
+                       session->readyInProcess = true;
+                       session->historyLoaded = true;
+                       emitHistoryState(session);
+                       sessionsByThread_.insert(session->threadId, session);
+                       persistWorkspace(session->path);
+                       startTurn(session);
+                   });
         return;
     }
 
@@ -89,33 +88,33 @@ void AgentSessionManager::ensureThread(const SessionPtr& session) {
         applyModelOverride(params, false);
     }
     const QPointer<AgentSessionManager> guard(this);
-    server_->call(QStringLiteral("thread/resume"), params,
-                  [guard, this, session](const QJsonObject& result, const QString& error) {
-                      if (!guard)
-                          return;
-                      if (!error.isEmpty()) {
-                          if (session->pendingCompact) {
-                              failSession(session, error);
-                              return;
-                          }
-                          sessionsByThread_.remove(session->threadId);
-                          session->threadId.clear();
-                          session->readyInProcess = false;
-                          persistWorkspace(session->path);
-                          ensureThread(session);
-                          return;
-                      }
-                      session->readyInProcess = true;
-                      const QJsonObject thread = result.value(QStringLiteral("thread")).toObject();
-                      if (!session->historyLoaded) {
-                          if (!thread.value("turns").toArray().isEmpty())
-                              hydrateHistory(session, thread);
-                          else
-                              loadHistoryPage(session);
-                      }
-                      sessionsByThread_.insert(session->threadId, session);
-                      startTurn(session);
-                  });
+    serverCall(QStringLiteral("thread/resume"), params,
+               [guard, this, session](const QJsonObject& result, const QString& error) {
+                   if (!guard)
+                       return;
+                   if (!error.isEmpty()) {
+                       if (session->pendingCompact) {
+                           failSession(session, error);
+                           return;
+                       }
+                       sessionsByThread_.remove(session->threadId);
+                       session->threadId.clear();
+                       session->readyInProcess = false;
+                       persistWorkspace(session->path);
+                       ensureThread(session);
+                       return;
+                   }
+                   session->readyInProcess = true;
+                   const QJsonObject thread = result.value(QStringLiteral("thread")).toObject();
+                   if (!session->historyLoaded) {
+                       if (!thread.value("turns").toArray().isEmpty())
+                           hydrateHistory(session, thread);
+                       else
+                           loadHistoryPage(session);
+                   }
+                   sessionsByThread_.insert(session->threadId, session);
+                   startTurn(session);
+               });
 }
 
 void AgentSessionManager::startTurn(const SessionPtr& session) {
@@ -127,17 +126,16 @@ void AgentSessionManager::startTurn(const SessionPtr& session) {
     if (session->pendingCompact) {
         session->pendingCompact = false;
         const QPointer<AgentSessionManager> guard(this);
-        server_->call(QStringLiteral("thread/compact/start"),
-                      {{QStringLiteral("threadId"), session->threadId}},
-                      [guard, this, session](const QJsonObject&, const QString& error) {
-                          if (!guard)
-                              return;
-                          if (!error.isEmpty())
-                              failSession(
-                                  session,
-                                  QStringLiteral("Could not compact context: %1").arg(error));
-                          // The response only acknowledges the request; item/turn events finish it.
-                      });
+        serverCall(QStringLiteral("thread/compact/start"),
+                   {{QStringLiteral("threadId"), session->threadId}},
+                   [guard, this, session](const QJsonObject&, const QString& error) {
+                       if (!guard)
+                           return;
+                       if (!error.isEmpty())
+                           failSession(session,
+                                       QStringLiteral("Could not compact context: %1").arg(error));
+                       // The response only acknowledges the request; item/turn events finish it.
+                   });
         return;
     }
     const QString prompt = std::exchange(session->pendingPrompt, {});
@@ -174,24 +172,24 @@ void AgentSessionManager::startTurn(const SessionPtr& session) {
             params.insert(key, value);
     }
     const QPointer<AgentSessionManager> guard(this);
-    server_->call(QStringLiteral("turn/start"), params,
-                  [guard, this, session](const QJsonObject& result, const QString& error) {
-                      if (!guard)
-                          return;
-                      if (!error.isEmpty()) {
-                          failSession(session, error);
-                          return;
-                      }
-                      session->turnId = result.value(QStringLiteral("turn"))
-                                            .toObject()
-                                            .value(QStringLiteral("id"))
-                                            .toString();
-                      if (session->customTitle)
-                          syncConversationTitle(session);
-                      if (session->cancelRequested) {
-                          cancelSession(session);
-                      }
-                  });
+    serverCall(QStringLiteral("turn/start"), params,
+               [guard, this, session](const QJsonObject& result, const QString& error) {
+                   if (!guard)
+                       return;
+                   if (!error.isEmpty()) {
+                       failSession(session, error);
+                       return;
+                   }
+                   session->turnId = result.value(QStringLiteral("turn"))
+                                         .toObject()
+                                         .value(QStringLiteral("id"))
+                                         .toString();
+                   if (session->customTitle)
+                       syncConversationTitle(session);
+                   if (session->cancelRequested) {
+                       cancelSession(session);
+                   }
+               });
 }
 
 } // namespace ketplus

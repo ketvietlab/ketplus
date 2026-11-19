@@ -65,7 +65,7 @@ void AgentSessionManager::hydrateConversation(const SessionPtr& session, bool lo
         params.insert(QStringLiteral("model"), session->model);
     }
     const QPointer<AgentSessionManager> guard(this);
-    server_->call(
+    serverCall(
         QStringLiteral("thread/resume"), params,
         [guard, this, session, previousStatus, loadOlder, selectionGeneration,
          requestGeneration](const QJsonObject& result, const QString& error) {
@@ -252,7 +252,7 @@ void AgentSessionManager::readHistoryPage(
     if (!cursor.isEmpty())
         params.insert("cursor", cursor);
     const QPointer<AgentSessionManager> guard(this);
-    server_->call(
+    serverCall(
         "thread/turns/list", params,
         [guard, this, session, callback = std::move(callback)](const QJsonObject& result,
                                                                const QString& error) {
@@ -261,14 +261,13 @@ void AgentSessionManager::readHistoryPage(
             if (error.contains("method not found", Qt::CaseInsensitive) ||
                 error.contains("-32601") || error.contains("unknown method", Qt::CaseInsensitive)) {
                 // Older Codex servers can only return a complete transcript.
-                server_->call("thread/read",
-                              {{"threadId", session->threadId}, {"includeTurns", true}},
-                              [guard, callback](const QJsonObject& full, const QString& failure) {
-                                  if (!guard)
-                                      return;
-                                  callback(full.value("thread").toObject().value("turns").toArray(),
-                                           {}, failure);
-                              });
+                serverCall("thread/read", {{"threadId", session->threadId}, {"includeTurns", true}},
+                           [guard, callback](const QJsonObject& full, const QString& failure) {
+                               if (!guard)
+                                   return;
+                               callback(full.value("thread").toObject().value("turns").toArray(),
+                                        {}, failure);
+                           });
                 return;
             }
             if (error.isEmpty() && !result.value("data").isArray()) {

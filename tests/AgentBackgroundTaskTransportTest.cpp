@@ -252,6 +252,63 @@ class AgentBackgroundTaskTransportTest final : public QObject {
                  "opaque/output==");
         QCOMPARE(peer.requests.last().value("session_generation").toInteger(), 1);
     }
+    // The server outlives the manager here: a late answer to one of the manager's calls must not
+    // reach its callback, while the server keeps working for everyone else.
+    void destroyedManagerLeavesNoCallbackForTheServer() {
+        TaskPeer peer;
+        peer.respond = [&](const QJsonObject& request) {
+            return request.value("message_type").toString() == "session.list" ? peer.catalog()
+                                                                              : QJsonObject{};
+        };
+        ketplus::CodexAppServer server;
+        auto* manager = new ketplus::AgentSessionManager(&server);
+        QTRY_VERIFY(server.hasDaemonSession("owner"));
+        QSignalSpy errors(manager, &ketplus::AgentSessionManager::errorOccurred);
+        manager->loadModels();
+        const auto modelsRequestIndex = [&] {
+            for (qsizetype i = 0; i < peer.requests.size(); ++i)
+                if (peer.requests.at(i).value("message_type") == "provider.models")
+                    return i;
+            return qsizetype(-1);
+        };
+        QTRY_VERIFY(modelsRequestIndex() >= 0);
+        const QJsonObject modelsRequest = peer.requests.at(modelsRequestIndex());
+        const int dropped = ketplus::CallbackGuard::droppedCount();
+        delete manager;
+        QVERIFY(peer.client);
+        peer.answer(modelsRequest, {{"ok", false}, {"error_message", "late"}});
+        QTRY_COMPARE(ketplus::CallbackGuard::droppedCount(), dropped + 1);
+
+        // Another owner's call on the same server still completes.
+        const auto before = peer.requests.size();
+        QString outcome = "pending";
+        server.call("model/list", {}, [&](const QJsonObject&, const QString& error) {
+            outcome = error.isEmpty() ? QString("answered") : error;
+        });
+        QTRY_VERIFY(peer.requests.size() > before);
+        peer.answer(peer.requests.last(), {{"ok", true}, {"models", QJsonArray{}}});
+        QTRY_COMPARE(outcome, QString("answered"));
+
+        // And the connection still recovers by itself: the client's own hello is untouched.
+        peer.client->abort();
+        QTRY_VERIFY_WITH_TIMEOUT(!server.isReady(), 5000);
+        QTRY_VERIFY_WITH_TIMEOUT(server.isReady(), 20000);
+    }
+    void liveManagerStillReceivesFailedCalls() {
+        TaskPeer peer;
+        peer.respond = [&](const QJsonObject& request) {
+            return request.value("message_type").toString() == "session.list"
+                       ? peer.catalog()
+                       : QJsonObject{{"ok", false}, {"error_message", "refused"}};
+        };
+        ketplus::CodexAppServer server;
+        ketplus::AgentSessionManager manager(&server);
+        QTRY_VERIFY(server.hasDaemonSession("owner"));
+        QSignalSpy errors(&manager, &ketplus::AgentSessionManager::errorOccurred);
+        manager.loadModels();
+        QTRY_VERIFY(!errors.isEmpty());
+        QCOMPARE(errors.first().first().toString(), QString("refused"));
+    }
 };
 
 QTEST_MAIN(AgentBackgroundTaskTransportTest)

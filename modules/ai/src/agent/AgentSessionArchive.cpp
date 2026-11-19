@@ -75,7 +75,7 @@ bool AgentSessionManager::restoreConversation(const QString& worktreePath,
             finish(session, !session->threadId.isEmpty());
             return true;
         }
-        server_->setDaemonSessionArchived(
+        serverSetDaemonSessionArchived(
             session->threadId, false,
             [this, finish, weak = std::weak_ptr<Session>(session)](const QJsonObject&,
                                                                    const QString& error) {
@@ -147,7 +147,7 @@ void AgentSessionManager::syncArchived(const SessionPtr& session) {
         return;
     session->archiveSyncPending = true;
     const bool archived = session->archived;
-    server_->setDaemonSessionArchived(
+    serverSetDaemonSessionArchived(
         session->threadId, archived,
         [this, archived, weak = std::weak_ptr<Session>(session)](const QJsonObject&,
                                                                  const QString& error) {
@@ -174,7 +174,7 @@ void AgentSessionManager::markConversationDone(const QString& worktreePath,
     for (const SessionPtr& session : conversationsByPath_.value(normalizedPath(worktreePath))) {
         if (session->id != conversationId || !session->awaitingReply)
             continue;
-        server_->markDaemonSessionDone(
+        serverMarkDaemonSessionDone(
             session->threadId, [this, weak = std::weak_ptr<Session>(session)](
                                    const QJsonObject&, const QString& error) {
                 const SessionPtr current = weak.lock();

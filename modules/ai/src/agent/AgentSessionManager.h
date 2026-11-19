@@ -11,6 +11,7 @@
 #include <QVector>
 
 #include "agent/AgentTranscriptWindowBudget.h"
+#include "agent/CallbackGuard.h"
 
 #include <functional>
 #include <memory>
@@ -429,6 +430,23 @@ class AgentSessionManager final : public QObject {
     [[nodiscard]] static QString normalizedPath(const QString& path);
 
     CodexAppServer* server_{nullptr};
+    // The server may outlive the manager (or, as its child, be destroyed after the members its
+    // callbacks use); callbacks given to it go through this so they stop once the manager goes.
+    CallbackGuard callbackGuard_;
+    using ServerCallback = CallbackGuard::Callback;
+    void serverCall(const QString& method, const QJsonObject& params, ServerCallback done);
+    void serverReadDaemonTranscriptWindow(const QString& sessionId, const QJsonObject& params,
+                                          ServerCallback done, bool preserveLiveBuffer = false);
+    void serverExecutionWorktreeCommand(const QString& sessionId, const QString& type,
+                                        const QJsonObject& payload, ServerCallback done);
+    void serverSetDaemonSessionArchived(const QString& sessionId, bool archived,
+                                        ServerCallback done);
+    void serverReadDaemonActivityGroup(const QString& sessionId, const QJsonObject& params,
+                                       ServerCallback done);
+    void serverMarkDaemonSessionSeen(const QString& sessionId, qint64 cursor, ServerCallback done);
+    void serverMarkDaemonSessionDone(const QString& sessionId, ServerCallback done);
+    void serverFinishDaemonTranscriptCatchup(const QString& sessionId, const QJsonObject& page,
+                                             ServerCallback done);
     CodexRateLimits* rateLimits_{nullptr};
     ProviderRuntimeStatus* providerStatus_{nullptr};
     std::unique_ptr<ConversationWorktreeStore> worktreeStore_;

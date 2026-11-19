@@ -79,7 +79,7 @@ void AgentSessionManager::loadBackgroundTasks(const QString& worktreePath, bool 
     emitBackgroundTasks(session);
     const auto owner = session->threadId;
     const auto generation = session->daemonGeneration;
-    server_->call(
+    serverCall(
         "task/list", {{"threadId", owner}, {"cursor", cursor}, {"limit", 100}},
         [this, guard = QPointer<AgentSessionManager>(this), session, path, owner,
          generation](const QJsonObject& reply, const QString& error) {
@@ -144,7 +144,7 @@ void AgentSessionManager::refreshBackgroundTaskMetadata(const SessionPtr& sessio
         session->backgroundTaskMetadataReads.insert(id);
         const auto owner = session->threadId;
         const auto generation = session->daemonGeneration;
-        server_->call(
+        serverCall(
             "task/get", {{"threadId", owner}, {"taskId", id}},
             [this, guard = QPointer<AgentSessionManager>(this), session, owner, generation,
              id](const QJsonObject& reply, const QString& error) {
@@ -200,24 +200,24 @@ void AgentSessionManager::callBackgroundTask(const QString& worktreePath, const 
     auto params = parameters;
     params.insert("threadId", owner);
     params.insert("taskId", taskId);
-    server_->call(
-        "task/" + action, params,
-        [this, guard = QPointer<AgentSessionManager>(this), session, owner, generation, path,
-         taskId, action, parameters](const QJsonObject& reply, const QString& error) {
-            if (!guard || sessionForThread(owner) != session || session->threadId != owner ||
-                session->daemonGeneration != generation)
-                return;
-            auto result = reply.toVariantMap();
-            QString message = error;
-            if (message.isEmpty() && !reply.value("ok").toBool(true))
-                message = reply.value("error_message").toString("The task operation failed.");
-            if (!message.isEmpty())
-                result.insert("error", message);
-            result.insert("request", parameters.value("request").toVariant());
-            if (isActiveSession(session))
-                emit backgroundTaskResult(path, taskId, action, result);
-            if (action != "output" && isActiveSession(session))
-                loadBackgroundTasks(path, false);
-        });
+    serverCall("task/" + action, params,
+               [this, guard = QPointer<AgentSessionManager>(this), session, owner, generation, path,
+                taskId, action, parameters](const QJsonObject& reply, const QString& error) {
+                   if (!guard || sessionForThread(owner) != session || session->threadId != owner ||
+                       session->daemonGeneration != generation)
+                       return;
+                   auto result = reply.toVariantMap();
+                   QString message = error;
+                   if (message.isEmpty() && !reply.value("ok").toBool(true))
+                       message =
+                           reply.value("error_message").toString("The task operation failed.");
+                   if (!message.isEmpty())
+                       result.insert("error", message);
+                   result.insert("request", parameters.value("request").toVariant());
+                   if (isActiveSession(session))
+                       emit backgroundTaskResult(path, taskId, action, result);
+                   if (action != "output" && isActiveSession(session))
+                       loadBackgroundTasks(path, false);
+               });
 }
 } // namespace ketplus

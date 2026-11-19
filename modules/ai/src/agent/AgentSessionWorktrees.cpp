@@ -46,7 +46,7 @@ void AgentSessionManager::executionWorktreeCommand(
         callback({}, "Start a conversation before choosing its execution worktree.");
         return;
     }
-    server_->executionWorktreeCommand(session->threadId, type, payload, std::move(callback));
+    serverExecutionWorktreeCommand(session->threadId, type, payload, std::move(callback));
 }
 
 // `git worktree list` runs off the GUI thread's event loop: the turn notifications that
