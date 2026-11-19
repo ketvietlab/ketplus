@@ -1,6 +1,6 @@
+#include "agent/CodexAppServer.h"
 #include "agent/CodexRateLimits.h"
 #include "daemon/ScriptFixture.h"
-#include "agent/CodexAppServer.h"
 #include <QDateTime>
 #include <QFile>
 #include <QTemporaryDir>

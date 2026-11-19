@@ -1,7 +1,6 @@
 #pragma once
 #include <QCoreApplication>
 #include <QSettings>
-#include <QStandardPaths>
 #include <QTemporaryDir>
 
 // QSettings() needs an organization name to persist anything on Windows (the registry key is
