@@ -1,6 +1,7 @@
 #include "agents/AgentMcpServer.h"
 #include "cloud/CloudControlClient.h"
 #include "platform/ProcessTree.h"
+#include "service/DaemonApplication.h"
 #include "service/DaemonService.h"
 #include "service/UnixSignals.h"
 #include "service/WindowsShutdown.h"
@@ -45,7 +46,7 @@ int main(int argc, char* argv[]) {
     // staging) holds transcripts or secrets. Owner-only from creation, not chmod afterwards.
     ::umask(077);
 #endif
-    QCoreApplication application(argc, argv);
+    DaemonApplication application(argc, argv);
     QCoreApplication::setApplicationName(QStringLiteral("ketplus-daemon"));
     QCoreApplication::setApplicationVersion(QStringLiteral(KETPLUS_PRODUCT_VERSION));
     QCoreApplication::setOrganizationDomain(QStringLiteral("ketsuite.com"));
