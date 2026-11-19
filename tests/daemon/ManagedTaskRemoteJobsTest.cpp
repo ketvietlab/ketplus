@@ -1,5 +1,8 @@
 #include "ManagedTaskRemoteJoined.h"
 
+#include <QSqlError>
+#include <QSqlQuery>
+
 using namespace managed_remote_test;
 
 namespace {
@@ -342,6 +345,104 @@ class ManagedTaskRemoteJobsTest final : public QObject {
         QCOMPARE(ended.value("state").toString(), QStringLiteral("completed"));
         QCOMPARE(ended.value("exit_code").toInt(-1), 0);
         QCOMPARE(j.completions(id), 1);
+        QVERIFY(!j.runtime()->isLive(id));
+    }
+
+    // A caller that is not the user cannot acknowledge a remote job's cleanup, with the reply a
+    // local task gives; the record stays as it was.
+    void aCleanupNotFromTheUserIsRefusedAsOnALocalTask() {
+        Joined j;
+        std::unique_ptr<RunnerEnd> end;
+        const QString id = j.running(end, 2 * hour);
+        QVERIFY(!id.isEmpty());
+        end->lose();
+        j.e->h.clock.advance(20 * minute);
+        QVERIFY(j.until([&] { return j.state(id) == "needs_attention"; }));
+        const qint64 revision = j.task(id).value("revision").toInteger();
+        const auto started = j.run("session.task.start", j.process(QStringLiteral("local")));
+        QVERIFY2(started.value("ok").toBool(), QJsonDocument(started).toJson());
+        const QString local = started.value("task").toObject().value("task_id").toString();
+        const qint64 localRevision = j.task(local).value("revision").toInteger();
+
+        for (const QString client : {QString(), QStringLiteral("cloud-control-v2")}) {
+            const auto remote =
+                j.run("session.task.resolve_cleanup", {{"task_id", id}, {"revision", revision}},
+                      QStringLiteral("owner"), 1, client);
+            const auto expected = j.run("session.task.resolve_cleanup",
+                                        {{"task_id", local}, {"revision", localRevision}},
+                                        QStringLiteral("owner"), 1, client);
+            QVERIFY2(!expected.value("ok").toBool(true), QJsonDocument(expected).toJson());
+            QCOMPARE(remote.keys(), expected.keys());
+            QCOMPARE(remote.value("ok"), expected.value("ok"));
+            QCOMPARE(remote.value("error_code").toString(),
+                     expected.value("error_code").toString());
+        }
+        QCOMPARE(j.run("session.task.resolve_cleanup", {{"task_id", id}, {"revision", revision}},
+                       QStringLiteral("owner"), 1, QString())
+                     .value("error_code")
+                     .toString(),
+                 QStringLiteral("user_action_required"));
+        const QJsonObject after = j.task(id);
+        QCOMPARE(after.value("state").toString(), QStringLiteral("needs_attention"));
+        QCOMPARE(after.value("revision").toInteger(), revision);
+        QCOMPARE(j.e->h.jobs->record(id)->state, QStringLiteral("needs_attention"));
+        QCOMPARE(j.completions(id), 0);
+    }
+
+    // When the placement of a started remote task cannot be read, its output is unavailable
+    // rather than an empty local page.
+    void anUnreadablePlacementLeavesNoOutput() {
+        Joined j;
+        std::unique_ptr<RunnerEnd> end;
+        const QString id = j.running(end, hour);
+        QVERIFY(!id.isEmpty());
+        QSqlQuery query(j.registry->database());
+        QVERIFY2(query.exec("ALTER TABLE remote_jobs RENAME TO remote_jobs_away"),
+                 qPrintable(query.lastError().text()));
+        const auto unreadable = j.run("session.task.output", {{"task_id", id}});
+        QVERIFY(query.exec("ALTER TABLE remote_jobs_away RENAME TO remote_jobs"));
+        QCOMPARE(unreadable.value("ok").toBool(true), false);
+        QCOMPARE(unreadable.value("error_code").toString(), QStringLiteral("output_unavailable"));
+        QVERIFY(!unreadable.contains("output"));
+        QVERIFY(j.run("session.task.output", {{"task_id", id}}).value("ok").toBool());
+
+        // Unavailable output answers in the shape a local task's does, whatever made it so.
+        const auto started = j.run("session.task.start", j.process(QStringLiteral("local")));
+        QVERIFY2(started.value("ok").toBool(), QJsonDocument(started).toJson());
+        const QString local = started.value("task").toObject().value("task_id").toString();
+        const QJsonObject badCursor{{"task_id", local}, {"cursor", "not a cursor"}};
+        const auto expected = j.run("session.task.output", badCursor);
+        QCOMPARE(expected.value("error_code").toString(), QStringLiteral("output_unavailable"));
+        const auto remoteCursor =
+            j.run("session.task.output", {{"task_id", id}, {"cursor", "not a cursor"}});
+        for (const QJsonObject& remote : {unreadable, remoteCursor}) {
+            QCOMPARE(remote.value("error_code").toString(), QStringLiteral("output_unavailable"));
+            QCOMPARE(remote.keys(), expected.keys());
+            for (const QString& key : expected.keys())
+                QCOMPARE(remote.value(key).type(), expected.value(key).type());
+        }
+    }
+
+    // A stop the runner answers with cancelled: the task ends cancelled, once, and its one
+    // completion is suppressed as a local task's stop is.
+    void aStopTheRunnerCancelsEndsCancelledOnce() {
+        Joined j;
+        std::unique_ptr<RunnerEnd> end;
+        const QString id = j.running(end, hour);
+        QVERIFY(!id.isEmpty());
+        QVERIFY(j.run("session.task.stop", {{"task_id", id}}).value("ok").toBool());
+        QCOMPARE(j.e->h.jobs->record(id)->state, QStringLiteral("stopping"));
+        end->send(resultOf(QStringLiteral("cancelled")));
+        QVERIFY(j.e->play(*end, [&] { return j.e->resultAcked; }));
+        QVERIFY(j.until([&] { return j.completions(id) == 1; }));
+        QTest::qWait(600); // the bridge polls the outbox every 500 ms
+        j.e->h.run();
+        QCOMPARE(j.state(id), QStringLiteral("cancelled"));
+        QCOMPARE(j.completions(id), 1);
+        QCOMPARE(j.count("SELECT count(*) FROM managed_job_outbox WHERE task_id='" + id +
+                         "' AND status='suppressed' AND reason='cancelled'"),
+                 1);
+        QCOMPARE(j.deliveries(id), 0);
         QVERIFY(!j.runtime()->isLive(id));
     }
 
