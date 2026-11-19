@@ -42,6 +42,9 @@ path that must not trust the download server or the network.
   Sparkle implementation wraps `SPUStandardUpdaterController`. Unconfigured
   builds and other platforms use a disabled implementation, and tests install a
   fake.
+- Desktop also uses the disabled implementation when launched in explicit
+  [QA settings isolation mode](../testing.md#desktop-update-qa-isolation).
+  This prevents Sparkle initialization from accessing the app's preference domain.
 - Sparkle's standard windows show release notes, download progress and the
   install prompt. KetPlus adds Settings → Updates, a "Check for Updates…"
   item in the application menu and the sidebar user menu, and a sidebar

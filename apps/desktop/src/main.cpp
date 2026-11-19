@@ -1,5 +1,6 @@
 #include "app/ApplicationAttributes.h"
 #include "app/MainWindow.h"
+#include "app/QaSettingsIsolation.h"
 #include "app/RepositoryRouter.h"
 #include "remote/LinuxMachines.h"
 #include "ui/InterfaceFont.h"
@@ -31,6 +32,13 @@
 int main(int argc, char* argv[]) {
     QElapsedTimer startupTimer;
     startupTimer.start();
+
+    const auto settingsName = QStringLiteral("KetPlus");
+    if (const auto error = ketplus::configureQaSettingsIsolation(settingsName, settingsName);
+        !error.isEmpty()) {
+        std::fprintf(stderr, "KetPlus QA settings isolation failed: %s\n", qPrintable(error));
+        return 1;
+    }
 
 #ifdef Q_OS_MACOS
     QQuickWindow::setGraphicsApi(QSGRendererInterface::Metal);
@@ -66,17 +74,18 @@ int main(int argc, char* argv[]) {
     }
 #endif
     // The name keeps the settings location of existing installs; users see ketPlus Pro.
-    QCoreApplication::setApplicationName(QStringLiteral("KetPlus"));
+    QCoreApplication::setApplicationName(settingsName);
     QGuiApplication::setApplicationDisplayName(QStringLiteral("ketPlus Pro"));
     QCoreApplication::setApplicationVersion(QStringLiteral(KETPLUS_PRODUCT_VERSION));
-    QCoreApplication::setOrganizationName(QStringLiteral("KetPlus"));
+    QCoreApplication::setOrganizationName(settingsName);
     // Matches packaging/linux/ketplus-pro.desktop, so Wayland compositors use its name and icon.
     QGuiApplication::setDesktopFileName(QStringLiteral("ketplus-pro"));
     QApplication::setWindowIcon(QIcon(QStringLiteral(":/brand/ketplus-app-icon.png")));
     // Benchmarks and captures against large fixtures: preferences and per-app data live in this
     // directory, so a run never reads or overwrites the installed app's windows, repositories or
     // conversation worktrees. Point KETPLUS_DAEMON_* at a separate daemon as well.
-    if (const QString profile = qEnvironmentVariable("KETPLUS_PROFILE_DIR"); !profile.isEmpty()) {
+    if (const QString profile = qEnvironmentVariable("KETPLUS_PROFILE_DIR");
+        !profile.isEmpty() && !qEnvironmentVariableIsSet("KETPLUS_QA_SETTINGS_DIR")) {
         QDir().mkpath(profile);
         QSettings::setDefaultFormat(QSettings::IniFormat);
         QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, profile);
