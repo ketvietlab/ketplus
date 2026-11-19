@@ -9,12 +9,15 @@
 namespace ketplus::daemon::runner::entry {
 
 // session.task.resolve_cleanup on a remote job: nullopt when the task has no remote record. As
-// on the local path, the request's revision must be the task's current one (revision_conflict).
+// on the local path, only a user may acknowledge (user_action_required), and the request's
+// revision must be the task's current one (revision_conflict).
 [[nodiscard]] inline std::optional<QString>
 resolveRemoteCleanup(RemoteJobPort& port, const QString& taskId, const QJsonObject& payload,
                      const QJsonObject& authorized, const QString& userClientId) {
     if (!port.hasRecord(taskId))
         return std::nullopt;
+    if (userClientId.isEmpty())
+        return QStringLiteral("user_action_required");
     const qint64 current = authorized.value(QStringLiteral("task"))
                                .toObject()
                                .value(QStringLiteral("revision"))

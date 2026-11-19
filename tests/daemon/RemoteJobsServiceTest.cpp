@@ -4,6 +4,7 @@
 #include "runner/remote/RemoteJobsService.h"
 #include "RemoteJobLedgerFixture.h"
 #include "cloud/CredentialStore.h"
+#include "cloud/RelayWakeups.h"
 #include "runner/RunnerRelayPort.h"
 #include "runner/remote/RemoteJobs.h"
 #include "runner/sync/SnapshotPreparation.h"
@@ -11,14 +12,19 @@
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QHostAddress>
 #include <QJsonArray>
+#include <QJsonDocument>
 #include <QProcess>
 #include <QStandardPaths>
 #include <QTest>
 #include <QThreadPool>
+#include <QWebSocket>
+#include <QWebSocketServer>
 
 using namespace remote_job_ledger_test;
 using ketplus::daemon::CredentialStore;
+using ketplus::daemon::RelayWakeups;
 using ketplus::daemon::runner::MachineIdentity;
 using ketplus::daemon::runner::RelayReply;
 using ketplus::daemon::runner::RunnerRelayPort;
@@ -146,6 +152,53 @@ QJsonObject queuedJob() {
             {"outcome", QJsonValue::Null},
             {"reason", QJsonValue::Null}};
 }
+
+// The Relay's wake-up endpoint: accepts the socket and sends what the test gives it.
+class WakeupRelay final : public QObject {
+  public:
+    WakeupRelay() : server_(QStringLiteral("relay"), QWebSocketServer::NonSecureMode) {
+        server_.setSupportedSubprotocols({QStringLiteral("ketplus.control.v2")});
+        if (!server_.listen(QHostAddress::LocalHost))
+            qFatal("Wake-up relay cannot listen");
+        connect(&server_, &QWebSocketServer::newConnection, this, [this] {
+            while (QWebSocket* socket = server_.nextPendingConnection()) {
+                socket->setParent(this);
+                socket_ = socket;
+            }
+        });
+    }
+    [[nodiscard]] QUrl baseUrl() const {
+        return QUrl(QStringLiteral("http://127.0.0.1:%1").arg(server_.serverPort()));
+    }
+    bool send(const QJsonObject& message) {
+        return socket_ && socket_->sendTextMessage(QString::fromUtf8(
+                              QJsonDocument(message).toJson(QJsonDocument::Compact))) > 0;
+    }
+
+  private:
+    QWebSocketServer server_;
+    QWebSocket* socket_{nullptr};
+};
+
+// The Control client's Relay socket on a real wake-up socket: each message goes to the taker
+// first; what it does not take goes on to `rest`, as the Control client gives it to signaling.
+class WakeupSocket final : public RelaySocket {
+  public:
+    WakeupSocket(RelayWakeups& wakeups, QList<QJsonObject>& rest) : wakeups_(wakeups) {
+        QObject::connect(&wakeups, &RelayWakeups::message, &context_,
+                         [this, &rest](const QJsonObject& message) {
+                             if (!take_ || !take_(message))
+                                 rest.append(message);
+                         });
+    }
+    bool send(const QJsonObject& message) override { return wakeups_.send(message); }
+    void take(Take taker, std::function<void()>) override { take_ = std::move(taker); }
+
+  private:
+    RelayWakeups& wakeups_;
+    QObject context_;
+    Take take_;
+};
 
 // The service and the parts the test plays.
 struct Service {
@@ -276,6 +329,56 @@ class RemoteJobsServiceTest final : public QObject {
         QTest::qWait(100);
         QVERIFY(!answered);
         QVERIFY(s.port.requests.isEmpty());
+    }
+
+    // A job.changed the Relay sends on the wake-up socket reaches the record of that job, which
+    // asks the Relay for the job; one without a job of this desktop or without a jobId does
+    // nothing.
+    void aJobChangedOnTheWakeupSocketReachesItsRecord() {
+        if (!prep::checkGit().isEmpty())
+            QSKIP("no usable system git");
+        WakeupRelay relay;
+        RelayWakeups wakeups(relay.baseUrl(),
+                             [](const std::function<void(const QString&)>& answer) {
+                                 answer(QStringLiteral("synthetic"));
+                             });
+        QList<QJsonObject> rest;
+        LedgerFixture f;
+        QTemporaryDir state;
+        FakePort port;
+        auto service = std::make_unique<RemoteJobsService>(
+            *f.ledger, port, std::make_unique<WakeupSocket>(wakeups, rest), state.path());
+        service->start();
+        QTemporaryDir root;
+        const QString cwd = repository(root.path());
+        QVERIFY(!cwd.isEmpty());
+        const QString id = f.remoteTask();
+        QVERIFY(!id.isEmpty());
+        service->jobs().submit(id, requestIn(cwd), [](const QString&) {});
+        QTRY_COMPARE(port.requests.size(), 1);
+        port.requests.takeFirst().callback(RelayReply{202, queuedJob()});
+        QCOMPARE(service->jobs().record(id)->placement, jobs::placement::relayQueued);
+
+        wakeups.start();
+        QTRY_VERIFY(wakeups.isOpen());
+        QVERIFY(relay.send({{"type", "job.changed"}}));
+        QVERIFY(relay.send({{"type", "job.changed"}, {"jobId", 7}}));
+        QVERIFY(relay.send({{"type", "job.changed"}, {"jobId", "job-2"}}));
+        QVERIFY(relay.send({{"type", "device.revoked"}, {"deviceId", "device-1"}}));
+        QTRY_COMPARE(rest.size(), 3); // the two without a jobId and the revocation
+        QCOMPARE(rest.last().value("type").toString(), QStringLiteral("device.revoked"));
+        QVERIFY(port.requests.isEmpty());
+
+        QVERIFY(relay.send({{"type", "job.changed"}, {"jobId", "job-1"}}));
+        QTRY_COMPARE(port.requests.size(), 1);
+        const FakePort::Request get = port.requests.takeFirst();
+        QCOMPARE(get.method, QByteArray("GET"));
+        QCOMPARE(get.path, QStringLiteral("/v2/runner-jobs/job-1"));
+        get.callback(RelayReply{200, queuedJob()});
+        QCOMPARE(service->jobs().record(id)->placement, jobs::placement::relayQueued);
+        QCOMPARE(rest.size(), 3);
+        wakeups.stop();
+        service.reset();
     }
 };
 
