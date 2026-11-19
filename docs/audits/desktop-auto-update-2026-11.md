@@ -238,7 +238,11 @@ compiled version.
 
 Every completed Sparkle case passed `codesign --verify --deep --strict` before
 and after. The isolated daemon reported the same running fake turn and refused
-replacement both times.
+replacement both times. The rerun checked the exact QA bundle's launchd jobs
+and helper processes before verifying the final signature or detaching a disk
+image. All completed cases ended with zero installer or progress jobs and
+processes. The runner deleted each case's disposable Sparkle preference domain
+after the helpers stopped.
 
 | Case | Real Sparkle result | Bundle |
 | --- | --- | --- |
@@ -247,9 +251,15 @@ replacement both times.
 | Archive transfer interrupted | Loopback closed the 200 response after 65,536 bytes. Sparkle reported `SUDownloadError` (2001), with `NSURLErrorDomain` -1005. | Stayed at N, strict signature valid |
 | Interrupted transfer followed by a new check | The test requested a second check after error 2001. Both archive requests lacked a Range header. The second request downloaded the full archive and Sparkle scheduled installation on quit. | Changed from N to the arm64 N+1 metadata fixture, strict signature valid |
 | Read-only disk image | Mounted a UDRO image read-only. Sparkle reported `SURunningFromDiskImageError` (1003) without requesting the feed. | Stayed at N, strict signature valid |
-| Full destination volume | Filled a 2 GiB writable APFS disk image until a write returned `ENOSPC`. Sparkle downloaded the signed archive and reported installation ready on quit. The trigger saw no installation error code, and the destination version stayed unchanged during the 20-second post-exit check. | Stayed at N, strict signature valid |
+| Full destination volume | Filled a 2 GiB writable APFS image until a write returned `ENOSPC`. After Desktop quit, Sparkle Autoupdate logged that finalizing installation failed and reported “No space left on device.” Both installer and progress helpers exited and their jobs disappeared. Launchd did not retain a numeric exit status. | Stayed at N, strict signature valid, no pending installer |
 | Signed newer archive with an x86_64 main executable | Appcast and ZIP GET 200, update cycle completed without an error. The archive used an x86_64 executable stub with the remaining arm64 Runtime unchanged. | Changed from arm64 N to x86_64 N+1, strict signature valid. This is a failure of the architecture invariant. |
 | App Translocation | Gatekeeper assessment of a quarantine-marked, ad-hoc signed scratch bundle rejected it (exit 3). The test did not bypass Gatekeeper or observe an App Translocation launch. | No Sparkle result |
+
+Before detaching the full image, the destination comparison found three new
+Cocoa staging directories and no removed paths. The top-level
+`.TemporaryItems` directory denied listing by design. The runner traversed
+directly to the test user's staging directory and confirmed its leaf was empty.
+There was no partial application copy or temporary file in the inspected paths.
 
 ### Finding F1 — Desktop accepts a signed archive with an incompatible executable
 

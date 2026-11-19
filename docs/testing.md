@@ -2127,14 +2127,20 @@ archive responses after 64 KiB. Add `--retry` to let the next request complete
 and record whether it requested a byte range. Pass `--ctl` and `--fake-codex`
 (the `hang` case from `tests/daemon/FakeCodex.h`) to verify that a separate daemon
 reports an active fake turn before and after the update cycle. The runner
-verifies the bundle's signature before and after each case.
+verifies the bundle's signature before and after each case. It waits for the
+installer and progress jobs scoped to the QA bundle identifier, captures the
+observed helpers' Sparkle logs, and deletes that identifier's preference domain
+after the jobs stop.
 
 For a destination-volume case, mount the disk image inside the case root and
 pass the mounted app to `--bundle`. For a read-only fixture, use a UDRO image
 and attach it with `hdiutil attach -readonly -nobrowse`. For a full writable
 fixture, copy N to an APFS image, then write filler on that volume until a
 write returns `ENOSPC`. Keep the feed and daemon state outside the image. Detach
-the image after the updater and daemon have stopped.
+the image after the updater and daemon have stopped. Use `--inspect-volume` to
+save the difference in paths on the destination before detaching, including the
+test user's Cocoa replacement staging directory. If the runner reports live
+helpers after cancellation, leave the image mounted until cleanup succeeds.
 
 `ketplus_machine_toast_tests` renders the production Machine composer in temporary
 INI settings, in light/dark. It checks the exact recipe gap after growth and window

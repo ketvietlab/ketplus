@@ -10,6 +10,7 @@ import os
 from pathlib import Path
 import plistlib
 import re
+import signal
 import socket
 import subprocess
 import tempfile
@@ -94,7 +95,7 @@ def active_turn_probe(args, bundle, root, env):
     daemon_env = dict(env, PATH=f"{fake_codex.parent}:/usr/bin:/bin")
     del daemon_env["DYLD_INSERT_LIBRARIES"]
     build_info = subprocess.check_output([str(daemon_executable), "--build-info"],
-                                         env=daemon_env, text=True, timeout=20)
+                                         env=daemon_env, text=True, timeout=45)
     if "http://127.0.0.1:9" not in build_info:
         raise ValueError("The fixture daemon must be built with a loopback control URL")
     worktree = root / "workspace"
@@ -153,6 +154,147 @@ def active_turn_probe(args, bundle, root, env):
             stop(daemon)
 
 
+class SparkleJobs:
+    """Track Sparkle 2.10's one-shot jobs for this disposable bundle."""
+
+    def __init__(self, identifier, bundle, root):
+        self.identifier = identifier
+        self.bundle = bundle
+        self.root = root
+        self.seen = set()
+        self.exit_statuses = set()
+        self.since = time.strftime("%Y-%m-%d %H:%M:%S")
+        domains = (f"gui/{os.getuid()}", f"user/{os.getuid()}", "system")
+        self.targets = [f"{domain}/{identifier}-sparkle-{role}"
+                        for domain in domains for role in ("updater", "progress")]
+
+    def observe(self):
+        jobs = set()
+        processes = set()
+        for target in self.targets:
+            result = subprocess.run(["launchctl", "print", target], text=True,
+                                    capture_output=True, timeout=5)
+            if result.returncode:
+                if ("Could not find service" in result.stderr or
+                        "Could not find domain" in result.stderr):
+                    continue
+                raise RuntimeError(f"Could not inspect the QA Sparkle job ({result.returncode})")
+            jobs.add(target)
+            pid = re.search(r"^\s*pid = (\d+)", result.stdout, re.MULTILINE)
+            if pid:
+                processes.add(int(pid[1]))
+            status = re.search(r"^\s*last exit code = (-?\d+)\s*$", result.stdout, re.MULTILINE)
+            if status:
+                self.exit_statuses.add((target.rsplit("-", 1)[1], status[1]))
+
+        listing = subprocess.check_output(["ps", "-Ao", "pid=,comm="], text=True, timeout=5)
+        helpers = set()
+        for line in listing.splitlines():
+            fields = line.strip().split(maxsplit=1)
+            if len(fields) == 2 and Path(fields[1]).name in {
+                    "Autoupdate", "Installer", "InstallerLauncher", "Updater"}:
+                helpers.add(fields[0])
+        listing = subprocess.check_output(["ps", "-Ao", "pid=,args="], text=True, timeout=5)
+        qa_id = re.compile(rf"(?:^|\s){re.escape(self.identifier)}(?:\s|$)")
+        bundle_path = str(self.bundle)
+        for line in listing.splitlines():
+            fields = line.strip().split(maxsplit=1)
+            if len(fields) != 2:
+                continue
+            pid, command = fields
+            if pid in helpers and (qa_id.search(command) or bundle_path + "/" in command
+                                   or command.endswith(" " + bundle_path)
+                                   or " " + bundle_path + " " in command):
+                processes.add(int(pid))
+        self.seen.update(processes)
+        return jobs, processes
+
+    def installer_log(self):
+        if not self.seen:
+            return
+        pids = " OR ".join(f"processIdentifier == {pid}" for pid in sorted(self.seen))
+        with (self.root / "installer.log").open("wb") as output:
+            subprocess.run(["/usr/bin/log", "show", "--start", self.since, "--style", "compact",
+                            "--predicate", f'({pids}) AND category == "Sparkle"'],
+                           stdout=output, stderr=subprocess.STDOUT, check=True, timeout=25)
+
+    def drain(self, timeout):
+        deadline = time.monotonic() + timeout
+        quiet_since = None
+        while True:
+            jobs, processes = self.observe()
+            now = time.monotonic()
+            if not jobs and not processes:
+                quiet_since = now if quiet_since is None else quiet_since
+                if now - quiet_since >= 1:
+                    print(f"Sparkle helpers stopped: observed {len(self.seen)}, zero remaining",
+                          flush=True)
+                    for role, status in sorted(self.exit_statuses):
+                        print(f"Sparkle {role} last exit code: {status}", flush=True)
+                    return True
+            else:
+                quiet_since = None
+            if now >= deadline:
+                break
+            time.sleep(0.15)
+
+        for target in jobs:
+            subprocess.run(["launchctl", "bootout", target], capture_output=True, timeout=5)
+        for pid in self.observe()[1]:
+            try:
+                os.kill(pid, signal.SIGTERM)
+            except (ProcessLookupError, PermissionError):
+                pass
+        deadline = time.monotonic() + 5
+        remaining = self.observe()
+        while any(remaining) and time.monotonic() < deadline:
+            time.sleep(0.15)
+            remaining = self.observe()
+        if any(remaining):
+            raise RuntimeError("QA Sparkle helpers still running after cancellation; keep the volume mounted")
+        return False
+
+
+def clear_qa_preferences(identifier):
+    result = subprocess.run(["/usr/bin/defaults", "delete", identifier], text=True,
+                            capture_output=True, timeout=10)
+    if result.returncode and "not found" not in result.stderr.lower():
+        raise RuntimeError("Could not remove the disposable Sparkle preference domain")
+    print("Disposable Sparkle preference domain removed", flush=True)
+
+
+def volume_snapshot(volume):
+    entries = set()
+    inaccessible = set()
+
+    def scan(directory):
+        for path, directories, files in os.walk(
+                directory, onerror=lambda err: inaccessible.add(err.filename)):
+            entries.update(str((Path(path) / name).relative_to(volume))
+                           for name in directories + files)
+
+    scan(volume)
+    # Cocoa creates .TemporaryItems without directory listing permission, but
+    # the owner can traverse it to that user's replacement staging directory.
+    temporary = volume / ".TemporaryItems"
+    user_area = temporary / f"folders.{os.getuid()}"
+    if str(temporary) in inaccessible and user_area.is_dir():
+        entries.add(str(user_area.relative_to(volume)))
+        scan(user_area)
+    return entries, inaccessible
+
+
+def compare_volume(volume, before, case_root):
+    entries, inaccessible = volume_snapshot(volume)
+    added = sorted(entries - before[0])
+    removed = sorted(before[0] - entries)
+    report = {"added": added, "removed": removed,
+              "unreadable": sorted(before[1] | inaccessible)}
+    (case_root / "volume-diff.json").write_text(json.dumps(report, indent=2) + "\n")
+    print(f"Destination volume: {len(added)} added, {len(removed)} removed, "
+          f"{len(report['unreadable'])} unreadable paths", flush=True)
+
+
 def run_case(args, socket_directory):
     root, bundle, trigger, archive = (path.resolve() for path in
                                       (args.root, args.bundle, args.trigger, args.archive))
@@ -197,6 +339,13 @@ def run_case(args, socket_directory):
                QT_QPA_PLATFORM=args.platform,
                DYLD_INSERT_LIBRARIES=str(trigger))
     executable = bundle / "Contents" / "MacOS" / info["CFBundleExecutable"]
+    volume = bundle.parent
+    if args.inspect_volume and not volume.is_mount():
+        raise ValueError("--inspect-volume requires the app at the mounted volume root")
+    before_volume = volume_snapshot(volume) if args.inspect_volume else None
+    jobs = SparkleJobs(identifier, bundle, root)
+    if any(jobs.observe()):
+        raise RuntimeError("A Sparkle job is already using this QA bundle identifier")
     handler = partial(FeedHandler, directory=str(feed))
     with ThreadingHTTPServer(("127.0.0.1", args.port), handler) as server, \
             active_turn_probe(args, bundle, root, env) as check_daemon:
@@ -217,19 +366,23 @@ def run_case(args, socket_directory):
                             break
                         time.sleep(0.25)
                 finally:
-                    stop(app)
+                    try:
+                        # Observe the installer before it receives the app termination.
+                        jobs.observe()
+                    finally:
+                        stop(app)
+                        drained_normally = jobs.drain(args.installer_timeout)
+                        clear_qa_preferences(identifier)
+                        jobs.installer_log()
+                        if not drained_normally:
+                            raise RuntimeError("QA Sparkle helpers timed out and were stopped; installation is unverified")
             observations = [line for line in log_path.read_text(errors="replace").splitlines()
                             if line.startswith("sparkle-qa ")]
             for line in observations:
                 print(line)
             install_ready = "sparkle-qa install on quit ready" in observations
-            if install_ready:
-                deadline = time.monotonic() + 20
-                plist = bundle / "Contents" / "Info.plist"
-                while time.monotonic() < deadline:
-                    if plist.exists() and plistlib.loads(plist.read_bytes())["CFBundleVersion"] != version:
-                        break
-                    time.sleep(0.25)
+            if before_volume is not None:
+                compare_volume(volume, before_volume, root)
             check_daemon()
             result = verify_bundle(bundle)["CFBundleVersion"]
             print(f"Strict bundle verification passed; build {version} -> {result}")
@@ -250,6 +403,8 @@ if __name__ == "__main__":
     parser.add_argument("--interrupt", action="store_true")
     parser.add_argument("--retry", action="store_true")
     parser.add_argument("--timeout", type=int, default=45)
+    parser.add_argument("--installer-timeout", type=int, default=45)
+    parser.add_argument("--inspect-volume", action="store_true")
     parser.add_argument("--platform", choices=("cocoa", "offscreen"), default="cocoa")
     parser.add_argument("--ctl", type=Path)
     parser.add_argument("--fake-codex", type=Path)
