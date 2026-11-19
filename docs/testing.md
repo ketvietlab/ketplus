@@ -2224,6 +2224,12 @@ A Python fixture's log lines end in `\r\n`. `QSettings()` needs an organization 
 tests that read settings back call `isolateTestSettings()` (`tests/daemon/TestSettings.h`) or set one.
 `ketplus_agent_tests` needs more than 10 minutes on Windows (about 3 minutes elsewhere).
 
+Last full Windows run (`ctest --test-dir build/dev -j2 --timeout 1200`, 262 tests): 257 pass
+(before the Pro test fixes about 30 of 190 enabled tests failed). Not passing: `ketplus_team_storage_tests`
+and `ketplus_daemon_worktree_context_tests` time out at 1200 s, `ketplus_team_agent_tools_tests`
+hangs (all daemon tests, see the daemon section), `ketplus_ssh_install_transaction_tests` is skipped
+and `ketplus_claude_sidecar_posix_tests` is disabled.
+
 Fixed for Windows: a path containment check compared a canonical path with `QDir::separator()`
 (a backslash) instead of `/`; `~CodexAppServer` called pending replies back into an
 `AgentSessionManager` that was already destroyed.
