@@ -446,8 +446,6 @@ if(APPLE)
             "node >= 22 and network (nodejs.org, npm registry), unless KETPLUS_BROWSER_RUNTIME_DIR "
             "points at a staged runtime or KETPLUS_NODE_CACHE holds the pinned Node archive "
             "(npm packages still need network). Pass -DKETPLUS_BUNDLE_BROWSER_RUNTIME=OFF to skip.")
-        file(READ "${ketplus_browser_app_dir}/runtime/node-runtime.json" ketplus_node_pin_json)
-        string(JSON ketplus_node_pin_version GET "${ketplus_node_pin_json}" version)
         if(CMAKE_OSX_ARCHITECTURES)
             set(ketplus_browser_runtime_arch "${CMAKE_OSX_ARCHITECTURES}")
         else()
@@ -465,23 +463,8 @@ if(APPLE)
                 message(FATAL_ERROR
                     "KETPLUS_BROWSER_RUNTIME_DIR has no runtime.json: ${KETPLUS_BROWSER_RUNTIME_DIR}")
             endif()
-            file(READ "${KETPLUS_BROWSER_RUNTIME_DIR}/runtime.json" ketplus_browser_runtime_json)
-            string(JSON ketplus_browser_runtime_name ERROR_VARIABLE ketplus_json_error
-                GET "${ketplus_browser_runtime_json}" name)
-            string(JSON ketplus_browser_runtime_node ERROR_VARIABLE ketplus_json_error
-                GET "${ketplus_browser_runtime_json}" nodeVersion)
-            string(JSON ketplus_browser_runtime_staged_platform ERROR_VARIABLE ketplus_json_error
-                GET "${ketplus_browser_runtime_json}" platform)
-            if(NOT ketplus_browser_runtime_name STREQUAL "ketplus-browser"
-               OR NOT ketplus_browser_runtime_node STREQUAL ketplus_node_pin_version
-               OR NOT ketplus_browser_runtime_staged_platform STREQUAL ketplus_browser_runtime_platform)
-                message(FATAL_ERROR
-                    "KETPLUS_BROWSER_RUNTIME_DIR ${KETPLUS_BROWSER_RUNTIME_DIR} is "
-                    "'${ketplus_browser_runtime_name}' node '${ketplus_browser_runtime_node}' "
-                    "platform '${ketplus_browser_runtime_staged_platform}'; this build needs "
-                    "ketplus-browser node ${ketplus_node_pin_version} ${ketplus_browser_runtime_platform}. "
-                    "Re-stage it with apps/browser/scripts/package-runtime.mjs.")
-            endif()
+            ketplus_browser_check_runtime_manifest("${ketplus_browser_app_dir}"
+                "${KETPLUS_BROWSER_RUNTIME_DIR}" "${ketplus_browser_runtime_platform}")
             option(KETPLUS_BROWSER_RUNTIME_ALLOW_STALE
                 "Bundle a prebuilt browser runtime whose sources differ from this checkout" OFF)
             ketplus_browser_check_runtime("${ketplus_browser_app_dir}"

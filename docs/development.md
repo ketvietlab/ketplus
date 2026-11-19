@@ -133,7 +133,7 @@ a build-host `node` 22+ on `PATH` (or `-DKETPLUS_NODE_EXECUTABLE=<node.exe>`) an
 Node archive and the npm packages; `-DKETPLUS_BROWSER_RUNTIME_DIR=<staged dir>` installs a runtime
 staged earlier, `-DKETPLUS_NODE_CACHE=<dir>` supplies the Node archive, and
 `-DKETPLUS_BUNDLE_BROWSER_RUNTIME=OFF` leaves the runtime out. No browser is bundled: the runtime
-drives the installed Microsoft Edge or Google Chrome, and otherwise downloads Chrome for Testing
+drives the installed Google Chrome or Microsoft Edge, and otherwise downloads Chrome for Testing
 on first need or reports `BROWSER_UNAVAILABLE` with the reason. The runtime's notices are also
 installed in `share\licenses\ketplus\browser-runtime`, and `VerifyStagedTree` checks them by name
 and starts the bundled `node.exe` against the browser server.

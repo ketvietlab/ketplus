@@ -31,7 +31,15 @@ endforeach()
 # configured without it. Its Node.js and npm licenses must be named in share\licenses.
 set(browser_runtime "${STAGE}/lib/ketplus/ketplus-browser")
 if(EXISTS "${STAGE}/bin/KetPlus.exe" AND NOT EXISTS "${browser_runtime}")
-    message(STATUS "No browser runtime in the staged tree (packaged without it)")
+    # A desktop package without the runtime lacks the agent browser tools: only a deliberate
+    # -DALLOW_NO_BROWSER_RUNTIME=ON (a package configured with KETPLUS_BUNDLE_BROWSER_RUNTIME=OFF)
+    # accepts that.
+    if(NOT ALLOW_NO_BROWSER_RUNTIME)
+        message(FATAL_ERROR
+            "The staged desktop has no browser runtime (lib/ketplus/ketplus-browser). Pass "
+            "-DALLOW_NO_BROWSER_RUNTIME=ON only for a package built without it.")
+    endif()
+    message(STATUS "No browser runtime in the staged tree (allowed)")
 elseif(EXISTS "${browser_runtime}")
     foreach(required bin/node.exe runtime.json src/mcp.mjs src/cli.mjs
             node_modules/playwright-core/package.json THIRD_PARTY_NOTICES.md)
@@ -74,16 +82,21 @@ if(NOT result EQUAL 0)
     message(FATAL_ERROR "ketplusctl --help failed (${result})")
 endif()
 if(EXISTS "${browser_runtime}/runtime.json")
-    # The bundled node.exe must start from the staged tree alone and load the browser server.
-    execute_process(COMMAND "${browser_runtime}/bin/node.exe" --input-type=module -e
-        "await import('./src/browser-service.mjs'); console.log(process.version)"
+    # The bundled node.exe must start the entry KetPlus launches (src/mcp.mjs) and answer an MCP
+    # initialize request; stdin ending then stops the server.
+    set(initialize_request "$ENV{TEMP}/ketplus-verify-initialize.json")
+    file(WRITE "${initialize_request}"
+        "{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2025-06-18\",\"capabilities\":{},\"clientInfo\":{\"name\":\"verify\",\"version\":\"0\"}}}\n")
+    execute_process(COMMAND "${browser_runtime}/bin/node.exe" src/mcp.mjs
         WORKING_DIRECTORY "${browser_runtime}"
-        OUTPUT_VARIABLE node_version RESULT_VARIABLE result ERROR_VARIABLE node_error)
-    if(NOT result EQUAL 0)
-        message(FATAL_ERROR "The bundled browser runtime did not start (${result}): ${node_error}")
+        INPUT_FILE "${initialize_request}"
+        OUTPUT_VARIABLE mcp_reply RESULT_VARIABLE result ERROR_VARIABLE node_error TIMEOUT 60)
+    file(REMOVE "${initialize_request}")
+    if(NOT mcp_reply MATCHES "\"serverInfo\"")
+        message(FATAL_ERROR
+            "The bundled browser runtime did not answer initialize (${result}): ${node_error}")
     endif()
-    string(STRIP "${node_version}" node_version)
-    message(STATUS "Browser runtime started with Node ${node_version}")
+    message(STATUS "Browser runtime answered initialize")
 endif()
 if(EXISTS "${STAGE}/bin/KetPlus.exe")
     # A GUI program has no console output to read: started without a display (offscreen) it must

@@ -28,6 +28,8 @@ set(ketplus_browser_app "${PROJECT_SOURCE_DIR}/apps/browser")
 include("${PROJECT_SOURCE_DIR}/cmake/KetPlusBrowserRuntime.cmake")
 if(KETPLUS_BROWSER_RUNTIME_DIR)
     set(ketplus_browser_stage "${KETPLUS_BROWSER_RUNTIME_DIR}")
+    ketplus_browser_check_runtime_manifest("${ketplus_browser_app}" "${ketplus_browser_stage}"
+        win32-x64)
     ketplus_browser_check_runtime("${ketplus_browser_app}" "${ketplus_browser_stage}" FALSE)
 else()
     find_program(KETPLUS_NODE_EXECUTABLE node

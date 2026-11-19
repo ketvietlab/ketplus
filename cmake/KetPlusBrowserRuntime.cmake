@@ -39,6 +39,33 @@ function(ketplus_browser_check_runtime app_dir runtime_dir allow_stale)
     endif()
 endfunction()
 
+# Fails unless a prebuilt runtime is the ketplus-browser runtime for this platform and the Node.js
+# version pinned in apps/browser/runtime/node-runtime.json. platform is "darwin-arm64",
+# "win32-x64", ... as package-runtime.mjs writes it.
+function(ketplus_browser_check_runtime_manifest app_dir runtime_dir platform)
+    if(NOT EXISTS "${runtime_dir}/runtime.json")
+        message(FATAL_ERROR "The browser runtime has no runtime.json: ${runtime_dir}")
+    endif()
+    file(READ "${app_dir}/runtime/node-runtime.json" ketplus_node_pin_json)
+    string(JSON ketplus_node_pin_version GET "${ketplus_node_pin_json}" version)
+    file(READ "${runtime_dir}/runtime.json" ketplus_runtime_json)
+    string(JSON ketplus_runtime_name ERROR_VARIABLE ketplus_json_error
+        GET "${ketplus_runtime_json}" name)
+    string(JSON ketplus_runtime_node ERROR_VARIABLE ketplus_json_error
+        GET "${ketplus_runtime_json}" nodeVersion)
+    string(JSON ketplus_runtime_platform ERROR_VARIABLE ketplus_json_error
+        GET "${ketplus_runtime_json}" platform)
+    if(NOT ketplus_runtime_name STREQUAL "ketplus-browser"
+       OR NOT ketplus_runtime_node STREQUAL ketplus_node_pin_version
+       OR NOT ketplus_runtime_platform STREQUAL platform)
+        message(FATAL_ERROR
+            "The browser runtime ${runtime_dir} is '${ketplus_runtime_name}' node "
+            "'${ketplus_runtime_node}' platform '${ketplus_runtime_platform}'; this build needs "
+            "ketplus-browser node ${ketplus_node_pin_version} ${platform}. "
+            "Re-stage it with apps/browser/scripts/package-runtime.mjs.")
+    endif()
+endfunction()
+
 # Script mode, with -DKETPLUS_BROWSER_APP_DIR=<dir>:
 #   alone, prints the digest;
 #   with -DKETPLUS_BROWSER_RUNTIME_DIR=<dir> [-DKETPLUS_BROWSER_RUNTIME_ALLOW_STALE=ON], checks it.
