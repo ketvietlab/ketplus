@@ -5,6 +5,7 @@
 
 #include <QCoreApplication>
 #include <QCryptographicHash>
+#include <QDeadlineTimer>
 #include <QDir>
 #include <QFile>
 #include <QJsonDocument>
@@ -12,7 +13,11 @@
 #include <QProcessEnvironment>
 #include <QTimer>
 #include <QUuid>
+#include <algorithm>
+#include <chrono>
 #include <memory>
+#include <sys/wait.h>
+#include <thread>
 #include <utility>
 #ifdef Q_OS_LINUX
 #include <sys/stat.h>
@@ -307,6 +312,49 @@ bool linuxBoundaryEmpty(const QJsonObject& identity) {
            read(identity.value("path").toString() + "/cgroup.events")
                .split('\n')
                .contains("populated 0");
+}
+LinuxPopulated linuxPopulatedOf(const QByteArray& events) {
+    std::optional<LinuxPopulated> found;
+    for (const QByteArray& line : events.split('\n')) {
+        if (!line.startsWith("populated "))
+            continue;
+        const QByteArray value = line.mid(int(sizeof("populated ")) - 1);
+        if (found || (value != "0" && value != "1"))
+            return LinuxPopulated::Unknown;
+        found = value == "0" ? LinuxPopulated::Empty : LinuxPopulated::Populated;
+    }
+    return found.value_or(LinuxPopulated::Unknown);
+}
+bool linuxAwaitEmpty(const std::function<std::optional<QByteArray>()>& readEvents,
+                     const int deadlineMs, const int pollMs) {
+    const QDeadlineTimer deadline(deadlineMs, Qt::PreciseTimer);
+    for (;;) {
+        const auto events = readEvents();
+        const auto state = events ? linuxPopulatedOf(*events) : LinuxPopulated::Unknown;
+        if (state != LinuxPopulated::Populated)
+            return state == LinuxPopulated::Empty;
+        const qint64 left = deadline.remainingTime();
+        if (left <= 0)
+            return false;
+        std::this_thread::sleep_for(std::chrono::milliseconds(std::min<qint64>(pollMs, left)));
+    }
+}
+bool linuxBoundaryEmptyWithin(const QJsonObject& identity, const int deadlineMs) {
+    const QString path = identity.value("path").toString() + "/cgroup.events";
+    return linuxAwaitEmpty(
+        [&identity, &path]() -> std::optional<QByteArray> {
+            if (!linuxBoundaryMatches(identity))
+                return std::nullopt;
+            QFile file(path);
+            if (!file.open(QIODevice::ReadOnly))
+                return std::nullopt;
+            return file.read(16384).trimmed();
+        },
+        deadlineMs, linuxProbeEmptyPollMs);
+}
+bool linuxProbeSucceeded(const bool launched, const int waitStatus,
+                         const std::function<bool()>& boundaryEmptied) {
+    return launched && WIFEXITED(waitStatus) && WEXITSTATUS(waitStatus) == 0 && boundaryEmptied();
 }
 bool linuxKillBoundary(const QJsonObject& identity) {
     return linuxBoundaryMatches(identity) &&

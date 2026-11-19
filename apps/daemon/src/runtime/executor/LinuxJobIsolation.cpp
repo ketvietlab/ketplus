@@ -390,8 +390,9 @@ int linuxContainmentProbe(const QString& task, const QString& lease, bool mounts
             while (waitpid(child, &status, 0) < 0 && errno == EINTR) {
             }
         }
-        available = available && WIFEXITED(status) && WEXITSTATUS(status) == 0 &&
-                    linuxBoundaryEmpty(boundary);
+        available = linuxProbeSucceeded(available, status, [&boundary] {
+            return linuxBoundaryEmptyWithin(boundary, linuxProbeEmptyDeadlineMs);
+        });
     } else {
         available = false;
     }

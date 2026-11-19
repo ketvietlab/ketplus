@@ -1,8 +1,10 @@
 #pragma once
 
+#include <QByteArray>
 #include <QJsonObject>
 #include <QString>
 #include <functional>
+#include <optional>
 
 class QObject;
 
@@ -24,6 +26,23 @@ void linuxStartSupervisorAsync(const QString& helper, const QString& directory, 
 QJsonObject linuxCreateBoundary(const QString& task, const QString& lease, QString* error);
 bool linuxBoundaryMatches(const QJsonObject& identity);
 bool linuxBoundaryEmpty(const QJsonObject& identity);
+// cgroup v2 can report `populated 1` for a moment after the last member of a domain was reaped.
+// Only the containment probe waits for that to settle; every other check reads once.
+enum class LinuxPopulated { Empty, Populated, Unknown };
+// The `populated` value of a cgroup.events text: Unknown unless exactly one line says 0 or 1.
+LinuxPopulated linuxPopulatedOf(const QByteArray& events);
+// Reads until `readEvents` reports Empty (true). Unknown, an unreadable file (nullopt) or still
+// Populated once the monotonic deadline fixed at the call has passed answer false.
+bool linuxAwaitEmpty(const std::function<std::optional<QByteArray>()>& readEvents, int deadlineMs,
+                     int pollMs);
+// linuxBoundaryEmpty, waiting up to `deadlineMs` while the same boundary reports populated 1.
+bool linuxBoundaryEmptyWithin(const QJsonObject& identity, int deadlineMs);
+constexpr int linuxProbeEmptyDeadlineMs = 1000;
+constexpr int linuxProbeEmptyPollMs = 5;
+// The probe's verdict once its launcher was placed and reaped: `waitStatus` is a clean exit 0 and
+// then `boundaryEmptied` holds. `boundaryEmptied` runs only after such an exit.
+bool linuxProbeSucceeded(bool launched, int waitStatus,
+                         const std::function<bool()>& boundaryEmptied);
 bool linuxKillBoundary(const QJsonObject& identity);
 bool linuxPlaceLauncher(const QJsonObject& identity, qint64 pid);
 bool linuxReceiptTrusted(const QString& task, const QString& lease, const QJsonObject& receipt,
