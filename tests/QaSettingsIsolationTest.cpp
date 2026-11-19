@@ -8,7 +8,10 @@
 #include <QSettings>
 #include <QTemporaryDir>
 #include <QTest>
-#include <QUuid>
+
+#ifdef Q_OS_MACOS
+void observeQaNativeSettingsReads(int* count);
+#endif
 
 namespace {
 
@@ -77,8 +80,7 @@ void QaSettingsIsolationTest::rejectsUnusablePaths() {
 void QaSettingsIsolationTest::isolatesNativeSettingsAndIniFallbacks() {
     QTemporaryDir scratch;
     QVERIFY(scratch.isValid());
-    const auto organization = QStringLiteral("dev.ketplus.tests.qa.") +
-                              QUuid::createUuid().toString(QUuid::WithoutBraces);
+    const auto organization = QStringLiteral("dev.ketplus.tests.qa.isolation");
     const auto application = QStringLiteral("SettingsProbe");
     QCoreApplication::setOrganizationName(organization);
     QCoreApplication::setApplicationName(application);
@@ -88,22 +90,17 @@ void QaSettingsIsolationTest::isolatesNativeSettingsAndIniFallbacks() {
     const auto recent = QStringLiteral("workspace/recentFolders");
     const auto repositories = QStringLiteral("spotlight/repositories");
     const auto sessions = QStringLiteral("agent/sessions/qa");
-    const auto nativeValue = QStringLiteral("native-only");
+    const auto ordinaryValue = QStringLiteral("ordinary-only");
     const auto isolatedValue = QStringLiteral("isolated-only");
 
-    // Use a unique native domain so the regression can read, write and compare actual
-    // native values without ever opening the installed app's domain.
-    QSettings native(QSettings::NativeFormat, QSettings::UserScope, organization, application);
-    native.setFallbacksEnabled(false);
-    const auto cleanupNative = qScopeGuard([&] {
-        native.clear();
-        native.sync();
-    });
-    native.setValue(lastRoot, nativeValue);
-    native.setValue(sessions, nativeValue);
-    native.sync();
-    QCOMPARE(native.status(), QSettings::NoError);
-    QCOMPARE(QSettings().value(lastRoot).toString(), nativeValue);
+#ifdef Q_OS_MACOS
+    int readCount = 0;
+    observeQaNativeSettingsReads(&readCount);
+    const auto stopObserving = qScopeGuard([] { observeQaNativeSettingsReads(nullptr); });
+    QCOMPARE(QSettings().value(lastRoot).toString(), QStringLiteral("native-sentinel"));
+    QVERIFY(readCount > 0);
+    readCount = 0;
+#endif
 
     // Seed the ordinary INI organization and system fallback locations separately.
     QSettings::setPath(QSettings::IniFormat, QSettings::UserScope,
@@ -111,33 +108,33 @@ void QaSettingsIsolationTest::isolatesNativeSettingsAndIniFallbacks() {
     QSettings::setPath(QSettings::IniFormat, QSettings::SystemScope,
                        scratch.filePath(QStringLiteral("ordinary-system")));
     QSettings userFallback(QSettings::IniFormat, QSettings::UserScope, organization);
-    userFallback.setValue(recent, nativeValue);
+    userFallback.setValue(recent, ordinaryValue);
     userFallback.sync();
     QCOMPARE(userFallback.status(), QSettings::NoError);
     QSettings systemFallback(QSettings::IniFormat, QSettings::SystemScope, organization,
                              application);
-    systemFallback.setValue(repositories, nativeValue);
+    systemFallback.setValue(repositories, ordinaryValue);
     systemFallback.sync();
     QCOMPARE(systemFallback.status(), QSettings::NoError);
     QSettings ordinary(QSettings::IniFormat, QSettings::UserScope, organization, application);
-    QCOMPARE(ordinary.value(recent).toString(), nativeValue);
-    QCOMPARE(ordinary.value(repositories).toString(), nativeValue);
+    QCOMPARE(ordinary.value(recent).toString(), ordinaryValue);
+    QCOMPARE(ordinary.value(repositories).toString(), ordinaryValue);
 
     const auto isolatedPath = scratch.filePath(QStringLiteral("isolated"));
     useDirectory(isolatedPath);
     const auto error = ketplus::configureQaSettingsIsolation(organization, application);
     QVERIFY2(error.isEmpty(), qPrintable(error));
     QCOMPARE(QSettings::defaultFormat(), QSettings::IniFormat);
+    QSettings isolated;
+    // Abort before any write if a regression selects the real native backend.
+    QCOMPARE(isolated.format(), QSettings::IniFormat);
     for (const auto& key : {lastRoot, recent, repositories, sessions, draft})
-        QVERIFY2(!QSettings().contains(key), qPrintable(key));
+        QVERIFY2(!isolated.contains(key), qPrintable(key));
 
-    {
-        QSettings isolated;
-        for (const auto& key : {lastRoot, recent, repositories, sessions, draft})
-            isolated.setValue(key, isolatedValue);
-        isolated.sync();
-        QCOMPARE(isolated.status(), QSettings::NoError);
-    }
+    for (const auto& key : {lastRoot, recent, repositories, sessions, draft})
+        isolated.setValue(key, isolatedValue);
+    isolated.sync();
+    QCOMPARE(isolated.status(), QSettings::NoError);
     const auto relativeFile = QStringLiteral("user/%1/%2.ini").arg(organization, application);
     QSettings persisted(QDir(isolatedPath).filePath(relativeFile), QSettings::IniFormat);
     for (const auto& key : {lastRoot, recent, repositories, sessions, draft}) {
@@ -145,16 +142,13 @@ void QaSettingsIsolationTest::isolatesNativeSettingsAndIniFallbacks() {
         QCOMPARE(persisted.value(key).toString(), isolatedValue);
     }
 
-    native.sync();
-    QCOMPARE(native.value(lastRoot).toString(), nativeValue);
-    QCOMPARE(native.value(sessions).toString(), nativeValue);
-    QVERIFY(!native.contains(draft));
-    QVERIFY(!native.contains(recent));
-    QVERIFY(!native.contains(repositories));
+#ifdef Q_OS_MACOS
+    QCOMPARE(readCount, 0);
+#endif
     userFallback.sync();
     systemFallback.sync();
-    QCOMPARE(userFallback.value(recent).toString(), nativeValue);
-    QCOMPARE(systemFallback.value(repositories).toString(), nativeValue);
+    QCOMPARE(userFallback.value(recent).toString(), ordinaryValue);
+    QCOMPARE(systemFallback.value(repositories).toString(), ordinaryValue);
 
     auto& updater = ketplus::AppUpdater::instance();
     updater.start();

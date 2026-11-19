@@ -2066,10 +2066,12 @@ Use a separate daemon if the scenario needs one. Record only key namespaces and
 counts in public evidence. Keep any comparison evidence outside the repository.
 
 The regression for audit finding M5 is `ketplus_qa_settings_isolation_tests`.
-It seeds and compares actual native settings in a unique test domain, verifies
-that ordinary INI fallbacks are isolated, and checks startup rejection and the
-disabled updater. Run it on macOS with a Sparkle-enabled build to cover the
-platform updater selection:
+It checks that the default settings use INI before writing, verifies isolation
+from ordinary INI fallbacks, and exercises startup rejection and the disabled
+updater. On macOS, it intercepts Qt's native key lookup and verifies that the
+isolated settings perform no native lookups. The test writes settings only to
+scratch INI files. Run it with a Sparkle-enabled build to cover the macOS
+updater selection:
 
 ```sh
 cmake --build build/dev --target ketplus_qa_settings_isolation_tests

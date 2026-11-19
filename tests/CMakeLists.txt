@@ -27,6 +27,13 @@ ketplus_add_gui_test(ketplus_qa_settings_isolation_tests
     QaSettingsIsolationTest.cpp
     "${PROJECT_SOURCE_DIR}/apps/desktop/src/app/QaSettingsIsolation.cpp")
 target_link_libraries(ketplus_qa_settings_isolation_tests PRIVATE Qt6::Test ketplus_app_updater)
+if(APPLE)
+    # Interpose the CFPreferences call made inside QtCore from a test-only dylib.
+    add_library(ketplus_qa_native_settings_probe SHARED QaNativeSettingsProbe.cpp)
+    target_link_libraries(ketplus_qa_native_settings_probe PRIVATE "-framework CoreFoundation")
+    ketplus_enable_warnings(ketplus_qa_native_settings_probe)
+    target_link_libraries(ketplus_qa_settings_isolation_tests PRIVATE ketplus_qa_native_settings_probe)
+endif()
 
 ketplus_add_gui_test(ketplus_codex_browser_tools_tests CodexBrowserToolsTest.cpp)
 target_link_libraries(ketplus_codex_browser_tools_tests PRIVATE Qt6::Test ketplus_browser_tools)
