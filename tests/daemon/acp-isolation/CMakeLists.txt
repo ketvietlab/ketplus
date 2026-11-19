@@ -42,3 +42,8 @@ if(WIN32)
             LABELS "windows-script-fixture")
     endif()
 endif()
+
+# Area label inside the KetPlus build (cmake/TestLabels.cmake); a standalone build has none.
+if(COMMAND ketplus_label_tests)
+    ketplus_label_tests(daemon)
+endif()

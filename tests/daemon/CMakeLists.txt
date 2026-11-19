@@ -560,6 +560,7 @@ endif()
 ketplus_add_daemon_test(ketplus_async_question_lifetime_tests AsyncQuestionLifetimeTest.cpp)
 
 ketplus_tests_offscreen()
+ketplus_label_tests(daemon)
 # #468: the daemon's team texts, read by the desktop's transcript blocks.
 ketplus_add_daemon_test(ketplus_team_transcript_contract_tests TeamTranscriptContractTest.cpp)
 target_sources(ketplus_team_transcript_contract_tests PRIVATE

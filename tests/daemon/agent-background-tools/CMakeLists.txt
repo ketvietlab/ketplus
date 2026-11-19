@@ -31,3 +31,8 @@ target_include_directories(ketplus_agent_mutation_origin_tests PRIVATE
     "${agent_background_root}/apps/daemon/src")
 target_link_libraries(ketplus_agent_mutation_origin_tests PRIVATE Qt6::Core Qt6::Test)
 add_test(NAME ketplus_agent_mutation_origin_tests COMMAND ketplus_agent_mutation_origin_tests)
+
+# Area label inside the KetPlus build (cmake/TestLabels.cmake); a standalone build has none.
+if(COMMAND ketplus_label_tests)
+    ketplus_label_tests(daemon)
+endif()

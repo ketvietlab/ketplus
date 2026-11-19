@@ -148,3 +148,8 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND NOT TARGET ketplus_linux_job_executor_
     add_dependencies(ketplus_linux_job_executor_tests ketplus_job_executor)
     add_test(NAME ketplus_linux_job_executor_tests COMMAND ketplus_linux_job_executor_tests)
 endif()
+
+# Area label inside the KetPlus build (cmake/TestLabels.cmake); a standalone build has none.
+if(COMMAND ketplus_label_tests)
+    ketplus_label_tests(daemon)
+endif()

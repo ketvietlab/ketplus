@@ -97,6 +97,7 @@ endif()
 
 include(cmake/Warnings.cmake)
 include(cmake/OffscreenTests.cmake)
+include(cmake/TestLabels.cmake)
 
 set(KETPLUS_DAEMON_RELEASE_MANIFEST_URL
     "https://github.com/ketvietlab/ketplus/releases/download/v${PROJECT_VERSION}/ketplus-daemon-linux-manifest.json"
@@ -190,6 +191,7 @@ if(KETPLUS_BUILD_TESTS)
             "-DKETPLUS_PRODUCTION_RELEASE=${KETPLUS_PRODUCTION_RELEASE}"
             -P "${PROJECT_SOURCE_DIR}/tests/packaging/DaemonControlBuildInfoTest.cmake")
     set_tests_properties(ketplus_daemon_control_build_info_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+    ketplus_label_tests(packaging)
     find_package(Qt6 6.11 REQUIRED COMPONENTS Test)
     if(KETPLUS_BUILD_DESKTOP)
         add_subdirectory(tests)
