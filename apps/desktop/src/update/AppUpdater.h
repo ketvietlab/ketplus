@@ -21,7 +21,7 @@ class AppUpdater : public QObject {
     // platform without Sparkle) gets an updater whose isConfigured() is false.
     static AppUpdater& instance();
     // Called during QA startup, before the first use of the process-wide updater.
-    static void disableForQa();
+    static void enableQaSettingsIsolation();
     // Replaces the process-wide updater; the caller keeps ownership. Tests only.
     static void setInstanceForTesting(AppUpdater* updater);
 

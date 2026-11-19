@@ -84,6 +84,17 @@ class SparkleAppUpdater final : public AppUpdater {
 
 AppUpdater* createPlatformAppUpdater(QObject* parent) { return new SparkleAppUpdater(parent); }
 
+bool sparkleQaBundleAllowed(NSString* bundleIdentifier) {
+    // Keep the installed Desktop's Sparkle preference domain outside QA. If macOS
+    // cannot identify the running bundle, leave the updater disabled.
+    return bundleIdentifier.length > 0 &&
+           [bundleIdentifier caseInsensitiveCompare:@"dev.ketplus.editor"] != NSOrderedSame;
+}
+
+bool platformAppUpdaterAllowedInQa() {
+    return sparkleQaBundleAllowed(NSBundle.mainBundle.bundleIdentifier);
+}
+
 } // namespace ketplus
 
 @implementation KetPlusSparkleDelegate {

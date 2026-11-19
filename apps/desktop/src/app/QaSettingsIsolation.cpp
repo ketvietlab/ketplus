@@ -78,7 +78,7 @@ QString configureQaSettingsIsolation(const QString& organization, const QString&
     QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, userPath);
     QSettings::setPath(QSettings::IniFormat, QSettings::SystemScope, systemPath);
     QSettings::setDefaultFormat(QSettings::IniFormat);
-    AppUpdater::disableForQa();
+    AppUpdater::enableQaSettingsIsolation();
     return {};
 }
 

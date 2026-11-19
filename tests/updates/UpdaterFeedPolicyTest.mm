@@ -1,9 +1,15 @@
+#include "update/AppUpdater.h"
+
 #include <QCoreApplication>
 
 #import <Foundation/Foundation.h>
 #import <Sparkle/Sparkle.h>
 
 #include <cstdio>
+
+namespace ketplus {
+bool sparkleQaBundleAllowed(NSString* bundleIdentifier);
+}
 
 // Exercise the real production delegate, without starting an updater or making requests.
 @interface KetPlusSparkleDelegate : NSObject <SPUUpdaterDelegate>
@@ -35,11 +41,26 @@ int main(int argc, char** argv) {
             if (![controller.updater.feedURL.absoluteString isEqualToString:expected])
                 ++failures;
         }
+        const bool qaIdentityPolicy = !ketplus::sparkleQaBundleAllowed(@"dev.ketplus.editor") &&
+                                      !ketplus::sparkleQaBundleAllowed(@"DEV.KETPLUS.EDITOR") &&
+                                      !ketplus::sparkleQaBundleAllowed(nil) &&
+                                      !ketplus::sparkleQaBundleAllowed(@"") &&
+                                      ketplus::sparkleQaBundleAllowed(bundle.bundleIdentifier);
+        ketplus::AppUpdater::enableQaSettingsIsolation();
+        const bool qaUpdaterConfigured = ketplus::AppUpdater::instance().isConfigured();
         if (previous)
             [defaults setPersistentDomain:previous forName:domain];
         else
             [defaults removePersistentDomainForName:domain];
         [defaults synchronize];
+        if (!qaIdentityPolicy) {
+            std::fputs("Unexpected QA bundle identity policy\n", stderr);
+            return 3;
+        }
+        if (!qaUpdaterConfigured) {
+            std::fputs("QA bundle did not retain its Sparkle updater\n", stderr);
+            return 4;
+        }
         std::fprintf(stdout,
                      "Compiled feed policy: %d/2 restored defaults ignored; no network checks\n",
                      2 - failures);

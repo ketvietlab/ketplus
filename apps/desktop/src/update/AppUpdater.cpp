@@ -6,6 +6,9 @@
 namespace ketplus {
 
 AppUpdater* createPlatformAppUpdater(QObject* parent);
+#ifdef KETPLUS_HAS_SPARKLE
+bool platformAppUpdaterAllowedInQa();
+#endif
 
 namespace {
 
@@ -14,7 +17,17 @@ QPointer<AppUpdater>& currentInstance() {
     return updater;
 }
 
-bool updaterDisabledForQa = false;
+bool qaSettingsIsolationEnabled = false;
+
+bool updaterAllowed() {
+    if (!qaSettingsIsolationEnabled)
+        return true;
+#ifdef KETPLUS_HAS_SPARKLE
+    return platformAppUpdaterAllowedInQa();
+#else
+    return false;
+#endif
+}
 
 } // namespace
 
@@ -39,19 +52,19 @@ AppUpdater* createPlatformAppUpdater(QObject* parent) { return new DisabledAppUp
 
 AppUpdater::AppUpdater(QObject* parent) : QObject(parent) {}
 
-void AppUpdater::disableForQa() {
+void AppUpdater::enableQaSettingsIsolation() {
     Q_ASSERT(currentInstance().isNull());
-    updaterDisabledForQa = true;
+    qaSettingsIsolationEnabled = true;
 }
 
 AppUpdater& AppUpdater::instance() {
     auto& updater = currentInstance();
     if (updater.isNull()) {
         auto* parent = QCoreApplication::instance();
-        if (updaterDisabledForQa)
-            updater = new DisabledAppUpdater(parent);
-        else
+        if (updaterAllowed())
             updater = createPlatformAppUpdater(parent);
+        else
+            updater = new DisabledAppUpdater(parent);
     }
     return *updater;
 }

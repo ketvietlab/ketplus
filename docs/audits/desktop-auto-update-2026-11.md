@@ -224,3 +224,43 @@ acceptance because they did not download the fixture.
 - M4: pin or migrate effective feed defaults, testing restored staging preferences.
 - M5: document mandatory isolated-settings QA and attribution checks; provide an
   explicit isolated backend or require a separate OS user for native-settings QA.
+
+## Follow-up loopback QA
+
+The follow-up ran on macOS 26.2 arm64 with Sparkle 2.10.0. The staged Debug
+Pro Runtime included the daemon and helpers. The app used
+`KETPLUS_QA_SETTINGS_DIR` and a separate bundle identifier per fixture. An
+external test-only trigger requested a background check in the real Desktop
+updater. Both the RSS and archives were signed with a throwaway EdDSA key and
+served over HTTP loopback. The source bundle was N (0.1.52). Candidate versions
+were set in the disposable bundle metadata. Its helpers kept the original
+compiled version.
+
+Every completed Sparkle case passed `codesign --verify --deep --strict` before
+and after. The isolated daemon reported the same running fake turn and refused
+replacement both times.
+
+| Case | Real Sparkle result | Bundle |
+| --- | --- | --- |
+| Signed appcast with 0.1.51 only | Appcast GET 200, no archive request, `SUNoUpdateError` (1001) | Stayed at N, strict signature valid |
+| Signed appcast with 0.1.52 only | Appcast GET 200, no archive request, `SUNoUpdateError` (1001) | Stayed at N, strict signature valid |
+| Archive transfer interrupted | Loopback closed the 200 response after 65,536 bytes. Sparkle reported `SUDownloadError` (2001), with `NSURLErrorDomain` -1005. | Stayed at N, strict signature valid |
+| Interrupted transfer followed by a new check | The test requested a second check after error 2001. Both archive requests lacked a Range header. The second request downloaded the full archive and Sparkle scheduled installation on quit. | Changed from N to the arm64 N+1 metadata fixture, strict signature valid |
+| Read-only disk image | Mounted a UDRO image read-only. Sparkle reported `SURunningFromDiskImageError` (1003) without requesting the feed. | Stayed at N, strict signature valid |
+| Full destination volume | Filled a 2 GiB writable APFS disk image until a write returned `ENOSPC`. Sparkle downloaded the signed archive and reported installation ready on quit. The trigger saw no installation error code, and the destination version stayed unchanged during the 20-second post-exit check. | Stayed at N, strict signature valid |
+| Signed newer archive with an x86_64 main executable | Appcast and ZIP GET 200, update cycle completed without an error. The archive used an x86_64 executable stub with the remaining arm64 Runtime unchanged. | Changed from arm64 N to x86_64 N+1, strict signature valid. This is a failure of the architecture invariant. |
+| App Translocation | Gatekeeper assessment of a quarantine-marked, ad-hoc signed scratch bundle rejected it (exit 3). The test did not bypass Gatekeeper or observe an App Translocation launch. | No Sparkle result |
+
+### Finding F1 — Desktop accepts a signed archive with an incompatible executable
+
+The arm64 client requested its own configured loopback feed. That feed offered
+a correctly signed archive as N+1 whose main executable contained only x86_64.
+After the update, `lipo -archs` on the disposable installation changed from
+`arm64` to `x86_64`. Bundle signing and an uninterrupted daemon do not establish
+architecture compatibility. The fixture proves this for a wrong-architecture
+executable inside a correctly signed archive. A full Intel build and automatic
+relaunch were outside this test. Existing publisher scope checks still cover
+production feed pairing.
+
+Run the fixture using the
+[Desktop update QA procedure](../testing.md#desktop-update-qa-isolation).

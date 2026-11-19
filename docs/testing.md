@@ -2059,11 +2059,13 @@ HOME="$qa_home" CFFIXED_USER_HOME="$qa_home" \
 Desktop routes default QSettings to INI files under the directory's `user` and
 `system` subdirectories, including organization-level fallbacks. It exits with a
 startup error on stderr if the requested location is unusable. The QA directory
-takes precedence over `KETPLUS_PROFILE_DIR`, and the updater is disabled for the
-entire process, including manual checks. Use a separate OS user and leave
-`KETPLUS_QA_SETTINGS_DIR` unset when testing Sparkle download, install, or relaunch.
-Use a separate daemon if the scenario needs one. Record only key namespaces and
-counts in public evidence. Keep any comparison evidence outside the repository.
+takes precedence over `KETPLUS_PROFILE_DIR`. The updater is disabled for the
+production bundle identifier and when the identifier is missing. To test Sparkle,
+give the disposable bundles a unique QA bundle identifier shared by both versions
+and keep `KETPLUS_QA_SETTINGS_DIR` set. Sparkle then uses the disposable bundle's
+preferences. Use a dedicated daemon if the scenario needs one. Record only key
+namespaces and counts in public evidence. Keep any comparison evidence outside
+the repository.
 
 The regression for audit finding M5 is `ketplus_qa_settings_isolation_tests`.
 It checks that the default settings use INI before writing, verifies isolation
@@ -2100,6 +2102,39 @@ ctest --test-dir build/updater-policy -R '^ketplus_updater_feed_policy_tests$' -
 
 The test sets `QT_QPA_PLATFORM=offscreen`. Production bundle installation and
 owner-run manual UI acceptance remain separate checks.
+
+The opt-in `tests/updates/sparkle_loopback_qa.py` runner exercises the real updater in
+a staged Desktop bundle. Build the test-only trigger against the pinned SDK.
+
+```sh
+clang++ -std=c++20 -fobjc-arc -dynamiclib -F "$SPARKLE_SDK_DIR" \
+  -framework Sparkle -framework Foundation -Wl,-rpath,@executable_path/../Frameworks \
+  tests/updates/SparkleQaTrigger.mm -o "$qa_scratch/SparkleQaTrigger.dylib"
+```
+
+The trigger accepts only a disposable bundle with a `dev.ketplus.audit.*`
+identifier and a loopback HTTP `SUFeedURL`. It requests a background check and
+records Sparkle's cycle and error codes. Sparkle may install a downloaded
+update when the app exits, so both the launch and candidate bundles must be
+disposable. The trigger leaves relaunch to the operator.
+
+Stage the full Runtime bundle with a loopback-only daemon control URL. Set the
+QA bundle identifier and feed in a fresh scratch copy, then ad-hoc sign it.
+Supply a ZIP and its signature, signed with a throwaway EdDSA key. For an
+appcast that must be signed, pass the pinned `sign_update` tool and the scratch
+private key using `--sign-update` and `--signing-key`. Use `--interrupt` to close
+archive responses after 64 KiB. Add `--retry` to let the next request complete
+and record whether it requested a byte range. Pass `--ctl` and `--fake-codex`
+(the `hang` case from `tests/daemon/FakeCodex.h`) to verify that a separate daemon
+reports an active fake turn before and after the update cycle. The runner
+verifies the bundle's signature before and after each case.
+
+For a destination-volume case, mount the disk image inside the case root and
+pass the mounted app to `--bundle`. For a read-only fixture, use a UDRO image
+and attach it with `hdiutil attach -readonly -nobrowse`. For a full writable
+fixture, copy N to an APFS image, then write filler on that volume until a
+write returns `ENOSPC`. Keep the feed and daemon state outside the image. Detach
+the image after the updater and daemon have stopped.
 
 `ketplus_machine_toast_tests` renders the production Machine composer in temporary
 INI settings, in light/dark. It checks the exact recipe gap after growth and window
