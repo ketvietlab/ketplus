@@ -26,6 +26,14 @@ path that must not trust the download server or the network.
   empty (the default) Sparkle is neither downloaded nor bundled and the app
   never contacts an update server. The Sparkle delegate pins this compiled URL;
   a restored `SUFeedURL` user default cannot override it.
+- Each published item declares its executable architecture through the
+  Sparkle item channel `ketplus-arm64` or `ketplus-x86_64`. The delegate
+  allows only the running executable slice, and rejects untagged or invalid
+  items before offering them. Release tooling checks the Mach-O slice before
+  generating the item, and R2 publication and rollback validate its tag.
+  Sparkle's public extraction callbacks provide an appcast item without the
+  extracted bundle path. The Desktop check therefore enforces the declared
+  architecture. Publisher-side binary validation remains required.
 - Every archive is verified against the compiled-in EdDSA key before it is
   extracted. The private key is never stored in this repository and never
   passed to CMake. `packaging/macos/publish-update.sh` signs archives with the

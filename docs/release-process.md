@@ -237,6 +237,21 @@ all symlinks before a filesystem-identity ancestry check (including case aliases
 The app pins the compiled feed through its delegate: restoring an old `SUFeedURL`
 preference cannot switch the build's channel or redirect it to HTTP.
 
+Architecture-aware clients require every appcast item to carry the Sparkle
+channel `ketplus-arm64` or `ketplus-x86_64`, matching its scoped release.
+`publish-update.sh` validates the executable and adds the item channel before
+Sparkle generates or signs the feed. R2 validates the tag on every item before
+publishing or restoring an appcast.
+
+For an existing untagged feed, prepare the next release in a clean
+`<channel>/<arch>` output directory using the same approved download prefix.
+Keep the old appcast bytes for incident records. R2 can snapshot an untagged
+live feed during the switch. For rollback after the switch, use a snapshot
+with matching item tags. Older clients listen to Sparkle's default channel,
+so users of those builds need a one-time install of the first architecture-aware
+release from its signed DMG before they can receive tagged updates. Coordinate
+that transition before replacing a live untagged feed.
+
 For local update QA, follow the native-settings isolation procedure in
 [testing](testing.md#desktop-update-qa-isolation). Use only a throwaway key,
 a loopback feed and a disposable complete bundle. Never replace or relaunch the

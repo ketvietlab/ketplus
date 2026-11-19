@@ -32,3 +32,8 @@ set_target_properties(ketplus_updater_feed_policy_tests PROPERTIES
     BUILD_RPATH "${KETPLUS_SPARKLE_DIR}")
 add_test(NAME ketplus_updater_feed_policy_tests COMMAND "$<TARGET_FILE:ketplus_updater_feed_policy_tests>")
 set_tests_properties(ketplus_updater_feed_policy_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+add_test(NAME ketplus_updater_architecture_tests
+    COMMAND "${Python3_EXECUTABLE}" -I "${CMAKE_CURRENT_SOURCE_DIR}/check_architecture_feed.py"
+        "$<TARGET_FILE:ketplus_updater_feed_policy_tests>")

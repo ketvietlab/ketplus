@@ -201,6 +201,16 @@ if os.environ.get("UPDATE_APPCAST_FAIL"): sys.exit("synthetic signing failure")
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual(feed.read_bytes(), original)
 
+    def test_new_feed_seed_declares_sparkle_namespace(self):
+        feed = self.root / "seed.xml"
+        result = subprocess.run([sys.executable, str(self.script.with_name("update-release-policy.py")),
+            "seed-feed", "--channel", "production", "--arch", "arm64", "--download-prefix",
+            "https://updates.example.invalid/production/arm64/", "--appcast", str(feed)],
+            capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        namespaces = dict(value for _, value in ET.iterparse(feed, events=("start-ns",)))
+        self.assertEqual(namespaces.get("sparkle"), "http://www.andymatuschak.org/xml-namespaces/sparkle")
+
     def test_external_key_symlink_is_resolved_before_signer(self):
         target = self.root / "external-key"
         target.write_text("inert fixture")

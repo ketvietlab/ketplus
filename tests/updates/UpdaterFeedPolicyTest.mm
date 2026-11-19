@@ -31,9 +31,9 @@ int probeArchitecture(NSBundle* bundle, bool expectOffer) {
     auto* delegate = [[KetPlusSparkleDelegate alloc] initWithOwner:nullptr];
     auto* userDriver = [[SPUStandardUserDriver alloc] initWithHostBundle:bundle delegate:nil];
     auto* updater = [[SPUUpdater alloc] initWithHostBundle:bundle
-                                       applicationBundle:bundle
-                                               userDriver:userDriver
-                                                 delegate:delegate];
+                                         applicationBundle:bundle
+                                                userDriver:userDriver
+                                                  delegate:delegate];
     __block bool offered = false;
     id observer = [NSNotificationCenter.defaultCenter
         addObserverForName:SUUpdaterDidFindValidUpdateNotification
@@ -67,7 +67,8 @@ int main(int argc, char** argv) {
         NSBundle* bundle = [NSBundle mainBundle];
         if (app.arguments().size() == 2) {
             const auto option = app.arguments().at(1);
-            if (option == QStringLiteral("--expect-offer") || option == QStringLiteral("--expect-no-offer"))
+            if (option == QStringLiteral("--expect-offer") ||
+                option == QStringLiteral("--expect-no-offer"))
                 return probeArchitecture(bundle, option == QStringLiteral("--expect-offer"));
             return 3;
         }

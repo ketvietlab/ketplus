@@ -49,7 +49,7 @@ class FeedHandler(SimpleHTTPRequestHandler):
         print("loopback:", message % args, flush=True)
 
 
-def make_feed(path, base_url, version, archive, signature):
+def make_feed(path, base_url, version, archive, signature, architecture):
     rss = ET.Element("rss", {"version": "2.0"})
     channel = ET.SubElement(rss, "channel")
     ET.SubElement(channel, "title").text = "Desktop Sparkle QA"
@@ -57,6 +57,8 @@ def make_feed(path, base_url, version, archive, signature):
     ET.SubElement(item, "title").text = version
     ET.SubElement(item, f"{{{SPARKLE}}}version").text = version
     ET.SubElement(item, f"{{{SPARKLE}}}shortVersionString").text = version
+    if architecture != "missing":
+        ET.SubElement(item, f"{{{SPARKLE}}}channel").text = "ketplus-" + architecture
     ET.SubElement(item, "enclosure", {
         "url": base_url + "/update.zip",
         "length": str(archive.stat().st_size),
@@ -305,6 +307,12 @@ def run_case(args, socket_directory):
     info = verify_bundle(bundle)
     version = info["CFBundleVersion"]
     identifier = info["CFBundleIdentifier"]
+    executable = bundle / "Contents" / "MacOS" / info["CFBundleExecutable"]
+    architecture = args.item_architecture
+    if architecture is None:
+        architecture = subprocess.check_output(["/usr/bin/lipo", "-archs", str(executable)], text=True).strip()
+        if architecture not in ("arm64", "x86_64"):
+            raise ValueError("Use a thin QA bundle or specify --item-architecture")
     expected_url = f"http://127.0.0.1:{args.port}"
     if (not re.fullmatch(r"dev\.ketplus\.audit\.[a-z0-9-]+", identifier)
             or info.get("SUFeedURL") != expected_url + "/appcast.xml"):
@@ -313,7 +321,7 @@ def run_case(args, socket_directory):
     feed.mkdir(exist_ok=False)
     (feed / "update.zip").symlink_to(archive)
     signature = args.signature.read_text().strip()
-    make_feed(feed, expected_url, args.version, archive, signature)
+    make_feed(feed, expected_url, args.version, archive, signature, architecture)
     if bool(args.sign_update) != bool(args.signing_key):
         raise ValueError("Supply the Sparkle signing tool and its throwaway key together")
     if args.signing_key:
@@ -338,7 +346,6 @@ def run_case(args, socket_directory):
                KETPLUS_CONTROL_URL="http://127.0.0.1:9",
                QT_QPA_PLATFORM=args.platform,
                DYLD_INSERT_LIBRARIES=str(trigger))
-    executable = bundle / "Contents" / "MacOS" / info["CFBundleExecutable"]
     volume = bundle.parent
     if args.inspect_volume and not volume.is_mount():
         raise ValueError("--inspect-volume requires the app at the mounted volume root")
@@ -400,6 +407,7 @@ if __name__ == "__main__":
         parser.add_argument("--" + name, type=Path, required=True)
     parser.add_argument("--port", type=int, required=True)
     parser.add_argument("--version", required=True)
+    parser.add_argument("--item-architecture", choices=("arm64", "x86_64", "missing"))
     parser.add_argument("--interrupt", action="store_true")
     parser.add_argument("--retry", action="store_true")
     parser.add_argument("--timeout", type=int, default=45)

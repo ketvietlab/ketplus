@@ -2097,11 +2097,14 @@ then build and run the harness.
 cmake -S tests/updates -B build/updater-policy -G Ninja \
   -DCMAKE_PREFIX_PATH="$QT_ROOT" -DKETPLUS_SPARKLE_DIR="$SPARKLE_SDK_DIR"
 cmake --build build/updater-policy --target ketplus_updater_feed_policy_tests
-ctest --test-dir build/updater-policy -R '^ketplus_updater_feed_policy_tests$' --output-on-failure
+ctest --test-dir build/updater-policy -R '^ketplus_updater_(feed_policy|architecture)_tests$' --output-on-failure
 ```
 
-The test sets `QT_QPA_PLATFORM=offscreen`. Production bundle installation and
-owner-run manual UI acceptance remain separate checks.
+The compiled-feed test sets `QT_QPA_PLATFORM=offscreen`. The architecture
+test uses a disposable bundle and real Sparkle information checks over
+loopback. It expects an offer for the matching architecture and no offer for
+mismatched or missing metadata, with a diagnostic for each refusal. Production
+bundle installation and owner-run manual UI acceptance remain separate checks.
 
 The opt-in `tests/updates/sparkle_loopback_qa.py` runner exercises the real updater in
 a staged Desktop bundle. Build the test-only trigger against the pinned SDK.
@@ -2131,6 +2134,11 @@ verifies the bundle's signature before and after each case. It waits for the
 installer and progress jobs scoped to the QA bundle identifier, captures the
 observed helpers' Sparkle logs, and deletes that identifier's preference domain
 after the jobs stop.
+
+By default the loopback runner tags the feed item with the thin host bundle's
+architecture. For F1, supply the signed wrong-architecture archive and set
+`--item-architecture` to that archive's actual slice. Use
+`--item-architecture missing` for the untagged appcast case.
 
 For a destination-volume case, mount the disk image inside the case root and
 pass the mounted app to `--bundle`. For a read-only fixture, use a UDRO image

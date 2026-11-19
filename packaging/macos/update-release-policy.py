@@ -6,7 +6,8 @@ from urllib.parse import unquote, urlsplit
 import xml.etree.ElementTree as ET
 
 NAMESPACE = "urn:ketplus:release"
-SPARKLE_CHANNEL = "{http://www.andymatuschak.org/xml-namespaces/sparkle}channel"
+SPARKLE_NAMESPACE = "http://www.andymatuschak.org/xml-namespaces/sparkle"
+SPARKLE_CHANNEL = "{" + SPARKLE_NAMESPACE + "}channel"
 ET.register_namespace("ketplus", NAMESPACE)
 
 
@@ -87,7 +88,8 @@ def main():
             if not args.appcast:
                 raise ValueError("appcast is required")
             if args.operation == "seed-feed" and not Path(args.appcast).exists():
-                root = ET.Element("rss", version="2.0")
+                # generate_appcast adds prefixed elements to the existing RSS root.
+                root = ET.Element("rss", {"version": "2.0", "xmlns:sparkle": SPARKLE_NAMESPACE})
                 node = ET.SubElement(root, "channel")
                 ET.SubElement(node, "title").text = "ketPlus Pro"
                 ET.SubElement(node, "{" + NAMESPACE + "}releaseChannel").text = args.channel
