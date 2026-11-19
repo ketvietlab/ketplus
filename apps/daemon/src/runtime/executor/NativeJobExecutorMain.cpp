@@ -12,6 +12,8 @@ int main(int argc, char** argv) {
 #ifdef Q_OS_LINUX
     if (arguments.size() == 4 && arguments[1] == "--linux-probe")
         return ketplus::daemon::executor::linuxContainmentProbe(arguments[2], arguments[3]);
+    if (arguments.size() == 5 && arguments[1] == "--linux-probe" && arguments[4] == "--mounts")
+        return ketplus::daemon::executor::linuxContainmentProbe(arguments[2], arguments[3], true);
     if (arguments.size() == 2 && arguments[1] == "--linux-launch") {
         QFile input;
         if (!input.open(stdin, QIODevice::ReadOnly))

@@ -1,5 +1,12 @@
+if(WIN32)
+    include("${CMAKE_CURRENT_SOURCE_DIR}/windows/WindowsDeploy.cmake")
+endif()
+
 if(NOT KETPLUS_BUILD_DESKTOP)
     set(CPACK_GENERATOR "TGZ")
+    if(WIN32)
+        set(CPACK_GENERATOR "ZIP")
+    endif()
     set(CPACK_PACKAGE_NAME "KetPlus-Daemon")
     set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
     set(CPACK_PACKAGE_FILE_NAME "KetPlus-Daemon-${PROJECT_VERSION}-${CMAKE_SYSTEM_NAME}-${CMAKE_SYSTEM_PROCESSOR}")

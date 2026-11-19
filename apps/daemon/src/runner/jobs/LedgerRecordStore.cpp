@@ -154,6 +154,84 @@ std::optional<QStringList> LedgerRecordStore::reserved() const {
     return tasks;
 }
 
+std::optional<int> LedgerRecordStore::unfinishedReserved() const {
+    QSqlQuery query(database_);
+    if (!query.exec("SELECT count(*) FROM remote_jobs r JOIN managed_jobs j "
+                    "ON j.task_id=r.task_id WHERE r.revision=0 AND j.state NOT IN "
+                    "('completed','failed','cancelled','timed_out','interrupted')") ||
+        !query.next())
+        return std::nullopt;
+    return query.value(0).toInt();
+}
+
+std::optional<LedgerRecordStore::Reservation>
+LedgerRecordStore::reservation(const QString& taskId) const {
+    const auto row = rowOf(database_, taskId);
+    if (!row || row->revision != 0 || row->runsOn.isEmpty())
+        return std::nullopt;
+    return Reservation{row->runsOn, row->timeoutMs};
+}
+
+std::optional<QString> LedgerRecordStore::abandonUnreadable(const QString& taskId) {
+    if (taskId.isEmpty() || !database_.transaction())
+        return std::nullopt;
+    const auto fail = [this]() -> std::optional<QString> {
+        database_.rollback();
+        return std::nullopt;
+    };
+    QSqlQuery query(database_);
+    query.prepare("SELECT revision,runs_on,timeout_ms,job_id,dispatched_to,record FROM remote_jobs "
+                  "WHERE task_id=? AND revision>0");
+    query.addBindValue(taskId);
+    if (!query.exec() || !query.next())
+        return fail();
+    // A record that reads is never ended this way.
+    if (const auto readable = decodeRecord(query.value(5).toByteArray());
+        readable && readable->taskId == taskId)
+        return fail();
+    const qint64 revision = query.value(0).toLongLong();
+    RemoteJobRecord record;
+    record.taskId = taskId;
+    record.runsOn = labelsOf(query.value(1));
+    record.timeoutMs = query.value(2).toLongLong();
+    record.jobId = query.value(3).toString();
+    record.dispatchedTo = query.value(4).toString();
+    record.state = state::interrupted;
+    record.reason = QStringLiteral("record_unreadable");
+    record.cleanupStatus = cleanup::unverified;
+    query.finish();
+    QJsonObject task = ledger_.runtimeTask(taskId);
+    if (task.isEmpty())
+        return fail();
+    const QString where = task.value("placement").toString();
+    if (where == placement::relayQueued || where == placement::assigned ||
+        where == placement::syncing || where == placement::running)
+        record.placement = where;
+    if (!isTerminalState(task.value("state").toString())) {
+        // The owner hears of it once, through the task's completion.
+        BackgroundTaskChange change;
+        change.state = record.state;
+        change.reason = record.reason;
+        change.cleanupStatus = record.cleanupStatus;
+        const auto applied =
+            ledger_.applyTransition(taskId, task, task.value("revision").toInteger(), change, {});
+        if (!applied.value("ok").toBool())
+            return fail();
+    }
+    QSqlQuery update(database_);
+    update.prepare("UPDATE remote_jobs SET revision=?,record=? WHERE task_id=? AND revision=?");
+    update.addBindValue(revision + 1);
+    update.addBindValue(encodeRecord(record));
+    update.addBindValue(taskId);
+    update.addBindValue(revision);
+    if (!update.exec() || update.numRowsAffected() != 1 || !database_.commit())
+        return fail();
+    acknowledgements_.remove(taskId);
+    unreadable_.removeAll(taskId);
+    qCWarning(ketplusRemoteJobStore).noquote() << "remote job record abandoned task=" + taskId;
+    return record.jobId;
+}
+
 bool LedgerRecordStore::acknowledge(const QString& taskId, const QString& source,
                                     const QString& userClientId) {
     if (taskId.isEmpty() || userClientId.isEmpty() ||

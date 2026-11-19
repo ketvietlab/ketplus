@@ -163,8 +163,8 @@ class CodexSessionIsolationTest final : public QObject {
     }
 
     void twoSessionsKeepHistoryWhileOnlyOneProcessRefreshes() {
-        KETPLUS_SKIP_ON_WINDOWS("the app-server shuts down before the refresh is counted on "
-                                "Windows; cause not yet diagnosed");
+        KETPLUS_SKIP_ON_WINDOWS("the fixture records its exit from a SIGTERM handler, which "
+                                "Windows' forced process termination never runs");
         QTemporaryDir folder;
         const auto path = folder.filePath(fixtureName("fake-codex"));
         QVERIFY(fixture(path));

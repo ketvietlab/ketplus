@@ -1,6 +1,9 @@
 #include "runtime/ManagedTaskRuntime.h"
+#include "runner/entry/RemoteJobPort.h"
+#include "runner/entry/RemoteLiveTasks.h"
 #include "runtime/executor/LinuxJobContainment.h"
 #include "runtime/executor/NativeJobClient.h"
+#include "storage/RemoteJobRows.h"
 
 #include <QDateTime>
 #include <QDir>
@@ -23,8 +26,6 @@ uint effectiveUserId() {
     return ::geteuid();
 #endif
 }
-} // namespace
-namespace {
 QJsonObject failure(const QString& code, const QString& message) {
     return {{"ok", false}, {"error_code", code}, {"error_message", message}};
 }
@@ -50,6 +51,45 @@ void ManagedTaskRuntime::setCallbacks(Changed changed, Permission permission, Ch
     permission_ = std::move(permission);
     childStart_ = std::move(childStart);
     childStop_ = std::move(childStop);
+}
+
+ManagedTaskRuntime::~ManagedTaskRuntime() { setRemoteJobs(nullptr); }
+
+void ManagedTaskRuntime::setRemoteJobs(runner::entry::RemoteJobPort* port) {
+    if (remoteJobs_)
+        remoteJobs_->setPorts({});
+    remoteJobs_ = port;
+    if (!remoteJobs_)
+        return;
+    const auto failReserved = [this](const QString& id, const QString& code) {
+        const auto live = live_.value(id);
+        if (!live || terminal(live->record.value("state").toString()))
+            return;
+        BackgroundTaskChange failed;
+        failed.state = "failed";
+        failed.reason = "spawn_failed";
+        failed.errorCode = code;
+        failed.neverLaunched = true;
+        apply(id, failed);
+    };
+    // The remote record changed the task: read it again and publish it.
+    const auto remoteChanged = [this](const QString& id) {
+        const auto task = ledger_.runtimeTask(id);
+        if (task.contains("error_code"))
+            return;
+        if (const auto live = live_.value(id)) {
+            live->record = task;
+            if (terminal(task.value("state").toString())) {
+                live_.remove(id);
+                if (live_.isEmpty())
+                    timer_.stop();
+            }
+        }
+        if (changed_)
+            changed_(task);
+    };
+    remoteJobs_->setPorts({failReserved, remoteChanged});
+    runner::entry::readStartedAgain(live_, ledger_.database(), remoteChanged);
 }
 
 bool ManagedTaskRuntime::initialize(QString* error) {
@@ -159,6 +199,15 @@ void ManagedTaskRuntime::start(const BackgroundTaskIntent& intent, const QJsonOb
         done(retry);
         return;
     }
+    // A job that runs on a runner needs no executor or containment on this machine.
+    if (intent.runsOn) {
+        if (!permission_)
+            done(failure("permission_unavailable",
+                         "The background permission broker is unavailable."));
+        else
+            done(accept(intent, execution));
+        return;
+    }
     if (intent.kind == "process") {
 #if !defined(Q_OS_MACOS) && !defined(Q_OS_LINUX)
         done(failure("containment_unavailable", "A verified process executor is required."));
@@ -202,6 +251,8 @@ QJsonObject ManagedTaskRuntime::accept(const BackgroundTaskIntent& intent,
     if (intent.kind == "process")
         acceptedIntent.containmentMode = "cgroup_v2";
 #endif
+    if (intent.runsOn)
+        acceptedIntent.containmentMode = "remote"; // nothing of it runs on this machine
     const auto reply = ledger_.create(acceptedIntent);
     if (!reply.value("ok").toBool() || reply.value("reused").toBool())
         return reply;
@@ -256,6 +307,22 @@ void ManagedTaskRuntime::permissionResolved(const QString& id, bool granted) {
     if (!live || live->record.value("state") != "queued")
         return;
     BackgroundTaskChange change;
+    if (granted &&
+        remote_job_rows::phaseOf(ledger_.database(), id) == remote_job_rows::Phase::Reserved) {
+        change.state = "queued";
+        change.permissionApproved = true;
+        if (remoteJobs_ && apply(id, change))
+            remoteJobs_->submit(id, live->execution);
+        else if (!remoteJobs_) {
+            change = {};
+            change.state = "failed";
+            change.reason = "spawn_failed";
+            change.errorCode = "runner_unavailable";
+            change.neverLaunched = true;
+            apply(id, change);
+        }
+        return;
+    }
     if (granted) {
         change.state = "queued";
         change.permissionApproved = true;
@@ -329,6 +396,11 @@ void ManagedTaskRuntime::stopTask(const QString& id, const QString& reason) {
     if (!live || live->record.value("state") == "stopping" ||
         live->record.value("state") == "needs_attention")
         return;
+    if (remote_job_rows::phaseOf(ledger_.database(), id) == remote_job_rows::Phase::Started) {
+        if (reason != "timed_out" && remoteJobs_) // the runner keeps the job's time
+            (void)remoteJobs_->stop(id);
+        return;
+    }
     BackgroundTaskChange change;
     change.state = "stopping";
     change.terminalTarget = reason;

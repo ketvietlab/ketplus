@@ -50,6 +50,17 @@ QString RemoteJobCoordinator::runnerName(const QString& runnerId) const {
 
 JobDecision RemoteJobCoordinator::start(const QString& taskId, const QStringList& runsOn,
                                         const qint64 timeoutMs) {
+    return begin(taskId, runsOn, timeoutMs, std::nullopt);
+}
+
+JobDecision RemoteJobCoordinator::start(const QString& taskId, const QStringList& runsOn,
+                                        const qint64 timeoutMs, const RemoteSnapshot& snapshot) {
+    return begin(taskId, runsOn, timeoutMs, snapshot);
+}
+
+JobDecision RemoteJobCoordinator::begin(const QString& taskId, const QStringList& runsOn,
+                                        const qint64 timeoutMs,
+                                        const std::optional<RemoteSnapshot>& snapshot) {
     if (!isSubmitKey(taskId) || timeoutMs < 0)
         return {QStringLiteral("invalid_request")};
     if (!isValidRunsOn(runsOn))
@@ -66,6 +77,7 @@ JobDecision RemoteJobCoordinator::start(const QString& taskId, const QStringList
     created.taskId = taskId;
     created.runsOn = runsOn;
     created.timeoutMs = timeoutMs;
+    created.snapshot = snapshot;
     if (!commit(created))
         return {QStringLiteral("storage_error")};
     submit(taskId);

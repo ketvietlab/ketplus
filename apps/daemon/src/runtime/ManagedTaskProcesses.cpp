@@ -1,6 +1,7 @@
 #include "runtime/ManagedTaskRuntime.h"
 #include "runtime/executor/LinuxJobContainment.h"
 #include "runtime/executor/NativeJobClient.h"
+#include "storage/RemoteJobRows.h"
 
 #include <QDateTime>
 #include <QDir>
@@ -82,6 +83,8 @@ void ManagedTaskRuntime::reconcileProcess(const QString& id) {
     const auto live = live_.value(id);
     if (!live)
         return;
+    if (remote_job_rows::phaseOf(ledger_.database(), id) == remote_job_rows::Phase::Started)
+        return; // the remote jobs service ends or keeps a started remote job
     const auto identity = live->record.value("execution_identity").toObject();
     if (identity.isEmpty()) {
         if (live->record.value("state") == "needs_attention") {

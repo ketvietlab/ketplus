@@ -10,6 +10,7 @@ namespace {
 
 constexpr int pageBytes = 8 * 1024;
 constexpr int maxReadFailures = 20;
+const QString tmpRoot = QStringLiteral("/jobtmp");
 
 QMap<QString, QString> systemEnvironment() {
     QMap<QString, QString> environment;
@@ -27,6 +28,8 @@ ExecutorCommandRunner::ExecutorCommandRunner(Options options, Executor& executor
       m_events(std::move(events)), m_directories(m_options.directory) {
     if (!m_options.environment)
         m_options.environment = systemEnvironment;
+    if (m_options.mounts)
+        m_tmp.emplace(m_options.mounts->work + tmpRoot);
     for (QTimer* timer : {&m_poll, &m_killWait, &m_probeTimer, &m_cleanupWait, &m_cleanupRetry})
         timer->setSingleShot(true);
     connect(&m_poll, &QTimer::timeout, this, &ExecutorCommandRunner::poll);
@@ -52,6 +55,27 @@ void ExecutorCommandRunner::fail(const session::LaunchRequest& request, const QS
         m_events.finished(exit);
 }
 
+// The launch with the job's mounts, once its executor directory holds the task id: a tmp
+// directory of the same name can belong to no other job.
+PreparedLaunch ExecutorCommandRunner::prepareMounted(const session::LaunchRequest& request,
+                                                     const QString& taskId) {
+    const std::optional<QString> tmp = m_tmp->create(taskId);
+    if (!tmp)
+        return {{}, QStringLiteral("tmp_directory_unavailable")};
+    const Mounts& roots = *m_options.mounts;
+    const MountPlan plan =
+        planMounts(roots.state, roots.work, roots.runtime, request.workspace, *tmp);
+    PreparedLaunch prepared = prepareLaunch(request, m_options.environment(), &plan);
+    if (!prepared.error.isEmpty())
+        removeTmp(taskId);
+    return prepared;
+}
+
+void ExecutorCommandRunner::removeTmp(const QString& taskId) {
+    if (m_tmp && !m_tmp->remove(taskId))
+        qCWarning(lcRunnerExec) << "a job tmp directory could not be removed";
+}
+
 void ExecutorCommandRunner::launch(const session::LaunchRequest& request) {
     if (m_running) {
         // The session runs one command at a time; the running one is left alone.
@@ -63,7 +87,7 @@ void ExecutorCommandRunner::launch(const session::LaunchRequest& request) {
                                                  : m_readiness.code);
         return;
     }
-    const PreparedLaunch prepared = prepareLaunch(request, m_options.environment());
+    PreparedLaunch prepared = prepareLaunch(request, m_options.environment());
     if (!prepared.error.isEmpty()) {
         fail(request, prepared.error);
         return;
@@ -73,6 +97,14 @@ void ExecutorCommandRunner::launch(const session::LaunchRequest& request) {
     if (!entry) {
         fail(request, QStringLiteral("executor_directory_unavailable"));
         return;
+    }
+    if (m_options.mounts) {
+        prepared = prepareMounted(request, entry->taskId);
+        if (!prepared.error.isEmpty()) {
+            m_directories.remove(*entry); // nothing was started from it
+            fail(request, prepared.error);
+            return;
+        }
     }
     auto running = std::make_unique<Running>();
     running->entry = *entry;
@@ -90,6 +122,7 @@ void ExecutorCommandRunner::launch(const session::LaunchRequest& request) {
         const ExecutorDirectories::Entry gone = m_running->entry;
         m_running.reset();
         m_directories.remove(gone);
+        removeTmp(gone.taskId);
         fail(request, QStringLiteral("spawn_failed"));
         return;
     }
@@ -196,6 +229,7 @@ void ExecutorCommandRunner::report(const session::CommandExit& exit) {
     if (verified) {
         running->job->acknowledge();
         m_directories.remove(running->entry);
+        removeTmp(running->entry.taskId);
         // The client may be inside its own event: it goes after this turn of the loop.
         QTimer::singleShot(0, this,
                            [job = std::shared_ptr<ExecutorJob>(std::move(running->job))] {});
@@ -214,6 +248,7 @@ void ExecutorCommandRunner::settleLater() {
             return;
         m_unsettled->job->acknowledge();
         m_directories.remove(m_unsettled->entry);
+        removeTmp(m_unsettled->entry.taskId);
         qCInfo(lcRunnerExec) << "job" << m_unsettled->entry.jobId << "cleanup confirmed";
         m_unsettled.reset();
         updateReadiness();

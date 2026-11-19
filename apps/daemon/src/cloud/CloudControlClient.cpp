@@ -192,9 +192,9 @@ bool CloudControlClient::handles(const QString& type) const {
 }
 
 void CloudControlClient::handleLocal(const QString& type, const QJsonObject& payload,
-                                     LocalCallback callback) {
+                                     LocalCallback callback, const QString& clientId) {
     if (runner::RunnerService::handlesType(type)) {
-        runners().handle(type, payload, std::move(callback));
+        runners().handle(type, payload, std::move(callback), clientId);
         return;
     }
     if (type == QStringLiteral("remote.status")) {

@@ -248,6 +248,13 @@ void codeRows() {
     spec<JobResult>("result reason empty", [](JobResult& f) { f.reason.clear(); });
     spec<JobResult>("result reason space", [](JobResult& f) { f.reason = "a b"; }, "reason");
     spec<JobResult>("result reason upper", [](JobResult& f) { f.reason = "A"; }, "reason");
+    spec<JobResult>("result reason digit first", [](JobResult& f) { f.reason = "0r"; }, "reason");
+    spec<JobResult>(
+        "result reason underscore first", [](JobResult& f) { f.reason = "_r"; }, "reason");
+    spec<JobResult>("result reason hyphen", [](JobResult& f) { f.reason = "a-b"; }, "reason");
+    spec<JobRejected>("code digit first", [](JobRejected& f) { f.code = "0c"; }, "code");
+    spec<JobRejected>("code underscore first", [](JobRejected& f) { f.code = "_c"; }, "code");
+    spec<JobRejected>("code upper", [](JobRejected& f) { f.code = "Code"; }, "code");
     spec<Close>("close reason 64", [](Close& f) { f.reason = repeat(" ", 64); });
     spec<Close>("close reason 65", [](Close& f) { f.reason = repeat("r", 65); }, "reason");
     spec<Close>("close reason tab", [](Close& f) { f.reason = "\t"; }, "reason");

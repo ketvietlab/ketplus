@@ -37,7 +37,10 @@ QString commit(const QString& directory) {
     QByteArray head;
     if (!git(directory, {"add", "-A"}) ||
         !git(directory,
-             {"-c", "user.email=t@example.com", "-c", "user.name=T", "commit", "-qm", "fixture"}) ||
+             {"-c", "user.email=t@example.com", "-c", "user.name=T", "commit",
+              // The ignored-gitlink row stages only a gitlink under diff.ignoreSubmodules=all;
+              // older Git (Git for Windows 2.38) then refuses the commit as empty.
+              "--allow-empty", "-qm", "fixture"}) ||
         !git(directory, {"rev-parse", "HEAD"}, &head))
         return {};
     return QString::fromLatin1(head.trimmed());
@@ -328,6 +331,20 @@ class TeamRoutingToolsTest final : public QObject {
         QVERIFY(!result.reason.isEmpty());
     }
 
+    // The worktree must match the revision: a file that only swaps LF for CRLF is a change.
+    // Run everywhere; `core.autocrlf=input` (Windows only) does not hide it from `git status`.
+    void aWorktreeFileThatOnlySwapsLineEndingsIsStale() {
+        QTemporaryDir directory;
+        const QString base = init(directory.path());
+        QVERIFY(write(directory.path(), "docs/prose.md", reflow));
+        const QString head = commit(directory.path());
+        QByteArray crlf = reflow;
+        crlf.replace("\n", "\r\n");
+        QVERIFY(write(directory.path(), "docs/prose.md", crlf));
+        QCOMPARE(teams::RoutingEvidence::produce(team(), task(directory.path(), base), head).reason,
+                 QString("stale_revision"));
+    }
+
     void dirtyHeadModeAndPendingApprovalCannotMintReceipt() {
         QTemporaryDir directory;
         const QString base = init(directory.path());
@@ -365,18 +382,6 @@ class TeamRoutingToolsTest final : public QObject {
         QTest::newRow("replaced-base-tree") << QString("replaced-base-tree");
     }
     void authenticatedToolsUseRealProducerThenHostLookupThenPolicy() {
-        KETPLUS_SKIP_ROW_ON_WINDOWS("ordinary-prose",
-                                    "git evidence for the raced case reports stale_revision on "
-                                    "Windows; cause not yet diagnosed");
-        KETPLUS_SKIP_ROW_ON_WINDOWS("concurrent-only",
-                                    "git evidence for the raced case reports stale_revision on "
-                                    "Windows; cause not yet diagnosed");
-        KETPLUS_SKIP_ROW_ON_WINDOWS("ignored-gitlink",
-                                    "git evidence for an ignored gitlink reports stale_revision on "
-                                    "Windows; cause not yet diagnosed");
-        KETPLUS_SKIP_ROW_ON_WINDOWS("replaced-base-tree",
-                                    "git evidence for a replaced base tree reports stale_revision "
-                                    "on Windows; cause not yet diagnosed");
         QFETCH(QString, attack);
         Fixture fixture;
         QVERIFY(fixture.open());

@@ -4,6 +4,7 @@
 #include "RemoteJobLedgerFixture.h"
 #include "RemoteJobTestFakes.h"
 
+#include <QFile>
 #include <QJsonArray>
 #include <QJsonDocument>
 
@@ -20,6 +21,11 @@ using remote_job_test::runnerA;
 namespace {
 
 constexpr qint64 minute = 60'000;
+
+QStringList capturedLog;
+void captureLog(QtMsgType, const QMessageLogContext&, const QString& message) {
+    capturedLog.append(message);
+}
 
 QStringList taskIds(const QJsonObject& reply, const char* name) {
     QStringList ids;
@@ -171,6 +177,91 @@ class RemoteJobStepsTest final : public QObject {
         QVERIFY(!s.f.task(s.id).value("cleanup_pending").toBool());
         QCOMPARE(s.f.task(s.id).value("cleanup_status").toString(), QStringLiteral("verified"));
         QCOMPARE(s.outbox(), 1);
+    }
+
+    // A failed result keeps the runner's code on the task row; a reason that is not a code
+    // ends spawn_failed and is written nowhere: not the registry, its JSON or the log.
+    // A launch that fails before job.started ends the job from starting or syncing.
+    void aFailedResultKeepsTheRunnersCode_data() {
+        QTest::addColumn<QString>("from");
+        QTest::addColumn<QString>("reason");
+        QTest::addColumn<QString>("kept");
+        for (const char* from : {"running", "starting", "syncing"}) {
+            for (const char* code :
+                 {"spawn_failed", "invalid_invocation", "workspace_missing", "cwd_missing",
+                  "cwd_outside_workspace", "invalid_environment", "launch_too_large",
+                  "runner_directory_missing", "workspace_outside_work", "runtime_directory_invalid",
+                  "executor_directory_unavailable", "handshake_failed", "containment_unavailable",
+                  "executor_leftover_unidentified", "timed_out", "executor_interrupted",
+                  "exit_status_unknown", "expired", "a_code_not_yet_known"})
+                QTest::addRow("%s %s", from, code)
+                    << from << QString::fromLatin1(code) << QString::fromLatin1(code);
+            // A code with a meaning of its own here ends the job like a malformed one.
+            for (const char* code :
+                 {"permission_denied", "cleanup_acknowledged", "cleanup_unverified",
+                  "delivery_exhausted", "not_paired", "runner_removed", "entitlement_required",
+                  "runner_unavailable", "no_matching_runner", "queue_full", "invalid_labels",
+                  "idempotency_conflict", "invalid_request", "queue_expired", "exit_code", "user",
+                  "deadline", "session_closed", "worker_restart"})
+                QTest::addRow("%s reserved %s", from, code)
+                    << from << QString::fromLatin1(code) << "spawn_failed";
+            QTest::addRow("%s snapshot code", from) << from << "disk_full" << "snapshot_failed";
+            QTest::addRow("%s empty", from) << from << "" << "spawn_failed";
+            QTest::addRow("%s capitals", from) << from << "Marker_Reason" << "spawn_failed";
+            QTest::addRow("%s space", from) << from << "marker reason" << "spawn_failed";
+            QTest::addRow("%s newline", from) << from << "marker_reason\nnext" << "spawn_failed";
+            QTest::addRow("%s html", from) << from << "<i>marker_reason</i>" << "spawn_failed";
+            QTest::addRow("%s too long", from)
+                << from << QString(65, QLatin1Char('m')) << "spawn_failed";
+        }
+    }
+    void aFailedResultKeepsTheRunnersCode() {
+        QFETCH(QString, from);
+        QFETCH(QString, reason);
+        QFETCH(QString, kept);
+        Steps s;
+        if (from == "running") {
+            QVERIFY(s.running());
+        } else {
+            QVERIFY(s.sent());
+            if (from == "syncing")
+                s.jobs->accepted(job, runnerA);
+            QCOMPARE(s.task(), QStringLiteral("starting"));
+            QCOMPARE(s.record().placement,
+                     from == "syncing" ? placement::syncing : placement::assigned);
+        }
+        capturedLog.clear();
+        const auto previous = qInstallMessageHandler(captureLog);
+        const bool recorded = s.jobs->result(job, runnerA, jobResult("failed", {}, reason)).ok();
+        qInstallMessageHandler(previous);
+        QVERIFY(recorded);
+        QCOMPARE(s.task(), QStringLiteral("failed"));
+        const QJsonObject row = s.f.task(s.id);
+        QCOMPARE(row.value("reason").toString(), kept);
+        QCOMPARE(row.value("cleanup_status").toString(), QStringLiteral("verified"));
+        QCOMPARE(s.outbox(), 1);
+        const QJsonObject completion = s.outboxRow();
+        QCOMPARE(completion.value("status").toString(), QStringLiteral("pending"));
+        QCOMPARE(completion.value("payload").toObject().value("state").toString(),
+                 QStringLiteral("failed"));
+        QVERIFY(completion.value("reason").isNull()); // not suppressed
+        if (reason == kept || reason.isEmpty() || kept == "snapshot_failed")
+            return;
+        QVERIFY(row.value("reason").toString() != reason);
+        if (isReasonCode(reason))
+            return; // a reserved code may be logged; it is never the reason
+        // The malformed string itself went nowhere.
+        QVERIFY(!QJsonDocument(row).toJson().contains(reason.toUtf8()));
+        QVERIFY(!QJsonDocument(completion).toJson().contains(reason.toUtf8()));
+        for (const QString& line : std::as_const(capturedLog))
+            QVERIFY2(!line.contains(reason), qPrintable(line));
+        s.jobs.reset(); // before the store it refers to
+        s.f.close();
+        for (const QString& suffix : {QString(), QStringLiteral("-wal")}) {
+            QFile file(s.f.path() + suffix);
+            if (file.open(QIODevice::ReadOnly))
+                QVERIFY(!file.readAll().contains(reason.toUtf8()));
+        }
     }
 
     // S8 and the running results: the runner ends a job the desktop did not stop.

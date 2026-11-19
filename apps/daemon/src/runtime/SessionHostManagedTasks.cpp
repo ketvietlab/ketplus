@@ -55,6 +55,13 @@ void SessionHost::initializeManagedTasks() {
         qWarning("Managed background tasks are unavailable: %s", qUtf8Printable(error));
 }
 
+// Null until the remote jobs exist and again before they end; a task with runs_on is refused
+// without them.
+void SessionHost::setRemoteJobs(runner::entry::RemoteJobPort* port) {
+    if (managedTasks_)
+        managedTasks_->setRemoteJobs(port);
+}
+
 void SessionHost::managedTaskCommand(const QJsonObject& request, const QString& clientId,
                                      CommandCallback done, bool agentCaller,
                                      std::optional<AgentMutationGrant> origin) {

@@ -206,8 +206,9 @@ class TeamStorageTest final : public QObject {
 
     // Criterion 3: the main checkout is never offered nor removed, by whatever path it is named.
     void theMainCheckoutIsRefused() {
-        KETPLUS_SKIP_ON_WINDOWS(
-            "the task worktree is not created on Windows; cause not yet diagnosed");
+        KETPLUS_SKIP_ON_WINDOWS("the fixture links the worktree to the main checkout with "
+                                "QFile::link, which makes a .lnk "
+                                "shortcut on Windows, not a symbolic link");
         QString id;
         (void)teams_->createTask(team_, {.title = "Cart", .lane = "Web"}, "lead", &id);
         QVERIFY(teams_->assignTask(team_, id, "dev1", "lead").ok());

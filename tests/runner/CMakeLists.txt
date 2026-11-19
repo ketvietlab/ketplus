@@ -53,6 +53,13 @@ target_link_libraries(ketplus_runner_run_tests PRIVATE
     Qt6::Test ketplus_runner_run ketplus_runner_snapshot ketplus_control_crypto_primitives)
 add_test(NAME ketplus_runner_run_tests COMMAND ketplus_runner_run_tests)
 set_tests_properties(ketplus_runner_run_tests PROPERTIES TIMEOUT 180)
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND TARGET ketplus_job_executor)
+    # Real jobs through the run loop; they run only with KETPLUS_RUN_LINUX_JOB_TESTS=1.
+    target_sources(ketplus_runner_run_tests PRIVATE RunnerRunLinuxTest.cpp)
+    target_compile_definitions(ketplus_runner_run_tests PRIVATE
+        KETPLUS_JOB_EXECUTOR_PATH="$<TARGET_FILE:ketplus_job_executor>")
+    add_dependencies(ketplus_runner_run_tests ketplus_job_executor)
+endif()
 
 # The runner's job session over fake channel, lease, snapshot receiver, command and clock.
 qt_add_executable(ketplus_runner_session_tests
@@ -103,14 +110,16 @@ target_link_libraries(ketplus_runner_exec_plan_tests PRIVATE Qt6::Test ketplus_r
 add_test(NAME ketplus_runner_exec_plan_tests COMMAND ketplus_runner_exec_plan_tests)
 
 qt_add_executable(ketplus_runner_exec_tests
-    RunnerExecCleanupTest.cpp RunnerExecRunnerTest.cpp RunnerExecTest.cpp RunnerExecTest.h)
+    RunnerExecCleanupTest.cpp RunnerExecLinuxPolicyTest.cpp RunnerExecMountsTest.cpp
+    RunnerExecRunnerTest.cpp RunnerExecTest.cpp RunnerExecTest.h)
 ketplus_enable_warnings(ketplus_runner_exec_tests)
 target_link_libraries(ketplus_runner_exec_tests PRIVATE Qt6::Test ketplus_runner_exec)
 add_test(NAME ketplus_runner_exec_tests COMMAND ketplus_runner_exec_tests)
 
-# The command runner over the real job executor of this build, on macOS: environment, cwd,
-# output, kill and restart cleanup with real processes in temporary directories.
-if(APPLE AND TARGET ketplus_runner_exec_native)
+# The command runner over the real job executor of this build, on macOS and Linux: environment,
+# cwd, output, kill and restart cleanup with real processes in temporary directories. On Linux it
+# needs a prepared user session and runs only with KETPLUS_RUN_LINUX_JOB_TESTS=1.
+if((APPLE OR CMAKE_SYSTEM_NAME STREQUAL "Linux") AND TARGET ketplus_runner_exec_native)
     qt_add_executable(ketplus_runner_exec_native_tests RunnerExecNativeTest.cpp)
     ketplus_enable_warnings(ketplus_runner_exec_native_tests)
     target_link_libraries(ketplus_runner_exec_native_tests PRIVATE
@@ -120,4 +129,35 @@ if(APPLE AND TARGET ketplus_runner_exec_native)
     add_dependencies(ketplus_runner_exec_native_tests ketplus_job_executor)
     add_test(NAME ketplus_runner_exec_native_tests COMMAND ketplus_runner_exec_native_tests)
     set_tests_properties(ketplus_runner_exec_native_tests PROPERTIES TIMEOUT 300)
+endif()
+
+# Linux job containment with the real executor: the policy, the job's mounts seen from inside and
+# outside, stop and restart cleanup. Runs only with KETPLUS_RUN_LINUX_JOB_TESTS=1.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND TARGET ketplus_runner_exec_native)
+    qt_add_executable(ketplus_runner_linux_job_tests RunnerLinuxJobTest.cpp)
+    ketplus_enable_warnings(ketplus_runner_linux_job_tests)
+    target_link_libraries(ketplus_runner_linux_job_tests PRIVATE
+        Qt6::Test ketplus_runner_exec_native)
+    target_compile_definitions(ketplus_runner_linux_job_tests PRIVATE
+        KETPLUS_JOB_EXECUTOR_PATH="$<TARGET_FILE:ketplus_job_executor>")
+    add_dependencies(ketplus_runner_linux_job_tests ketplus_job_executor)
+    add_test(NAME ketplus_runner_linux_job_tests COMMAND ketplus_runner_linux_job_tests)
+    set_tests_properties(ketplus_runner_linux_job_tests PROPERTIES TIMEOUT 900)
+endif()
+
+# Real jobs through `run` as the runner's main wires it (RunnerAssembly::create), with the job
+# executor beside the test binary, the fake Relay over HTTP and a paired desktop the test plays;
+# then a runner killed during its job and started again. Runs only with
+# KETPLUS_RUN_LINUX_JOB_TESTS=1.
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND TARGET ketplus_job_executor)
+    qt_add_executable(ketplus_runner_assembly_linux_tests
+        FakeRelay.cpp FakeRelay.h FakeRelayJobs.cpp RunnerAssemblyLinuxTest.cpp
+        RunnerAssemblyRig.cpp RunnerAssemblyRig.h)
+    ketplus_enable_warnings(ketplus_runner_assembly_linux_tests)
+    target_link_libraries(ketplus_runner_assembly_linux_tests PRIVATE
+        Qt6::Test Qt6::Network ketplus_runner_run ketplus_runner_snapshot
+        ketplus_control_crypto_primitives OpenSSL::Crypto)
+    add_dependencies(ketplus_runner_assembly_linux_tests ketplus_job_executor)
+    add_test(NAME ketplus_runner_assembly_linux_tests COMMAND ketplus_runner_assembly_linux_tests)
+    set_tests_properties(ketplus_runner_assembly_linux_tests PROPERTIES TIMEOUT 900)
 endif()

@@ -529,22 +529,24 @@ class TeamReviewTest final : public QObject {
         QTest::addColumn<QString>("action");
         QTest::addColumn<QString>("field");
         QTest::newRow("unchanged") << QString{} << QString{};
-        QTest::newRow("new commit") << "cd '%1' && git -c user.email=t@example.com -c user.name=T "
+        // Run by the fake reviewer through the platform shell (`sh` and `cmd` both take double
+        // quotes), so paths are quoted and there is no `cd`.
+        QTest::newRow("new commit") << "git -C \"%1\" -c user.email=t@example.com -c user.name=T "
                                        "commit -q --allow-empty -m tampered"
                                     << "head";
-        QTest::newRow("dirty worktree") << "cd '%1' && echo dirty > dirty.txt" << "status";
-        QTest::newRow("switched branch") << "cd '%1' && git checkout -q -b elsewhere"
+        QTest::newRow("dirty worktree") << "echo dirty> \"%1/dirty.txt\"" << "status";
+        QTest::newRow("switched branch") << "git -C \"%1\" checkout -q -b elsewhere"
                                          << "symbolic_ref";
-        QTest::newRow("moved remote head") << "cd '%1' && git push -q origin HEAD:refs/heads/%2"
+        QTest::newRow("moved remote head") << "git -C \"%1\" push -q origin HEAD:refs/heads/%2"
                                            << "remote_head";
-        QTest::newRow("source unavailable") << "mv '%1' '%1-unavailable'" << "worktree";
+        QTest::newRow("source unavailable") << "mv \"%1\" \"%1-unavailable\"" << "worktree";
     }
 
     void aCodexReviewerIsCheckedAroundEachReview() {
-        KETPLUS_SKIP_ON_WINDOWS("the reviewer check around a review does not block on Windows; "
-                                "cause not yet diagnosed");
         QFETCH(QString, action);
         QFETCH(QString, field);
+        if (action.startsWith("mv "))
+            KETPLUS_SKIP_ON_WINDOWS("Windows cannot rename the directory the reviewer runs in");
         agent_test::Fixture fixture;
         QVERIFY(fixture.open(true));
         const QString origin = fixture.directory.filePath("origin.git");
