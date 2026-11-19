@@ -685,6 +685,11 @@ the corresponding Atlas mock first.
 - Client transport-buffer changes: `ketplus_daemon_client_upgrade_policy_tests`
   observes unread bytes with dispatch paused before/after hello, then verifies
   exact-limit pipelined frames and subsequent delivery without reconnect.
+- Daemon client reconnect changes: `ketplus_daemon_client_reconnect_tests` against a
+  local fake daemon checks that a lost connection is replaced by a new socket object (the
+  old one is destroyed) and that replies arrive afterwards, and that a client started before
+  the daemon exists still gets replies once it appears. The hang seen on Windows when an aborted
+  socket was reused is documented in `AgentMessagingTest` (T-17); this test does not reproduce it.
 - `core/` change: the Lite suite (`ctest --preset lite-dev`), then the full Pro suite.
 - Git/workspace symlink fixtures use native filesystem symbolic links, including
   directory and dangling links. `QFile::link()` creates Windows shortcuts and

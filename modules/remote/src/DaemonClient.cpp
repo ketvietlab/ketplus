@@ -82,10 +82,19 @@ DaemonClient::DaemonClient(QObject* parent)
       clientId_(
           QStringLiteral("desktop-%1").arg(QUuid::createUuid().toString(QUuid::WithoutBraces))) {
     initialiseTimers();
+    QTimer::singleShot(0, this, &DaemonClient::connectToDaemon);
+}
+
+QLocalSocket* DaemonClient::newSocket() {
     auto* socket = new QLocalSocket(this);
-    connect(socket, &QLocalSocket::connected, this, &DaemonClient::authenticate);
+    connect(socket, &QLocalSocket::connected, this, [this, socket] {
+        if (socket == socket_.data())
+            authenticate();
+    });
     connect(socket, &QLocalSocket::errorOccurred, this,
-            [this](QLocalSocket::LocalSocketError error) {
+            [this, socket](QLocalSocket::LocalSocketError error) {
+                if (socket != socket_.data())
+                    return;
                 if (error == QLocalSocket::ServerNotFoundError ||
                     error == QLocalSocket::ConnectionRefusedError) {
                     launchDaemon();
@@ -93,7 +102,7 @@ DaemonClient::DaemonClient(QObject* parent)
                 scheduleReconnect();
             });
     attachSocket(socket);
-    QTimer::singleShot(0, this, &DaemonClient::connectToDaemon);
+    return socket;
 }
 
 DaemonClient::DaemonClient(CredentialSource credential, QObject* parent)
@@ -293,13 +302,23 @@ QString DaemonClient::defaultTokenPath() { return DaemonPaths::token(); }
 
 void DaemonClient::connectToDaemon() {
     // An adopted connection is opened, and reopened, by its route (adoptConnection()).
-    if (adopted_ || !socket_ || identityRejected_ || ready_ ||
-        socket_->state() == QLocalSocket::ConnectedState ||
-        socket_->state() == QLocalSocket::ConnectingState) {
+    if (adopted_ || identityRejected_ || ready_ ||
+        (socket_ && (socket_->state() == QLocalSocket::ConnectedState ||
+                     socket_->state() == QLocalSocket::ConnectingState))) {
         return;
     }
-    socket_->abort();
-    socket_->connectToServer(socketPath_);
+    // Every attempt uses a new socket. Reusing a named-pipe socket after abort() was seen on
+    // Windows to connect without ever delivering a reply (AgentMessagingTest); a new object has
+    // no such history. The old one is cut off from this client first, so none of its signals
+    // reach it, and is deleted when control returns to the event loop.
+    if (socket_) {
+        QLocalSocket* previous = socket_.data();
+        QObject::disconnect(previous, nullptr, this, nullptr);
+        socket_.clear();
+        previous->abort();
+        previous->deleteLater();
+    }
+    newSocket()->connectToServer(socketPath_);
 }
 
 void DaemonClient::scheduleReconnect() {
