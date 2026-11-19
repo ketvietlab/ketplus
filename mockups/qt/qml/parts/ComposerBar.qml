@@ -96,7 +96,7 @@ Item {
             composer.text = ({ "mention": "look at @mai", "agent-mention": "ask @agent/82", "skill": "use $rev", "slash": "/" })[name]
             suggestions.suggestions = ({
                 "mention": [{ kind: "file", path: "src/app/main.cpp" }, { kind: "file", path: "src/app/MainWindow.cpp" }, { kind: "file", path: "src/main", directory: true }],
-                "agent-mention": [{ kind: "conversation", mention: "@agent/8213", description: "Finish the repository picker", detail: "Claude · ketplus-desktop" }, { kind: "conversation", mention: "@agent/8215", description: "Follow up on the new UI", detail: "Codex · ketplus-desktop" }],
+                "agent-mention": [{ kind: "conversation", mention: "@agent/8213", description: "Finish the repository picker", detail: "Claude · cinder-trail" }, { kind: "conversation", mention: "@agent/8215", description: "Follow up on the new UI", detail: "Codex · cinder-trail" }],
                 "skill": [{ kind: "skill", mention: "$review", description: "Review the current diff for bugs", detail: "Project skill" }, { kind: "skill", mention: "$release-notes", description: "Draft release notes from merged PRs", detail: "User skill" }],
                 "slash": [{ kind: "command", mention: "/compact", description: "Summarize the conversation to free context" }, { kind: "command", mention: "/clear", description: "Start a new conversation" }, { kind: "command", mention: "/model", description: "Choose the model and effort" }]
             })[name]

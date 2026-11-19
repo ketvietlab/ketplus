@@ -115,6 +115,10 @@ if(BUILD_TESTING)
                          ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 30)
     find_program(KETPLUS_MOCK_QMLTESTRUNNER qmltestrunner
                  HINTS "${Qt6_DIR}/../../../bin" REQUIRED)
+    add_test(NAME mock_atlas_offline_flow
+             COMMAND $<TARGET_FILE:ketplus_qt_mock> --screen=atlas --size=1440x900 --check-state)
+    set_tests_properties(mock_atlas_offline_flow PROPERTIES
+                         ENVIRONMENT "QT_QPA_PLATFORM=offscreen" TIMEOUT 30)
     foreach(suite ContentTabsModel PlanRunModel ScheduleRules)
         add_test(NAME mock_${suite}
                  COMMAND "${KETPLUS_MOCK_QMLTESTRUNNER}" -input

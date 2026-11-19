@@ -155,9 +155,9 @@ QtObject {
           images: [shot("sidebar")] },
         { type: "commentary", text: "I'll read how the sidebar draws its working rows, then measure the idle CPU." },
         { type: "activity", summary: "Explored 3 files, searched code, ran 2 commands", steps: [
-            { kind: "read", title: "Read", detail: "modules/ai/src/agent/qml/AgentSidebar.qml:540-600" },
+            { kind: "read", title: "Read", detail: "src/trails/AgentSidebar.qml:540-600" },
             { kind: "search", title: "Searched", detail: "“Animation.Infinite” in modules/ai", command: "rg -n \"Animation.Infinite\" modules/ai",
-              output: "modules/ai/src/agent/qml/AgentRunStatus.qml:33\nmodules/ai/src/agent/qml/AgentSidebar.qml:579\nmodules/ai/src/agent/qml/BackgroundTaskBar.qml:149" },
+              output: "src/trails/AgentRunStatus.qml:33\nsrc/trails/AgentSidebar.qml:579\nsrc/trails/BackgroundTaskBar.qml:149" },
             { kind: "command", title: "Measure idle CPU", detail: "top -l 4 -s 2 -pid 41087", expanded: true,
               description: "Sample the mock's CPU while nothing happens.",
               command: "top -l 4 -s 2 -pid 41087 -stats pid,cpu", output: "41087  44.3\n41087  47.4\n41087  41.5\n41087  45.0" },
@@ -193,8 +193,8 @@ QtObject {
         { type: "event", text: "Context compacted", detail: "Older steps are summarised; the conversation continues." },
         { type: "steer", text: "Also check dark mode before you finish." },
         { type: "activity", summary: "Edited 2 files, ran tests", steps: [
-            { kind: "edit", title: "Edited", detail: "modules/ai/src/agent/qml/AgentSidebar.qml  +3 −1", expanded: true, diff: sidebarDiff },
-            { kind: "create", title: "Created", detail: "modules/ai/src/agent/qml/SpinClock.qml  +48" },
+            { kind: "edit", title: "Edited", detail: "src/trails/AgentSidebar.qml  +3 −1", expanded: true, diff: sidebarDiff },
+            { kind: "create", title: "Created", detail: "src/trails/SpinClock.qml  +48" },
             { kind: "wait", title: "Waited for the build", detail: "Monitor · 1m 12s" },
             { kind: "command", title: "Run tests", detail: "ctest --test-dir build -R sidebar", duration: "9.8 s",
               command: "ctest --test-dir build -R sidebar", output: "100% tests passed, 0 tests failed out of 2" },
@@ -202,8 +202,8 @@ QtObject {
         ] },
         { type: "answer", markdown: "The sidebar now steps every working row on **one shared clock**: 20 steps a second in front, 4 behind another app.\n\n| Build | Idle CPU |\n|---|---|\n| Before | 41–47% |\n| After | 0–2% |\n\n```qml\nrotation: 360 * (KetTheme.animationClock % spinMs) / spinMs\n```\n\nEvery indicator holds the same clock:\n\n```mermaid\n" + Fixtures.mermaid.sharedClock + "\n```" },
         { type: "changes", files: [
-            { name: "AgentSidebar.qml", path: "modules/ai/src/agent/qml", added: 3, removed: 1 },
-            { name: "SpinClock.qml", path: "modules/ai/src/agent/qml", added: 48, removed: 0 }] },
+            { name: "AgentSidebar.qml", path: "src/trails", added: 3, removed: 1 },
+            { name: "SpinClock.qml", path: "src/trails", added: 48, removed: 0 }] },
         { type: "turn", status: "completed", text: "4m 12s · 182k context · $1.24 session" }
     ]
 
@@ -215,7 +215,7 @@ QtObject {
             { kind: "read", title: "Read", detail: "apps/daemon/src/storage/LocalJournal.cpp" },
             { kind: "read", title: "Read", detail: "apps/daemon/src/storage/LocalJournal.h" },
             { kind: "search", title: "Searched code", detail: "“pruneRetention” in apps/daemon" },
-            { kind: "list", title: "Listed files", detail: "modules/ai/src/agent/qml" }
+            { kind: "list", title: "Listed files", detail: "src/trails" }
         ] },
         { type: "commentary", text: "Retention never reclaims free pages. I'll measure the journal before changing it." },
         { type: "activity", summary: "Ran 2 commands", steps: [

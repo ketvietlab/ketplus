@@ -17,46 +17,30 @@ Item {
 
     function px(value) { return KetTheme.px(value, KetTheme.zoom) }
 
-    component MiniScreen: Rectangle {
-        property string number
-        property string title
-        property string heading
-        property bool start: false
-        width: screen.px(260) * screen.zoom
-        height: screen.px(378) * screen.zoom
-        radius: screen.px(7)
-        color: KetTheme.t.panelBg
-        border.color: KetTheme.t.panelBorder
-        Item {
-            width: parent.width; height: screen.px(40)
-            Text { x: screen.px(14); anchors.verticalCenter: parent.verticalCenter; text: number + "   <b>" + title + "</b>"; textFormat: Text.StyledText; color: KetTheme.t.textMain; font.family: KetTheme.fontFamily; font.pixelSize: screen.px(13) }
-            Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: KetTheme.t.panelBorder }
+    property int selectedStep: 0
+    property string selectedTrail: "Ember Ridge Loop"
+    property string observation: "Loose gravel near the saddle."
+    readonly property var currentFlow: Fixtures.atlasFlows[flow]
+
+    function selectFlow(index) {
+        if (flow !== index) {
+            flow = index
+            selectedStep = 0
+            mapView.contentX = 0
+            mapView.contentY = 0
         }
-        Column {
-            x: screen.px(22) * screen.zoom
-            y: screen.px(64) * screen.zoom
-            width: parent.width - 2 * x
-            spacing: screen.px(10) * screen.zoom
-            Text { text: "STEP " + number + " / 02"; color: KetTheme.t.accentText; font.family: KetTheme.fontFamily; font.pixelSize: screen.px(6) * screen.zoom }
-            Text { width: parent.width; wrapMode: Text.Wrap; text: heading; color: KetTheme.t.textMain; font.family: KetTheme.fontFamily; font.pixelSize: screen.px(17) * screen.zoom; font.weight: Font.DemiBold }
-            Repeater {
-                model: 2
-                Rectangle {
-                    required property int index
-                    width: parent.width; height: screen.px(32) * screen.zoom; radius: screen.px(3)
-                    color: index === 0 ? KetTheme.t.accentSubtle : KetTheme.t.panelBg
-                    border.color: index === 0 ? KetTheme.t.accentBorder : KetTheme.t.panelBorder
-                }
-            }
-            Rectangle { width: parent.width; height: screen.px(12) * screen.zoom; radius: screen.px(2); color: KetTheme.t.accent }
-        }
-        Item {
-            anchors.bottom: parent.bottom
-            width: parent.width; height: screen.px(40)
-            Rectangle { width: parent.width; height: 1; color: KetTheme.t.panelBorder }
-            KetBadge { x: screen.px(12); anchors.verticalCenter: parent.verticalCenter; text: start ? "Start" : "End"; tone: start ? KetTheme.BadgeTone.Accent : KetTheme.BadgeTone.Success }
-            KetButton { anchors.right: parent.right; anchors.rightMargin: screen.px(6); anchors.verticalCenter: parent.verticalCenter; text: "Try screen"; iconName: "arrow-up-right"; variant: KetTheme.ButtonVariant.Ghost; controlSize: KetTheme.ControlSize.Small; onClicked: screen.window.notify("Opened " + title + " in preview") }
-        }
+    }
+
+    function evidenceChecks() {
+        return flowNodes.width <= mapView.width - 2 * map.x
+            && map.height + 2 * map.y <= mapView.height
+    }
+
+    function advance(step) {
+        if (step + 1 < currentFlow.nodes.length)
+            selectedStep = step + 1
+        else
+            selectFlow(flow === 0 ? 1 : 0)
     }
 
     ColumnLayout {
@@ -75,8 +59,8 @@ Item {
                 KetIcon { anchors.verticalCenter: parent.verticalCenter; name: "branch"; box: screen.px(14); color: KetTheme.t.textSecondary }
                 Column {
                     anchors.verticalCenter: parent.verticalCenter
-                    Text { text: "Onboarding experience"; color: KetTheme.t.textMain; font.family: KetTheme.fontFamily; font.pixelSize: screen.px(13); font.weight: Font.DemiBold }
-                    Text { text: Fixtures.atlasFlows[screen.flow].title + " · " + Fixtures.atlasFlows[screen.flow].screens + " screens"; color: KetTheme.t.textMuted; font.family: KetTheme.fontFamily; font.pixelSize: screen.px(11) }
+                    Text { text: "First field entry"; color: KetTheme.t.textMain; font.family: KetTheme.fontFamily; font.pixelSize: screen.px(13); font.weight: Font.DemiBold }
+                    Text { text: screen.currentFlow.title + " · " + screen.currentFlow.nodes.length + " screens"; color: KetTheme.t.textMuted; font.family: KetTheme.fontFamily; font.pixelSize: screen.px(11) }
                 }
             }
             Row {
@@ -97,7 +81,7 @@ Item {
 
             Rectangle {
                 Layout.fillHeight: true
-                Layout.preferredWidth: screen.px(204)
+                Layout.preferredWidth: screen.px(174)
                 color: KetTheme.t.sidebarBg
                 Column {
                     x: screen.px(10); y: screen.px(14)
@@ -115,10 +99,10 @@ Item {
                             required property int index
                             width: parent.width
                             text: modelData.title
-                            detail: modelData.screens + " screens"
+                            detail: modelData.nodes.length + " screens"
                             iconName: "branch"
                             checked: screen.flow === index
-                            onClicked: screen.flow = index
+                            onClicked: screen.selectFlow(index)
                         }
                     }
                 }
@@ -147,31 +131,111 @@ Item {
                 }
 
                 Flickable {
+                    id: mapView
                     anchors.fill: parent
-                    contentWidth: map.width + screen.px(160)
-                    contentHeight: map.height + screen.px(160)
+                    contentWidth: map.width + 2 * map.x
+                    contentHeight: map.height + 2 * map.y
+                    boundsBehavior: Flickable.StopAtBounds
+
                     Column {
                         id: map
-                        x: screen.px(80); y: screen.px(64)
+                        x: screen.px(20)
+                        y: screen.px(52)
                         spacing: screen.px(28)
-                        Row {
-                            spacing: screen.px(12)
-                            Rectangle { width: screen.px(32); height: width; radius: screen.px(6); color: KetTheme.t.panelBg; border.color: KetTheme.t.panelBorder
-                                Text { anchors.centerIn: parent; text: "0" + (screen.flow + 1); color: KetTheme.t.textSecondary; font.family: KetTheme.monoFontFamily; font.pixelSize: screen.px(14) } }
-                            Column {
-                                Text { text: Fixtures.atlasFlows[screen.flow].title; color: KetTheme.t.textMain; font.family: KetTheme.fontFamily; font.pixelSize: screen.px(20); font.weight: Font.DemiBold }
-                                Text { text: screen.flow === 0 ? "From opening a project to a workspace ready for your Agent." : "Reopen a workspace after the Mac restarts."; color: KetTheme.t.textSecondary; font.family: KetTheme.fontFamily; font.pixelSize: screen.px(14) }
+                        width: Math.max(flowNodes.width, mapView.width - 2 * x)
+
+                        Column {
+                            width: mapView.width - 2 * map.x
+                            spacing: screen.px(6)
+                            Text {
+                                width: parent.width
+                                text: screen.currentFlow.title
+                                wrapMode: Text.WordWrap
+                                color: KetTheme.t.textMain
+                                font.family: KetTheme.fontFamily
+                                font.pixelSize: screen.px(22)
+                                font.weight: Font.DemiBold
+                            }
+                            Text {
+                                width: parent.width
+                                text: screen.currentFlow.summary
+                                wrapMode: Text.WordWrap
+                                color: KetTheme.t.textSecondary
+                                font.family: KetTheme.fontFamily
+                                font.pixelSize: screen.px(14)
                             }
                         }
+
                         Row {
-                            spacing: 0
-                            MiniScreen { number: "01"; title: screen.flow === 0 ? "Open a project" : "Recent workspaces"; heading: screen.flow === 0 ? "Great work starts here." : "Pick up where you left off."; start: true }
-                            Item {
-                                width: screen.px(150); height: screen.px(378) * screen.zoom
-                                Text { anchors.horizontalCenter: parent.horizontalCenter; y: parent.height / 2 - screen.px(26); text: (screen.flow === 0 ? "Open workspace" : "Reconnect") + "  →"; color: KetTheme.t.textSecondary; font.family: KetTheme.fontFamily; font.pixelSize: screen.px(12) }
-                                Rectangle { y: parent.height / 2; width: parent.width; height: 1.5; color: KetTheme.t.accent }
+                            id: flowNodes
+                            readonly property real connectorWidth: screen.px(38) * screen.zoom
+                            readonly property int nodeCount: screen.currentFlow.nodes.length
+                            readonly property real nodeWidth: Math.max(screen.px(184),
+                                Math.min(screen.px(242), Math.floor((mapView.width - 2 * map.x
+                                    - screen.px(38) * (nodeCount - 1)) / nodeCount))) * screen.zoom
+
+                            Repeater {
+                                model: screen.currentFlow.nodes
+                                Row {
+                                    id: step
+                                    required property var modelData
+                                    required property int index
+                                    Item {
+                                        id: previewBounds
+                                        width: flowNodes.nodeWidth
+                                        height: preview.height * screen.zoom
+                                        AtlasScreenPreview {
+                                            id: preview
+                                            width: parent.width / screen.zoom
+                                            scale: screen.zoom
+                                            transformOrigin: Item.TopLeft
+                                            node: step.modelData
+                                            step: step.index
+                                            current: screen.selectedStep === step.index
+                                            trail: screen.selectedTrail
+                                            savedNote: screen.observation
+                                            onActivated: screen.selectedStep = step.index
+                                            onTrailSelected: name => {
+                                                screen.selectedTrail = name
+                                                screen.selectedStep = step.index
+                                            }
+                                            onAdvanced: screen.advance(step.index)
+                                            onSaved: note => {
+                                                screen.observation = note
+                                                screen.advance(step.index)
+                                            }
+                                        }
+                                    }
+                                    Item {
+                                        visible: !!step.modelData.transition
+                                        width: flowNodes.connectorWidth
+                                        height: previewBounds.height
+                                        Text {
+                                            anchors.horizontalCenter: parent.horizontalCenter
+                                            anchors.bottom: connection.top
+                                            anchors.bottomMargin: screen.px(6)
+                                            text: step.modelData.transition || ""
+                                            color: KetTheme.t.textSecondary
+                                            font.family: KetTheme.fontFamily
+                                            font.pixelSize: screen.px(11)
+                                        }
+                                        Rectangle {
+                                            id: connection
+                                            anchors.verticalCenter: parent.verticalCenter
+                                            width: parent.width
+                                            height: 1
+                                            color: KetTheme.t.accent
+                                        }
+                                        KetIcon {
+                                            anchors.right: parent.right
+                                            anchors.verticalCenter: connection.verticalCenter
+                                            name: "chevron-right"
+                                            box: screen.px(12)
+                                            color: KetTheme.t.accentText
+                                        }
+                                    }
+                                }
                             }
-                            MiniScreen { number: "02"; title: screen.flow === 0 ? "Workspace ready" : "Workspace restored"; heading: screen.flow === 0 ? "Your Agent is ready." : "Everything is back."; start: false }
                         }
                     }
                 }
@@ -201,7 +265,7 @@ Item {
             Rectangle {
                 visible: screen.chatOpen
                 Layout.fillHeight: true
-                Layout.preferredWidth: screen.px(410)
+                Layout.preferredWidth: screen.px(344)
                 color: KetTheme.t.panelBg
                 Rectangle { width: 1; height: parent.height; color: KetTheme.t.panelBorder }
                 ColumnLayout {
@@ -224,18 +288,18 @@ Item {
                             x: screen.px(16); y: screen.px(14)
                             width: chatScroll.availableWidth - 2 * x
                             spacing: screen.px(14)
-                            KetUserMessage { width: parent.width; text: "Design an onboarding flow for KetPlus Desktop using Két Design System, from opening a project to the first conversation with an Agent." }
-                            KetMarkdown { width: parent.width; markdown: "I will create a focused experience that helps people open a project and get started right away." }
+                            KetUserMessage { width: parent.width; text: Fixtures.atlasPrompt }
+                            KetMarkdown { width: parent.width; markdown: "The first flow now ends with a local receipt. The sync flow picks up the same observation and confirms it uploaded." }
                             KetActivityGroup {
                                 width: parent.width
                                 text: "Built the Atlas in 4 steps"
                                 expanded: true
-                                KetActivityRow { text: "Read the context and current features"; iconName: "success" }
+                                KetActivityRow { text: "Read the field-note release brief"; iconName: "success" }
                                 KetActivityRow { text: "Applied Két Design System"; iconName: "success" }
-                                KetActivityRow { text: "Created screens and interactive flows"; iconName: "success" }
+                                KetActivityRow { text: "Connected the field and sync flows"; iconName: "success" }
                                 KetActivityRow { text: "Validated the bundle structure"; iconName: "success" }
                             }
-                            KetBanner { width: parent.width; tone: KetTheme.BannerTone.Info; title: "Validated preview available"; message: "4 screens · 2 flows · Két Design System"; actionText: "Open preview"; actionIcon: "open"; onActionTriggered: screen.window.notify("Opened the preview") }
+                            KetBanner { width: parent.width; tone: KetTheme.BannerTone.Info; title: "Preview validated"; message: Fixtures.atlasSummary + " · Két Design System" }
                         }
                     }
                     ComposerBar {
@@ -243,7 +307,7 @@ Item {
                         Layout.margins: screen.px(12)
                         window: screen.window
                         compact: true
-                        placeholder: "Ask for a change to " + Fixtures.atlasFlows[screen.flow].title + "…"
+                        placeholder: "Ask AI to edit this flow…"
                     }
                 }
             }

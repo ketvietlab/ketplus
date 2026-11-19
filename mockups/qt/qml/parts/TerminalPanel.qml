@@ -12,7 +12,7 @@ Rectangle {
     id: panel
 
     required property var window
-    property var tabs: ["ketplus — demo", "~"]
+    property var tabs: ["cinder-trail · zsh", "~"]
     property int current: 0
     property bool searching: false
     property string query: "Passed"

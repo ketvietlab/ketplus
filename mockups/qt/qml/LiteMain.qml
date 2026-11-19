@@ -210,7 +210,8 @@ Basic.ApplicationWindow {
                 visible: app.screen === "search" && app.sidebarOpen && !app.welcome
                 window: app
                 sources: editor.sources
-                paths: ({ "NavigationRail.qml": "modules/ai/src/agent/qml",
+                paths: ({ "TrailList.qml": "src/trails",
+                          "TrailRow.qml": "src/trails", "release-checklist.md": "docs",
                           "design-system.md": "docs", "licensing.md": "docs" })
                 onLineChosen: (file, line) => editor.openAt(file, line)
             }
@@ -261,7 +262,7 @@ Basic.ApplicationWindow {
                             }
                             Repeater {
                                 model: [
-                                    { name: "ketplus-desktop", path: "~/dev/ketplus-desktop" },
+                                    { name: "cinder-trail", path: "~/dev/cinder-trail" },
                                     { name: "ket-qt", path: "~/dev/ket-qt" },
                                     { name: "ket-sans-font", path: "~/dev/ket-sans-font" }
                                 ]

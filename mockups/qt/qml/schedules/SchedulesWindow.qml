@@ -27,11 +27,11 @@ Basic.ApplicationWindow {
         { status: "✗ Failed: provider is not signed in", at: "13/11 08:30", conversation: "", detail: "Codex is not signed in. Sign in, then choose Run now to retry." },
         { status: "✓ Succeeded", at: "12/11 08:30", conversation: "9410", detail: "Summarized 3 workflows that need attention." }
     ] : selected.kind === "team-start" ? [] : [
-        { status: "✓ Succeeded", at: "13/11 08:00", conversation: "4821", detail: "Draft sent to the leader for approval." },
+        { status: "✓ Succeeded", at: "13/11 08:00", conversation: "4821", detail: "Picker tests passed. The Linux smoke check still needs a dataset." },
         { status: "↷ Skipped: team paused", at: "12/11 08:00", conversation: "", detail: "Release 1.4 is paused." },
         { status: "⚠ Missed (computer asleep), caught up at 08:47", at: "11/11 08:00", conversation: "4821", detail: "One catch-up run; earlier missed runs are not queued." },
         { status: "✗ Failed: provider is not signed in", at: "10/11 08:00", conversation: "", detail: "Codex is not signed in." },
-        { status: "✓ Succeeded", at: "09/11 08:00", conversation: "4821", detail: "Draft sent." }
+        { status: "✓ Succeeded", at: "09/11 08:00", conversation: "4821", detail: "Release brief sent to the leader." }
     ])) : []
     onShownChanged: {
         if (!shown.some(e => e.id === selectedId)) selectedId = shown.length ? shown[0].id : ""

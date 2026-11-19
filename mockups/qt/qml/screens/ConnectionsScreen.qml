@@ -15,12 +15,15 @@ Item {
     id: screen
 
     required property var window
+    property bool machinesOnly: false
+    property bool devicesOnly: false
+    readonly property int recentLimit: devicesOnly ? 3 : 5
     property var phones: [{ name: "iPhone 16", detail: "KetPlus App · Paired" }]
     // ADR 0118's states: Connecting, Connected, Reconnecting, Offline; `error` names a failure.
     property var machines: [
-        { name: "build-node-01", detail: "Ubuntu 24.04 LTS · Ready for remote work", via: "SSH", state: "Connected", fingerprint: "SHA256:9f2cQx0aA1bB2cC3dD4eE5fF6gG7hH8iI9jJ0kKa41e", error: "" },
-        { name: "build-node-02", detail: "Linux · Trusted", via: "Relay", state: "Offline", fingerprint: "SHA256:Lp4uT0cN8mVq2rXs6yZa1bC5dE9fG3hJ7kM2nP6qR0s", error: "" },
-        { name: "old-host", detail: "Ubuntu 22.04", via: "SSH", state: "Offline", fingerprint: "", error: "Host key changed" }
+        { name: "cinder-build", detail: "Ubuntu 24.04 LTS · Cinder Trail build and tests", via: "SSH", state: "Connected", fingerprint: "SHA256:9f2cQx0aA1bB2cC3dD4eE5fF6gG7hH8iI9jJ0kKa41e", error: "" },
+        { name: "cinder-field-qa", detail: "Linux · Offline field tests", via: "Relay", state: "Offline", fingerprint: "SHA256:Lp4uT0cN8mVq2rXs6yZa1bC5dE9fG3hJ7kM2nP6qR0s", error: "" },
+        { name: "cinder-archive", detail: "Ubuntu 22.04 LTS · Archived builds", via: "SSH", state: "Offline", fingerprint: "", error: "Host key changed" }
     ]
     property int linuxMode: 0
     property bool linuxHostKeyShown: false
@@ -32,12 +35,12 @@ Item {
     // first. Only requests that can change something are recorded; reads are not.
     readonly property var activity: screen.window.remoteActivity ? activityFixture : []
     readonly property var activityFixture: [
-        { kind: "turn.start", device: "iPhone 16", target: "Fix login timeout", when: "2 min ago", result: "ok" },
-        { kind: "session.create", device: "iPhone 16", target: "New worktree feature/offline-cache", when: "18 min ago", result: "ok" },
-        { kind: "turn.interrupt", device: "iPhone 16", target: "Refactor sync engine", when: "1 hour ago", result: "ok" },
-        { kind: "session.create", device: "iPhone 16", target: "New worktree experiment/parser", when: "Yesterday, 21:14", result: "worktree_quota_exceeded" },
+        { kind: "turn.start", device: "iPhone 16", target: "Verify trail picker", when: "2 min ago", result: "ok" },
+        { kind: "session.create", device: "iPhone 16", target: "New worktree fix/trail-picker", when: "18 min ago", result: "ok" },
+        { kind: "turn.interrupt", device: "iPhone 16", target: "Trace an offline sync failure", when: "1 hour ago", result: "ok" },
+        { kind: "session.create", device: "iPhone 16", target: "New worktree feat/offline-onboarding", when: "Yesterday, 21:14", result: "worktree_quota_exceeded" },
         { kind: "session.configuration.apply", device: "iPad Air", target: "Release notes draft", when: "Mon, 09:02", result: "ok" },
-        { kind: "turn.start", device: "Unknown device", target: "Fix login timeout", when: "Sun, 23:40", result: "invalid_encrypted_command" },
+        { kind: "turn.start", device: "Unknown device", target: "Verify trail picker", when: "Sun, 23:40", result: "invalid_encrypted_command" },
         { kind: "session.delete", device: "iPad Air", target: "Old spike", when: "28 Oct, 17:55", result: "ok" }
     ]
     // The device the activity dialog shows; empty for every device.
@@ -266,7 +269,7 @@ Item {
             x: Math.max(screen.px(42), (scroll.availableWidth - width) / 2)
             y: screen.px(38)
             width: Math.min(scroll.availableWidth - screen.px(84), screen.px(1000))
-            spacing: screen.px(18)
+            spacing: screen.px(12)
 
             PageHeading {
                 width: parent.width
@@ -281,7 +284,7 @@ Item {
                 }
             }
 
-            Item { width: 1; height: screen.px(28) }
+            Item { width: 1; height: screen.px(8) }
 
             Row {
                 spacing: screen.px(38)
@@ -302,9 +305,9 @@ Item {
 
             Rectangle { width: parent.width; height: 1; color: KetTheme.t.panelBorder }
 
-            SectionTitle { title: "Phones & tablets"; count: screen.phones.length + " paired" }
+            SectionTitle { visible: !screen.machinesOnly; title: "Phones & tablets"; count: screen.phones.length + " paired" }
             KetEmptyState {
-                visible: screen.phones.length === 0
+                visible: !screen.machinesOnly && screen.phones.length === 0
                 width: parent.width
                 iconName: "smartphone"
                 title: "No phone paired"
@@ -313,7 +316,7 @@ Item {
                 onActionTriggered: pairDialog.open()
             }
             Repeater {
-                model: screen.phones
+                model: screen.machinesOnly ? [] : screen.phones
                 DeviceCard {
                     required property var modelData
                     required property int index
@@ -333,9 +336,9 @@ Item {
                 }
             }
 
-            SectionTitle { title: "Activity from paired devices"; count: "Last 90 days" }
+            SectionTitle { visible: !screen.machinesOnly; title: "Activity from paired devices"; count: "Last 90 days" }
             KetEmptyState {
-                visible: screen.activity.length === 0
+                visible: !screen.machinesOnly && screen.activity.length === 0
                 width: parent.width
                 iconName: "clock"
                 title: "No activity yet"
@@ -354,13 +357,13 @@ Item {
                     Accessible.role: Accessible.List
                     Accessible.name: "Activity from paired devices"
                     Repeater {
-                        model: screen.activity.slice(0, 5)
+                        model: screen.activity.slice(0, screen.recentLimit)
                         ActivityRow {
                             required property var modelData
                             required property int index
                             entry: modelData
                             rowIndex: index
-                            last: index === Math.min(screen.activity.length, 5) - 1
+                            last: index === Math.min(screen.activity.length, screen.recentLimit) - 1
                         }
                     }
                 }
@@ -378,7 +381,7 @@ Item {
                 KetButton {
                     id: showAll
                     anchors.right: parent.right
-                    visible: screen.activity.length > 5
+                    visible: screen.activity.length > screen.recentLimit
                     text: "Show all"
                     variant: KetTheme.ButtonVariant.Ghost
                     controlSize: KetTheme.ControlSize.Small
@@ -386,9 +389,9 @@ Item {
                 }
             }
 
-            SectionTitle { title: "Linux machines"; count: screen.machines.length + " trusted" }
+            SectionTitle { visible: !screen.devicesOnly; title: "Linux machines"; count: screen.machines.length + " trusted" }
             Repeater {
-                model: screen.machines
+                model: screen.devicesOnly ? [] : screen.machines
                 DeviceCard {
                     required property var modelData
                     required property int index
@@ -420,6 +423,7 @@ Item {
                 }
             }
             Row {
+                visible: !screen.devicesOnly
                 spacing: screen.px(8)
                 KetIcon { name: "shield"; box: screen.px(13); color: KetTheme.t.textMuted; anchors.verticalCenter: parent.verticalCenter }
                 Text { text: "Linux machines connect over your SSH access (free) or through the ketPlus Relay (Pro). Verify the host fingerprint or pairing code before trusting one."; color: KetTheme.t.textSecondary; font.family: KetTheme.fontFamily; font.pixelSize: screen.px(13) }
@@ -431,10 +435,10 @@ Item {
                 Row {
                     anchors.verticalCenter: parent.verticalCenter
                     spacing: screen.px(12)
-                    KetAvatar { name: "An Nguyen"; anchors.verticalCenter: parent.verticalCenter }
+                    KetAvatar { name: Fixtures.accountName; anchors.verticalCenter: parent.verticalCenter }
                     Column {
-                        Text { text: "Demo account"; color: KetTheme.t.textMain; font.family: KetTheme.fontFamily; font.pixelSize: screen.px(13); font.weight: Font.Medium }
-                        Text { text: "Personal workspace"; color: KetTheme.t.textSecondary; font.family: KetTheme.fontFamily; font.pixelSize: screen.px(12) }
+                        Text { text: Fixtures.accountName; color: KetTheme.t.textMain; font.family: KetTheme.fontFamily; font.pixelSize: screen.px(13); font.weight: Font.Medium }
+                        Text { text: "Cinder Trail workspace"; color: KetTheme.t.textSecondary; font.family: KetTheme.fontFamily; font.pixelSize: screen.px(12) }
                     }
                 }
                 KetButton { anchors.right: parent.right; anchors.verticalCenter: parent.verticalCenter; text: "Sign out"; iconName: "log-out"; variant: KetTheme.ButtonVariant.Ghost; onClicked: { screen.window.signInExpired = false; screen.window.signedIn = false } }
@@ -456,7 +460,7 @@ Item {
                 font.pixelSize: screen.px(13)
                 lineHeight: 1.4
             }
-            Item { width: 1; height: screen.px(40) }
+            Item { width: 1; height: screen.px(24) }
         }
     }
 
@@ -771,7 +775,7 @@ Item {
             screen.window.signInExpired = false
             screen.window.signedIn = true
             signInDialog.accept()
-            screen.window.notify("Signed in as An Nguyen")
+            screen.window.notify("Signed in as " + Fixtures.accountName)
         }
     }
 

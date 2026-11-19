@@ -6,6 +6,7 @@ import Ket
 import KetPlusMock
 import KetPlusMock.Native
 import "../schedules/ScheduleSamples.js" as ScheduleSamples
+import "../ReleaseBoard.js" as ReleaseBoard
 import "../parts/TeamLanguageChecks.js" as TeamLanguageChecks
 
 // Teams (concept): several conversations with one goal. The page answers, in order, what waits
@@ -46,6 +47,7 @@ Item {
         idle: { label: copy("Idle"), color: KetTheme.t.textMuted }
     })
 
+    readonly property bool releaseBoard: !!team && team.id === "field-release"
     readonly property var members: team ? team.members : []
     // T-56 (ADR 0125): a team works in English or Vietnamese; a team without one is English.
     readonly property var languages: [{ code: "en", name: "English" }, { code: "vi", name: "Tiếng Việt" }]
@@ -139,6 +141,8 @@ Item {
         // `teams/live`: content as a team writes it: long choices, descriptions, lanes, updates.
         if (state === "live")
             teams = [Fixtures.liveTeam]
+        if (state === "board")
+            teams = [ReleaseBoard.make(Fixtures.teams[0])]
         teamIndex = 0
         if (vietnamese) change({ language: "vi" })
         filter = ""
@@ -881,10 +885,10 @@ Item {
         Column {
             id: content
             x: Math.max(screen.px(42), (scroll.availableWidth - width) / 2)
-            y: screen.px(38)
+            y: screen.px(screen.releaseBoard ? 24 : 38)
             width: Math.min(scroll.availableWidth - screen.px(84), screen.px(1120))
-            spacing: screen.px(18)
-            bottomPadding: screen.px(40)
+            spacing: screen.px(screen.releaseBoard ? 9 : 18)
+            bottomPadding: screen.px(screen.releaseBoard ? 8 : 40)
 
             PageHeading {
                 width: parent.width
@@ -906,7 +910,7 @@ Item {
                 }
             }
 
-            TeamSchedules { width: parent.width; window: screen.window; team: screen.team; language: screen.teamLanguage }
+            TeamSchedules { visible: !screen.releaseBoard; width: parent.width; window: screen.window; team: screen.team; language: screen.teamLanguage }
 
             // The goal whole, folded after three lines (ADR 0114); a mention opens its
             // conversation. Everywhere else the goal keeps one line.
@@ -1457,7 +1461,7 @@ Item {
                             required property int index
                             readonly property var status: screen.memberStates[modelData.state] || screen.memberStates.idle
                             width: memberList.width
-                            height: screen.px(64)
+                            height: screen.px(screen.releaseBoard ? 52 : 64)
                             Rectangle { visible: memberRow.index > 0; width: parent.width; height: 1; color: KetTheme.t.panelBorder }
                             RowLayout {
                                 anchors.fill: parent
@@ -1467,7 +1471,7 @@ Item {
                                 Column {
                                     Layout.fillWidth: true
                                     Layout.minimumWidth: screen.px(150)
-                                    Layout.preferredWidth: screen.px(190)
+                                    Layout.preferredWidth: screen.px(screen.releaseBoard ? 252 : 190)
                                     spacing: screen.px(5)
                                     // A narrow page has no role column: the role sits beside the name.
                                     Row {
