@@ -1,0 +1,49 @@
+#!/bin/sh
+# SPDX-License-Identifier: MPL-2.0
+# remove: unloads the executor's AppArmor profile and turns off the linger the package turned
+# on; the account, its registration, the state and work directories and the profile file (a
+# conffile) stay. purge: deletes the state and work directories and the service drop-in, and
+# the account and group when the package created them; dpkg deletes the conffile. No network: a
+# runner purged without `ketplus-runner deregister` stays listed on the Relay until removed
+# there.
+set -e
+
+account=ketplus-runner
+base=/var/lib/ketplus-runner
+record=$base/package-created
+dropin=/etc/systemd/system/ketplus-runner.service.d
+profile=ketplus-job-executor
+
+created() {
+    [ -f "$record" ] && grep -qx "$1" "$record"
+}
+
+case "$1" in
+remove)
+    if command -v apparmor_parser >/dev/null 2>&1 && [ -d /sys/kernel/security/apparmor ] &&
+        [ -e "/etc/apparmor.d/$profile" ]; then
+        apparmor_parser -R "/etc/apparmor.d/$profile" || true
+    fi
+    if created linger && [ -d /run/systemd/system ]; then
+        loginctl disable-linger "$account" || true
+    fi
+    [ ! -d /run/systemd/system ] || systemctl daemon-reload
+    ;;
+purge)
+    rm -f "$dropin/50-account.conf" "$dropin/50-account.conf.new"
+    rmdir "$dropin" 2>/dev/null || true
+    if created account && getent passwd "$account" >/dev/null; then
+        uid=$(id -u "$account")
+        if [ -d /run/systemd/system ]; then
+            systemctl stop "user@$uid.service" || true
+        fi
+        userdel "$account"
+    fi
+    if created group && getent group "$account" >/dev/null; then
+        groupdel "$account"
+    fi
+    rm -rf "$base" /var/cache/ketplus-runner
+    [ ! -d /run/systemd/system ] || systemctl daemon-reload
+    ;;
+esac
+exit 0

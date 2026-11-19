@@ -282,6 +282,77 @@ The sidecar pins Claude Agent SDK 0.3.322 in both package metadata and the lockf
 The model picker uses the SDK's live model catalog, including Sonnet 5.5; changing
 only a UI label does not upgrade the provider runtime.
 
+### Linux runner package
+
+`ketplus-runner` ships as its own unsigned engineering `.deb`, separate from the
+desktop package and from a build directory of its own: configure a fresh Release
+tree with the Runner install component on and the desktop off, build the runner
+and its job executor, and assemble the package from that component.
+
+```sh
+cmake -S . -B build-runner -G Ninja -DKETPLUS_EDITION=pro -DCMAKE_BUILD_TYPE=Release \
+    -DKETPLUS_BUILD_DESKTOP=OFF -DKETPLUS_LINUX_RUNNER_PACKAGE=ON \
+    -DKETPLUS_CONTROL_URL=https://<relay>
+cmake --build build-runner --target ketplus-runner ketplus_job_executor
+SOURCE_DATE_EPOCH=$(git log -1 --format=%ct) \
+    packaging/linux/runner/build-runner-package.py --build build-runner \
+    --out dist/runner --expected-control-url https://<relay> [--revision N]
+```
+
+The script installs the `Runner` component (`cmake --install --component Runner`),
+refuses a component with a missing file, a GUI plugin, a SQL driver other than
+SQLite, a symlink leaving the package, a run path other than `$ORIGIN`, an absolute
+`qt.conf` path, a binary naming the build or source tree, or a library `ldd` cannot
+resolve on the build host, and takes the package's `Depends` from the system
+libraries it loads. The version is the project version (`ketplus-runner --version`
+must report it) plus `-N`, 1 by default. It writes
+`ketplus-runner_<version>-<N>_<arch>.deb` and `SHA256SUMS`. A tree configured with
+`KETPLUS_LINUX_RUNNER_PACKAGE=ON` must not be used for the desktop package: a plain
+`cmake --install` installs every component.
+
+Installed, the package holds:
+
+- `/usr/lib/ketplus-runner`: the runner, `ketplus_job_executor` beside it, and
+  their Qt libraries and plugins;
+- `/usr/bin/ketplus-runner`: a wrapper that runs the runner as the
+  `ketplus-runner` account with the state directory `/var/lib/ketplus-runner/state`
+  and the work directory `/var/cache/ketplus-runner/work`;
+- `ketplus-runner.service`: a system service under that account, started once the
+  runner is registered; jobs run in the account's user manager, which the package
+  keeps running with `loginctl enable-linger`;
+- `/etc/apparmor.d/ketplus-job-executor`: allows user namespaces for the job
+  executor only, where Ubuntu restricts them. Processes a job starts inherit it,
+  nested user namespaces included.
+
+Register as root, with the token on standard input so it stays out of the process
+list and the sudo log; the wrapper starts the service when registration succeeds:
+
+```sh
+sudo ketplus-runner register - --name <name> < token-file
+sudo ketplus-runner status
+systemctl status ketplus-runner
+sudo ketplus-runner deregister
+```
+
+`pair`, `unpair` and `deregister` take the state directory's lock, so the wrapper
+stops a running service for them and starts it again afterwards, except after a
+successful `deregister`. `status` reads without the lock.
+
+Removing the package stops and disables the service, unloads the AppArmor profile
+and turns off the linger the package turned on; it keeps the account, the
+registration, the state and the profile file. Purging deletes the state, the work
+directory, the profile file and the service drop-in, and the account and its group
+only when the package created them. Maintainer scripts make no network call: deregister before purging,
+or remove the runner on the Relay afterwards. An upgrade restarts a running
+service.
+
+A package built for an `http` loopback Relay needs `--test-only`; it is named
+`..._test-only.deb`, says so in its description, and is never published.
+`ketplus_runner_fake_relay --port N --token-file PATH` (from `tests/runner`) serves
+the test Relay on that port, writes a registration token to `PATH` and prints one
+line per registration, heartbeat (with the state the runner reported) and
+deregistration.
+
 ### In-app updates (macOS)
 
 Builds do not check for updates unless they are configured with an appcast and

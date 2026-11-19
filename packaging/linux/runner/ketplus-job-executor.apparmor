@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: MPL-2.0
+# The runner's job executor creates a user namespace to contain each job. Ubuntu restricts
+# unprivileged user namespaces to profiles that allow them; this profile allows it for this one
+# binary and confines nothing else. Processes the executor starts inherit it.
+abi <abi/4.0>,
+include <tunables/global>
+
+profile ketplus-job-executor /usr/lib/ketplus-runner/bin/ketplus_job_executor flags=(unconfined) {
+  userns,
+
+  include if exists <local/ketplus-job-executor>
+}

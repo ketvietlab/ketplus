@@ -39,8 +39,8 @@ QString randomSecret() {
     return text(random);
 }
 
-FakeRelay::FakeRelay(std::function<QDateTime()> now) : m_now(std::move(now)) {
-    m_server.listen(QHostAddress::LocalHost, 0);
+FakeRelay::FakeRelay(std::function<QDateTime()> now, const quint16 port) : m_now(std::move(now)) {
+    m_server.listen(QHostAddress::LocalHost, port);
     QObject::connect(&m_server, &QTcpServer::newConnection, &m_server, [this] {
         while (QTcpSocket* socket = m_server.nextPendingConnection()) {
             QObject::connect(socket, &QTcpSocket::readyRead, socket,
