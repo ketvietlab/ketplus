@@ -40,9 +40,9 @@ def asset_name(url, prefix, allowed_suffixes):
     return name
 
 
-def read_feed(data, args):
+def read_feed(data, args, allow_legacy_arch=False):
     prefix = args.download_url_prefix
-    channel = POLICY["process_feed"](io.BytesIO(data), args.channel, args.arch, prefix, "release")
+    channel = POLICY["process_feed"](io.BytesIO(data), args.channel, args.arch, prefix, "release", allow_legacy_arch)
     items = channel.findall("item")
     assets = {}
     version = None
@@ -242,7 +242,8 @@ def run(args, work):
     changed = live_payload is None or desired.sha256 != live_payload.sha256
     snapshot_to_save = None
     if changed and live_payload is not None:
-        version, _ = read_feed(live.read_bytes(), args)
+        # Preserve an untagged pre-migration live feed, but never publish or restore it.
+        version, _ = read_feed(live.read_bytes(), args, allow_legacy_arch=True)
         prior = "snapshots/" + snapshot_id(version, live_payload)
         if r2.needs_upload(prior, live_payload, scratch):
             snapshot_to_save = prior

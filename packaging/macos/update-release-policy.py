@@ -6,6 +6,8 @@ from urllib.parse import unquote, urlsplit
 import xml.etree.ElementTree as ET
 
 NAMESPACE = "urn:ketplus:release"
+SPARKLE_NAMESPACE = "http://www.andymatuschak.org/xml-namespaces/sparkle"
+SPARKLE_CHANNEL = "{" + SPARKLE_NAMESPACE + "}channel"
 ET.register_namespace("ketplus", NAMESPACE)
 
 
@@ -27,7 +29,7 @@ def validate_prefix(prefix, channel, architecture, mode):
         raise ValueError("download prefix must end with /<channel>/<arch>/")
 
 
-def process_feed(path, channel, architecture, prefix, mode):
+def process_feed(path, channel, architecture, prefix, mode, allow_legacy_arch=False):
     parser = ET.XMLParser(target=ET.TreeBuilder(insert_comments=True))
     tree = ET.parse(path, parser=parser)
     node = tree.getroot().find("channel")
@@ -43,6 +45,12 @@ def process_feed(path, channel, architecture, prefix, mode):
     modes = node.findall("{" + NAMESPACE + "}releaseMode")
     if len(modes) != 1 or modes[0].text != mode:
         raise ValueError("appcast release mode is missing or mismatched; use a clean scoped directory")
+    for item in node.findall("item"):
+        tags = item.findall(SPARKLE_CHANNEL)
+        if allow_legacy_arch and not tags:
+            continue
+        if len(tags) != 1 or tags[0].text != "ketplus-" + architecture or len(tags[0]):
+            raise ValueError("appcast item architecture is missing or mismatched; use a clean scoped directory")
     for enclosure in node.findall(".//enclosure"):
         url = enclosure.get("url", "")
         if not url.startswith(prefix):
@@ -80,7 +88,8 @@ def main():
             if not args.appcast:
                 raise ValueError("appcast is required")
             if args.operation == "seed-feed" and not Path(args.appcast).exists():
-                root = ET.Element("rss", version="2.0")
+                # generate_appcast adds prefixed elements to the existing RSS root.
+                root = ET.Element("rss", {"version": "2.0", "xmlns:sparkle": SPARKLE_NAMESPACE})
                 node = ET.SubElement(root, "channel")
                 ET.SubElement(node, "title").text = "ketPlus Pro"
                 ET.SubElement(node, "{" + NAMESPACE + "}releaseChannel").text = args.channel

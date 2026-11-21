@@ -106,7 +106,8 @@ class UpdateR2Test(unittest.TestCase):
                 'xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle"><channel>'
                 f'<ketplus:releaseChannel>{channel}</ketplus:releaseChannel>'
                 f'<ketplus:architecture>{arch}</ketplus:architecture>{mode_node}'
-                f'<item><enclosure url="{prefix}{archive}" length="13"/>{delta}</item></channel></rss>')
+                f'<item><sparkle:channel>ketplus-{arch}</sparkle:channel>'
+                f'<enclosure url="{prefix}{archive}" length="13"/>{delta}</item></channel></rss>')
         (self.local / "appcast.xml").write_text(feed)
         return feed.encode()
 
@@ -175,6 +176,29 @@ class UpdateR2Test(unittest.TestCase):
                                       b"notes.html</sparkle:releaseNotesLink></item>"))
         self.run_cli("--execute", success=False)
         self.assertFalse(self.calls.exists())
+
+    def test_item_architecture_must_match_before_s3(self):
+        data = self.prepare()
+        tag = b"<sparkle:channel>ketplus-arm64</sparkle:channel>"
+        for replacement in (b"", tag.replace(b"arm64", b"x86_64"), tag + tag):
+            with self.subTest(replacement=replacement):
+                (self.local / "appcast.xml").write_bytes(data.replace(tag, replacement))
+                result = self.run_cli("--execute", success=False)
+                self.assertIn("item architecture is missing or mismatched", result.stderr)
+                self.assertFalse(self.calls.exists())
+
+    def test_migration_snapshots_legacy_feed_without_allowing_rollback_to_it(self):
+        old = self.prepare().replace(b"<sparkle:channel>ketplus-arm64</sparkle:channel>", b"")
+        self.remote.mkdir(parents=True)
+        (self.remote / "appcast.xml").write_bytes(old)
+        new = self.prepare("2.0")
+        self.run_cli("--execute")
+        snapshot = "1.2.3/" + hashlib.sha256(old).hexdigest() + ".xml"
+        self.assertEqual((self.remote / "snapshots" / snapshot).read_bytes(), old)
+        self.calls.unlink()
+        self.run_cli("--execute", snapshot=snapshot, success=False)
+        self.assertEqual(self.writes(), [])
+        self.assertEqual((self.remote / "appcast.xml").read_bytes(), new)
 
     def test_same_size_different_archive_is_refused_without_writes(self):
         self.remote.mkdir(parents=True)

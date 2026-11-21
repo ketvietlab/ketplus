@@ -71,7 +71,11 @@ channel = root.find("channel")
 ET.SubElement(channel, "description").text = "synthetic item"
 prefix = sys.argv[sys.argv.index("--download-url-prefix") + 1]
 url = os.environ.get("UPDATE_GENERATED_URL", prefix + "KetPlus-" + os.environ["UPDATE_VERSION"] + ".zip")
-ET.SubElement(ET.SubElement(channel,"item"),"enclosure",url=url)
+item = ET.SubElement(channel,"item")
+ET.SubElement(item,"enclosure",url=url)
+item_channel = os.environ.get("UPDATE_GENERATED_CHANNEL", sys.argv[sys.argv.index("--channel") + 1])
+if item_channel:
+    ET.SubElement(item,"{http://www.andymatuschak.org/xml-namespaces/sparkle}channel").text = item_channel
 output.write_bytes(ET.tostring(root))
 if os.environ.get("UPDATE_APPCAST_FAIL"): sys.exit("synthetic signing failure")
 ''')
@@ -127,6 +131,16 @@ if os.environ.get("UPDATE_APPCAST_FAIL"): sys.exit("synthetic signing failure")
         self.assert_rejected_before_archive(self.run_update())
         self.assertEqual(feed.read_text(), original)
 
+    def test_generated_items_must_declare_the_release_architecture(self):
+        for channel in ("", "ketplus-x86_64"):
+            with self.subTest(channel=channel):
+                self.env["UPDATE_GENERATED_CHANNEL"] = channel
+                result = self.run_update()
+                self.assertNotEqual(result.returncode, 0, result.stdout)
+                self.assertIn("item architecture is missing or mismatched", result.stderr)
+                self.assertFalse((self.updates / "appcast.xml").exists())
+                self.assertFalse((self.updates / "KetPlus-0.1.50.zip").exists())
+
     def test_local_qa_still_requires_valid_signature(self):
         self.env["UPDATE_INVALID_SIGNATURE"] = "1"
         self.assert_rejected_before_archive(self.run_update(["--mode", "local-qa"]))
@@ -175,6 +189,7 @@ if os.environ.get("UPDATE_APPCAST_FAIL"): sys.exit("synthetic signing failure")
                     '<ketplus:architecture>arm64</ketplus:architecture>'
                     '<ketplus:releaseMode>release</ketplus:releaseMode><!-- preserve this -->'
                     '<item><sparkle:version>1</sparkle:version><sparkle:shortVersionString>0.1.1</sparkle:shortVersionString>'
+                    '<sparkle:channel>ketplus-arm64</sparkle:channel>'
                     '<enclosure url="https://updates.example.invalid/production/arm64/KetPlus-0.1.1.zip" '
                     'sparkle:edSignature="synthetic-signature" /></item></channel></rss>').encode()
         feed.write_bytes(original)
@@ -185,6 +200,16 @@ if os.environ.get("UPDATE_APPCAST_FAIL"): sys.exit("synthetic signing failure")
                 capture_output=True, text=True)
             self.assertEqual(result.returncode, 0, result.stderr)
             self.assertEqual(feed.read_bytes(), original)
+
+    def test_new_feed_seed_declares_sparkle_namespace(self):
+        feed = self.root / "seed.xml"
+        result = subprocess.run([sys.executable, str(self.script.with_name("update-release-policy.py")),
+            "seed-feed", "--channel", "production", "--arch", "arm64", "--download-prefix",
+            "https://updates.example.invalid/production/arm64/", "--appcast", str(feed)],
+            capture_output=True, text=True)
+        self.assertEqual(result.returncode, 0, result.stderr)
+        namespaces = dict(value for _, value in ET.iterparse(feed, events=("start-ns",)))
+        self.assertEqual(namespaces.get("sparkle"), "http://www.andymatuschak.org/xml-namespaces/sparkle")
 
     def test_external_key_symlink_is_resolved_before_signer(self):
         target = self.root / "external-key"
@@ -217,6 +242,8 @@ if os.environ.get("UPDATE_APPCAST_FAIL"): sys.exit("synthetic signing failure")
                     node = ET.parse(self.updates / "appcast.xml").getroot().find("channel")
                     self.assertEqual(node.find("{urn:ketplus:release}releaseChannel").text, channel)
                     self.assertEqual(node.find("{urn:ketplus:release}architecture").text, arch)
+                    self.assertEqual(node.findtext("item/{http://www.andymatuschak.org/xml-namespaces/sparkle}channel"),
+                                     "ketplus-" + arch)
                     self.assertTrue(node.find("item/enclosure").get("url").startswith(prefix))
 
     def test_bundle_architecture_must_match(self):

@@ -273,8 +273,20 @@ relaunch were outside this test. Existing publisher scope checks still cover
 production feed pairing.
 
 F1 is the sole documented exception to T-4's requirement that each completed
-case preserve N or install the correct N+1. T-5 tracks client-side architecture
-validation and a rerun of the F1 fixture.
+case preserve N or install the correct N+1. T-5 addresses the mixed-feed case
+at the appcast boundary. In the Sparkle 2.10.0 loopback rerun, the arm64 Desktop
+rejected the EdDSA-signed x86_64 candidate before requesting its ZIP. N remained
+in place and passed strict deep signature verification. An untagged appcast
+also left N unchanged with no archive request. Both cases kept the same
+isolated daemon turn running. The arm64 control downloaded its signed archive
+and installed the N+1 metadata fixture with a valid bundle signature and
+the same running daemon turn.
+
+The client checks the declared item architecture. Sparkle's public delegate
+does not expose the extracted bundle path for a Mach-O check, so this gate
+does not detect an archive that is mislabeled with a matching architecture.
+The release preparation tool checks the actual executable slice before
+generating its appcast item.
 
 Run the fixture using the
 [Desktop update QA procedure](../testing.md#desktop-update-qa-isolation).
