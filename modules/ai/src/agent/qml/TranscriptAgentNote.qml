@@ -2,8 +2,7 @@ import Ket
 import QtQuick
 import Ket as Kit
 
-// The mock's bordered note in the flow: a message this conversation sent to another agent (who
-// it went to, its state, and the start of what it said) or a question that is closed.
+// Shared compact card for incoming and outgoing agent/team messages, and closed questions.
 Rectangle {
     id: note
     required property string label
@@ -25,33 +24,111 @@ Rectangle {
         return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/\n/g, "<br>");
     }
 
-    Row {
+    property bool externallyManagedExpansion: false
+    property bool expanded: false
+    property bool hasExtraContent: false
+    property bool expandBody: true
+    readonly property int previewLines: 4
+    readonly property bool overlong: body.contentHeight > previewHeight + 1 || hasExtraContent
+    readonly property real previewHeight: noteMetrics.height * previewLines
+    property var taskIds: []
+    signal taskRequested(string taskId)
+    signal copyRequested(string selection)
+    signal toggleRequested
+
+    Column {
         id: noteRow
         x: KetTheme.px(14, KetTheme.zoom)
         y: KetTheme.px(10, KetTheme.zoom)
         width: parent.width - 2 * x
-        spacing: KetTheme.px(8, KetTheme.zoom)
-        Kit.KetIcon {
-            y: Math.max(0, (noteMetrics.height - height) / 2)
-            name: note.iconName
-            box: KetTheme.px(14, KetTheme.zoom)
-            color: note.iconColor
-        }
-        Text {
-            objectName: "transcriptAgentNoteText"
-            width: parent.width - KetTheme.px(22, KetTheme.zoom)
-            wrapMode: Text.Wrap
-            // The text is another agent's, so every part is escaped for StyledText.
-            text: "<b>" + note.escaped(note.label) + "</b>&nbsp;&nbsp;" + note.escaped(note.details) + (note.message.length > 0 ? "<br>" + note.escaped(note.message) : "")
-            textFormat: Text.StyledText
-            color: KetTheme.t.textSecondary
-            font.family: KetTheme.fontFamily
-            font.pixelSize: KetTheme.px(13, KetTheme.zoom)
-            FontMetrics {
-                id: noteMetrics
+        spacing: KetTheme.px(6, KetTheme.zoom)
+        Row {
+            width: parent.width
+            spacing: KetTheme.px(8, KetTheme.zoom)
+            Kit.KetIcon {
+                name: note.iconName
+                box: KetTheme.px(14, KetTheme.zoom)
+                color: note.iconColor
+            }
+            Text {
+                objectName: "transcriptAgentNoteText"
+                width: parent.width - KetTheme.px(22, KetTheme.zoom)
+                wrapMode: Text.Wrap
+                text: "<b>" + note.escaped(note.label) + "</b>" + (note.details ? "&nbsp;&nbsp;" + note.escaped(note.details) : "")
+                textFormat: Text.StyledText
+                color: KetTheme.t.textSecondary
                 font.family: KetTheme.fontFamily
                 font.pixelSize: KetTheme.px(13, KetTheme.zoom)
             }
         }
+        TextEdit {
+            id: body
+            objectName: "transcriptAgentNoteBody"
+            width: parent.width
+            height: note.expanded && note.expandBody ? contentHeight : Math.min(contentHeight, note.previewHeight)
+            clip: true
+            text: note.message
+            textFormat: TextEdit.PlainText
+            wrapMode: TextEdit.Wrap
+            Keys.onShortcutOverride: event => event.accepted = (event.matches(StandardKey.Copy) && selectedText.length > 0) || event.matches(StandardKey.SelectAll)
+            Keys.onPressed: event => {
+                if (event.matches(StandardKey.Copy) && selectedText.length > 0) {
+                    note.copyRequested(selectedText);
+                    event.accepted = true;
+                }
+            }
+            readOnly: true
+            selectByMouse: true
+            persistentSelection: true
+            color: KetTheme.t.textSecondary
+            selectionColor: KetTheme.t.accent
+            selectedTextColor: KetTheme.t.actionPrimaryInk
+            font.family: KetTheme.fontFamily
+            font.pixelSize: KetTheme.px(13, KetTheme.zoom)
+        }
+        Flickable {
+            width: parent.width
+            height: visible ? taskActions.implicitHeight : 0
+            visible: note.taskIds.length > 0 && !note.expanded
+            contentWidth: taskActions.implicitWidth
+            contentHeight: height
+            clip: true
+            flickableDirection: Flickable.HorizontalFlick
+            Row {
+                id: taskActions
+                spacing: KetTheme.px(6, KetTheme.zoom)
+                Repeater {
+                    model: note.taskIds
+                    Kit.KetButton {
+                        required property string modelData
+                        objectName: "transcriptTeamBlockOpenTask"
+                        text: "Open " + modelData
+                        variant: Kit.KetTheme.ButtonVariant.Ghost
+                        controlSize: Kit.KetTheme.ControlSize.Small
+                        onClicked: note.taskRequested(modelData)
+                    }
+                }
+            }
+        }
+        Kit.KetButton {
+            objectName: "transcriptAgentNoteExpand"
+            visible: note.overlong
+            height: visible ? implicitHeight : 0
+            text: note.expanded ? "Collapse" : "Expand"
+            Accessible.name: text + " " + note.label
+            variant: Kit.KetTheme.ButtonVariant.Ghost
+            controlSize: Kit.KetTheme.ControlSize.Small
+            onClicked: {
+                if (note.externallyManagedExpansion)
+                    note.toggleRequested();
+                else
+                    note.expanded = !note.expanded;
+            }
+        }
+    }
+    FontMetrics {
+        id: noteMetrics
+        font.family: KetTheme.fontFamily
+        font.pixelSize: KetTheme.px(13, KetTheme.zoom)
     }
 }

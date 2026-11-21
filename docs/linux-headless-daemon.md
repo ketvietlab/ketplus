@@ -3,7 +3,8 @@
 KetPlus 0.1.29 can build and install the private daemon independently of Desktop.
 The Linux server owns provider processes, repositories, the durable SQLite journal,
 session keys and approval decisions. iOS and a remote Desktop client communicate
-through Control v2. They do not connect to the local Unix socket over the network.
+through Control v2. Nothing connects to the local Unix socket over the network;
+a Desktop on the user's own SSH access reaches it only through SSH (ADR 0119).
 The daemon opens outbound HTTPS and WebSocket connections to the relay; this
 topology needs no inbound TCP port or display server.
 
@@ -17,7 +18,7 @@ v2 pairing protocol does not migrate that application.
 ## Build and stage
 
 Use CMake 3.24+, Ninja, a C++20 compiler, OpenSSL 3 and Qt 6.11+ Core, Concurrent,
-Gui, Network, Sql and WebSockets. Gui supplies image decoding; Widgets, QML,
+Gui, Network, DBus, Sql and WebSockets. Gui supplies image decoding; Widgets, QML,
 WebView, `core/` and an X server are not needed for the headless
 target. Tests additionally require Qt Test. Node 24+ and npm stage the Claude
 sidecar. An already staged tree can be supplied with
@@ -96,8 +97,14 @@ The CLI and daemon share `KETPLUS_DAEMON_DATA_DIR`, `KETPLUS_DAEMON_SOCKET`,
 in an administrative shell, especially the unit's socket path
 `$XDG_RUNTIME_DIR/ketplus-daemon-v0`. Defaults are derived from the user data
 directory and runtime directory, with a shared data-directory fallback.
-Linux credentials are kept in service-specific owner-only files. Protect this
-OS account and its backups; it is the host trust boundary.
+Linux credentials use an unlocked default Secret Service collection on this user's
+local Unix session bus. Provision the service and unlock the collection using the
+OS administration tools before enrollment; KetPlus does not request an interactive
+unlock and never falls back to a plaintext file. An absent/locked store reports an
+error. The service unit must reach the same user session bus. Existing owner-only
+credential files are migration sources, removed after a verified store commit;
+conflicting backups require explicit recovery. Protect the OS account, collection
+unlock credentials and backups. See [ADR 0130](decisions/0130-os-credential-storage.md).
 
 Install Git and the providers that the server will run. Authenticate each provider
 under the service user using that provider's supported login method. The service
@@ -163,7 +170,34 @@ tests, stages and archives the headless target independently of Desktop.
 The scoped results and remaining deployment checks for 0.1.29 are recorded in
 [`linux-headless-verification.md`](linux-headless-verification.md).
 
-## Qt backend prepared for Desktop
+## Desktop on a Linux machine (SSH and Relay)
+
+Desktop works on a Linux machine over SSH or over the Relay (#419). ADR 0119
+defines how Desktop composes a remote machine: one machine-neutral
+`MachineBackend` (`modules/remote/src/MachineBackend.h`) implemented by the
+local socket (`DaemonMachineBackend`), a Relay backend over `ControlV2Client`
+(`RelayMachineBackend`) and an SSH route that carries the local protocol to the user's own socket; how
+the sidebar, Agent Workspace, worktree picker and approvals bind to the selected
+machine; the Connecting / Connected / Reconnecting / Offline states; and the SSH
+trust decision (host key from `known_hosts` or an accepted SHA256 fingerprint,
+SSH keys or agent only, no stored passwords). Connections adds and connects the
+machine on either route, the activity bar's picker selects it, and the window's
+sidebar, Agent Workspace, worktree picker, composer and approval cards then
+follow that machine's `MachineBackend` until the picker returns to This Mac
+(`docs/agent-workspace.md`, "Remote machines"). The SSH route reaches the
+user's own daemon socket through `SshTunnel` (`docs/ssh-transport.md`); the
+Relay route is `RelayMachineBackend` below.
+
+Remaining follow-ups:
+
+- **Relay entitlement.** The Relay is gated on the signed-in session's
+  `ketplus.relay` entitlement and fails closed while the relay names none
+  (D-4). Granting it is work in the private auth service; until then the Relay
+  route is available only where that service grants it, and SSH needs no
+  account.
+- **Remote daemon install over SSH.** A host without `ketplus_daemon` is
+  reported as "daemon not installed"; installing or upgrading the daemon over
+  the SSH route is not implemented. Install it on the host as described above.
 
 `modules/remote/src/control/ControlV2Client` provides origin-scoped credentials,
 refresh recovery, key-bound pairing/cancellation, session/worktree indexes,
@@ -171,7 +205,7 @@ authenticated event decryption, encrypted command preparation/submission and
 host-signed command-result decryption. Persist the prepared envelope and retry
 exactly that ciphertext. It never resolves server paths or starts a local daemon.
 Revoked credentials fence in-flight responses. Sign-out also reports a local
-credential-file removal failure instead of claiming a durable successful logout.
+credential-store removal failure instead of claiming a durable successful logout.
 It revokes the server session only with a live access token: an expired one is
 rotated once first, and anything but a 200 reports that remote revocation
 failed. A rotated credential that cannot be stored stays in memory and is
@@ -192,10 +226,62 @@ reads once. The claim digest is base64url, as the relay computes it.
 Desktop now uses a loopback PKCE browser handoff to obtain a UserSession for the
 backend's installation ID, and Connections can claim and approve a Linux pairing
 link after an explicit identity comparison. The sidebar lists the local machine
-and any remote machine IDs visible in the worktree index. Session/worktree index
-metadata remains sealed; presentation,
-sealed metadata projection, large-event assembly, session creation/restore,
-attachments and a durable Desktop command outbox are future integrations. The
-current backend supports ordinary session controls and workspace-file requests;
-it is not a complete remote Desktop product. A changed host signing key version
-in an event page fails closed; historical-key selection is also a future extension.
+and any remote machine IDs visible in the worktree index.
+
+`ControlV2Client::projection` opens the sealed session metadata and returns
+`{repositories, conversations, rejected}`. Everything it shows comes from the
+host-signed copy: a conversation's title, state, updated time
+(`lastTurnStartedAt`), branch and repository/worktree scope (the host now also
+seals `title`, `state`, `repositoryId`, `repositoryLabel`, `worktreeId` and
+`worktreeLabel`). Repositories and worktrees are built from verified
+conversations; the unsigned worktree index only adds revisions to a worktree
+verified that way. Anything else is never shown and is listed in `rejected`
+with a stable reason: `unpinned_host` (no stored pin names the machine, so a
+client paired before pins adopts its host through an event read first),
+`metadata_absent`, `session_key_pending` (shown on a later projection once the
+host grants the key), `host_key_not_pinned`, `host_key_changed`,
+`unauthenticated_session_metadata`, `invalid_session_metadata`,
+`host_upgrade_required` (a host that does not seal title and state),
+`invalid_index_entry`, `unsigned_index_entry` (a worktree with no verified
+conversation) or `verification_failed` (with the error in `detail`).
+Every read verifies the relay-served keys against the pins again. A projected
+row also carries `adapter`, `lastEventCursor`, `currentTurnSequence` and
+`workspaceRevision` from the relay index. These are unsigned relay routing
+values, not host-signed: they choose what to fetch, and every event or page
+fetched with them is verified on its own. Sealing them is a future extension.
+
+`ControlV2Client::transcriptWindow` pages a transcript over Control v2 with a
+sealed `transcript.restore_window` request and returns the local
+`session.transcript_window` page shape: the newest turns first
+(`before_cursor` 0), then older pages by the previous page's `before_cursor`
+at the same `snapshot_cursor`, bounded by `event_limit` (128), `turn_limit`
+(3) and `byte_cap` (4 KiB to 512 KiB). Each response fragment is decrypted
+with the host's pinned signing key and the page digest is checked before use.
+A large event in the page is fetched through a continuation chain (each
+request bound to the previous response digest) and reassembled with
+`LargeEventReassembler` before the page is delivered. A root request gets a
+540-second deadline, a minute under the relay's 600-second limit so clock skew
+never makes the relay reject it, and its continuations share it. When the host
+refuses a page (for example, sealed fragments over the byte cap), the relay
+answers the poll with 410 `restore_window_unavailable` (or a page with status
+`failed`); the client then asks again at the same snapshot with half the
+`event_limit`, down to one event. An abandoned request is cancelled at the
+relay.
+
+Any host-signed content naming a signing key version other than the pinned
+one that opened its session key fails closed (events, metadata and restore
+responses) and needs a new pairing; historical-key selection is a future
+extension.
+
+`RelayMachineBackend` implements ADR 0119's `MachineBackend` for one paired
+machine. Its writes, including session creation in a verified worktree
+(`session.create` through `session-creates`, the host's existing path), go
+through a durable `CommandOutbox`: the encrypted envelope is written to an
+owner-only file before it is sent, only that ciphertext is retried after a
+restart or reconnect, and a host-signed result is verified and applied once.
+Index worktrees with no conversation are shown only after the host signs their
+catalog scope in a `worktree.configuration.read` result (ADR 0119, decision C).
+Desktop composes it through ADR 0119's `MachineBackend` like the other routes;
+`tests/MachineEndToEndTest.cpp` drives that composition end to end against the
+loopback relay of `tests/daemon/SyntheticRelay.h`, and over SSH through a
+loopback sshd to a real `ketplus_daemon` with a fake provider.

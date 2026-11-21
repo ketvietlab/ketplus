@@ -32,9 +32,16 @@ inline bool eventJoinsUpload(const qsizetype bytes, const int count, const qsize
 inline constexpr qint64 eventUploadRefusedBackoffCapMilliseconds = 5 * 60 * 1000;
 inline constexpr qint64 eventUploadUnavailableBackoffCapMilliseconds = 60 * 1000;
 
-inline qint64 eventUploadBackoffMilliseconds(const int failures, const bool refused) {
-    const qint64 cap = refused ? eventUploadRefusedBackoffCapMilliseconds
-                               : eventUploadUnavailableBackoffCapMilliseconds;
+// `event_cursor_gap`: the relay waits for a cursor this journal no longer holds (its events were
+// pruned, or its upload progress was lost). Sending the same batch again cannot close the gap, so
+// it is retried at most hourly rather than every five minutes for the life of the daemon.
+inline constexpr qint64 eventUploadGapBackoffCapMilliseconds = 60 * 60 * 1000;
+
+inline qint64 eventUploadBackoffMilliseconds(const int failures, const bool refused,
+                                             const bool gap = false) {
+    const qint64 cap = gap       ? eventUploadGapBackoffCapMilliseconds
+                       : refused ? eventUploadRefusedBackoffCapMilliseconds
+                                 : eventUploadUnavailableBackoffCapMilliseconds;
     return qMin(cap, qint64(1000) << qBound(0, failures - 1, 20));
 }
 

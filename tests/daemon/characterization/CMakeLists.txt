@@ -20,6 +20,7 @@ list(FILTER R03_JOURNAL_SOURCES INCLUDE REGEX "^src/storage/.*\\.cpp$")
 list(TRANSFORM R03_JOURNAL_SOURCES PREPEND "${REPO}/apps/daemon/")
 add_executable(r03_characterization CharacterizationTest.cpp ${R03_JOURNAL_SOURCES}
   "${REPO}/apps/daemon/src/cloud/CloudEventProjection.cpp"
+  "${REPO}/apps/daemon/src/runner/jobs/RemoteJobLabels.cpp"
   "${REPO}/apps/daemon/src/protocol/DaemonProtocol.cpp")
 add_dependencies(r03_characterization r03_provenance)
 target_include_directories(r03_characterization PRIVATE "${REPO}/apps/daemon/src" "${REPO}/modules/ai/src"

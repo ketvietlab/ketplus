@@ -20,3 +20,17 @@ Date: YYYY-MM-DD
 
 Do not use an ADR for routine implementation detail. When superseding a
 decision, retain the old record and link both documents.
+
+- [0120: GitHub Copilot through a shared ACP adapter](0120-github-copilot-acp-provider.md)
+- [0121: Canonical KetPlus color scheme format](0121-canonical-color-scheme-format.md)
+- [0122: Prepare a session before staging a conversation’s first attachment](0122-first-turn-remote-attachments.md)
+- [0123: A team's repository can change, and a task can work in its own](0123-team-and-task-repository.md)
+- [0124: Consented user-space daemon installation over SSH](0124-consented-ssh-daemon-installation.md)
+- [0125: A team works in its leader's language](0125-team-language.md)
+- [0126: The daemon owns scheduled agent runs](0126-scheduled-agent-runs.md)
+- [0127: The daemon owns background tasks and their completion delivery](0127-daemon-background-tasks.md)
+  - [Linux daemon-user environment and containment evidence](0127-linux-containment-evidence.md) (primitive probes, not production acceptance)
+- [0128: Authorize each Atlas renderer launch](0128-atlas-renderer-per-launch-consent.md)
+- [0131: Paged live session catalog](0131-paged-live-session-catalog.md)
+
+- [English UI and prompt-driven team content](2026-11-18-english-ui-team-content.md)

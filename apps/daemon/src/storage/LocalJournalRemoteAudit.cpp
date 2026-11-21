@@ -24,6 +24,20 @@ bool LocalJournal::initializeRemoteAudit() {
             return false;
         }
     }
+    // ADR 0116 §5: a team command names its team; entries written before have none.
+    if (!query.exec(QStringLiteral("PRAGMA table_info(remote_command_audit)"))) {
+        setError(query.lastError().text());
+        return false;
+    }
+    bool hasTeam = false;
+    while (query.next())
+        hasTeam = hasTeam || query.value(1).toString() == QStringLiteral("team_id");
+    if (!hasTeam && !query.exec(QStringLiteral(
+                        "ALTER TABLE remote_command_audit ADD COLUMN team_id TEXT NOT NULL "
+                        "DEFAULT ''"))) {
+        setError(query.lastError().text());
+        return false;
+    }
     return true;
 }
 
@@ -32,7 +46,7 @@ bool LocalJournal::recordRemoteCommand(const RemoteCommandAudit& entry) {
     // Only a repeated command id is skipped; any other constraint failure is reported.
     query.prepare(QStringLiteral(
         "INSERT INTO remote_command_audit(command_id, kind, device_id, device_key_version, "
-        "session_id, result_code, recorded_at) VALUES(?, ?, ?, ?, ?, ?, ?) "
+        "session_id, result_code, recorded_at, team_id) VALUES(?, ?, ?, ?, ?, ?, ?, ?) "
         "ON CONFLICT(command_id) DO NOTHING"));
     // A missing field is stored empty: a null QString binds as SQL NULL.
     const auto text = [](const QString& value) {
@@ -48,6 +62,7 @@ bool LocalJournal::recordRemoteCommand(const RemoteCommandAudit& entry) {
         (entry.recordedAt.isValid() ? entry.recordedAt : QDateTime::currentDateTimeUtc())
             .toUTC()
             .toString(Qt::ISODateWithMs));
+    query.addBindValue(text(entry.teamId));
     if (!query.exec()) {
         setError(query.lastError().text());
         return false;
@@ -62,11 +77,12 @@ std::optional<QList<RemoteCommandAudit>> LocalJournal::remoteCommands(const QStr
     QList<RemoteCommandAudit> result;
     QSqlQuery query(database_);
     query.setForwardOnly(true);
-    query.prepare(QStringLiteral("SELECT command_id, kind, device_id, device_key_version, "
-                                 "session_id, result_code, recorded_at FROM remote_command_audit "
-                                 "%1 ORDER BY recorded_at DESC, rowid DESC LIMIT %2")
-                      .arg(deviceId.isEmpty() ? QString() : QStringLiteral("WHERE device_id = ?"))
-                      .arg(qMax(0, limit)));
+    query.prepare(
+        QStringLiteral("SELECT command_id, kind, device_id, device_key_version, "
+                       "session_id, result_code, recorded_at, team_id FROM remote_command_audit "
+                       "%1 ORDER BY recorded_at DESC, rowid DESC LIMIT %2")
+            .arg(deviceId.isEmpty() ? QString() : QStringLiteral("WHERE device_id = ?"))
+            .arg(qMax(0, limit)));
     if (!deviceId.isEmpty())
         query.addBindValue(deviceId);
     if (!query.exec()) {
@@ -77,7 +93,8 @@ std::optional<QList<RemoteCommandAudit>> LocalJournal::remoteCommands(const QStr
         result.append({query.value(0).toString(), query.value(1).toString(),
                        query.value(2).toString(), query.value(3).toInt(), query.value(4).toString(),
                        query.value(5).toString(),
-                       QDateTime::fromString(query.value(6).toString(), Qt::ISODateWithMs)});
+                       QDateTime::fromString(query.value(6).toString(), Qt::ISODateWithMs),
+                       query.value(7).toString()});
     }
     if (query.lastError().isValid()) {
         setError(query.lastError().text());

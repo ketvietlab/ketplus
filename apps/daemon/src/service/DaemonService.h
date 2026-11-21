@@ -14,11 +14,15 @@ namespace ketplus::daemon {
 class ClaudeAdapter;
 class CodexAdapter;
 class CursorAdapter;
+class CopilotAdapter;
 class CloudControlClient;
 class LocalIpcServer;
 class LocalJournal;
 class ClaudeCredentials;
 class SessionHost;
+namespace runner::remote {
+class RemoteJobsService;
+}
 
 struct DaemonConfiguration final {
     QString statePath;
@@ -27,6 +31,7 @@ struct DaemonConfiguration final {
     QString codexExecutable;
     QString claudeExecutable;
     QString cursorExecutable;
+    QString copilotExecutable;
 };
 
 class DaemonService final : public QObject {
@@ -57,9 +62,12 @@ class DaemonService final : public QObject {
     std::unique_ptr<ClaudeCredentials> claudeCredentials_;
     std::unique_ptr<ClaudeAdapter> claude_;
     std::unique_ptr<CursorAdapter> cursor_;
+    std::unique_ptr<CopilotAdapter> copilot_;
     std::unique_ptr<SessionHost> host_;
     std::unique_ptr<CloudControlClient> cloud_;
     std::unique_ptr<LocalIpcServer> ipc_;
+    // After cloud_, whose Relay socket and runner port it uses; destroyed before it.
+    std::unique_ptr<runner::remote::RemoteJobsService> remoteJobs_;
     QTimer* spaceTimer_{nullptr};
 };
 

@@ -40,6 +40,7 @@ class RemoteControlView final : public QWidget {
     // that has not read the daemon's status yet does it once the status arrives.
     void requestSignOut();
     void applyDesignSystemStyle();
+    [[nodiscard]] LinuxMachinesSection* linuxMachines() const { return linuxMachines_; }
 
   signals:
     void machinesChanged(const QStringList& ids, const QStringList& names);
@@ -73,6 +74,7 @@ class RemoteControlView final : public QWidget {
 
   protected:
     void changeEvent(QEvent* event) override;
+    void hideEvent(QHideEvent* event) override;
 
     remote::DaemonClient* daemon_{nullptr};
     QTimer* refreshTimer_{nullptr};
@@ -84,6 +86,7 @@ class RemoteControlView final : public QWidget {
     QWidget* linkedContent_{nullptr};
     QWidget* linkedFooter_{nullptr};
     LinuxMachinesSection* linuxMachines_{nullptr};
+    QVBoxLayout* linuxColumnLayout_{nullptr};
     RemoteActivitySection* activity_{nullptr};
     QLabel* notice_{nullptr};
     QLabel* welcomeNotice_{nullptr};

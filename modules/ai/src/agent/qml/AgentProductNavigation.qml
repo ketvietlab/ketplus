@@ -19,22 +19,14 @@ ColumnLayout {
         Layout.fillWidth: true
         Layout.preferredHeight: navigation.compactHeight ? KetTheme.px(54, KetTheme.zoom) : KetTheme.px(67, KetTheme.zoom)
 
-        Image {
-            objectName: "productBrandImage"
+        // The approved ketPlus Pro lockup, as the mock's sidebar draws it: a 17 px wordmark.
+        BrandLockup {
+            objectName: "productBrandLockup"
+            edition: "pro"
             anchors.left: parent.left
             anchors.leftMargin: KetTheme.px(13, KetTheme.zoom)
             anchors.verticalCenter: parent.verticalCenter
-            width: Math.min(KetTheme.px(176, KetTheme.zoom),
-                            Math.max(0, parent.width - 2 * anchors.leftMargin))
-            height: KetTheme.px(44, KetTheme.zoom)
-            source: KetTheme.dark
-                    ? "qrc:/agent/brand/ketplus-logo-dark.png"
-                    : "qrc:/agent/brand/ketplus-logo-light.png"
-            fillMode: Image.PreserveAspectFit
-            horizontalAlignment: Image.AlignLeft
-            smooth: true
-            mipmap: true
-            Accessible.name: "KétPlus Pro"
+            size: KetTheme.px(17, KetTheme.zoom)
         }
     }
 

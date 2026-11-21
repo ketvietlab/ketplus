@@ -18,7 +18,7 @@
 namespace ketplus::remote {
 class DaemonClientTestAccess {
   public:
-    static QLocalSocket& socket(DaemonClient& client) { return client.socket_; }
+    static QLocalSocket& socket(DaemonClient& client) { return *client.socket_; }
 };
 } // namespace ketplus::remote
 

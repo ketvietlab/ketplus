@@ -67,7 +67,7 @@ class ContextHarnessTest final : public QObject {
   private slots:
     void settingsDuringAttachStayOutOfTheSubmittedTurn() {
         QTemporaryDir root;
-        const auto executable = root.filePath("codex");
+        const auto executable = root.filePath(fixtureName("codex"));
         const auto log = root.filePath("codex.log");
         QVERIFY(writeFakeCodex(executable, log));
         LocalJournal journal(root.filePath("journal.sqlite"));
@@ -191,7 +191,7 @@ class ContextHarnessTest final : public QObject {
 
     void codexStartResumeForkAndReset() {
         QTemporaryDir root;
-        const QString provider = root.filePath("codex");
+        const QString provider = root.filePath(fixtureName("codex"));
         const QString log = root.filePath("codex.log");
         const QString path = root.filePath("journal.sqlite3");
         QVERIFY(writeFakeCodex(provider, log));
@@ -243,7 +243,7 @@ class ContextHarnessTest final : public QObject {
 
     void configurationChangesApplyToLoadedCodexAtTheNextTurn() {
         QTemporaryDir root;
-        const QString provider = root.filePath("codex");
+        const QString provider = root.filePath(fixtureName("codex"));
         const QString log = root.filePath("codex.log");
         QVERIFY(writeFakeCodex(provider, log));
         LocalJournal journal(root.filePath("journal.sqlite3"));
@@ -293,7 +293,7 @@ class ContextHarnessTest final : public QObject {
 
     void claudeReceivesInheritedWindowsOnEveryTurn() {
         QTemporaryDir root;
-        const QString provider = root.filePath("claude");
+        const QString provider = root.filePath(fixtureName("claude"));
         const QString log = root.filePath("claude.log");
         QVERIFY(writeFakeClaude(provider, log));
         LocalJournal journal(root.filePath("journal.sqlite3"));

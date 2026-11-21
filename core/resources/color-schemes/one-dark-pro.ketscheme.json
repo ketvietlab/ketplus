@@ -1,0 +1,198 @@
+{
+    "diff": {
+        "added": "#00809B33"
+    },
+    "editor": {
+        "bg": "#282C34",
+        "caret": "#528BFF",
+        "fg": "#ABB2BF",
+        "gutterBg": "#282C34",
+        "gutterFg": "#495162",
+        "lineHighlight": "#2C313C",
+        "selection": "#67769660"
+    },
+    "extends": "builtin-dark",
+    "id": "builtin.one-dark-pro",
+    "kind": "dark",
+    "metadata": {
+        "author": "Binaryify",
+        "importReport": {
+            "counts": {
+                "approximated": 144,
+                "mapped": 43,
+                "skipped": 461
+            },
+            "path": "docs/theme-import-reports/one-dark-pro.json"
+        },
+        "license": "MIT",
+        "manualAdjustments": [
+        ],
+        "sourceApp": "VS Code",
+        "sourceFile": "themes/OneDark-Pro.json",
+        "sourceLabel": "Community",
+        "upstream": {
+            "author": "Binaryify",
+            "commit": "75c80ab18d90655e05ad837bb8d89f5e68d5ce53",
+            "files": [
+                {
+                    "path": "LICENSE.txt",
+                    "sha256": "b4bdb28c670386f4fa093650b0bb8773714ce53171a2d1a9adb81756119200f1",
+                    "url": "https://raw.githubusercontent.com/Binaryify/OneDark-Pro/75c80ab18d90655e05ad837bb8d89f5e68d5ce53/LICENSE.txt"
+                },
+                {
+                    "path": "themes/OneDark-Pro.json",
+                    "sha256": "bd098a63d2fdcb932ea67caaf66eb25a51cda1c2179ff37048fe1db7fe13461f",
+                    "url": "https://raw.githubusercontent.com/Binaryify/OneDark-Pro/75c80ab18d90655e05ad837bb8d89f5e68d5ce53/themes/OneDark-Pro.json"
+                }
+            ],
+            "key": "one-dark-pro",
+            "license": "MIT",
+            "licenseFiles": [
+                {
+                    "distributionFile": "OneDarkPro-MIT.txt",
+                    "source": "LICENSE.txt"
+                }
+            ],
+            "repo": "Binaryify/OneDark-Pro"
+        },
+        "vscodeSemanticHighlighting": true,
+        "vscodeSemanticTokenColors": {
+            "annotation:dart": {
+                "foreground": "#d19a66"
+            },
+            "enumMember": {
+                "foreground": "#56b6c2"
+            },
+            "macro": {
+                "foreground": "#d19a66"
+            },
+            "memberOperatorOverload": {
+                "foreground": "#c678dd"
+            },
+            "parameter.label:dart": {
+                "foreground": "#abb2bf"
+            },
+            "property:dart": {
+                "foreground": "#d19a66"
+            },
+            "tomlArrayKey": {
+                "foreground": "#e5c07b"
+            },
+            "variable.constant": {
+                "foreground": "#d19a66"
+            },
+            "variable.defaultLibrary": {
+                "foreground": "#e5c07b"
+            },
+            "variable:dart": {
+                "foreground": "#d19a66"
+            }
+        }
+    },
+    "name": "One Dark Pro",
+    "schemaVersion": 1,
+    "syntax": {
+        "attribute": {
+            "bold": false,
+            "fg": "#56B6C2",
+            "italic": true,
+            "underline": false
+        },
+        "comment": {
+            "bold": false,
+            "fg": "#7F848E",
+            "italic": true,
+            "underline": false
+        },
+        "constant": {
+            "fg": "#98C379"
+        },
+        "function": {
+            "fg": "#E5C07B"
+        },
+        "keyword": {
+            "fg": "#56B6C2"
+        },
+        "number": {
+            "fg": "#C678DD"
+        },
+        "operator": {
+            "fg": "#C678DD"
+        },
+        "string": {
+            "fg": "#E06C75"
+        },
+        "type": {
+            "fg": "#61AFEF"
+        },
+        "variable": {
+            "bold": false,
+            "fg": "#E06C75",
+            "italic": true,
+            "underline": false
+        }
+    },
+    "terminal": {
+        "ansi0": "#3F4451",
+        "ansi1": "#E05561",
+        "ansi10": "#A5E075",
+        "ansi11": "#F0A45D",
+        "ansi12": "#4DC4FF",
+        "ansi13": "#DE73FF",
+        "ansi14": "#4CD1E0",
+        "ansi15": "#E6E6E6",
+        "ansi2": "#8CC265",
+        "ansi3": "#D18F52",
+        "ansi4": "#4AA5F0",
+        "ansi5": "#C162DE",
+        "ansi6": "#42B3C2",
+        "ansi7": "#D7DAE0",
+        "ansi8": "#4F5666",
+        "ansi9": "#FF616E",
+        "bg": "#282C34",
+        "cursor": "#528BFF",
+        "fg": "#ABB2BF",
+        "selection": "#ABB2BF30"
+    },
+    "ui": {
+        "button": {
+            "bg": "#404754",
+            "hover": "#404754"
+        },
+        "chrome": {
+            "accent": "#3E4452",
+            "appBackground": "#282C34",
+            "border": "#3E4452",
+            "pageBackground": "#282C34",
+            "panelBackground": "#282C34",
+            "panelSubtle": "#282C34",
+            "textDisabled": "#ABB2BF",
+            "textMain": "#ABB2BF",
+            "textSecondary": "#ABB2BF"
+        },
+        "focus": {
+            "border": "#3E4452"
+        },
+        "input": {
+            "bg": "#1D1F23",
+            "fg": "#ABB2BF"
+        },
+        "list": {
+            "fg": "#ABB2BF",
+            "hover": "#2C313A",
+            "selection": "#2C313A",
+            "selectionFg": "#D7DAE0"
+        },
+        "sidebar": {
+            "bg": "#21252B",
+            "border": "#3E4452",
+            "fg": "#ABB2BF"
+        },
+        "tab": {
+            "activeBg": "#282C34",
+            "activeFg": "#DCDCDC",
+            "inactiveBg": "#21252B",
+            "inactiveFg": "#ABB2BF"
+        }
+    }
+}

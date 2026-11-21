@@ -5,6 +5,7 @@
 #include "ui/Theme.h"
 
 #include <QWidget>
+#include <memory>
 
 class QLabel;
 class QTableView;
@@ -29,6 +30,7 @@ class GitDiffView final : public QWidget {
                  const ThemePalette& palette);
     void applyEditorSettings(const EditorSettings& settings);
     void applyTheme(const ThemePalette& palette);
+    void applyColorScheme(const ColorScheme& scheme);
 
   signals:
     void openFileRequested(const QString& path);
@@ -56,6 +58,7 @@ class GitDiffView final : public QWidget {
     QString filePath_;
     QString rawDiff_;
     ThemePalette palette_;
+    std::shared_ptr<const ColorScheme> scheme_;
     GitDiffMode mode_{GitDiffMode::Combined};
     bool hideUnchangedRows_{true};
 };

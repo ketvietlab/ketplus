@@ -44,31 +44,30 @@ void AgentSessionManager::callReviewer(const QString& worktreePath, const QStrin
         return;
     }
     const QString conversation = session->threadId;
-    server_->call(method, {{"threadId", conversation}, {"reviewer", reviewer}},
-                  [this, path, conversation, method](const QJsonObject& result,
-                                                     const QString& transportError) {
-                      // A delayed reply cannot update a different conversation selected in this
-                      // workspace.
-                      const auto current = sessions_.value(path);
-                      if (!current || current->threadId != conversation)
-                          return;
-                      const QString error = !transportError.isEmpty() ? transportError
-                                            : result.value("ok").toBool()
-                                                ? QString{}
-                                                : result.value("error_message").toString();
-                      if (!error.isEmpty()) {
-                          if (!method.endsWith("/set"))
-                              reviewerReadsToRetry_.insert(path);
-                          emit reviewerResult(
-                              path, conversation,
-                              {{"error", error}, {"change", method.endsWith("/set")}});
-                          return;
-                      }
-                      QVariantMap state{{"available", true}};
-                      if (const auto assigned = result.value("reviewer"); assigned.isObject())
-                          state.insert("reviewer", assigned.toObject().toVariantMap());
-                      emit reviewerResult(path, conversation, state);
-                  });
+    serverCall(method, {{"threadId", conversation}, {"reviewer", reviewer}},
+               [this, path, conversation, method](const QJsonObject& result,
+                                                  const QString& transportError) {
+                   // A delayed reply cannot update a different conversation selected in this
+                   // workspace.
+                   const auto current = sessions_.value(path);
+                   if (!current || current->threadId != conversation)
+                       return;
+                   const QString error = !transportError.isEmpty() ? transportError
+                                         : result.value("ok").toBool()
+                                             ? QString{}
+                                             : result.value("error_message").toString();
+                   if (!error.isEmpty()) {
+                       if (!method.endsWith("/set"))
+                           reviewerReadsToRetry_.insert(path);
+                       emit reviewerResult(path, conversation,
+                                           {{"error", error}, {"change", method.endsWith("/set")}});
+                       return;
+                   }
+                   QVariantMap state{{"available", true}};
+                   if (const auto assigned = result.value("reviewer"); assigned.isObject())
+                       state.insert("reviewer", assigned.toObject().toVariantMap());
+                   emit reviewerResult(path, conversation, state);
+               });
 }
 
 void AgentSessionManager::retryReviewerReads() {

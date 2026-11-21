@@ -5,6 +5,7 @@
 #include "agent/ConversationChangesPane.h"
 #include "agent/DaemonTranscriptProjection.h"
 #include "agent/WorkReportPane.h"
+#include "agent/WorkReportText.h"
 
 #include <QJsonArray>
 #include <QQuickView>
@@ -105,12 +106,16 @@ void AgentWorkspaceViewTest::turnEndShowsTheTurnsWorkReport() {
                                {{"next", QJsonObject{{"action", "Choose"}, {"owner", "user"}}}}),
                     reportItem("d", "Dropped", "cancelled", 1, 1)}}};
     const auto rows = ketplus::agent_message::daemonWindowMessages(
-        {{"events", QJsonArray{journalEvent(1, 2, "user.message", {{"text", "Finish it"}}),
-                               journalEvent(2, 2, "work_report.updated", early),
-                               journalEvent(3, 2, "work_report.updated", last),
-                               journalEvent(4, 2, "turn.completed", {{"status", "completed"}}),
-                               journalEvent(5, 3, "user.message", {{"text", "Thanks"}}),
-                               journalEvent(6, 3, "turn.completed", {{"status", "completed"}})}}});
+        {{"events",
+          QJsonArray{
+              journalEvent(1, 2, "user.message", {{"text", "Finish it"}}),
+              journalEvent(2, 2, "work_report.updated", early),
+              journalEvent(3, 2, "work_report.updated", last),
+              journalEvent(4, 2, "turn.completed", {{"status", "completed"}}),
+              journalEvent(5, 3, "user.message", {{"text", "Thanks"}}),
+              journalEvent(6, 3, "work_report.updated",
+                           {{"scope_only", true}, {"turn", 3}, {"items", last.value("items")}}),
+              journalEvent(7, 3, "turn.completed", {{"status", "completed"}})}}});
     // The report rides on its turn's end row; no row of its own.
     int ends = 0;
     for (const QVariant& value : rows) {
@@ -192,10 +197,150 @@ void AgentWorkspaceViewTest::turnEndShowsTheTurnsWorkReport() {
         QTest::qWait(120);
         QVERIFY(view.quickView()->grabWindow().save(capture));
     }
+    // Done items never turn a failed/interrupted provider end into a success badge.
+    const QJsonObject doneReport{{"turn", 2},
+                                 {"items", QJsonArray{reportItem("done", "Work", "done", 2, 2)}}};
+    for (const auto& status : {QStringLiteral("failed"), QStringLiteral("interrupted"),
+                               QStringLiteral("stopped"), QStringLiteral("completed")}) {
+        view.resetMessages(
+            ketplus::agent_message::daemonWindowMessages(
+                {{"events",
+                  QJsonArray{journalEvent(1, 2, "turn.completed",
+                                          {{"status", status}, {"work_report", doneReport}})}}}),
+            "terminal-report-" + status);
+        QTRY_VERIFY((card = findVisibleItem(root, "transcriptWorkReport")) != nullptr);
+        QTRY_COMPARE(card->property("terminalStatus").toString(), status);
+        auto* badge = findVisibleItem(card, "workReportStatus");
+        QVERIFY(badge != nullptr);
+        QCOMPARE(badge->property("text").toString(),
+                 status == "failed"      ? QStringLiteral("Turn failed")
+                 : status == "completed" ? QStringLiteral("All done")
+                                         : QStringLiteral("Turn stopped"));
+    }
 }
 
 // ADR 0106: turn.completed repeats the report, so a page that begins after the turn's
 // work_report.updated events still shows the card and copies the table.
+// An open item no call changed for work_report::staleTurns was likely forgotten by the agent:
+// it reads muted with how long it waited, and does not make the report need you.
+void AgentWorkspaceViewTest::forgottenItemsReadStaleAndDoNotNeedYou() {
+    const QJsonObject report{
+        {"title", "Team"},
+        {"turn", 40},
+        {"version", 9},
+        {"items", QJsonArray{reportItem("first-assignments", "Plan", "waiting", 2, 2,
+                                        {{"next", QJsonObject{{"action", "Press Start"},
+                                                              {"owner", "user"}}}}),
+                             reportItem("t-16", "Tasks", "active", 30, 39)}}};
+    const auto rows = ketplus::agent_message::daemonWindowMessages(
+        {{"events", QJsonArray{journalEvent(1, 40, "user.message", {{"text", "Go on"}}),
+                               journalEvent(2, 40, "work_report.updated", report),
+                               journalEvent(3, 40, "turn.completed", {{"status", "completed"}})}}});
+    ketplus::AgentWorkspaceView view;
+    view.applyTheme(testPalette());
+    view.resize(900, 900);
+    view.show();
+    view.resetMessages(rows, "work-report-stale");
+    auto* root = view.quickView()->rootObject();
+    QQuickItem* card = nullptr;
+    QTRY_VERIFY((card = findVisibleItem(root, "transcriptWorkReport")) != nullptr);
+    QVERIFY(!card->property("needsYou").toBool());
+    // A group of waiting items starts collapsed; open each to read its rows.
+    for (const QVariant& group : card->property("groups").toList()) {
+        QVariant open;
+        QVERIFY(QMetaObject::invokeMethod(card, "groupOpen", Q_RETURN_ARG(QVariant, open),
+                                          Q_ARG(QVariant, group)));
+        if (!open.toBool())
+            QVERIFY(QMetaObject::invokeMethod(card, "toggleGroup", Q_ARG(QVariant, group)));
+    }
+    QStringList badges;
+    QTRY_VERIFY(([&] {
+        badges.clear();
+        const auto collect = [&](const auto& self, QQuickItem* item) -> void {
+            if (item->objectName() == "workReportItemBadge" && item->isVisible())
+                badges << item->property("text").toString();
+            for (auto* child : item->childItems())
+                self(self, child);
+        };
+        collect(collect, card);
+        return !badges.isEmpty();
+    })());
+    QVERIFY2(badges.contains("No update for 38 turns"), qPrintable(badges.join(", ")));
+    QVERIFY2(!badges.contains("No update for 1 turns"), qPrintable(badges.join(", ")));
+}
+
+// A long conversation's card: a duplicate another item replaced is neither shown nor counted,
+// and items finished long ago fold under "Finished earlier" beside the group's recent work. A
+// group with nothing recent shows its history unfolded.
+void AgentWorkspaceViewTest::duplicatesHideAndOldFinishedItemsFold() {
+    const QJsonObject merged{{"evidence", "Merged"}};
+    QJsonObject oldDone = merged, recentDone = merged, replaced = merged;
+    oldDone.insert("closed_turn", 5);
+    recentDone.insert("closed_turn", 35);
+    replaced.insert("replaced_by", "t-20");
+    const QJsonObject report{
+        {"title", "Team"},
+        {"turn", 40},
+        {"version", 12},
+        {"items", QJsonArray{reportItem("old-done", "Tasks", "done", 2, 30, oldDone),
+                             // Closed before closed_turn existed: dates from when it was added.
+                             reportItem("legacy-done", "Tasks", "done", 3, 39, merged),
+                             reportItem("recent-done", "Tasks", "done", 20, 35, recentDone),
+                             reportItem("t-20", "Tasks", "active", 30, 38),
+                             reportItem("t20-runbooks", "Tasks", "done", 4, 39, replaced),
+                             reportItem("history", "History", "done", 1, 2, oldDone)}}};
+    const auto rows = ketplus::agent_message::daemonWindowMessages(
+        {{"events", QJsonArray{journalEvent(1, 40, "user.message", {{"text", "Go on"}}),
+                               journalEvent(2, 40, "work_report.updated", report),
+                               journalEvent(3, 40, "turn.completed", {{"status", "completed"}})}}});
+    ketplus::AgentWorkspaceView view;
+    view.applyTheme(testPalette());
+    view.resize(900, 1200);
+    view.show();
+    view.resetMessages(rows, "work-report-fold");
+    auto* root = view.quickView()->rootObject();
+    QQuickItem* card = nullptr;
+    QTRY_VERIFY((card = findVisibleItem(root, "transcriptWorkReport")) != nullptr);
+    QCOMPARE(card->property("total").toInt(), 5);
+    QCOMPARE(card->property("finished").toInt(), 4);
+    QVariantList groups = card->property("groups").toList();
+    QCOMPARE(groups.size(), 2);
+    for (const QVariant& group : groups) {
+        QVariant open;
+        QVERIFY(QMetaObject::invokeMethod(card, "groupOpen", Q_RETURN_ARG(QVariant, open),
+                                          Q_ARG(QVariant, group)));
+        if (!open.toBool())
+            QVERIFY(QMetaObject::invokeMethod(card, "toggleGroup", Q_ARG(QVariant, group)));
+    }
+    const auto visibleTexts = [&] {
+        QStringList texts;
+        const auto collect = [&](const auto& self, QQuickItem* item) -> void {
+            if (!item->isVisible())
+                return;
+            if (const QVariant text = item->property("text"); text.isValid())
+                texts << text.toString();
+            for (auto* child : item->childItems())
+                self(self, child);
+        };
+        collect(collect, card);
+        return texts;
+    };
+    QTRY_VERIFY(visibleTexts().contains("Item history"));
+    QStringList texts = visibleTexts();
+    QVERIFY2(texts.contains("Item t-20") && texts.contains("Item recent-done"),
+             qPrintable(texts.join(", ")));
+    QVERIFY2(!texts.contains("Item t20-runbooks"), qPrintable(texts.join(", ")));
+    QVERIFY2(!texts.contains("Item old-done") && !texts.contains("Item legacy-done"),
+             qPrintable(texts.join(", ")));
+    QVERIFY2(texts.count("Finished earlier (2)") == 1, qPrintable(texts.join(", ")));
+    QVERIFY(QMetaObject::invokeMethod(card, "toggleEarlier", Q_ARG(QVariant, groups.at(0))));
+    QTRY_VERIFY(visibleTexts().contains("Item old-done"));
+    texts = visibleTexts();
+    QVERIFY2(texts.contains("Item legacy-done") && texts.contains("Hide earlier finished items"),
+             qPrintable(texts.join(", ")));
+    QVERIFY2(!texts.contains("Item t20-runbooks"), qPrintable(texts.join(", ")));
+}
+
 void AgentWorkspaceViewTest::turnEndReportSurvivesAHistoryPageSplit() {
     const QJsonObject report{
         {"title", "Picker"},
@@ -257,6 +402,35 @@ void AgentWorkspaceViewTest::workReportGroupsAcceptAnyName() {
 
 // ADR 0106: the Report tab shows one conversation's ledger; a late read or another
 // conversation's report never replaces what it shows.
+void AgentWorkspaceViewTest::workReportShowsCurrentRequestAndOutstandingItems() {
+    const QJsonObject report{
+        {"request_id", 100},
+        {"turn", 12},
+        {"version", 7},
+        {"items",
+         QJsonArray{reportItem("old-done", "Work", "done", 1, 1, {{"closed_request", 5}}),
+                    reportItem("current-done", "Work", "done", 1, 11, {{"closed_request", 100}}),
+                    reportItem("outstanding", "Work", "waiting", 1, 1),
+                    reportItem("legacy-done", "Work", "done", 1, 1)}}};
+    ketplus::WorkReportPane pane;
+    pane.resize(600, 700);
+    pane.show();
+    pane.showConversation("scope");
+    pane.acceptReport("scope", report.toVariantMap(), {});
+    QQuickItem* card = nullptr;
+    QTRY_VERIFY((card = findVisibleItem(pane.quickView()->rootObject(), "workReportLedger")) !=
+                nullptr);
+    QCOMPARE(card->property("total").toInt(), 2);
+    QCOMPARE(card->property("finished").toInt(), 1);
+    QCOMPARE(card->property("items").toList().size(), 2);
+    const auto copied = ketplus::agent_message::workReportText(report.toVariantMap());
+    QVERIFY(copied.contains("1/2 done"));
+    QVERIFY(copied.contains("current-done"));
+    QVERIFY(copied.contains("outstanding"));
+    QVERIFY(!copied.contains("old-done"));
+    QVERIFY(!copied.contains("legacy-done"));
+}
+
 void AgentWorkspaceViewTest::workReportPaneFollowsItsConversation() {
     const auto ledger = [](const qint64 version, const QString& status) {
         return QJsonObject{
@@ -285,8 +459,19 @@ void AgentWorkspaceViewTest::workReportPaneFollowsItsConversation() {
     QTRY_VERIFY((card = findVisibleItem(root, "workReportLedger")) != nullptr);
     QVERIFY(card->property("ledger").toBool());
     QCOMPARE(card->property("finished").toInt(), 1);
+    auto* ledgerBadge = findVisibleItem(card, "workReportStatus");
+    QVERIFY(ledgerBadge != nullptr);
+    QCOMPARE(ledgerBadge->property("text").toString(), QStringLiteral("All done"));
+    auto failed = ledger(2, "done");
+    failed.insert("terminal_status", "failed");
+    pane.acceptReport("first", failed, {});
+    QTRY_COMPARE(ledgerBadge->property("text").toString(), QStringLiteral("Turn failed"));
+    pane.acceptReport("first", ledger(2, "done"), {});
+    QTRY_COMPARE(ledgerBadge->property("text").toString(), QStringLiteral("All done"));
     // The ledger view has no footer link back to itself.
     QVERIFY(!findVisibleItem(card, "workReportFooter")->property("opens").toBool());
+    QCOMPARE(findVisibleItem(card, "workReportFooter")->property("label").toString(),
+             QStringLiteral("No outstanding recorded items"));
     if (const auto capture = qEnvironmentVariable("KETPLUS_WORK_REPORT_PANE_CAPTURE");
         !capture.isEmpty()) {
         QTest::qWait(120);
@@ -364,59 +549,39 @@ void AgentWorkspaceViewTest::changesPaneListsTheWorktreeChanges() {
     QTRY_VERIFY(findVisibleItem(root, "conversationChangesEmpty") != nullptr);
 }
 
-// ADR 0106, mock workspace/report-running: while a turn runs, its latest report closes the
-// transcript with a Running badge and the live activity in place of the run line. The turn's
-// end hands over to the end-of-turn card, and the next turn starts without the old report.
-void AgentWorkspaceViewTest::runningTurnShowsItsWorkReport() {
+// A report tool call is not a terminal event, even from an older daemon. More
+// work keeps the ordinary run line; the final card belongs only to the end row.
+void AgentWorkspaceViewTest::runningTurnKeepsWorkReportPending() {
     ketplus::AgentWorkspaceView view;
     view.applyTheme(testPalette());
     view.resize(900, 900);
     view.show();
-    view.resetMessages({QVariantMap{{"kind", "user"}, {"body", "Carry on with the dialog."}}},
-                       "running-report");
-    view.setSessionState("Follow up on the new UI", QStringLiteral("Working…"), true);
-    view.setWorkingDetail("Editing ExecutionWorktreeDialog.cpp");
+    view.resetMessages({QVariantMap{{"kind", "user"}, {"body", "Continue"}}}, "pending-report");
+    view.setSessionState("Work", QStringLiteral("Working…"), true);
     auto* root = view.quickView()->rootObject();
-    QQuickItem* indicator = nullptr;
-    QTRY_VERIFY((indicator = findVisibleItem(root, "workingIndicator")) != nullptr);
-    QVERIFY(findVisibleItem(root, "runningWorkReport") == nullptr);
-
-    view.setTurnWorkReport(mockReport().toVariantMap());
-    QQuickItem* card = nullptr;
-    QTRY_VERIFY((card = findVisibleItem(root, "runningWorkReport")) != nullptr);
-    QVERIFY(findVisibleItem(root, "workingIndicator") == nullptr);
-    QVERIFY(card->property("running").toBool());
-    QCOMPARE(card->property("total").toInt(), 7);
-    QCOMPARE(card->property("finished").toInt(), 3);
-    // The bar follows the counts even though the report arrived after the card was made.
-    QQuickItem* bar = nullptr;
-    const auto findBar = [&](const auto& self, QQuickItem* item) -> void {
-        if (bar == nullptr && item->inherits("QQuickProgressBar"))
-            bar = item;
-        for (auto* child : item->childItems())
-            self(self, child);
-    };
-    findBar(findBar, card);
-    QVERIFY(bar != nullptr);
-    QVERIFY(qAbs(bar->property("position").toReal() - 3.0 / 7.0) < 0.001);
-    auto* footer = findVisibleItem(card, "workReportFooter");
-    QVERIFY(footer != nullptr);
-    QVERIFY(!footer->property("opens").toBool());
-    QCOMPARE(footer->property("label").toString(),
-             QStringLiteral("Working · Editing ExecutionWorktreeDialog.cpp"));
-    QVERIFY(findVisibleItem(card, "workReportActivity") != nullptr);
-    if (const auto capture = qEnvironmentVariable("KETPLUS_WORK_REPORT_RUNNING_CAPTURE");
-        !capture.isEmpty()) {
-        card->setProperty("openItem", "picker-dialog");
-        QTest::qWait(120);
-        QVERIFY(view.quickView()->grabWindow().save(capture));
-    }
-
-    view.setSessionState("Follow up on the new UI", "Completed", false);
-    QTRY_VERIFY(findVisibleItem(root, "runningWorkReport") == nullptr);
-    view.setSessionState("Follow up on the new UI", QStringLiteral("Working…"), true);
-    QVERIFY(view.turnWorkReport().isEmpty());
     QTRY_VERIFY(findVisibleItem(root, "workingIndicator") != nullptr);
+    view.setTurnWorkReport(mockReport().toVariantMap());
+    view.setWorkingDetail("Running another tool after the report");
+    QTest::qWait(30);
+    QVERIFY(findVisibleItem(root, "runningWorkReport") == nullptr);
+    QVERIFY(findVisibleItem(root, "transcriptWorkReport") == nullptr);
+    QVERIFY(findVisibleItem(root, "workingIndicator") != nullptr);
+    auto finalReport = mockReport();
+    finalReport.insert("version", 99);
+    view.setTurnWorkReport(finalReport.toVariantMap());
+    QTest::qWait(30);
+    QVERIFY(findVisibleItem(root, "runningWorkReport") == nullptr);
+    const auto rows = ketplus::agent_message::daemonWindowMessages(
+        {{"events",
+          QJsonArray{journalEvent(1, 4, "turn.completed",
+                                  {{"status", "completed"}, {"work_report", finalReport}})}}});
+    view.resetMessages(rows, "finished-report");
+    view.setSessionState("Work", "Completed", false);
+    QQuickItem* card = nullptr;
+    QTRY_VERIFY((card = findVisibleItem(root, "transcriptWorkReport")) != nullptr);
+    QCOMPARE(card->property("report").toMap().value("version").toInt(), 99);
+    view.setSessionState("Work", QStringLiteral("Working…"), true);
+    QVERIFY(view.turnWorkReport().isEmpty());
     QVERIFY(findVisibleItem(root, "runningWorkReport") == nullptr);
 }
 
@@ -472,10 +637,10 @@ void AgentWorkspaceViewTest::workReportCapturesMatchTheMock() {
                 view.setSessionState("Follow up on the new UI", QStringLiteral("Working…"), true);
                 view.setWorkingDetail("Editing ExecutionWorktreeDialog.cpp");
                 view.setTurnWorkReport(report.toVariantMap());
-                QQuickItem* card = nullptr;
-                QTRY_VERIFY((card = findVisibleItem(view.quickView()->rootObject(),
-                                                    "runningWorkReport")) != nullptr);
-                card->setProperty("openItem", "picker-dialog");
+                QTRY_VERIFY(findVisibleItem(view.quickView()->rootObject(), "workingIndicator") !=
+                            nullptr);
+                QVERIFY(findVisibleItem(view.quickView()->rootObject(), "runningWorkReport") ==
+                        nullptr);
                 save(view.quickView(), "report-running");
             }
             {

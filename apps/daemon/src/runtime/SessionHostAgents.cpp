@@ -2,6 +2,7 @@
 
 #include "agents/AgentInstructions.h"
 #include "protocol/DaemonProtocol.h"
+#include "providers/ProviderAdapter.h"
 #include "providers/compat/ProviderCapabilities.h"
 
 #include <QJsonArray>
@@ -49,6 +50,64 @@ QJsonObject SessionHost::handleAgentCommand(const QString& token, const QString&
     return agents_->handle(token, type, payload);
 }
 
+void SessionHost::handleAgentCommandDeferred(const QString& token, const QString& type,
+                                             const QJsonObject& payload, CommandCallback done) {
+    if (isManagedTaskCommand(type)) {
+        const auto owner = agents_->sessionForToken(token);
+        const auto caller = owner ? agentConversation(owner->first) : std::nullopt;
+        if (!caller || caller->generation != owner->second) {
+            done({{"ok", false},
+                  {"error_code", "forbidden"},
+                  {"error_message", "The agent owner generation expired."}});
+            return;
+        }
+        auto arguments = payload;
+        const auto credential = arguments.take(QLatin1String(mutationOriginField)).toString();
+        std::optional<AgentMutationGrant> origin;
+        if (type == "session.task.start" || type == "session.task.stop") {
+            const auto current = sessions_.constFind(caller->sessionId);
+            const auto snapshot = current == sessions_.cend()
+                                      ? std::nullopt
+                                      : current->mutationOrigin.authorize(
+                                            credential, caller->sessionId, caller->generation);
+            if (!snapshot) {
+                if (const auto* target = provider(caller->provider);
+                    target && !target->supportsManagedMutations()) {
+                    done({{"ok", false},
+                          {"error_code", "mutation_refresh_unavailable"},
+                          {"error_message", QString("Managed mutations are unavailable for %1: "
+                                                    "history and MCP refresh are not validated.")
+                                                .arg(target->name())}});
+                    return;
+                }
+                done({{"ok", false},
+                      {"error_code", "stale_origin"},
+                      {"error_message", "The invocation has no active mutation origin."}});
+                return;
+            }
+            origin = AgentMutationGrant{*snapshot, credential};
+        }
+        managedTaskCommand({{"message_type", type},
+                            {"session_id", caller->sessionId},
+                            {"session_generation", caller->generation},
+                            {"payload", arguments}},
+                           "authenticated-agent", std::move(done), true, std::move(origin));
+        return;
+    }
+    auto run = [this, token, type, payload, done = std::move(done)] {
+        done(agents_->handle(token, type, payload));
+    };
+    // Only the caller the broker will accept has anything read for it.
+    const auto owner = agents_->sessionForToken(token);
+    const auto caller = owner ? agentConversation(owner->first) : std::nullopt;
+    if (!caller || caller->generation != owner->second ||
+        !type.startsWith(QStringLiteral("agents.team_task_"))) {
+        run();
+        return;
+    }
+    prepareTeamOperation(caller->sessionId, type.mid(7), payload, std::move(run));
+}
+
 QString SessionHost::agentToken(const QString& sessionId) {
     const auto it = sessions_.constFind(sessionId);
     return it == sessions_.cend() ? QString{} : agents_->tokenFor(sessionId, it->stored.generation);
@@ -64,6 +123,7 @@ AgentConversation SessionHost::agentConversationOf(const Session& session) const
     conversation.provider = stored.adapter;
     conversation.model = stored.model;
     conversation.worktree = stored.worktreePath;
+    conversation.executionPolicy = stored.executionPolicy;
     conversation.state = stored.state;
     conversation.lastActivity = stored.lastTurnStartedAt;
     const QString& state = stored.state;
@@ -76,6 +136,17 @@ AgentConversation SessionHost::agentConversationOf(const Session& session) const
     conversation.steerable = state == QStringLiteral("running") && !stored.turnId.isEmpty() &&
                              (claude || !stored.threadId.isEmpty()) &&
                              providerSupports(stored.adapter, compat::capability::turnSteer);
+    if (!conversation.idle && !conversation.steerable)
+        conversation.waitingOn =
+            state == QStringLiteral("waiting_for_input")
+                ? QStringLiteral("an approval or an answer from the user")
+            : state == QStringLiteral("stopping") ? QStringLiteral("its turn to stop")
+            : session.startingTurn || state == QStringLiteral("starting") ||
+                    (state == QStringLiteral("running") && stored.turnId.isEmpty())
+                ? QStringLiteral("its turn to start")
+            : state == QStringLiteral("running")
+                ? QStringLiteral("a running turn that its provider cannot steer")
+                : QStringLiteral("a background task (a command or wait it started)");
     return conversation;
 }
 
@@ -175,8 +246,13 @@ std::optional<agent_tools::Launch> SessionHost::agentLaunch(const QString& sessi
                                                             const qint64 generation) {
     if (agentSocket_.isEmpty() || agentExecutable_.isEmpty())
         return std::nullopt;
+    const auto current = sessions_.constFind(sessionId);
+    if (current == sessions_.cend() || current->stored.generation != generation)
+        return std::nullopt;
+    const auto bootstrap = current->mutationOrigin.bootstrap();
     return agent_tools::Launch{agentExecutable_, agentSocket_,
-                               agents_->tokenFor(sessionId, generation)};
+                               agents_->tokenFor(sessionId, generation), bootstrap.credential,
+                               bootstrap.transportEpoch};
 }
 
 QString SessionHost::agentInstructions(const Session& session) const {
@@ -186,7 +262,7 @@ QString SessionHost::agentInstructions(const Session& session) const {
         journal_->conversationNumber(session.stored.id, session.stored.generation);
     if (number.isEmpty())
         return {};
-    // ADR 0112: a member also gets its role's instructions, current at every turn.
+    // ADR 0114: a member also gets its role's instructions, current at every turn.
     const QString team = teamInstructionsFor(session.stored.id);
     return team.isEmpty() ? agent_messaging::toolInstructions(number)
                           : agent_messaging::toolInstructions(number) + QLatin1Char('\n') + team;

@@ -5,8 +5,8 @@ import { randomUUID } from "node:crypto";
 // finish and folds the steer into the turn before its next model request, or
 // answers it with one more request after the current result.
 export class TurnInput {
-  constructor(first) {
-    this.queue = [first];
+  constructor(first, deferFirst = false) {
+    this.queue = deferFirst ? [] : [first];
     this.wake = null;
     this.closed = false;
     this.latestId = first.uuid;

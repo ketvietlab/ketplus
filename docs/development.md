@@ -24,12 +24,116 @@ export QT_ROOT="$(brew --prefix qt)"
 Use `CMakeUserPresets.json` for machine-specific settings. It is ignored and
 must not be committed.
 
+## Windows
+
+The Windows build uses MSVC (Visual Studio 2022 Build Tools, x64), Ninja and
+the same presets as other platforms. Source is edited on a Mac and mirrored
+with [mutagen](https://mutagen.io) to a Windows machine that builds over ssh;
+nothing here names a host, so pass it through the environment.
+
+### Toolchain
+
+On the Windows machine, in an administrator PowerShell or over ssh as an
+administrator, run `tools/windows/install-toolchain.ps1` (copy it with
+`install_qt.py`; both sit side by side). `-Root` selects the install folder
+(default `C:\ketplus-tools`). It installs Python 3, CMake, Ninja, MSVC Build
+Tools 2022 with the Windows SDK, Qt 6.11 `msvc2022_64` with the add-ons the
+project needs (WebSockets, WebView, Core5Compat, ShaderTools, ImageFormats) and
+the prebuilt OpenSSL 3 that Qt publishes. Qt is fetched by `install_qt.py`
+directly from `download.qt.io`, because aqtinstall does not read the Qt 6.11
+repository layout; no Qt account is needed. Re-running skips what is present.
+The Visual Studio installer must be recent enough for the Qt build (MSVC 14.4x);
+an old Build Tools install is brought up to date with
+`vs_BuildTools.exe update --quiet --wait --installPath <path>`.
+
+`tools/windows/vsenv.cmd <command>` runs a command with `vcvars64`, CMake,
+Ninja, `QT_ROOT` and `OPENSSL_ROOT_DIR` set from `KETPLUS_TOOLS_ROOT` (default
+`C:\ketplus-tools`); run it without arguments to print the resolved tools. A
+`QT_ROOT` already set wins; otherwise `KETPLUS_QT_VERSION` (for example
+`6.11.3`) selects a version, and without it the highest installed version is
+used (compared as version numbers). The
+presets already read `$env{QT_ROOT}`, so no Windows-specific preset is needed.
+
+MSVC links with `/INCREMENTAL:NO` (`core/cmake/MsvcOptions.cmake`): incremental linking
+leaves a ~180 MB `.ilk` beside every executable, which filled the disk of a Windows build
+machine with the full Pro test set.
+
+### Sync and build from a Mac
+
+Install mutagen (`brew install mutagen-io/mutagen/mutagen`, or unpack a release
+into `~/.local/bin`), make sure `ssh` to the Windows machine works without a
+password prompt, then from a worktree. Three conditions on the Windows machine:
+the OpenSSH default shell must stay `cmd.exe` (the scripts use `cd /d` and
+`if not exist`); `git config --global core.autocrlf false` must be set, because
+the build clones dependencies and patches them with LF-only patterns, which a
+CRLF checkout breaks; and `qtwebview` is installed without a WebEngine, so
+check that a WebView backend plugin is present before relying on it. Install Git for Windows
+2.47 or newer (the installer upgrades in place: `Git-<version>-64-bit.exe /VERYSILENT
+/NORESTART` keeps `C:\Program Files\Git\cmd` on `PATH`). The runner snapshot library (linked by the daemon) stages files with `git add` and
+`attr:` pathspecs, which Git for Windows 2.38 rejects (`pathspec magic not supported by this
+command: 'attr'`) and 2.47 accepts; `SealedGit::checkVersion` runs that command once and reports
+`GitTooOld` when git refuses it, so an older Git fails with that message instead of in the middle
+of a snapshot:
+
+```sh
+export KETPLUS_WIN_HOST=user@host            # required
+export KETPLUS_WIN_ROOT=C:/ketplus-work      # optional parent folder on Windows
+tools/windows/win-sync.sh start              # also: stop | status | flush
+tools/windows/win-run.sh cmake --preset lite-dev
+tools/windows/win-run.sh cmake --build --preset lite-dev
+tools/windows/win-run.sh ctest --preset lite-dev
+```
+
+Each worktree gets its own session and Windows folder, named after the
+worktree directory (`KETPLUS_WIN_NAME` overrides it), so parallel worktrees do
+not collide. The sync is one-way (Mac to Windows) and skips `build/`,
+`build-*`, `.cache/` and `.git`; the Windows build tree stays on the Windows
+machine. `win-run.sh` flushes the sync before it runs, so edits made on the Mac
+are always built. The remote shell is `cmd.exe` and `win-run.sh` passes its
+arguments through unchanged, so an argument with spaces or `cmd` metacharacters
+needs `cmd` quoting inside the shell quoting, for example
+`win-run.sh 'ctest -R "two words"'`. Stop a session with `win-sync.sh stop` when the worktree is
+removed.
+
+### Windows package
+
+One command produces the ZIP (from a Windows shell with the toolchain; over ssh use
+`tools/windows/win-run.sh`):
+
+```sh
+cmake --preset daemon-release            # Pro: `cmake --preset release`
+cmake --build --preset daemon-release --target package
+```
+
+`package` runs `cmake --install` into CPack's staging tree, so nothing is copied from the build
+tree by hand, and zips `bin\`, `plugins\`, `lib\ketplus\` and `share\licenses\ketplus\` as
+`KetPlus-Daemon-<version>-Windows-AMD64.zip` (`KetPlus-<version>-windows-AMD64.zip` for the
+desktop). The install rules are in `packaging/windows/WindowsDeploy.cmake`: `windeployqt` runs on
+every executable (Qt DLLs and plugins), the MSVC runtime DLLs and the two OpenSSL 3 DLLs are
+installed beside them, and the license texts come from the shared rules. `Qt-Third-Party-Notices.txt` is generated at install time by `packaging/windows/QtNotices.cmake` from the SBOM that the Qt build installs in its `sbom/` folder, for the Qt libraries and image-format plugins actually staged; the Qt installation must contain `sbom/`, otherwise `cmake --install` fails. To install without
+zipping: `cmake --install build\daemon-release --prefix <dir> --component Runtime`.
+
+Check a staged or unzipped tree as a user's machine would meet it (PATH reduced to the Windows
+directories, so a local Qt or OpenSSL cannot hide a missing DLL):
+
+```sh
+cmake -DSTAGE=<dir> -DKETPLUS_VERSION=<x.y.z> -P packaging/windows/VerifyStagedTree.cmake
+```
+
+On the Pro tree it also starts `KetPlus.exe` with `QT_QPA_PLATFORM=offscreen` and expects it to
+still be running after a few seconds; a missing Qt DLL or plugin shows as an early exit. That
+proves the libraries load, not that the window looks right.
+
+Not done yet: code signing, an installer (NSIS/WiX), the bundled browser runtime and a bundled
+Node for the Claude sidecar (the daemon needs `node` on `PATH` for Claude sessions), and a check
+of the Pro window on a real Windows desktop.
+
 ## Build presets
 
 For the independent Linux server target, see
 [`linux-headless-daemon.md`](linux-headless-daemon.md). `daemon-dev` and
 `daemon-release` configure `KETPLUS_BUILD_DESKTOP=OFF`; their Qt dependency set
-excludes Widgets, QML and WebView. Set the release Control URL explicitly before
+excludes Widgets, QML and WebView; Linux additionally uses Qt DBus for Secret Service. Set the release Control URL explicitly before
 staging a complete install tree. The product and bundled daemon version is 0.1.50;
 replacement bundles advance it so an older installed daemon can upgrade when its turns are idle.
 
@@ -42,6 +146,34 @@ replacement bundles advance it so an older installed daemon can upgrade when its
 - `KETPLUS_BUILD_BENCHMARKS`: controls benchmark executables.
 - `KETPLUS_USE_COMPILER_CACHE`: inherited from KetPlus CM and enabled by
   default. CMake selects `sccache`, then `ccache`, if installed.
+
+### Copilot CLI policy helpers
+
+`apps/daemon/src/providers/CopilotCli` implements the discovery, launch and
+authentication policy in [ADR 0120](decisions/0120-github-copilot-acp-provider.md).
+The daemon parser accepts `--copilot <absolute-path>` into
+`DaemonConfiguration::copilotExecutable`; `KETPLUS_COPILOT` is the next discovery
+override. Invalid overrides fail explicitly. Empty and relative `PATH` entries
+are skipped so discovery does not execute a CLI from the conversation's cwd.
+The resolver takes platform, environment, home and a runnable-file callback;
+`systemDiscoveryContext()` supplies the real host inputs.
+
+The launch result contains `program`, `arguments`, `nativeArguments` and an
+error. On Windows the adapter must apply `nativeArguments` through
+`QProcess::setNativeArguments` as well as the normal arguments: Qt's normal
+argument quoting does not implement `cmd.exe` parsing. Pass the daemon's
+environment to the builder so wrappers resolve under `SystemRoot/System32`,
+without searching the conversation's cwd. Command wrappers disable
+AutoRun and delayed expansion, quote the path, and reject percent/quote
+characters in that path rather than expanding them. See
+[Qt's process documentation](https://doc.qt.io/qt-6/qprocess.html#setNativeArguments)
+and [Microsoft's cmd reference](https://learn.microsoft.com/en-us/windows-server/administration/windows-commands/cmd).
+
+These helpers and the configuration field do not register a Copilot provider or
+start a CLI. Adapter integration follows separately. Authentication detection
+requires an explicit diagnostic; an exit code or generic ACP server error alone
+is insufficient. stderr diagnostics are considered only after a nonzero exit.
+The guidance contains no copied provider output or credentials.
 
 Build only the affected target during iteration:
 
@@ -107,13 +239,32 @@ The macOS package contains one `KetPlus.app`; its per-user daemon is embedded at
 `Contents/Helpers/ketplus_daemon`. Codex CLI and Cursor CLI remain external
 integrations and are deliberately not copied into the application.
 
-Build an unsigned local DMG with:
+Build an unsigned production DMG with the `release` preset. This preset enables
+`KETPLUS_PRODUCTION_RELEASE=ON` and targets `https://api.ketplus.app`:
 
 ```sh
 cmake --preset release
 cmake --build --preset release
 cmake --build build/release --target package
 ```
+
+For a staging/QA DMG, use a new build directory and explicitly disable production
+mode and select the staging URL:
+
+```sh
+cmake --preset release -B build/staging-release \
+  -DKETPLUS_PRODUCTION_RELEASE=OFF \
+  -DKETPLUS_CONTROL_URL=https://ketplus-staging.ketviet.vn
+cmake --build build/staging-release
+cmake --build build/staging-release --target package
+```
+
+Do not reuse a production build directory for staging/QA. The control URL is
+cached: turning `KETPLUS_PRODUCTION_RELEASE` off does not reset the production URL
+already selected in that directory. Use a fresh directory and an explicit URL for
+each deployment, then verify the bundled daemon's `--build-info` before use.
+Any QA launch must also follow the native-settings isolation requirements in
+[`testing.md`](testing.md).
 
 For a macOS app-only build (no DMG), use
 `cmake --build --preset release --target ketplus_bundle_browser_runtime` so the app
@@ -160,19 +311,23 @@ preserves npm's relative symlinks so the bundle remains
 relocatable after the temporary install directory is removed. The macOS bundle
 layout check rejects broken or absolute links inside the sidecar.
 
-The sidecar pins Claude Agent SDK 0.3.289 in both package metadata and the lockfile.
+The sidecar pins Claude Agent SDK 0.3.322 in both package metadata and the lockfile.
 The model picker uses the SDK's live model catalog, including Sonnet 5.5; changing
 only a UI label does not upgrade the provider runtime.
 
 ### In-app updates (macOS)
 
-Builds do not check for updates unless they are configured with an appcast and
-its EdDSA public key (ADR 0019):
+Builds do not check for updates by default. Use the
+[`release-macos-updates` preset](release-process.md#building-macos-pro-with-sparkle)
+for operator-configured releases. For an explicit local macOS test build, supply
+a scoped HTTPS appcast, its EdDSA public key and a single target architecture
+(ADR 0019):
 
 ```sh
-cmake --preset release \
-  -DKETPLUS_UPDATE_FEED_URL=https://<update host>/ketplus/appcast.xml \
-  -DKETPLUS_UPDATE_PUBLIC_ED_KEY=<base64 public key from generate_keys>
+cmake --preset dev -B build/dev-sparkle-arm64 \
+  -DCMAKE_OSX_ARCHITECTURES=arm64 -DKETPLUS_UPDATE_CHANNEL=staging \
+  -DKETPLUS_UPDATE_FEED_URL=https://updates.example.invalid/staging/arm64/appcast.xml \
+  -DKETPLUS_UPDATE_PUBLIC_ED_KEY="$QA_SPARKLE_PUBLIC_KEY"
 ```
 
 Configuring then downloads the pinned Sparkle release (set
@@ -181,7 +336,11 @@ Configuring then downloads the pinned Sparkle release (set
 keys do not match the configuration. Never pass the private key to CMake.
 `packaging/macos/publish-update.sh` archives an installed app and regenerates
 the appcast with the key from the Keychain or from a file outside the
-repository. It does not upload. Without a feed, Settings → Updates says that
+repository (including resolving the final symlink). Supply explicit channel and
+architecture inputs and matching scoped output/feed paths; release mode requires
+Developer ID signing and a stapled ticket. See `docs/release-process.md` and the
+native-settings isolation procedure in `docs/testing.md` before local QA. It does not
+upload. Without a feed, Settings → Updates says that
 the build is not configured.
 
 The direct-download install flow is: open the KetSuite-provided DMG, drag
@@ -232,6 +391,22 @@ git diff --check
 
 Do not mechanically format vendored files or unrelated source. Check the final
 diff for generated data, absolute paths, and credentials.
+
+## UI and team content language
+
+The application UI is English. Team content follows the user's prompt and explicit content
+instructions; `team.language` is only an optional fallback (`auto`, `en`, `vi`). See the
+[contract](decisions/2026-11-18-english-ui-team-content.md) and
+[source inventory](team-content-language.md). Never install a translator based on team or
+OS language, infer content language from UI language, or rewrite stored content.
+
+The historical Vietnamese catalog remains in `modules/remote/translations`. New English
+UI text needs no translation. `ketplus_team_translation_catalog_tests` checks its preserved
+entries with `--check-preserved`; the refresh utility remains available for explicit
+historical maintenance, not as a required UI-development step. Run
+`ketplus_team_page_language_tests`, `ketplus_team_language_tests`, protocol/paired language
+fixtures and relevant dialog/sidebar tests. Shared desktop changes require the full matrix
+in `testing.md` in addition to focused checks.
 
 ## External tools
 

@@ -17,6 +17,9 @@
 #include <QSqlQuery>
 #include <QTemporaryDir>
 #include <QUuid>
+#if defined(Q_OS_WIN)
+#include <qt_windows.h>
+#endif
 #include <QtTest>
 
 #include <memory>
@@ -237,6 +240,50 @@ class HeadlessDaemonTest final : public QObject {
                     .toBool());
         QVERIFY(journal.worktreePaths().isEmpty());
     }
+    void workspaceListNamesTheRepositoryOfALinkedWorktree() {
+        // ADR 0119 "Repository grain": a linked worktree names its main checkout, read from its
+        // `.git` file and the gitdir's `commondir`, so Desktop groups both under one repository.
+        QTemporaryDir directory;
+        QVERIFY(QDir(directory.path()).mkpath("app/.git/worktrees/fix"));
+        QVERIFY(QDir(directory.path()).mkpath("app-fix"));
+        QVERIFY(QDir(directory.path()).mkpath("broken"));
+        const auto write = [&](const QString& relative, const QByteArray& content) {
+            QFile file(directory.filePath(relative));
+            return file.open(QIODevice::WriteOnly) && file.write(content) == content.size();
+        };
+        const auto main = QFileInfo(directory.filePath("app")).canonicalFilePath();
+        QVERIFY(write("app-fix/.git", "gitdir: " + main.toUtf8() + "/.git/worktrees/fix\n"));
+        QVERIFY(write("app/.git/worktrees/fix/commondir", "../..\n"));
+        QVERIFY(write("broken/.git", "not a gitdir line\n"));
+        const auto linked = QFileInfo(directory.filePath("app-fix")).canonicalFilePath();
+        const auto broken = QFileInfo(directory.filePath("broken")).canonicalFilePath();
+        LocalJournal journal(directory.filePath("journal.db"));
+        QVERIFY(journal.rememberWorktree(main));
+        QVERIFY(journal.rememberWorktree(linked));
+        QVERIFY(journal.rememberWorktree(broken));
+        CodexAdapter adapter("/nonexistent/ketplus-test-codex");
+        SessionHost host(&journal, &adapter);
+        QHash<QString, QString> repositoryOf;
+        for (const auto& value :
+             host.handleCommand(command("workspace.list"), "admin").value("workspaces").toArray())
+            repositoryOf.insert(value.toObject().value("path").toString(),
+                                value.toObject().value("repository_path").toString());
+        QCOMPARE(repositoryOf.value(main), main);
+        QCOMPARE(repositoryOf.value(linked), main);
+        QCOMPARE(repositoryOf.value(broken), broken);
+
+#if !defined(Q_OS_WIN)
+        // A main checkout remembered through a symlink names its canonical repository too.
+        // (Skipped on Windows: QFile::link makes a .lnk shortcut, not a symbolic link.)
+        QVERIFY(QFile::link(main, directory.filePath("app-link")));
+        const auto linkPath = QDir(directory.path()).filePath("app-link");
+        QVERIFY(journal.rememberWorktree(linkPath));
+        for (const auto& value :
+             host.handleCommand(command("workspace.list"), "admin").value("workspaces").toArray())
+            if (value.toObject().value("path").toString() == linkPath)
+                QCOMPARE(value.toObject().value("repository_path").toString(), main);
+#endif
+    }
     void workspaceEnrollmentRequiresALocalAdministratorAndARealCheckout() {
         QTemporaryDir directory;
         LocalJournal journal(directory.filePath("journal.db"));
@@ -276,6 +323,115 @@ class HeadlessDaemonTest final : public QObject {
         QCOMPARE(configuration.statePath, directory.filePath("daemon/journal.sqlite3"));
         QCOMPARE(configuration.tokenPath, directory.filePath("daemon/local.token"));
     }
+    void helloNamesTheHostKeyWithoutSignInAndKeepsItAcrossRestarts() {
+#if defined(Q_OS_UNIX)
+        // ADR 0119 "Machine identity": an SSH client names a Linux machine by the fingerprint the
+        // daemon reports at daemon.hello. A fresh, never signed-in host must have one, and the
+        // same one after a restart, or every reconnect would look like a different machine.
+        QTemporaryDir directory("/tmp/kp-identity-XXXXXX");
+        QVERIFY(directory.isValid());
+        auto environment = QProcessEnvironment::systemEnvironment();
+        environment.insert("KETPLUS_DAEMON_DATA_DIR", directory.path());
+        environment.insert("KETPLUS_DAEMON_SOCKET", directory.filePath("socket"));
+        QMap<QByteArray, QByteArray> saved;
+        for (const auto& key : {"KETPLUS_DAEMON_TOKEN_FILE", "KETPLUS_DAEMON_SOCKET",
+                                "KETPLUS_DAEMON_DATA_DIR", "KETPLUS_DISABLE_DAEMON_AUTOSTART"})
+            saved.insert(key, qgetenv(key));
+        const auto restore = qScopeGuard([&] {
+            for (auto it = saved.cbegin(); it != saved.cend(); ++it)
+                it.value().isNull() ? qunsetenv(it.key().constData())
+                                    : qputenv(it.key().constData(), it.value());
+        });
+        qputenv("KETPLUS_DAEMON_DATA_DIR", directory.path().toUtf8());
+        qputenv("KETPLUS_DAEMON_SOCKET", directory.filePath("socket").toUtf8());
+        qputenv("KETPLUS_DAEMON_TOKEN_FILE", directory.filePath("daemon/local.token").toUtf8());
+        qputenv("KETPLUS_DISABLE_DAEMON_AUTOSTART", "1");
+        const auto fingerprintOfOneRun = [&]() -> QString {
+            QProcess daemon;
+            daemon.setProcessEnvironment(environment);
+            daemon.start(KETPLUS_TEST_DAEMON,
+                         {"--codex", "/nonexistent/codex", "--claude", "/nonexistent/claude",
+                          "--cursor", "/nonexistent/agent"});
+            if (!daemon.waitForStarted())
+                return {};
+            const auto stop = qScopeGuard([&] {
+                daemon.terminate();
+                if (!daemon.waitForFinished(5000)) {
+                    daemon.kill();
+                    daemon.waitForFinished();
+                }
+            });
+            ketplus::remote::DaemonClient client;
+            client.call("session.list", {}, {}, 0, [](const QJsonObject&, const QString&){});
+            if (!QTest::qWaitFor([&] { return client.isReady(); }, 10000))
+                return {};
+            if (!client.hasFeature(QStringLiteral("daemon.host_identity/1")))
+                return {};
+            return client.hostKeyFingerprint();
+        };
+        const QString first = fingerprintOfOneRun();
+        // base64url(SHA-256) of the host's key set, as a pairing QR code carries it.
+        QCOMPARE(first.size(), 43);
+        QCOMPARE(fingerprintOfOneRun(), first);
+#endif
+    }
+
+    void windowsPipeServesOnlyACredentialedClientAndStopsOnCtrlBreak() {
+#if defined(Q_OS_WIN)
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        QProcess daemon;
+        auto environment = QProcessEnvironment::systemEnvironment();
+        environment.insert("KETPLUS_DAEMON_DATA_DIR", directory.path());
+        // A named-pipe name, not a path; unique so a stray daemon cannot answer.
+        environment.insert("KETPLUS_DAEMON_SOCKET",
+                           "kp-test-" + QUuid::createUuid().toString(QUuid::Id128));
+        daemon.setProcessEnvironment(environment);
+        // Its own process group, so CTRL_BREAK reaches the daemon and not this test.
+        daemon.setCreateProcessArgumentsModifier([](QProcess::CreateProcessArguments* arguments) {
+            arguments->flags |= CREATE_NEW_PROCESS_GROUP;
+        });
+        daemon.start(KETPLUS_TEST_DAEMON,
+                     {"--codex", "C:/nonexistent/codex", "--claude", "C:/nonexistent/claude",
+                      "--cursor", "C:/nonexistent/agent"});
+        QVERIFY(daemon.waitForStarted());
+        const auto stop = qScopeGuard([&] {
+            if (daemon.state() != QProcess::NotRunning) {
+                daemon.kill();
+                daemon.waitForFinished();
+            }
+        });
+        QTRY_VERIFY_WITH_TIMEOUT(QFileInfo::exists(directory.filePath("daemon/local.token")),
+                                 10000);
+
+        QProcess cli;
+        cli.setProcessEnvironment(environment);
+        cli.start(KETPLUS_TEST_CTL, {"--timeout", "15", "sessions"});
+        QVERIFY(cli.waitForFinished(20000));
+        QCOMPARE(cli.exitCode(), 0);
+        QVERIFY(QJsonDocument::fromJson(cli.readAllStandardOutput()).object().value("ok").toBool());
+
+        // The local credential is required even for a client that reaches the pipe.
+        QFile wrong(directory.filePath("wrong.token"));
+        QVERIFY(wrong.open(QIODevice::WriteOnly));
+        wrong.write(QByteArray(64, 'x'));
+        wrong.close();
+        cli.start(KETPLUS_TEST_CTL,
+                  {"--timeout", "2", "--token-file", wrong.fileName(), "workspace", "list"});
+        QVERIFY(cli.waitForFinished(8000));
+        QVERIFY(cli.exitCode() != 0);
+
+        // Clean stop: the console event ends the loop and the process exits normally.
+        if (!::GenerateConsoleCtrlEvent(CTRL_BREAK_EVENT, static_cast<DWORD>(daemon.processId())) ||
+            !daemon.waitForFinished(10000))
+            QSKIP("No console is shared with the daemon, so CTRL_BREAK cannot be delivered.");
+        QCOMPARE(daemon.exitStatus(), QProcess::NormalExit);
+        QCOMPARE(daemon.exitCode(), 0);
+#else
+        QSKIP("Windows named pipe only.");
+#endif
+    }
+
     void administratorCliAuthenticatesAndSigtermLeavesTheJournalUsable() {
 #if defined(Q_OS_UNIX)
         QTemporaryDir directory("/tmp/kp-headless-XXXXXX");
@@ -343,6 +499,62 @@ class HeadlessDaemonTest final : public QObject {
         LocalJournal journal(directory.filePath("daemon/journal.sqlite3"));
         QCOMPARE(journal.worktreePaths(),
                  QStringList{QFileInfo(directory.path()).canonicalFilePath()});
+#endif
+    }
+
+    // ketplusctl runner commands reach the daemon over its socket. This daemon is not
+    // enrolled, so no Relay offers runners: each answers runner_unavailable and calls nothing.
+    void runnerCommandsAnswerThroughTheSocket() {
+#if defined(Q_OS_UNIX)
+        QTemporaryDir directory("/tmp/kp-headless-XXXXXX");
+        QVERIFY(directory.isValid());
+        QProcess daemon;
+        auto environment = QProcessEnvironment::systemEnvironment();
+        environment.insert("KETPLUS_DAEMON_DATA_DIR", directory.path());
+        environment.insert("KETPLUS_DAEMON_SOCKET", directory.filePath("socket"));
+        daemon.setProcessEnvironment(environment);
+        daemon.start(KETPLUS_TEST_DAEMON,
+                     {"--codex", "/nonexistent/codex", "--claude", "/nonexistent/claude",
+                      "--cursor", "/nonexistent/agent"});
+        QVERIFY(daemon.waitForStarted());
+        const auto stop = qScopeGuard([&] {
+            if (daemon.state() != QProcess::NotRunning) {
+                daemon.kill();
+                daemon.waitForFinished();
+            }
+        });
+        QTRY_VERIFY_WITH_TIMEOUT(QFileInfo::exists(directory.filePath("daemon/local.token")), 5000);
+        const QList<QStringList> commands{{"runner", "pair", "create"},
+                                          {"--runner", "runner-a", "runner", "pair", "create"},
+                                          {"runner", "pair", "status", "ticket-a"},
+                                          {"runner", "pair", "approve", "ticket-a", "AAAAA-AAAAA"},
+                                          {"runner", "pair", "reject", "ticket-a"},
+                                          {"runner", "list"},
+                                          {"runner", "disable", "runner-a"},
+                                          {"runner", "enable", "runner-a"},
+                                          {"runner", "remove", "runner-a"},
+                                          {"runner", "unpair", "runner-a"}};
+        QProcess cli;
+        cli.setProcessEnvironment(environment);
+        for (const QStringList& command : commands) {
+            cli.start(KETPLUS_TEST_CTL, QStringList{"--timeout", "5"} + command);
+            QVERIFY(cli.waitForFinished(8000));
+            QCOMPARE(cli.exitCode(), 1);
+            QVERIFY(cli.readAllStandardOutput().isEmpty());
+            QVERIFY2(cli.readAllStandardError().startsWith("runner_unavailable: "),
+                     qPrintable(command.join(' ')));
+        }
+        // Usage errors never reach the daemon; there is no approval without a code.
+        for (const QStringList& command :
+             QList<QStringList>{{"runner", "pair", "approve", "ticket-a"},
+                                {"--runner", "runner-a", "runner", "list"},
+                                {"runner", "list", "extra"},
+                                {"runner", "pair", "create", "--yes"}}) {
+            cli.start(KETPLUS_TEST_CTL, QStringList{"--timeout", "5"} + command);
+            QVERIFY(cli.waitForFinished(8000));
+            QVERIFY2(cli.exitCode() != 0, qPrintable(command.join(' ')));
+            QVERIFY(!cli.readAllStandardError().startsWith("runner_unavailable"));
+        }
 #endif
     }
 };

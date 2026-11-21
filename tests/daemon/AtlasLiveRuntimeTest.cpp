@@ -17,9 +17,10 @@ bool write(const QString& path, const QByteArray& bytes) {
     QFile file(path);
     return file.open(QIODevice::WriteOnly) && file.write(bytes) == bytes.size();
 }
-QByteArray get(quint16 port) {
+QByteArray get(quint16 port, const QString& path = QStringLiteral("/")) {
     QNetworkAccessManager network;
-    auto* reply = network.get(QNetworkRequest(QUrl(QString("http://127.0.0.1:%1/").arg(port))));
+    auto* reply =
+        network.get(QNetworkRequest(QUrl(QString("http://127.0.0.1:%1%2").arg(port).arg(path))));
     QSignalSpy finished(reply, &QNetworkReply::finished);
     if (!reply->isFinished() && !finished.wait(5000))
         return {};
@@ -36,6 +37,58 @@ bool listening(quint16 port) {
 class AtlasLiveRuntimeTest final : public QObject {
     Q_OBJECT
   private slots:
+    void cancelledStartupDoesNotLaunchViewerOrRenderer() {
+#ifndef Q_OS_UNIX
+        QSKIP("The fake CLI fixture uses a Unix shebang.");
+#else
+        QTemporaryDir root;
+        QVERIFY(root.isValid());
+        const auto cli = root.filePath("fake-atlas");
+        QVERIFY(QFile::copy(QFINDTESTDATA("fixtures/fake-atlas-static.py"), cli));
+        QVERIFY(QFile::setPermissions(cli, QFileDevice::ReadOwner | QFileDevice::WriteOwner |
+                                               QFileDevice::ExeOwner));
+        const auto oldCli = qgetenv("KETPLUS_KETATLAS_CLI");
+        const auto oldRecord = qgetenv("KETPLUS_ATLAS_FIXTURE_RECORD");
+        const auto oldHold = qgetenv("KETPLUS_ATLAS_FIXTURE_HOLD_VERSION");
+        const auto restore = qScopeGuard([&] {
+            const auto put = [](const char* name, const QByteArray& value) {
+                value.isNull() ? qunsetenv(name) : qputenv(name, value);
+            };
+            put("KETPLUS_KETATLAS_CLI", oldCli);
+            put("KETPLUS_ATLAS_FIXTURE_RECORD", oldRecord);
+            put("KETPLUS_ATLAS_FIXTURE_HOLD_VERSION", oldHold);
+        });
+        qputenv("KETPLUS_KETATLAS_CLI", QFile::encodeName(cli));
+        qputenv("KETPLUS_ATLAS_FIXTURE_RECORD", QFile::encodeName(root.path()));
+        qputenv("KETPLUS_ATLAS_FIXTURE_HOLD_VERSION", "1");
+        AtlasDescriptor atlas;
+        atlas.path = root.filePath("atlas.json");
+        atlas.directory = root.path();
+        QVERIFY(write(atlas.path, "{}"));
+        QVERIFY(write(
+            root.filePath("atlas.renderer.json"),
+            R"({"version":1,"framework":"fixture","command":["never-execute-project-code"]})"));
+        QPointer<AtlasLiveRuntime> runtime = new AtlasLiveRuntime;
+        const auto cleanup = qScopeGuard([&] {
+            if (runtime) {
+                runtime->stop();
+                delete runtime.data();
+            }
+        });
+        int callbacks = 0;
+        runtime->start(atlas, QUrl("ws://127.0.0.1:1"), "synthetic-only", 1,
+                       [&](const QJsonObject&) { ++callbacks; });
+        QTRY_VERIFY_WITH_TIMEOUT(QFileInfo::exists(root.filePath("version-started")), 5000);
+        QVERIFY(runtime);
+        runtime->stop();
+        QVERIFY(write(root.filePath("version-continue"), ""));
+        QTest::qWait(100);
+        QCOMPARE(callbacks, 0);
+        QVERIFY(runtime && !runtime->reusable());
+        QVERIFY(!QFileInfo::exists(root.filePath("argv.json")));
+        QVERIFY(!QFileInfo::exists(root.filePath("renderer-requested")));
+#endif
+    }
     void syntheticReadiness_data() {
         QTest::addColumn<QString>("mode");
         QTest::addColumn<bool>("accepted");
@@ -138,7 +191,7 @@ class AtlasLiveRuntimeTest final : public QObject {
         }
 #endif
     }
-    void realCliOwnsViewerAndRendererAndReattachesWithoutChangingSource() {
+    void realCliOwnsStaticViewerAndReattachesWithoutChangingSource() {
         if (qEnvironmentVariable("KETPLUS_KETATLAS_CLI").isEmpty())
             QSKIP("Set an isolated KetAtlas 0.5.2 CLI to run the real-process test.");
         QTemporaryDir root;
@@ -147,14 +200,12 @@ class AtlasLiveRuntimeTest final : public QObject {
         QVERIFY(QDir().mkpath(directory));
         QVERIFY(write(
             directory + "/atlas.json",
-            R"({"version":1,"title":"Isolated live fixture","screens":[{"id":"one","title":"Live","url":"/"}],"flows":[{"id":"main","title":"Main","nodes":[{"id":"one","screen":"one"}],"edges":[]}]})"));
+            R"({"version":1,"title":"Isolated live fixture","screens":[{"id":"one","title":"Live","url":"/screen.html"}],"flows":[{"id":"main","title":"Main","nodes":[{"id":"one","screen":"one"}],"edges":[]}]})"));
         QVERIFY(write(
             directory + "/atlas.renderer.json",
-            R"({"version":1,"framework":"node-http-test","command":["node","renderer.mjs","{port}"],"readyPath":"/","screenBasePath":"/"})"));
-        QVERIFY(write(
-            directory + "/renderer.mjs",
-            R"(import{createServer}from'node:http';import{readFileSync}from'node:fs';const server=createServer((q,r)=>{r.setHeader('content-type','text/html');r.end('<!doctype html><title>Live fixture</title>'+readFileSync('state.txt','utf8'))});server.listen(Number(process.argv[2]),'127.0.0.1');process.on('SIGTERM',()=>server.close(()=>process.exit(0)));)"));
-        QVERIFY(write(directory + "/state.txt", "first-live-state"));
+            R"({"version":1,"framework":"fixture","command":["never-execute-project-code"]})"));
+        QVERIFY(
+            write(directory + "/screen.html", "<!doctype html><title>first-live-state</title>"));
         QWebSocketServer relay("runtime-test", QWebSocketServer::NonSecureMode);
         QVERIFY(relay.listen(QHostAddress::LocalHost, 0));
         connect(&relay, &QWebSocketServer::newConnection, this, [&] {
@@ -175,13 +226,13 @@ class AtlasLiveRuntimeTest final : public QObject {
         QTRY_VERIFY_WITH_TIMEOUT(!first.isEmpty(), 30000);
         QVERIFY2(first.value("ok").toBool(), qPrintable(first.value("error_code").toString()));
         const auto origins = first.value("origins").toArray();
-        QCOMPARE(origins.size(), 2);
+        QCOMPARE(origins.size(), 1);
         const auto viewer = quint16(origins[0].toObject().value("port").toInt());
-        const auto renderer = quint16(origins[1].toObject().value("port").toInt());
         QVERIFY(get(viewer).contains("KetAtlas"));
-        QVERIFY(get(renderer).contains("first-live-state"));
-        QVERIFY(write(directory + "/state.txt", "second-live-state"));
-        QVERIFY(get(renderer).contains("second-live-state"));
+        QVERIFY(get(viewer, "/screen.html").contains("first-live-state"));
+        QVERIFY(
+            write(directory + "/screen.html", "<!doctype html><title>second-live-state</title>"));
+        QVERIFY(get(viewer, "/screen.html").contains("second-live-state"));
         QJsonObject second;
         runtime->attach(url, "test-only", [&](const QJsonObject& value) { second = value; });
         QVERIFY(second.value("ok").toBool());
@@ -190,7 +241,7 @@ class AtlasLiveRuntimeTest final : public QObject {
         QVERIFY(second.value("channel") != first.value("channel"));
         QVERIFY(second.value("key") != first.value("key"));
         runtime->stop();
-        QTRY_VERIFY_WITH_TIMEOUT(!listening(viewer) && !listening(renderer), 5000);
+        QTRY_VERIFY_WITH_TIMEOUT(!listening(viewer), 5000);
         QVERIFY(relay.isListening());
         delete runtime;
     }

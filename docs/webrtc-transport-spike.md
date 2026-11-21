@@ -6,7 +6,7 @@ the ADR orders (direct, TURN over UDP, TURN over TCP/TLS, then the HTTPS relay),
 with a stack that fits the daemon's build and licences and talks to the
 libwebrtc stack the iOS client uses. This records what the spike in
 `benchmarks/webrtc-datachannel` and its iOS client in the app repository
-(`apps/ios/Spikes/WebRtcDataChannel` in `ketplus-app`) showed on 2026-10-12.
+(a private mobile interoperability client in the private mobile app) showed on 2026-10-12.
 The figures are in
 `benchmarks/results/2026-10-12-webrtc-datachannel-macos-m1-pro.md`.
 

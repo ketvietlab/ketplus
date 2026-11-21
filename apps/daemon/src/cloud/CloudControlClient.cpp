@@ -7,6 +7,7 @@
 #include "cloud/RemoteAudit.h"
 #include "cloud/WorktreeBranches.h"
 #include "cloud/WorktreeRepositories.h"
+#include "runner/RunnerService.h"
 #include <QUrlQuery>
 
 #include "KetPlusProductVersion.h"
@@ -68,10 +69,6 @@ QJsonValue lastTurnOutcome(const StoredSession& session) {
     return QJsonValue::Null;
 }
 
-QString encodedPathSegment(const QString& value) {
-    return QString::fromUtf8(QUrl::toPercentEncoding(value, QByteArrayLiteral("-._~")));
-}
-
 QUrl compiledControlUrl() {
     const QUrl compiled(QStringLiteral(KETPLUS_DEFAULT_CONTROL_URL));
     return compiled.isValid() && !compiled.host().isEmpty()
@@ -106,38 +103,7 @@ CloudControlClient::CloudControlClient(LocalJournal* journal, SessionHost* host,
                   answer(ready ? daemonToken_ : QString());
               });
       }) {
-    machineId_ = storedString(QStringLiteral("machine-id"));
-    workspaceId_ = storedString(QStringLiteral("workspace-id"));
-    accountName_ = storedString(QStringLiteral("account-name"));
-    accountUsername_ = storedString(QStringLiteral("account-username"));
-    machineKeyVersion_ = storedString(QStringLiteral("machine-key-version")).toInt();
-    if (machineKeyVersion_ < 1)
-        machineKeyVersion_ = 1;
-    // An enrollment belongs to the relay that issued it. A build compiled for another relay
-    // presented it there, got errors it could not explain, and uploaded nothing. The identity
-    // stays stored for a build that talks to its relay again; this one reports it signed out.
-    const QString enrolledRelay = storedString(QStringLiteral("control-url"));
-    if (!machineId_.isEmpty() && enrolledRelay.isEmpty()) {
-        // Enrolled before the relay was recorded: the relay this build reaches is the only
-        // one it can have been used with.
-        storeString(QStringLiteral("control-url"), baseUrl_.toString());
-    } else if (!machineId_.isEmpty() && enrolledRelay != baseUrl_.toString()) {
-        otherRelay_ = enrolledRelay;
-        machineId_.clear();
-        workspaceId_.clear();
-        lastError_ = QStringLiteral("This Mac is enrolled with %1, not %2.")
-                         .arg(enrolledRelay, baseUrl_.toString());
-    }
-    // An enrollment stored by a sign-in that did not finish storing it is completed here, and one
-    // from before #84 records its workspace.
-    QString keysError;
-    if (!machineId_.isEmpty() && !sessionCredentials_.adoptWorkspace(workspaceId_, &keysError)) {
-        machineId_.clear();
-        workspaceId_.clear();
-        lastError_ = keysError;
-    }
-    if (!machineId_.isEmpty())
-        registerCloudCursors();
+    restoreEnrollment();
     initializePeerTransport();
     syncTimer_.setInterval(15'000);
     commandTimer_.setInterval(2'000);
@@ -163,6 +129,13 @@ CloudControlClient::CloudControlClient(LocalJournal* journal, SessionHost* host,
         }
         sync();
     });
+    // ADR 0116 §3: phones learn of a team change from the members' sealed metadata.
+    teamSyncTimer_.setSingleShot(true);
+    connect(&teamSyncTimer_, &QTimer::timeout, this, [this] {
+        lastTeamSync_.restart();
+        stateSyncTimer_.start(0);
+    });
+    connect(host_, &SessionHost::teamEvent, this, &CloudControlClient::noteTeamChanged);
     connect(host_, &SessionHost::eventReady, this, [this](const QJsonObject& event) {
         peers_->eventsChanged(event.value("session_id").toString());
         QTimer::singleShot(0, this, &CloudControlClient::uploadEvents);
@@ -214,11 +187,16 @@ bool CloudControlClient::handles(const QString& type) const {
            type == QStringLiteral("remote.pairing.status") ||
            type == QStringLiteral("remote.pairing.approve") ||
            type == QStringLiteral("remote.pairing.revoke") ||
-           type == QStringLiteral("remote.device.revoke") || type == QStringLiteral("remote.audit");
+           type == QStringLiteral("remote.device.revoke") ||
+           type == QStringLiteral("remote.audit") || runner::RunnerService::handlesType(type);
 }
 
 void CloudControlClient::handleLocal(const QString& type, const QJsonObject& payload,
-                                     LocalCallback callback) {
+                                     LocalCallback callback, const QString& clientId) {
+    if (runner::RunnerService::handlesType(type)) {
+        runners().handle(type, payload, std::move(callback), clientId);
+        return;
+    }
     if (type == QStringLiteral("remote.status")) {
         callback(status(), {});
     } else if (type == QStringLiteral("remote.sign_in")) {
@@ -349,18 +327,25 @@ void CloudControlClient::revokeAtlasAccess(const QString& device) {
 
 CloudControlClient::AtlasAccessFence
 CloudControlClient::atlasAccessFence(const QString& device) const {
-    return {atlasMachineEpoch_, atlasDeviceEpochs_.value(device)};
+    return {atlasMachineEpoch_, atlasDeviceEpochs_.value(device), accountFence()};
 }
 
 bool CloudControlClient::atlasAccessCurrent(const QString& device,
                                             const AtlasAccessFence& fence) const {
-    return fence.machine == atlasMachineEpoch_ && fence.device == atlasDeviceEpochs_.value(device);
+    const auto account = accountFence();
+    return fence.machine == atlasMachineEpoch_ &&
+           fence.device == atlasDeviceEpochs_.value(device) &&
+           fence.account.epoch == account.epoch &&
+           fence.account.enrollmentRevision == account.enrollmentRevision &&
+           fence.account.machine == account.machine && fence.account.workspace == account.workspace;
 }
 
 void CloudControlClient::signOut(LocalCallback callback) {
     signaling_->configure({}, {}, 1, false);
     revokeAtlasAccess();
     ++accountEpoch_;
+    invalidateSenderKeys();
+    legacyPinAdoptionPending_ = false;
     dropBrowserSignIn();
     signInError_.clear();
     QString removalError;
@@ -372,7 +357,7 @@ void CloudControlClient::signOut(LocalCallback callback) {
         QStringLiteral("machine-id"),          QStringLiteral("workspace-id"),
         QStringLiteral("machine-key-version"), QStringLiteral("control-url"),
         QStringLiteral("device-pins"),         QStringLiteral("account-name"),
-        QStringLiteral("account-username")};
+        QStringLiteral("account-username"),    QStringLiteral("runner-pins")};
     if (otherRelay_.isEmpty() && !credentials_.removeIf(
                                      [&enrollment](const QString& account) {
                                          return enrollment.contains(account) ||
@@ -383,6 +368,7 @@ void CloudControlClient::signOut(LocalCallback callback) {
         return;
     }
     wakeups_.stop();
+    runnerRelayAvailable_ = false;
     credentialRequestInFlight_ = false;
     finishCredentialWaiters(false, QStringLiteral("Signed out."));
     machineId_.clear();
@@ -391,6 +377,7 @@ void CloudControlClient::signOut(LocalCallback callback) {
     accountUsername_.clear();
     daemonToken_.clear();
     registeredCloudCursors_.clear();
+    knownUploadedCursors_.clear();
     eventUploadLimits_.clear();
     eventUploadBackoff_.clear();
     daemonTokenExpiresAt_ = {};
@@ -499,276 +486,53 @@ bool CloudControlClient::storeString(const QString& account, const QString& valu
     return credentials_.write(account, value.toUtf8(), error);
 }
 
-void CloudControlClient::createPairing(LocalCallback callback) {
-    ensureDaemonCredential([this, callback = std::move(callback)](const bool ready,
-                                                                  const QString& error) {
-        if (!ready) {
-            callback({}, error);
-            return;
-        }
-        // The QR code is the one channel the relay cannot touch: it names this Mac's keys, so
-        // the phone can refuse host keys the relay substitutes (#89).
-        QString keyError;
-        const QString fingerprint = DevicePins::hostFingerprint(crypto_.publicKeys(&keyError));
-        if (fingerprint.isEmpty()) {
-            callback({},
-                     keyError.isEmpty() ? QStringLiteral("This Mac has no valid keys.") : keyError);
-            return;
-        }
-        const QString host = QStringLiteral("&machine=%1&kv=%2&fp=%3")
-                                 .arg(QString::fromUtf8(QUrl::toPercentEncoding(machineId_)))
-                                 .arg(machineKeyVersion_)
-                                 .arg(fingerprint);
-        request("POST", QStringLiteral("/v2/pairing/tickets"), QJsonObject{}, daemonToken_, {},
-                [host, callback = std::move(callback)](const int status, const QJsonValue& value,
-                                                       const QString& transportError) {
-                    const QJsonObject pairing = object(value);
-                    const QJsonObject ticket = pairing.value(QStringLiteral("ticket")).toObject();
-                    const QString secret = pairing.value(QStringLiteral("secret")).toString();
-                    if (status != 201 || ticket.isEmpty() || secret.isEmpty() ||
-                        !transportError.isEmpty()) {
-                        callback({}, transportError.isEmpty()
-                                         ? responseCode(value, QStringLiteral("pairing_failed"))
-                                         : transportError);
-                        return;
-                    }
-                    const QString qr =
-                        QStringLiteral("ketplus://pair?ticket=%1&secret=%2")
-                            .arg(QString::fromUtf8(QUrl::toPercentEncoding(
-                                     ticket.value(QStringLiteral("id")).toString())),
-                                 QString::fromUtf8(QUrl::toPercentEncoding(secret))) +
-                        host;
-                    callback({{QStringLiteral("ok"), true},
-                              {QStringLiteral("ticket"), ticket},
-                              {QStringLiteral("pairing_code"), qr}},
-                             {});
-                });
-    });
+QString CloudControlClient::hostKeyFingerprint(QString* error) {
+    return DevicePins::hostFingerprint(crypto_.publicKeys(error));
 }
 
-void CloudControlClient::pairingStatus(const QJsonObject& payload, LocalCallback callback) {
-    const QString ticketId = payload.value(QStringLiteral("ticket_id")).toString();
-    if (ticketId.isEmpty()) {
-        callback({}, QStringLiteral("A pairing ticket is required."));
-        return;
-    }
-    ensureDaemonCredential([this, ticketId, callback = std::move(callback)](const bool ready,
-                                                                            const QString& error) {
-        if (!ready) {
-            callback({}, error);
-            return;
+std::optional<bool> CloudControlClient::sidebarRepositoryVisible(const QString& path) {
+    const QFileInfo origin(path);
+    if (!origin.isDir() || !origin.isReadable())
+        return std::nullopt;
+    const auto canonicalOrigin = origin.canonicalFilePath();
+    if (canonicalOrigin.isEmpty())
+        return std::nullopt;
+    QDir directory(canonicalOrigin);
+    do {
+        const QFileInfo marker(directory.filePath(QStringLiteral(".git")));
+        if (marker.exists() || marker.isSymLink()) {
+            const auto git = worktreeGitDirectory(directory.absolutePath());
+            return !git.isEmpty() && QFileInfo(git).isDir() ? std::optional<bool>{true}
+                                                            : std::nullopt;
         }
-        request("GET", QStringLiteral("/v2/pairing/tickets/%1").arg(encodedPathSegment(ticketId)),
-                {}, daemonToken_, {},
-                [ticketId, callback = std::move(callback)](
-                    const int status, const QJsonValue& value, const QString& transportError) {
-                    if (status != 200 || !transportError.isEmpty()) {
-                        callback({}, transportError.isEmpty()
-                                         ? responseCode(value, QStringLiteral("pairing_not_found"))
-                                         : transportError);
-                        return;
-                    }
-                    const QJsonObject ticket = object(value);
-                    QJsonObject result{{QStringLiteral("ok"), true},
-                                       {QStringLiteral("ticket"), ticket}};
-                    // The code to compare comes from this daemon, not the relay: a digest the
-                    // claimed keys do not reproduce gives no code (#89).
-                    const QJsonObject device =
-                        ticket.value(QStringLiteral("claimedDevice")).toObject();
-                    const QString digest = ticket.value(QStringLiteral("claimDigest")).toString();
-                    if (!device.isEmpty() || !digest.isEmpty()) {
-                        const bool verified = !device.isEmpty() && !digest.isEmpty() &&
-                                              DevicePins::claimDigest(ticketId, device) == digest &&
-                                              !DevicePins::confirmationCode(digest).isEmpty();
-                        result.insert(QStringLiteral("claim_verified"), verified);
-                        if (verified) {
-                            result.insert(QStringLiteral("claim_digest"), digest);
-                            result.insert(QStringLiteral("confirmation_code"),
-                                          DevicePins::confirmationCode(digest));
-                        }
-                    }
-                    callback(result, {});
-                });
-    });
-}
-
-void CloudControlClient::approvePairing(const QJsonObject& payload, LocalCallback callback) {
-    const QString ticketId = payload.value(QStringLiteral("ticket_id")).toString();
-    // The claim the user confirmed on this Mac; the ticket is read again below, and the relay
-    // must not swap keys and digest together in between.
-    const QString confirmed = payload.value(QStringLiteral("claim_digest")).toString();
-    if (ticketId.isEmpty() || confirmed.isEmpty()) {
-        callback({}, QStringLiteral("A pairing ticket and its confirmed claim are required."));
-        return;
-    }
-    ensureDaemonCredential([this, ticketId, confirmed, callback = std::move(callback)](
-                               const bool ready, const QString& error) {
-        if (!ready) {
-            callback({}, error);
-            return;
-        }
-        const QString path =
-            QStringLiteral("/v2/pairing/tickets/%1").arg(encodedPathSegment(ticketId));
-        request(
-            "GET", path, {}, daemonToken_, {},
-            [this, path, confirmed, callback = std::move(callback)](
-                const int status, const QJsonValue& value, const QString& transportError) {
-                const QJsonObject ticket = object(value);
-                const QJsonObject device = ticket.value(QStringLiteral("claimedDevice")).toObject();
-                const QString digest = ticket.value(QStringLiteral("claimDigest")).toString();
-                if (status != 200 ||
-                    ticket.value(QStringLiteral("status")).toString() !=
-                        QStringLiteral("claimed") ||
-                    device.isEmpty() || digest.isEmpty() || !transportError.isEmpty()) {
-                    callback({}, transportError.isEmpty()
-                                     ? QStringLiteral("The mobile key claim is not ready.")
-                                     : transportError);
-                    return;
-                }
-                // The code the user compared is this digest. Recomputed from the claimed keys, it
-                // proves those keys are the phone's, not ones the relay substituted (#87).
-                if (digest != confirmed ||
-                    DevicePins::claimDigest(ticket.value(QStringLiteral("id")).toString(),
-                                            device) != digest) {
-                    callback({}, QStringLiteral("The device claim does not match its keys."));
-                    return;
-                }
-                QJsonArray envelopes;
-                QString cryptoError;
-                for (const StoredSession& session : journal_->sessions()) {
-                    // The relay refuses the whole approval for a key it would not hold.
-                    if (refusedSessions_.contains(session.id))
-                        continue;
-                    const QString account =
-                        QStringLiteral("wrapped-%1-%2-%3-%4")
-                            .arg(session.id)
-                            .arg(session.generation)
-                            .arg(device.value(QStringLiteral("id")).toString())
-                            .arg(device.value(QStringLiteral("keyVersion")).toInt());
-                    QJsonObject envelope =
-                        object(QJsonDocument::fromJson(credentials_.read(account)).object());
-                    if (!CloudCrypto::validWrappedSessionKey(envelope)) {
-                        envelope =
-                            crypto_.wrapSessionKey(session.id, session.generation, 1, device,
-                                                   machineId_, machineKeyVersion_, &cryptoError);
-                        if (envelope.isEmpty() ||
-                            !credentials_.write(
-                                account, QJsonDocument(envelope).toJson(QJsonDocument::Compact),
-                                &cryptoError)) {
-                            callback({}, cryptoError);
-                            return;
-                        }
-                    }
-                    envelopes.append(envelope);
-                }
-                QJsonObject body{{QStringLiteral("claimDigest"), digest}};
-                if (!envelopes.isEmpty())
-                    body.insert(QStringLiteral("sessionKeys"), envelopes);
-                request("POST", path + QStringLiteral("/approve"), body, daemonToken_, {},
-                        [this, device, callback = std::move(callback)](
-                            const int approveStatus, const QJsonValue& approveValue,
-                            const QString& approveError) {
-                            QString pinError;
-                            if (approveStatus != 200 || !approveError.isEmpty()) {
-                                callback({}, approveError.isEmpty()
-                                                 ? responseCode(
-                                                       approveValue,
-                                                       QStringLiteral("pairing_approval_failed"))
-                                                 : approveError);
-                            } else if (!pins_.pin(device, &pinError)) {
-                                callback({}, pinError.isEmpty()
-                                                 ? QStringLiteral("Unable to remember the device.")
-                                                 : pinError);
-                            } else {
-                                callback({{QStringLiteral("ok"), true},
-                                          {QStringLiteral("ticket"), object(approveValue)}},
-                                         {});
-                            }
-                        });
-            });
-    });
-}
-
-void CloudControlClient::revokePairing(const QJsonObject& payload, LocalCallback callback) {
-    const QString ticketId = payload.value(QStringLiteral("ticket_id")).toString();
-    if (ticketId.isEmpty()) {
-        callback({}, QStringLiteral("A pairing ticket is required."));
-        return;
-    }
-    ensureDaemonCredential([this, ticketId, callback = std::move(callback)](const bool ready,
-                                                                            const QString& error) {
-        if (!ready) {
-            callback({}, error);
-            return;
-        }
-        request("POST",
-                QStringLiteral("/v2/pairing/tickets/%1/revoke").arg(encodedPathSegment(ticketId)),
-                QJsonObject{}, daemonToken_, {},
-                [callback = std::move(callback)](const int status, const QJsonValue& value,
-                                                 const QString& transportError) {
-                    if (status != 200 || !transportError.isEmpty()) {
-                        callback({},
-                                 transportError.isEmpty()
-                                     ? responseCode(value, QStringLiteral("pairing_revoke_failed"))
-                                     : transportError);
-                        return;
-                    }
-                    callback({{QStringLiteral("ok"), true}}, {});
-                });
-    });
-}
-
-void CloudControlClient::revokeDevice(const QJsonObject& payload, LocalCallback callback) {
-    const QString deviceId = payload.value(QStringLiteral("device_id")).toString();
-    if (deviceId.isEmpty()) {
-        callback({}, QStringLiteral("A device is required."));
-        return;
-    }
-    ensureDaemonCredential([this, deviceId, callback = std::move(callback)](const bool ready,
-                                                                            const QString& error) {
-        if (!ready) {
-            callback({}, error);
-            return;
-        }
-        request("POST", QStringLiteral("/v2/devices/%1/revoke").arg(encodedPathSegment(deviceId)),
-                QJsonObject{}, daemonToken_, {},
-                [this, deviceId, callback = std::move(callback)](
-                    const int status, const QJsonValue& value, const QString& transportError) {
-                    if (status != 200 || !transportError.isEmpty()) {
-                        callback({},
-                                 transportError.isEmpty()
-                                     ? responseCode(value, QStringLiteral("device_revoke_failed"))
-                                     : transportError);
-                        return;
-                    }
-                    signaling_->receive({{"type", "device.revoked"}, {"deviceId", deviceId}});
-                    senderKeys_.clear();
-                    QString pinError;
-                    if (!pins_.unpin(deviceId, &pinError)) {
-                        callback({}, pinError);
-                        return;
-                    }
-                    callback({{QStringLiteral("ok"), true}}, {});
-                });
-    });
+        if (QFileInfo(directory.filePath(QStringLiteral("HEAD"))).isFile() &&
+            QFileInfo(directory.filePath(QStringLiteral("objects"))).isDir())
+            return true;
+    } while (directory.cdUp());
+    return false;
 }
 
 QJsonArray CloudControlClient::sessionSnapshots(
     const QList<StoredSession>& stored, const QString& workspaceId, const QString& machineId,
     const QByteArray& pathIdSalt, const QHash<QString, QString>& repositories,
     QHash<QString, QJsonObject>* metadata, const QHash<QString, QJsonObject>& agentMetadata,
-    const QHash<QString, QString>& tagColors) {
+    const QHash<QString, QString>& tagColors, WorktreeRevisionCache* revisionCache,
+    const qint64 nowMs) {
     QJsonArray sessions;
     const QString machineName = QHostInfo::localHostName().left(128);
     QHash<QString, QString> revisions;
+    QHash<QString, QList<StoredSession>> byWorktree;
+    if (revisionCache != nullptr)
+        for (const StoredSession& session : stored)
+            byWorktree[session.worktreePath].append(session);
     for (const StoredSession& session : stored) {
         const QString label = QFileInfo(session.worktreePath).fileName();
         // The relay only accepts these providers; anything else keeps the historical default.
-        const QString adapter =
-            QStringList{QStringLiteral("codex"), QStringLiteral("claude"), QStringLiteral("cursor")}
-                    .contains(session.adapter)
-                ? session.adapter
-                : QStringLiteral("codex");
+        const QString adapter = QStringList{QStringLiteral("codex"), QStringLiteral("claude"),
+                                            QStringLiteral("cursor"), QStringLiteral("copilot")}
+                                        .contains(session.adapter)
+                                    ? session.adapter
+                                    : QStringLiteral("codex");
         QJsonObject snapshot{{QStringLiteral("id"), session.id},
                              {QStringLiteral("workspaceId"), workspaceId},
                              {QStringLiteral("machineId"), machineId},
@@ -796,7 +560,42 @@ QJsonArray CloudControlClient::sessionSnapshots(
                  {QStringLiteral("lastTurnStartedAt"), session.lastTurnStartedAt},
                  // "state" says whether the conversation takes a new turn; this says how the
                  // last one ended, which "ready" after a failure no longer shows.
-                 {QStringLiteral("lastTurnOutcome"), lastTurnOutcome(session)}});
+                 {QStringLiteral("lastTurnOutcome"), lastTurnOutcome(session)},
+                 // A paired Desktop shows these from the host-signed copy, not the relay's.
+                 {QStringLiteral("title"), snapshot.value(QStringLiteral("title"))},
+                 {QStringLiteral("state"), snapshot.value(QStringLiteral("state"))},
+                 {QStringLiteral("repositoryId"), context.value(QStringLiteral("repositoryId"))},
+                 {QStringLiteral("repositoryLabel"),
+                  context.value(QStringLiteral("repositoryLabel"))},
+                 {QStringLiteral("worktreeId"), context.value(QStringLiteral("worktreeId"))},
+                 {QStringLiteral("worktreeLabel"),
+                  context.value(QStringLiteral("worktreeLabel"))}});
+            // Navigation placement is host-sealed metadata only. The relay's routing scope
+            // above continues to name the current execution worktree/repository.
+            if (session.sidebarRepository) {
+                const auto& placement = *session.sidebarRepository;
+                auto& sealed = (*metadata)[session.id];
+                sealed.insert(QStringLiteral("sidebarPlacementKnown"), true);
+                sealed.insert(QStringLiteral("sidebarRepositoryId"),
+                              placement.isEmpty() ? QString{}
+                                                  : cloud_control::opaquePathId(
+                                                        "repository", placement, pathIdSalt));
+                sealed.insert(QStringLiteral("sidebarRepositoryLabel"),
+                              QFileInfo(placement).fileName());
+            } else if (!session.conversationPath.isEmpty()) {
+                // Legacy navigation is a stable fallback, not a claim about historical origin.
+                const auto recorded = repositories.value(session.conversationPath);
+                const auto fallback = recorded.isEmpty() ? session.conversationPath : recorded;
+                auto& sealed = (*metadata)[session.id];
+                sealed.insert(QStringLiteral("sidebarPlacementKnown"), false);
+                sealed.insert(QStringLiteral("sidebarRepositoryId"),
+                              cloud_control::opaquePathId("repository", fallback, pathIdSalt));
+                sealed.insert(QStringLiteral("sidebarRepositoryLabel"),
+                              QFileInfo(fallback).fileName());
+            }
+            if (const auto visible = sidebarRepositoryVisible(session.worktreePath))
+                (*metadata)[session.id].insert(QStringLiteral("sidebarExecutionRepositoryVisible"),
+                                               *visible);
             // ADR 0027: the number agents and users address the conversation by, and the
             // conversation whose message started the running turn. Sealed: only the phone
             // shows them.
@@ -822,12 +621,19 @@ QJsonArray CloudControlClient::sessionSnapshots(
             snapshot.insert(it.key(), it.value());
         }
         QString workspaceRevision = revisions.value(session.worktreePath);
-        if (workspaceRevision.isEmpty()) {
-            ReadOnlyWorkspaceFiles files({QStringLiteral("heartbeat"), workspaceId, machineId,
-                                          context.value(QStringLiteral("repositoryId")).toString(),
-                                          context.value(QStringLiteral("worktreeId")).toString(),
-                                          session.worktreePath});
-            workspaceRevision = files.revision();
+        if (!revisions.contains(session.worktreePath)) {
+            const auto compute = [&](const QString& path) {
+                ReadOnlyWorkspaceFiles files(
+                    {QStringLiteral("heartbeat"), workspaceId, machineId,
+                     context.value(QStringLiteral("repositoryId")).toString(),
+                     context.value(QStringLiteral("worktreeId")).toString(), path});
+                return files.revision();
+            };
+            workspaceRevision = revisionCache != nullptr
+                                    ? revisionCache->revision(
+                                          session.worktreePath,
+                                          byWorktree.value(session.worktreePath), nowMs, compute)
+                                    : compute(session.worktreePath);
             revisions.insert(session.worktreePath, workspaceRevision);
         }
         if (!workspaceRevision.isEmpty())
@@ -845,21 +651,37 @@ CloudControlClient::withSessionMetadata(const QList<QJsonArray>& batches,
         return batches;
     QList<QJsonArray> sealed;
     QSet<QString> current;
-    for (const QJsonArray& batch : batches) {
-        QJsonArray snapshots;
-        for (const QJsonValue& value : batch) {
-            QJsonObject snapshot = value.toObject();
-            const QString sessionId = snapshot.value(QStringLiteral("id")).toString();
-            current.insert(sessionId);
-            if (metadata.contains(sessionId)) {
-                const QJsonObject envelope =
-                    sealedSessionMetadata(snapshot, metadata.value(sessionId));
-                if (!envelope.isEmpty())
-                    snapshot.insert(QStringLiteral("encryptedMetadata"), envelope);
+    const auto previous = sealedMetadata_;
+    QString error;
+    const bool ready = credentials_.batch(
+        [&](CredentialStore& view, QString* failure) {
+            CloudCrypto crypto(&view);
+            for (const QJsonArray& batch : batches) {
+                QJsonArray snapshots;
+                for (const QJsonValue& value : batch) {
+                    QJsonObject snapshot = value.toObject();
+                    const QString sessionId = snapshot.value(QStringLiteral("id")).toString();
+                    current.insert(sessionId);
+                    if (metadata.contains(sessionId)) {
+                        const QJsonObject envelope =
+                            sealedSessionMetadata(snapshot, metadata.value(sessionId), crypto);
+                        if (envelope.isEmpty()) {
+                            *failure = lastError_;
+                            return false;
+                        }
+                        snapshot.insert(QStringLiteral("encryptedMetadata"), envelope);
+                    }
+                    snapshots.append(snapshot);
+                }
+                sealed.append(snapshots);
             }
-            snapshots.append(snapshot);
-        }
-        sealed.append(snapshots);
+            return true;
+        },
+        &error);
+    if (!ready) {
+        sealedMetadata_ = previous;
+        lastError_ = error;
+        return {};
     }
     for (auto it = sealedMetadata_.begin(); it != sealedMetadata_.end();) {
         if (current.contains(it.key()))
@@ -871,7 +693,8 @@ CloudControlClient::withSessionMetadata(const QList<QJsonArray>& batches,
 }
 
 QJsonObject CloudControlClient::sealedSessionMetadata(const QJsonObject& snapshot,
-                                                      const QJsonObject& metadata) {
+                                                      const QJsonObject& metadata,
+                                                      CloudCrypto& crypto) {
     const QString sessionId = snapshot.value(QStringLiteral("id")).toString();
     const qint64 generation = snapshot.value(QStringLiteral("generation")).toInteger();
     // The relay only takes metadata sealed at the snapshot's own cursor and turn.
@@ -887,8 +710,8 @@ QJsonObject CloudControlClient::sealedSessionMetadata(const QJsonObject& snapsho
         cached != sealedMetadata_.cend() && cached->first == fingerprint)
         return cached->second;
     QString cryptoError;
-    const QJsonObject content = crypto_.encrypt(plaintext, aad, sessionId, generation, 1,
-                                                machineId_, machineKeyVersion_, &cryptoError);
+    const QJsonObject content = crypto.encrypt(plaintext, aad, sessionId, generation, 1, machineId_,
+                                               machineKeyVersion_, &cryptoError);
     if (content.isEmpty()) {
         lastError_ = cryptoError;
         return {};

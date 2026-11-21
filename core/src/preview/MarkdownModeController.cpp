@@ -2,6 +2,7 @@
 #include "KetAppearance.h"
 #include "KetSegmentedControl.h"
 #include "preview/MarkdownPreviewPane.h"
+#include "ui/theme/ColorScheme.h"
 #include <QEvent>
 #include <QHBoxLayout>
 #include <QPlainTextEdit>
@@ -71,6 +72,8 @@ void MarkdownModeController::setMode(const QString& mode) {
     if (mode == "preview" && !preview_) {
         preview_ = new MarkdownPreviewPane(surface_);
         preview_->setEmbedded(true);
+        if (scheme_)
+            preview_->applyColorScheme(*scheme_);
         preview_->setTypography(fontSize_, lineHeight_);
         connect(preview_, &MarkdownPreviewPane::fileOpenRequested, this,
                 &MarkdownModeController::fileOpenRequested);
@@ -108,6 +111,12 @@ void MarkdownModeController::setMode(const QString& mode) {
     place();
     refresh();
     emit modeChanged();
+}
+void MarkdownModeController::applyColorScheme(const ColorScheme& scheme) {
+    scheme_ = std::make_shared<const ColorScheme>(resolveColorScheme(scheme));
+    palette_ = colorSchemePalette(*scheme_);
+    if (preview_)
+        preview_->applyColorScheme(*scheme_);
 }
 void MarkdownModeController::invalidate() {
     dirty_ = true;

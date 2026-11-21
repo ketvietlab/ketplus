@@ -13,7 +13,7 @@ Findings and recommendation: `docs/webrtc-transport-spike.md`.
   for the iOS TLS runs on 127.0.0.1:5349 with a throwaway self-signed
   certificate. It relayed over the Mac's LAN address unless noted
 - Browser: HeadlessChrome 154 driven through the KetPlus browser tools
-- iOS: the ketplus-app spike (`apps/ios/Spikes/WebRtcDataChannel`) with
+- iOS: the private mobile spike (a private mobile interoperability client) with
   `stasel/WebRTC` 154.0.0 on an iPhone 17 Pro simulator, iOS 26.5
 - OS: macOS 26.2, Darwin 25.2.0
 - Hardware: Apple M1 Pro, 10 CPU cores, 32 GiB RAM

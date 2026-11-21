@@ -37,10 +37,19 @@ function runNpm(args, options) {
     execFileSync(process.execPath, [npmCli, ...args], options);
     return;
   }
+  if (process.platform === "win32" && !npmCli) {
+    // npm is npm.cmd here, which Node refuses to spawn without a shell. The Node installer
+    // ships npm's CLI script next to node.exe: run that with this node instead.
+    const bundled = path.join(path.dirname(process.execPath), "node_modules", "npm", "bin", "npm-cli.js");
+    if (fs.existsSync(bundled)) {
+      execFileSync(process.execPath, [bundled, ...args], options);
+      return;
+    }
+  }
   execFileSync(npmCli || "npm", args, options);
 }
 
-const required = ["session-usage.mjs", "authentication.mjs", "index.mjs", "transcript.mjs", "input.mjs", "tasks.mjs", "resume.mjs", "session-delete.mjs", "package.json", "package-lock.json"];
+const required = ["session-usage.mjs", "authentication.mjs", "index.mjs", "transcript.mjs", "input.mjs", "tasks.mjs", "resume.mjs", "session-delete.mjs", "review-guard.mjs", "background-policy.mjs", "process-barrier.mjs", "package.json", "package-lock.json"];
 for (const name of required) {
   const source = path.join(sidecarDir, name);
   if (!fs.existsSync(source)) {

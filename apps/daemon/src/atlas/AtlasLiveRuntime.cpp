@@ -1,6 +1,4 @@
 #include "atlas/AtlasLiveRuntime.h"
-#include <QDir>
-#include <QFileInfo>
 #include <QJsonArray>
 #include <QRegularExpression>
 #include <QStandardPaths>
@@ -51,23 +49,17 @@ void AtlasLiveRuntime::start(const AtlasDescriptor& atlas, QUrl relay, const QSt
     process_.start(cli_, {"--version"});
 }
 void AtlasLiveRuntime::launch() {
-    QTcpServer viewer, renderer;
-    if (!viewer.listen(QHostAddress::LocalHost, 0) ||
-        !renderer.listen(QHostAddress::LocalHost, 0)) {
+    QTcpServer viewer;
+    if (!viewer.listen(QHostAddress::LocalHost, 0)) {
         fail("atlas_port_unavailable");
         return;
     }
     viewerPort_ = viewer.serverPort();
-    rendererPort_ = renderer.serverPort();
-    QStringList args{"serve",          atlas_.path,   "--root",
-                     atlas_.directory, "--port",      QString::number(viewerPort_),
-                     "--read-only",    "--no-preload"};
-    if (QFileInfo::exists(QDir(atlas_.directory).filePath("atlas.renderer.json")))
-        args << "--renderer" << "--html-port" << QString::number(rendererPort_);
-    else
-        rendererPort_ = 0;
+    // Remote viewing has no host-side per-launch renderer decision (ADR 0128).
+    const QStringList args{"serve",          atlas_.path,   "--root",
+                           atlas_.directory, "--port",      QString::number(viewerPort_),
+                           "--read-only",    "--no-preload"};
     viewer.close();
-    renderer.close();
     output_.clear();
     outputStartsAtLineBoundary_ = true;
     process_.start(cli_, args);
@@ -116,10 +108,6 @@ void AtlasLiveRuntime::attach(QUrl relay, const QString& bearer, Callback callba
     }
     QHash<QString, quint16> origins{{"viewer", viewerPort_}};
     QJsonArray descriptors{QJsonObject{{"id", "viewer"}, {"port", int(viewerPort_)}}};
-    if (rendererPort_) {
-        origins.insert("renderer", rendererPort_);
-        descriptors.append(QJsonObject{{"id", "renderer"}, {"port", int(rendererPort_)}});
-    }
     tunnel_ = new AtlasLiveTunnel(key_, channel_, origins, this);
     QUrlQuery query(relay_);
     query.addQueryItem("channel", channel_);

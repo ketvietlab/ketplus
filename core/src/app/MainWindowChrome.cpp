@@ -177,7 +177,7 @@ void MainWindow::createChrome() {
     chromePages_->setObjectName(QStringLiteral("liteWorkspacePages"));
     chromePages_->addWidget(workspaceSplit_);
     auto* welcome = new ket::EmptyState(
-        ket::Icons::codeForLucide(u"folder"), tr("Welcome to KétPlus"),
+        ket::Icons::codeForLucide(u"folder"), tr("Welcome to ketPlus"),
         tr("Open a folder to start working, or create a new file."), chromePages_);
     welcome->setObjectName(QStringLiteral("liteWelcome"));
     welcome->setAttribute(Qt::WA_StyledBackground);

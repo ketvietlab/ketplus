@@ -127,6 +127,9 @@ void MainWindow::ensureAgentWorkspace() {
             &AgentWorkspaceView::setConversationWidth);
     connect(agentWorkspace_, &AgentWorkspaceView::repositoryPickerRequested, this,
             &MainWindow::chooseFolder);
+    connect(agentWorkspace_, &AgentWorkspaceView::teamRequested, this, &MainWindow::openTeam);
+    connect(agentWorkspace_, &AgentWorkspaceView::teamTaskRequested, this,
+            &MainWindow::openTeamTask);
     auto updateRepositoryName = [this, lastPath = QString()]() mutable {
         const auto path = agentWorkspace_->executionPath();
         if (lastPath == path)
@@ -157,13 +160,11 @@ void MainWindow::ensureAgentWorkspace() {
                const QString& executionPath, qint64 revision) {
             if (agentWorkspace_->activePath() == path &&
                 agentManager_->activeConversationId(path) == conversation) {
-                const auto previousRepository =
-                    sidebarRepositoryForPath(agentWorkspace_->executionPath());
                 agentWorkspace_->setExecutionBranch(branch, executionPath, revision);
-                const auto repository = sidebarRepositoryForPath(executionPath);
-                agentWorkspace_->setRepositoryName(QFileInfo(repository).fileName());
-                if (repository != previousRepository)
-                    promotedSidebarRepository_ = repository;
+                // T-92: the execution context only; the conversation's sidebar group stays
+                // the repository it was created in.
+                agentWorkspace_->setRepositoryName(
+                    QFileInfo(sidebarRepositoryForPath(executionPath)).fileName());
                 if (normalizedPath(executionPath) !=
                     normalizedPath(fileContextRoot_.isEmpty() ? workspaceRoot_ : fileContextRoot_))
                     setFileContextWorktree(executionPath);
@@ -201,7 +202,6 @@ void MainWindow::ensureAgentWorkspace() {
                     agentManager_->activeConversationId(path) != conversation)
                     return;
                 setFileContextWorktree(selectedPath);
-                promotedSidebarRepository_ = sidebarRepositoryForPath(selectedPath);
                 scheduleSidebarRefresh(true);
             },
             agentWorkspace_->executionPath(), roots, currentRepository,
@@ -223,7 +223,8 @@ void MainWindow::ensureAgentWorkspace() {
         return agentManager_->transcriptPayload(agentWorkspace_->activePath(), scope, key, kind);
     });
     workspaceSplit_->insertWidget(0, agentWorkspace_);
-    agentWorkspace_->applyTheme(theme_.palette(), appearanceSettings_.interfaceZoomPercent);
+    agentWorkspace_->applyColorScheme(theme_.colorScheme(),
+                                      appearanceSettings_.interfaceZoomPercent);
     agentWorkspace_->setAgentAvailable(agentManager_->isAvailable());
     // ADR 0027: `#` completion lists every numbered conversation on this computer.
     agentWorkspace_->setConversationDirectory(
@@ -262,8 +263,11 @@ void MainWindow::ensureAgentWorkspace() {
             });
     connect(agentManager_, &AgentSessionManager::backgroundTasksChanged, this,
             [this](const QString& path, const QVariantList& tasks) {
-                if (normalizedPath(path) == normalizedPath(agentWorkspace_->activePath()))
+                if (normalizedPath(path) == normalizedPath(agentWorkspace_->activePath())) {
+                    agentWorkspace_->setBackgroundTaskState(
+                        agentManager_->backgroundTaskState(path));
                     agentWorkspace_->setBackgroundTasks(tasks);
+                }
             });
     connect(agentManager_, &AgentSessionManager::backgroundTaskResult, this,
             [this](const QString& path, const QString& taskId, const QString& action,
@@ -307,8 +311,18 @@ void MainWindow::ensureAgentWorkspace() {
                 agentManager_->stopBackgroundTask(agentWorkspace_->activePath(), taskId);
             });
     connect(agentWorkspace_, &AgentWorkspaceView::backgroundTaskOutputRequested, this,
-            [this](const QString& taskId) {
-                agentManager_->readBackgroundTaskOutput(agentWorkspace_->activePath(), taskId);
+            [this](const QString& taskId, const QString& cursor, quint64 request) {
+                agentManager_->readBackgroundTaskOutput(agentWorkspace_->activePath(), taskId,
+                                                        cursor, request);
+            });
+    connect(agentWorkspace_, &AgentWorkspaceView::backgroundTaskCleanupResolutionRequested, this,
+            [this](const QString& taskId, qint64 revision) {
+                agentManager_->resolveBackgroundTaskCleanup(agentWorkspace_->activePath(), taskId,
+                                                            revision);
+            });
+    connect(agentWorkspace_, &AgentWorkspaceView::backgroundTasksRequested, this,
+            [this](bool more) {
+                agentManager_->loadBackgroundTasks(agentWorkspace_->activePath(), more);
             });
     connect(
         agentWorkspace_, &AgentWorkspaceView::worktreeActivated, this, [this](const QString& path) {
@@ -383,8 +397,6 @@ void MainWindow::ensureAgentWorkspace() {
         openAgentTerminalTab();
     });
     connectAgentWorkReport();
-    connect(agentWorkspace_, &AgentWorkspaceView::tagFilterRequested, activityBar_,
-            &ActivityBar::setTagFilter);
     connect(agentWorkspace_, &AgentWorkspaceView::settingsRequested, this,
             &MainWindow::showSettingsSection);
     connect(agentWorkspace_, &AgentWorkspaceView::productNavigationRequested, this,
@@ -490,16 +502,6 @@ void MainWindow::ensureAgentWorkspace() {
                 QTimer::singleShot(0, this, [this, conversationId] {
                     renameAgentConversation(agentWorkspace_->activePath(), conversationId);
                 });
-            });
-    agentWorkspace_->setTagCatalog(agentManager_->tagCatalog());
-    connect(agentManager_, &AgentSessionManager::tagCatalogChanged, agentWorkspace_,
-            &AgentWorkspaceView::setTagCatalog);
-    connect(agentWorkspace_, &AgentWorkspaceView::tagCatalogSaveRequested, agentManager_,
-            &AgentSessionManager::saveTagCatalog);
-    connect(agentWorkspace_, &AgentWorkspaceView::conversationTagRequested, this,
-            [this](const QString& conversationId, const QString& label, const bool tagged) {
-                agentManager_->setConversationTag(agentWorkspace_->activePath(), conversationId,
-                                                  label, tagged);
             });
     connect(agentWorkspace_, &AgentWorkspaceView::conversationArchiveRequested, this,
             [this](const QString& conversationId) {
@@ -753,6 +755,14 @@ void MainWindow::startNewAgentConversation() {
 }
 
 void MainWindow::setAgentWorkspaceVisible(const bool visible) {
+    // ADR 0119: under a remote machine every way in shows that machine's workspace, and every
+    // other workspace hides it through here.
+    if (visible && selectedMachineId_ != QStringLiteral("local")) {
+        setMachineWorkspaceVisible(true);
+        return;
+    }
+    if (!visible)
+        setMachineWorkspaceVisible(false);
     if (!visible && compactConversationWindow_)
         setCompactConversationWindow(false);
     // Sidebar navigation selects its target after showing the workspace. When

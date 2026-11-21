@@ -103,7 +103,7 @@ ExplorerPanel* MainWindow::ensureExplorer() {
             [this](const QString& from, const QString& to) {
                 for (EditorWidget* editor : tab_paths::retarget(tabs_, from, to)) {
                     editor->configureLexerForPath(editor->document().filePath());
-                    editor->applyTheme(theme_.palette());
+                    editor->applyColorScheme(theme_.colorScheme());
                     updateTabTitle(editor);
                 }
             });
@@ -305,6 +305,7 @@ void MainWindow::showDiff(const QString& filePath, const GitDiffMode mode, const
         if (existing != nullptr && normalizedPath(existing->filePath()) == absolutePath &&
             existing->mode() == mode) {
             existing->setDiff(absolutePath, mode, diff, theme_.palette());
+            existing->applyColorScheme(theme_.colorScheme());
             tabs_->setCurrentIndex(index);
             statusBar()->showMessage(QStringLiteral("Updated Git diff"), 2000);
             return;
@@ -314,6 +315,7 @@ void MainWindow::showDiff(const QString& filePath, const GitDiffMode mode, const
     auto* diffView = new GitDiffView(this);
     diffView->applyEditorSettings(appearanceSettings_.editor);
     diffView->setDiff(absolutePath, mode, diff, theme_.palette());
+    diffView->applyColorScheme(theme_.colorScheme());
     connect(diffView, &GitDiffView::openFileRequested, this, &MainWindow::openFile);
     connect(diffView, &GitDiffView::refreshRequested, this,
             [this](const QString& path, const GitDiffMode requestedMode) {

@@ -24,7 +24,16 @@ path that must not trust the download server or the network.
   `SUFeedURL` and `SUPublicEDKey`, together with
   `SUVerifyUpdateBeforeExtraction`. Both must be set together; when both are
   empty (the default) Sparkle is neither downloaded nor bundled and the app
-  never contacts an update server.
+  never contacts an update server. The Sparkle delegate pins this compiled URL;
+  a restored `SUFeedURL` user default cannot override it.
+- Each published item declares its executable architecture through the
+  Sparkle item channel `ketplus-arm64` or `ketplus-x86_64`. The delegate
+  allows only the running executable slice, and rejects untagged or invalid
+  items before offering them. Release tooling checks the Mach-O slice before
+  generating the item, and R2 publication and rollback validate its tag.
+  Sparkle's public extraction callbacks provide an appcast item without the
+  extracted bundle path. The Desktop check therefore enforces the declared
+  architecture. Publisher-side binary validation remains required.
 - Every archive is verified against the compiled-in EdDSA key before it is
   extracted. The private key is never stored in this repository and never
   passed to CMake. `packaging/macos/publish-update.sh` signs archives with the
@@ -41,6 +50,10 @@ path that must not trust the download server or the network.
   Sparkle implementation wraps `SPUStandardUpdaterController`. Unconfigured
   builds and other platforms use a disabled implementation, and tests install a
   fake.
+- In explicit [QA settings isolation mode](../testing.md#desktop-update-qa-isolation),
+  Desktop disables Sparkle when its bundle identifier matches the production app
+  or is missing. A disposable bundle with a different identifier can use Sparkle
+  under its own preference domain.
 - Sparkle's standard windows show release notes, download progress and the
   install prompt. KetPlus adds Settings → Updates, a "Check for Updates…"
   item in the application menu and the sidebar user menu, and a sidebar
@@ -74,7 +87,25 @@ path that must not trust the download server or the network.
   with the old one.
 - Production updates still require Developer ID signing and notarization of the
   app and the embedded Sparkle helpers. EdDSA verification is required either
-  way. `publish-update.sh` warns when the app is not Developer ID signed.
+  way. `publish-update.sh` defaults to release mode and refuses missing Developer ID
+  signing or a stapled notarization ticket. Explicit `--mode local-qa` is for
+  disposable local fixtures only; its output must never be published.
+- Update preparation binds an explicit staging/production channel and arm64/x86_64
+  architecture to the output path, HTTPS download prefix, compiled feed and appcast
+  metadata. Feeds and archives are separate for each pair. The mode in the appcast
+  distinguishes release output from local QA, including QA feeds prepared over HTTPS.
+  The opt-in `release-macos-updates` preset reads release settings from the operator's
+  environment. CMake requires a single architecture and scoped HTTPS feed, and
+  installation verifies that the embedded appcast scope matches the executable's
+  Mach-O architecture. The default presets leave updates disabled.
+- Cloudflare R2 hosts the static feed and assets under `<channel>/<arch>/`. The
+  release owner provisions bucket-scoped credentials outside the checkout and
+  approves publication after reviewing the dry run. The separate uploader uses
+  conditional writes for immutable assets and changes the short-cached appcast
+  last. Before replacing a live feed it saves a version and digest-addressed
+  snapshot under `<channel>/<arch>/snapshots/`. Restoring a snapshot withdraws a
+  release from future checks without downgrading installed clients. See the
+  [release process](../release-process.md#publishing-the-macos-update-to-r2).
 - Every published version needs a higher `PROJECT_VERSION`, which is both
   `CFBundleVersion` and `CFBundleShortVersionString`.
 - Sparkle replaces the bundle while the old daemon may still be running from

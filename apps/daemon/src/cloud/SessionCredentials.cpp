@@ -76,40 +76,37 @@ bool SessionCredentials::pruneDeleted(const QSet<QString>& liveSessionIds, QStri
 }
 
 bool SessionCredentials::adoptWorkspace(const QString& workspaceId, QString* error) const {
-    QString readError;
-    const QString recorded = QString::fromUtf8(store_->read(workspaceAccount, &readError));
-    if (!readError.isEmpty()) {
-        if (error != nullptr)
-            *error = readError;
-        return false;
-    }
-    if (recorded == workspaceId)
-        return true;
-    if (recorded.isEmpty())
-        return store_->write(workspaceAccount, workspaceId.toUtf8(), error);
-    const QString leaving = setAside(recorded);
-    const QString returning = setAside(workspaceId);
     return store_->update(
-        [&](QHash<QString, QByteArray>& accounts) {
-            QHash<QString, QByteArray> moved;
-            for (auto entry = accounts.begin(); entry != accounts.end();) {
-                const QString& account = entry.key();
-                const bool used = account.startsWith(keyPrefix) || account.startsWith(wrapPrefix);
-                const bool returned = account.startsWith(returning);
-                if (!used && !returned && !account.startsWith(cursorPrefix)) {
-                    ++entry;
-                    continue;
-                }
-                if (used)
-                    moved.insert(leaving + account, entry.value());
-                else if (returned)
-                    moved.insert(account.mid(returning.size()), entry.value());
-                entry = accounts.erase(entry);
-            }
-            accounts.insert(moved);
-            accounts.insert(workspaceAccount, workspaceId.toUtf8());
-        },
+        [&](QHash<QString, QByteArray>& accounts) { adoptWorkspace(accounts, workspaceId); },
         error);
+}
+
+void SessionCredentials::adoptWorkspace(QHash<QString, QByteArray>& accounts,
+                                        const QString& workspaceId) {
+    const QString recorded = QString::fromUtf8(accounts.value(workspaceAccount));
+    if (recorded == workspaceId)
+        return;
+    if (!recorded.isEmpty()) {
+        const QString leaving = setAside(recorded);
+        const QString returning = setAside(workspaceId);
+        QHash<QString, QByteArray> moved;
+        for (auto entry = accounts.begin(); entry != accounts.end();) {
+            const QString& account = entry.key();
+            const bool used = account.startsWith(keyPrefix) || account.startsWith(wrapPrefix);
+            const bool returned = account.startsWith(returning);
+            if (!used && !returned && !account.startsWith(cursorPrefix)) {
+                ++entry;
+                continue;
+            }
+            if (used)
+                moved.insert(leaving + account, entry.value());
+            else if (returned)
+                moved.insert(account.mid(returning.size()), entry.value());
+            entry = accounts.erase(entry);
+        }
+        accounts.insert(moved);
+    }
+    accounts.insert(workspaceAccount, workspaceId.toUtf8());
 }
 
 } // namespace ketplus::daemon

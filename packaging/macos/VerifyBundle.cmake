@@ -37,7 +37,7 @@ endif()
 
 # A Release daemon cannot be pointed elsewhere at run time, so the relay compiled into the
 # bundle must be the one this build was configured for.
-if(DEFINED KETPLUS_CONTROL_URL AND NOT KETPLUS_CONTROL_URL STREQUAL "")
+if(KETPLUS_PRODUCTION_RELEASE OR (DEFINED KETPLUS_CONTROL_URL AND NOT KETPLUS_CONTROL_URL STREQUAL ""))
     execute_process(
         COMMAND "${daemon}" --build-info
         RESULT_VARIABLE build_info_result
@@ -48,18 +48,9 @@ if(DEFINED KETPLUS_CONTROL_URL AND NOT KETPLUS_CONTROL_URL STREQUAL "")
     if(NOT build_info_result EQUAL 0)
         message(FATAL_ERROR "Bundled daemon cannot report its build: ${build_info_error}")
     endif()
-    string(JSON bundled_control_url ERROR_VARIABLE build_info_json_error
-        GET "${build_info}" control_url)
-    if(build_info_json_error)
-        message(FATAL_ERROR "Unreadable daemon build info: ${build_info}")
-    endif()
-    # A Debug remote-demo daemon reports the relay its environment chose instead.
-    string(JSON overridable ERROR_VARIABLE build_info_json_error
-        GET "${build_info}" control_url_overridable)
-    if(NOT overridable AND NOT bundled_control_url STREQUAL KETPLUS_CONTROL_URL)
-        message(FATAL_ERROR
-            "Bundled daemon talks to ${bundled_control_url}, expected ${KETPLUS_CONTROL_URL}")
-    endif()
+    include("${CMAKE_CURRENT_LIST_DIR}/../../cmake/KetPlusProductionControl.cmake")
+    ketplus_verify_control_build_info("${build_info}" "${KETPLUS_CONTROL_URL}"
+        "${KETPLUS_PRODUCTION_RELEASE}")
 endif()
 
 execute_process(
@@ -76,37 +67,7 @@ if(NOT app_version_result EQUAL 0 OR
     )
 endif()
 
-# ADR 0019: a build configured for updates must carry Sparkle and the exact feed and key it
-# was configured with; an unconfigured build must not carry either.
-set(sparkle_framework "${KETPLUS_APP_BUNDLE}/Contents/Frameworks/Sparkle.framework")
-foreach(sparkle_key IN ITEMS SUFeedURL SUPublicEDKey)
-    execute_process(
-        COMMAND /usr/libexec/PlistBuddy -c "Print :${sparkle_key}"
-            "${KETPLUS_APP_BUNDLE}/Contents/Info.plist"
-        RESULT_VARIABLE sparkle_key_result
-        OUTPUT_VARIABLE sparkle_key_value
-        OUTPUT_STRIP_TRAILING_WHITESPACE
-        ERROR_QUIET
-    )
-    set(sparkle_plist_${sparkle_key} "")
-    if(sparkle_key_result EQUAL 0)
-        set(sparkle_plist_${sparkle_key} "${sparkle_key_value}")
-    endif()
-endforeach()
-if(KETPLUS_UPDATES_ENABLED)
-    if(NOT EXISTS "${sparkle_framework}/Versions/B/Sparkle"
-       OR NOT IS_SYMLINK "${sparkle_framework}/Sparkle")
-        message(FATAL_ERROR "KetPlus.app is missing an intact Contents/Frameworks/Sparkle.framework")
-    endif()
-    if(NOT sparkle_plist_SUFeedURL STREQUAL KETPLUS_UPDATE_FEED_URL
-       OR NOT sparkle_plist_SUPublicEDKey STREQUAL KETPLUS_UPDATE_PUBLIC_ED_KEY)
-        message(FATAL_ERROR "KetPlus.app Info.plist does not carry the configured update feed and key")
-    endif()
-elseif(DEFINED KETPLUS_UPDATES_ENABLED)
-    if(EXISTS "${sparkle_framework}" OR NOT sparkle_plist_SUFeedURL STREQUAL "")
-        message(FATAL_ERROR "KetPlus.app carries Sparkle although updates are not configured")
-    endif()
-endif()
+include("${CMAKE_CURRENT_LIST_DIR}/VerifySparkleBundle.cmake")
 
 file(GLOB_RECURSE bundled_codex LIST_DIRECTORIES false
     "${KETPLUS_APP_BUNDLE}/*codex*"
@@ -174,6 +135,7 @@ if(KETPLUS_REQUIRE_DEPLOYED_RUNTIME)
         COMMAND /usr/bin/otool -L
             "${KETPLUS_APP_BUNDLE}/Contents/MacOS/KetPlus"
             "${daemon}"
+            "${KETPLUS_APP_BUNDLE}/Contents/Helpers/ketplus_job_executor"
             "${KETPLUS_APP_BUNDLE}/Contents/Resources/qml/QtQuick/Controls/libqtquickcontrols2plugin.dylib"
         RESULT_VARIABLE otool_result
         OUTPUT_VARIABLE dependency_output

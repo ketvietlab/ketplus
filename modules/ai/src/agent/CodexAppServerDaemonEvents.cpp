@@ -10,6 +10,7 @@
 #include "CodexLaunchReloader.h"
 #include "CodexServerRequests.h"
 #include "DaemonClient.h"
+#include "TranscriptVisibility.h"
 
 #include <QCoreApplication>
 #include <QDir>
@@ -119,15 +120,17 @@ void CodexAppServer::dispatchDaemonEvent(const QJsonObject& envelope) {
         found->turnContextTokens = -1;
         found->turnReport = {};
     }
-    // ADR 0106: the ledger joins the turn's end row; the Report tab follows it live.
+    // Only a published scope projection refreshes the pane. Legacy tool updates are
+    // cached for their matching terminal row, never shown while the turn is open.
     if (type == QStringLiteral("work_report.updated")) {
         if (sequence == found->turnSequence)
-            found->turnReport = data;
-        emit notificationReceived(
-            QStringLiteral("daemon/workReport"),
-            {{QStringLiteral("threadId"), sessionId},
-             {QStringLiteral("report"), data},
-             {QStringLiteral("currentTurn"), sequence == found->turnSequence}});
+            found->turnReport =
+                data.value(QStringLiteral("scope_only")).toBool() ? QJsonObject{} : data;
+        if (data.value(QStringLiteral("scope_only")).toBool())
+            emit notificationReceived(QStringLiteral("daemon/workReport"),
+                                      {{QStringLiteral("threadId"), sessionId},
+                                       {QStringLiteral("report"), data},
+                                       {QStringLiteral("currentTurn"), false}});
         return;
     }
     if (type == QStringLiteral("usage.context") && sequence == found->turnSequence)
@@ -148,12 +151,19 @@ void CodexAppServer::dispatchDaemonEvent(const QJsonObject& envelope) {
         if (notice.isEmpty())
             return;
         if (type == QStringLiteral("turn.completed")) {
-            const QJsonObject report =
+            QJsonObject report =
                 data.contains(QStringLiteral("work_report"))
                     ? data.value(QStringLiteral("work_report")).toObject()
                     : (sequence == found->turnSequence ? found->turnReport : QJsonObject{});
-            if (!report.isEmpty())
+            if (!report.isEmpty()) {
                 notice.insert(QStringLiteral("workReport"), report.toVariantMap());
+                report.insert(QStringLiteral("terminal_status"),
+                              data.value(QStringLiteral("status")));
+                emit notificationReceived(QStringLiteral("daemon/workReport"),
+                                          {{QStringLiteral("threadId"), sessionId},
+                                           {QStringLiteral("report"), report},
+                                           {QStringLiteral("currentTurn"), false}});
+            }
         }
         if (daemonHasTranscriptWindow_ &&
             (!found->windowReady || sessionId != daemonRestorePrioritySession_)) {
@@ -280,6 +290,11 @@ void CodexAppServer::dispatchDaemonEvent(const QJsonObject& envelope) {
     }
     if (found->windowReady && sessionId == daemonRestorePrioritySession_)
         found->windowCursor = cursor;
+    // KetPlus's own agents tools are team plumbing, not transcript rows (TranscriptVisibility.h).
+    // The background task snapshot has its own notification above.
+    if (type.startsWith(QStringLiteral("item.")) &&
+        remote::transcript_visibility::hidden(type, data))
+        return;
     const QJsonObject largeEvent = data.value(QStringLiteral("large_event")).toObject();
     if (!largeEvent.isEmpty()) {
         const quint64 epoch = found->windowEpoch;
@@ -308,6 +323,9 @@ void CodexAppServer::dispatchDaemonEvent(const QJsonObject& envelope) {
                                                  .value(QStringLiteral("payload"))
                                                  .toObject();
                 const QJsonObject item = resolved.value(QStringLiteral("item")).toObject();
+                // A large internal call is known only once its item is whole.
+                if (remote::transcript_visibility::internalTool(item))
+                    return;
                 if (item.isEmpty()) {
                     emit notificationReceived(
                         QStringLiteral("error"),

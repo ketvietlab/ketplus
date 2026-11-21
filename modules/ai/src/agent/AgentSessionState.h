@@ -1,4 +1,5 @@
 #pragma once
+#include <optional>
 
 #include "agent/AgentSessionManager.h"
 #include <functional>
@@ -17,6 +18,8 @@ struct AgentSessionManager::Session final {
     QString path;
     // Stable birth anchor remains path; navigation follows the acknowledged execution root.
     QString executionPath;
+    std::optional<QString> sidebarRepository;
+    QString sidebarRepositoryFallback;
     QString executionBranch;
     qint64 executionRevision{0};
     QString threadId;
@@ -29,13 +32,6 @@ struct AgentSessionManager::Session final {
     QString agentTurnTitle;
     bool agentTurnReply{false};
     bool customTitle{false};
-    // The user's labels, as the daemon stores them (`session.tags/1`).
-    QStringList tags;
-    // The list the user's changes add up to while the daemon is still storing an earlier one.
-    QStringList tagsWanted;
-    bool tagSyncPending{false};
-    // #429: labels chosen before the first turn, sent once the daemon knows the conversation.
-    bool tagsAwaitStart{false};
     // #125: the last turn ended asking the user to approve or decide ("Waiting for you").
     bool awaitingReply{false};
     bool archived{false};
@@ -66,9 +62,15 @@ struct AgentSessionManager::Session final {
     // last reading stands in until the next turn. Rows: {id,label,usedPercent,resetsAt}.
     QVariantList planLimits;
     QVariantMap sessionUsage;
-    // The daemon's report of the provider's background shells and agents; never persisted,
-    // since a restarted provider no longer runs them.
+    // Owner-scoped presentation cache. The durable daemon registry owns managed jobs;
+    // a bounded event projection never replaces membership learned through pagination.
     QVariantList backgroundTasks;
+    QVariantList backgroundTaskProjection;
+    QVariantMap backgroundTaskPage;
+    QSet<QString> backgroundTaskMetadataReads;
+    bool backgroundTaskLoading{false};
+    bool backgroundTaskRefreshAgain{false};
+    int backgroundTaskCursorRetries{0};
     QString pendingPrompt;
     // Pairs the locally shown prompt with its journaled user.message echo.
     QString pendingClientMessageId;

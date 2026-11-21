@@ -4,7 +4,7 @@
 
 The mock only presents data, so its diagrams are rendered ahead of time, the way the app
 renders them at run time (core/src/preview/MermaidRenderer.cpp): mermaid-cli (`mmdc`) with
-the bundled Két theme in core/resources/mermaid, a transparent background and scale 2.
+the bundled configuration in core/resources/mermaid, a transparent background and scale 2.
 Run it after editing a .mmd file; it needs `mmdc` on PATH.
 """
 import json
@@ -19,11 +19,8 @@ THEMES = MOCK.parent.parent / "core" / "resources" / "mermaid"
 
 def configuration(theme: str) -> dict:
     config = json.loads((THEMES / f"{theme}.json").read_text())
-    variables = config.setdefault("themeVariables", {})
-    text = variables.get("textColor", "")
-    # As MermaidRenderer's mermaidConfiguration(): explicit state label fills.
-    variables["stateLabelColor"] = text
-    config["themeCSS"] = config.get("themeCSS", "") + f"\n.label text{{fill:{text};}}"
+    # MermaidRenderer's mermaidConfiguration() also adds explicit state label fills for Qt
+    # SVG. These PNGs come from the browser, which draws the theme's own label colours.
     return config
 
 

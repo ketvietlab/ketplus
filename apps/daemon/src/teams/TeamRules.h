@@ -2,11 +2,13 @@
 
 #include "teams/Team.h"
 
+#include <QJsonValue>
+
 #include <optional>
 
 namespace ketplus::daemon::teams {
 
-// A refusal with its protocol error code (ADR 0112, "Protocol").
+// A refusal with its protocol error code (ADR 0114, "Protocol").
 struct TeamError final {
     QString code;
     QString message;
@@ -17,6 +19,8 @@ struct Candidate final {
     QString sessionId;
     QString repository;
     QString provider;
+    // A Codex reviewer needs "full" (ketplus#295).
+    QString executionPolicy;
     // The team it is on already, 0 for none.
     qint64 teamId{0};
 };
@@ -24,8 +28,6 @@ struct Candidate final {
 // Membership rules, without side effects. Each returns the first rule the change breaks.
 namespace rules {
 
-// Only Claude enforces the read-only review guard (ADR 0067).
-[[nodiscard]] bool reviewerProviderSupported(const QString& provider);
 // A lane's prefixes, normalised: relative, '/' separated, no "." or "..", no trailing '/'.
 // Nothing when a prefix is invalid.
 [[nodiscard]] std::optional<QStringList> normalisedPaths(const QStringList& paths);
@@ -33,7 +35,7 @@ namespace rules {
 [[nodiscard]] bool pathUnder(const QString& path, const QString& prefix);
 [[nodiscard]] std::optional<TeamError> laneOverlap(const Team& team, const QString& exceptSession,
                                                    const QStringList& paths);
-// A new team: exactly one leader and one reviewer, one to five developers, all distinct
+// A new team: exactly one leader, one or two reviewers (T-23), one to five developers, all distinct
 // conversations of `repository` on no team, a Claude reviewer, lanes that do not overlap.
 [[nodiscard]] std::optional<TeamError> canCreate(const Team& team,
                                                  const QList<Candidate>& candidates);
@@ -41,6 +43,39 @@ namespace rules {
                                                     const Candidate& candidate);
 [[nodiscard]] std::optional<TeamError> canRemoveMember(const Team& team, const QString& sessionId);
 [[nodiscard]] std::optional<TeamError> validName(const QString& name, const QString& what);
+// The longest goal a team keeps, in UTF-16 characters (ADR 0114): long enough for an issue
+// with its context and links. A longer goal is refused, never cut.
+inline constexpr qsizetype maximumGoalCharacters = 16000;
+// The goal also fits in UTF-8 bytes: the leader's first turn is one team message, which the
+// broker cuts at AgentBroker::maximumBodyBytes (32 KiB). The goal keeps 24 KiB of it, so the
+// rest of that turn (members, the mentioned conversations) fits too. Accented letters, other
+// scripts and emoji take more than one byte each, so such a goal reaches this limit first.
+inline constexpr qsizetype maximumGoalBytes = 24 * 1024;
+// The mentioned conversations the leader's first turn lists, and the longest title it shows.
+inline constexpr qsizetype maximumListedMentions = 20;
+inline constexpr qsizetype maximumMentionTitleCharacters = 80;
+[[nodiscard]] std::optional<TeamError> validGoal(const QString& goal);
+// The conversation numbers a goal mentions as `@agent/<number>`, each once, in order. The `@`
+// follows the start, a space or an opening bracket or quote, as the app's editor draws them.
+[[nodiscard]] QStringList goalMentions(const QString& goal);
+// A branch a team names (its integration branch): empty for none, or a name git accepts
+// (`git check-ref-format --branch`) that cannot be read as an option.
+[[nodiscard]] std::optional<TeamError> validBranch(const QString& branch);
+// A team's automatic-turn budget: a whole number from minimumTurnBudget to maximumTurnBudget.
+// Sets `budget` when it is one.
+[[nodiscard]] std::optional<TeamError> validTurnBudget(const QJsonValue& value, int* budget);
+// T-40: a team's review rounds (1 or 2) and review place ("board" or "pull_request").
+[[nodiscard]] std::optional<TeamError> validReviewRounds(const QJsonValue& value, int* rounds);
+[[nodiscard]] std::optional<TeamError> validReviewPlace(const QJsonValue& value, QString* place);
+// T-56: a team's language is one team_language supports.
+[[nodiscard]] std::optional<TeamError> validLanguage(const QString& language);
+// ADR 0116 §4: a change that carries `expected_revision` is refused with stale_team when the
+// part it acts on changed after that revision: a decision answer its decision, team.update
+// the settings, team.delete the settings and the members, a member change the members, a
+// handover its task. A change without it, or a part that does not exist, is left to the
+// command's own rules.
+[[nodiscard]] std::optional<TeamError> fence(const Team& team, const QString& type,
+                                             const QJsonObject& payload);
 
 } // namespace rules
 } // namespace ketplus::daemon::teams

@@ -1,17 +1,22 @@
 # Also read by tests/daemon/cloud-privacy, which builds these against in-memory credentials.
+# PeerLink, WebRtcPeerLink and the frame codec build as ketplus_peer_link (cmake/WebRtc.cmake).
 set(KETPLUS_DAEMON_CORE_SOURCES
+    src/agents/AgentMutationOrigin.cpp
     src/cloud/CloudControlTransport.cpp
-    src/transport/FrameCodec.cpp
-    src/transport/PeerLink.h
     src/transport/RemotePeers.cpp
     src/transport/Signaling.cpp
-    src/transport/WebRtcPeerLink.cpp
     src/atlas/AtlasLiveRuntime.cpp
     src/atlas/AtlasLiveTunnel.cpp
     src/atlas/AtlasTunnelCodec.cpp
     ../../modules/atlas/src/workspace/AtlasIndex.cpp
     src/runtime/SessionHostWorkspaceCatalog.cpp
+    src/service/DaemonApplication.h
     src/service/UnixSignals.cpp
+    src/service/WindowsShutdown.cpp
+    src/platform/ProcessTree.cpp
+    src/providers/WindowsScriptLaunch.cpp
+    src/providers/WindowsScriptLaunch.h
+    src/runtime/executor/NativeJobUnsupported.cpp
     src/runtime/SessionHostWorktrees.cpp
     src/storage/LocalJournalContexts.cpp
     src/storage/LocalJournalTurnStart.cpp
@@ -19,23 +24,95 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/storage/LocalJournalDeletion.cpp
     src/runtime/SessionHostDeletion.cpp
     src/storage/LocalJournalTasks.cpp
+    src/storage/BackgroundTaskOutput.cpp
+    src/storage/BackgroundTaskLedger.cpp
+    src/storage/BackgroundTaskTransitions.cpp
+    src/storage/BackgroundTaskDelivery.cpp
+    src/storage/BackgroundTaskWakeQueue.cpp
+    src/storage/BackgroundTaskQuota.cpp
+    src/storage/BackgroundTaskList.cpp
+    src/storage/BackgroundTaskFingerprint.cpp
+    src/storage/BackgroundTaskRetention.cpp
+    src/storage/BackgroundTaskExecutors.cpp
+    src/storage/BackgroundTaskChildren.cpp
+    src/storage/BackgroundTaskEffects.cpp
+    src/storage/RemoteJobRows.cpp
+    src/storage/RemoteJobRows.h
+    src/storage/LocalJournalManagedTasks.cpp
+    src/runtime/executor/NativeJobClient.cpp
+    src/runtime/executor/LinuxJobContainment.cpp
+    src/runtime/executor/NativeJobRecovery.cpp
+    src/runtime/executor/NativeProcessIdentity.cpp
+    src/runtime/executor/NativeJobControlAddress.cpp
+    src/runtime/ManagedTaskRuntime.cpp
+    src/runtime/ManagedTaskProcesses.cpp
+    src/runtime/ManagedTaskOutput.cpp
+    src/runtime/ManagedTaskSpec.cpp
+    src/runtime/ManagedTaskBridge.cpp
+    src/runtime/ManagedTaskPermissions.cpp
+    src/runtime/ManagedTaskChildren.cpp
+    src/runtime/ManagedTaskChildOutput.cpp
+    src/runtime/ManagedTaskWake.cpp
+    src/runtime/SessionHostManagedTasks.cpp
     src/storage/LocalJournalArchive.cpp
     src/storage/LocalJournalTags.cpp
     src/cloud/CloudControlCredentials.cpp
     src/cloud/MachineChallenge.cpp
+    src/cloud/CloudControlTrust.cpp
     src/cloud/CloudControlClient.cpp
     src/cloud/CloudControlCommands.cpp
     src/cloud/CloudControlRestore.cpp
     src/cloud/CloudControlSupport.cpp
     src/cloud/CloudControlSupport.h
     src/cloud/CloudControlSync.cpp
+    src/cloud/CloudControlKeyDistribution.cpp
     src/cloud/CloudControlUploadProgress.cpp
+    src/cloud/CloudControlTeamCommands.cpp
     src/cloud/CloudControlWorktreeCommands.cpp
+    src/cloud/CloudControlPreparations.cpp
     src/cloud/RemoteWorktreeQuota.cpp
     src/cloud/RemoteAudit.cpp
     src/cloud/CloudControlClient.h
     src/cloud/CloudControlDeviceSignIn.cpp
     src/cloud/DevicePins.cpp
+    src/runner/CloudRunnerRelay.cpp
+    src/runner/CloudRunnerRelay.h
+    src/runner/RunnerPairing.cpp
+    src/runner/RunnerPairing.h
+    src/runner/RunnerPairingFlow.cpp
+    src/runner/RunnerPinStore.cpp
+    src/runner/RunnerPinStore.h
+    src/runner/RunnerRelayClient.cpp
+    src/runner/RunnerRelayClient.h
+    src/runner/RunnerRelayPort.h
+    src/runner/RunnerRelaySchema.cpp
+    src/runner/RunnerRelaySchema.h
+    src/runner/RunnerService.cpp
+    src/runner/RunnerService.h
+    src/runner/jobs/LedgerRecordStore.cpp
+    src/runner/jobs/LedgerRecordStore.h
+    src/runner/jobs/PinRunnerTrust.cpp
+    src/runner/jobs/PinRunnerTrust.h
+    src/runner/jobs/QtJobClock.cpp
+    src/runner/jobs/QtJobClock.h
+    src/runner/jobs/RemoteJobCoordinator.cpp
+    src/runner/jobs/RemoteJobCoordinator.h
+    src/runner/jobs/RemoteJobLabels.cpp
+    src/runner/jobs/RemoteJobLabels.h
+    src/runner/jobs/RemoteJobPeerEvents.cpp
+    src/runner/jobs/RemoteJobPorts.h
+    src/runner/jobs/RemoteJobRecord.cpp
+    src/runner/jobs/RemoteJobRecord.h
+    src/runner/jobs/RemoteJobRecordJson.cpp
+    src/runner/jobs/RemoteJobRecordJson.h
+    src/runner/jobs/RemoteJobRelay.cpp
+    src/runner/jobs/RemoteJobRelay.h
+    src/runner/jobs/RemoteJobSchema.cpp
+    src/runner/jobs/RemoteJobSchema.h
+    src/runner/jobs/RemoteJobSpecs.cpp
+    src/runner/jobs/RemoteJobSpecs.h
+    src/runner/jobs/RemoteJobTransitions.cpp
+    src/runner/jobs/RemoteJobTransitions.h
     src/cloud/SessionCredentials.cpp
     src/cloud/CloudControlSignIn.cpp
     src/cloud/CloudControlBatching.h
@@ -43,6 +120,8 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/cloud/WorktreeBranches.h
     src/cloud/WorktreeRepositories.cpp
     src/cloud/WorktreeRepositories.h
+    src/cloud/WorktreeRevisionCache.cpp
+    src/cloud/WorktreeRevisionCache.h
     src/cloud/CloudEventProjection.cpp
     src/cloud/CloudEventProjection.h
     src/agents/WorkReport.cpp
@@ -53,15 +132,35 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/ipc/LocalIpcServer.h
     src/protocol/DaemonProtocol.cpp
     src/protocol/DaemonProtocol.h
+    src/protocol/ScheduleProtocol.cpp
+    src/protocol/ScheduleProtocol.h
     src/providers/ProviderAdapter.h
+    src/providers/CopilotCli.cpp
+    src/providers/CopilotCli.h
     src/providers/ProviderResponseEnvelope.h
     src/providers/ProviderResponseId.h
     src/providers/ClaudeAdapter.cpp
     src/providers/ClaudeAdapter.h
+    src/providers/CopilotAdapter.cpp
+    src/providers/CopilotAdapter.h
+    src/providers/CopilotCatalog.cpp
+    src/providers/CopilotCatalog.h
     src/providers/CursorAdapter.cpp
-    src/providers/CursorBrowserSession.cpp
+    src/providers/CursorModelCatalog.cpp
+    src/providers/CursorModelConfig.cpp
+    src/providers/CursorModelVariant.h
+    src/providers/CursorRequests.cpp
+    src/providers/acp/AcpAdapter.h
+    src/providers/acp/AcpProcess.cpp
+    src/providers/acp/AcpProtocol.cpp
+    src/providers/acp/AcpTurns.cpp
+    src/providers/acp/AcpPermissions.cpp
+    src/providers/acp/AcpSession.cpp
+    src/providers/acp/AcpSessionIsolation.cpp
+    src/providers/acp/AcpToolItem.h
     src/providers/CursorAdapter.h
     src/providers/CodexAdapter.cpp
+    src/providers/CodexSessionIsolation.cpp
     src/providers/CodexAdapter.h
     src/providers/ProviderLineReader.cpp
     src/providers/ProviderLineReader.h
@@ -87,6 +186,13 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/agents/AgentBroker.cpp
     src/agents/AgentBrokerRelease.cpp
     src/agents/AgentBrokerReviews.cpp
+    src/agents/AgentBrokerIntegrity.cpp
+    src/agents/AgentBrokerReplies.cpp
+    src/agents/GitProcess.cpp
+    src/agents/GitProcess.h
+    src/agents/ReviewIntegrity.cpp
+    src/agents/ReviewIntegrity.h
+    src/agents/ReviewerPolicy.h
     src/agents/AgentBroker.h
     src/agents/AgentInstructions.cpp
     src/agents/AgentInstructions.h
@@ -102,26 +208,66 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/runtime/SessionHostWorkReports.cpp
     src/storage/AgentMessageRecord.h
     src/storage/LocalJournalAgents.cpp
+    src/storage/ScheduleRecord.h
+    src/storage/LocalJournalSchedules.cpp
     src/storage/LocalJournalReviewers.cpp
     src/storage/LocalJournalTeams.cpp
     src/teams/Team.cpp
     src/teams/Team.h
+    src/teams/TeamBranchNames.cpp
+    src/teams/TeamBranchNames.h
     src/teams/TeamRules.cpp
     src/teams/TeamRules.h
+    src/teams/TeamAgentTasks.cpp
+    src/teams/TeamAgentTasks.h
+    src/teams/TeamRemoteView.cpp
+    src/teams/TeamRemoteView.h
+    src/teams/TeamVerdictLine.cpp
+    src/teams/TeamVerdictLine.h
     src/teams/TeamCoordinator.cpp
     src/teams/TeamCoordinator.h
+    src/teams/TeamCoordinatorAssign.cpp
+    src/teams/TeamCoordinatorAllowedPaths.cpp
+    src/teams/TeamCoordinatorAttribution.cpp
+    src/teams/TeamCoordinatorDecisions.cpp
     src/teams/TeamCoordinatorFlow.cpp
+    src/teams/TeamCoordinatorGit.cpp
+    src/teams/TeamCoordinatorStall.cpp
+    src/teams/TeamCoordinatorStorage.cpp
+    src/teams/TeamCoordinatorWaits.cpp
+    src/teams/TeamCoordinatorLanes.cpp
+    src/teams/TeamCoordinatorMerges.cpp
+    src/teams/TeamCoordinatorSettings.cpp
+    src/teams/TeamCoordinatorDone.cpp
+    src/teams/TeamCoordinatorRelocations.cpp
+    src/teams/TeamCoordinatorBranchNames.cpp
+    src/teams/TeamCoordinatorRepository.cpp
+    src/teams/TeamCoordinatorReviews.cpp
+    src/teams/TeamCoordinatorReviewTools.cpp
+    src/teams/TeamCoordinatorTamper.cpp
+    src/teams/TeamCoordinatorReviewers.cpp
     src/teams/TeamCoordinatorTasks.cpp
     src/agents/AgentBrokerTeams.cpp
     src/storage/LocalJournalWorkReports.cpp
     src/runtime/SessionHostReviewers.cpp
     src/runtime/SessionHostTeams.cpp
+    src/runtime/SessionHostSchedules.cpp
+    src/runtime/SessionHostScheduleRuntime.cpp
     src/runtime/SessionHostTeamsProtocol.cpp
+    src/runtime/SessionHostTeamsRemote.cpp
+    src/runtime/SessionHostTeamStorage.cpp
     src/runtime/SessionHostTeamTasks.cpp
+    src/runtime/TeamGit.cpp
+    src/runtime/TeamGit.h
+    src/runtime/TeamWorktreeRemoval.cpp
+    src/runtime/TeamWorktreeRemoval.h
+    src/runtime/TeamPullRequests.cpp
+    src/runtime/TeamPullRequests.h
     src/runtime/SessionHostTeamAgents.cpp
     src/storage/LocalJournalAgentRelease.cpp
     src/runtime/SessionHostUsage.cpp
     src/runtime/SessionHostStorage.cpp
+    src/runtime/SessionHostPreparation.cpp
     src/runtime/JournalStorageJobs.cpp
     src/runtime/SessionHost.h
     src/runtime/SessionHostBrowser.cpp
@@ -146,7 +292,10 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/service/DaemonService.h
     src/storage/LocalJournalActivityBackfill.cpp
     src/storage/LocalJournalActivityGroups.cpp
+    src/storage/LocalJournalActivityLatest.cpp
     src/storage/LocalJournal.cpp
+    src/storage/LocalJournalPreparations.cpp
+    src/storage/SessionPreparation.h
     src/storage/LocalJournalAcknowledgements.cpp
     src/storage/LocalJournalGarbageCollection.cpp
     src/storage/LocalJournalHistoryPurge.cpp
@@ -180,4 +329,10 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/storage/McpMediaReferences.cpp
     src/storage/McpMediaStore.cpp
     src/storage/McpMediaStore.h
+    src/schedule/ScheduleRule.cpp
+    src/schedule/ScheduleRule.h
+    src/schedule/JournalScheduleStore.cpp
+    src/schedule/JournalScheduleStore.h
+    src/schedule/ScheduleRunner.cpp
+    src/schedule/ScheduleRunner.h
 )

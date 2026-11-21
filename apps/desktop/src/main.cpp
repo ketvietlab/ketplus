@@ -1,19 +1,28 @@
+#include "app/ApplicationAttributes.h"
 #include "app/MainWindow.h"
+#include "app/QaSettingsIsolation.h"
 #include "app/RepositoryRouter.h"
+#include "remote/LinuxMachines.h"
 #include "ui/InterfaceFont.h"
 #include "ui/Theme.h"
 #include "update/AppUpdater.h"
 
 #include "KetPlusProductVersion.h"
 
+#include <QAction>
 #include <QApplication>
 #include <QCoreApplication>
+#include <QDir>
 #include <QElapsedTimer>
 #include <QFileInfo>
 #include <QIcon>
+#include <QJsonDocument>
+#include <QJsonObject>
 #include <QMessageBox>
+#include <QProcess>
 #include <QQuickWindow>
 #include <QSGRendererInterface>
+#include <QSettings>
 #include <QTimer>
 #include <QtWebView/QtWebView>
 
@@ -24,17 +33,65 @@ int main(int argc, char* argv[]) {
     QElapsedTimer startupTimer;
     startupTimer.start();
 
+    const auto settingsName = QStringLiteral("KetPlus");
+    if (const auto error = ketplus::configureQaSettingsIsolation(settingsName, settingsName);
+        !error.isEmpty()) {
+        std::fprintf(stderr, "KetPlus QA settings isolation failed: %s\n", qPrintable(error));
+        return 1;
+    }
+
 #ifdef Q_OS_MACOS
     QQuickWindow::setGraphicsApi(QSGRendererInterface::Metal);
 #endif
     QtWebView::initialize();
+    ketplus::applyApplicationAttributes();
     QApplication app(argc, argv);
-    // The name keeps the settings location of existing installs; users see KétPlus Pro.
-    QCoreApplication::setApplicationName(QStringLiteral("KetPlus"));
-    QGuiApplication::setApplicationDisplayName(QStringLiteral("KétPlus Pro"));
+#ifdef Q_OS_LINUX
+    // Installed-package diagnostic: inspect a real child, never the app's own
+    // environment, and do not print unrelated variables (tokens, credentials).
+    if (app.arguments().contains(QStringLiteral("--check-child-environment"))) {
+        QProcess child;
+        child.start(QStringLiteral("/usr/bin/env"), {QStringLiteral("-0")});
+        if (!child.waitForFinished(5000) || child.exitStatus() != QProcess::NormalExit ||
+            child.exitCode() != 0) {
+            std::fprintf(stderr, "Child environment probe failed\n");
+            return 1;
+        }
+        QJsonObject environment;
+        for (const auto& entry : child.readAllStandardOutput().split('\0')) {
+            const auto separator = entry.indexOf('=');
+            if (separator < 0)
+                continue;
+            const auto name = entry.left(separator);
+            if (name == "LD_LIBRARY_PATH" || name == "QT_PLUGIN_PATH" || name.startsWith("QML") ||
+                name.startsWith("QTWEBENGINE")) {
+                environment.insert(QString::fromUtf8(name),
+                                   QString::fromUtf8(entry.mid(separator + 1)));
+            }
+        }
+        std::puts(QJsonDocument(environment).toJson(QJsonDocument::Compact).constData());
+        return 0;
+    }
+#endif
+    // The name keeps the settings location of existing installs; users see ketPlus Pro.
+    QCoreApplication::setApplicationName(settingsName);
+    QGuiApplication::setApplicationDisplayName(QStringLiteral("ketPlus Pro"));
     QCoreApplication::setApplicationVersion(QStringLiteral(KETPLUS_PRODUCT_VERSION));
-    QCoreApplication::setOrganizationName(QStringLiteral("KetPlus"));
+    QCoreApplication::setOrganizationName(settingsName);
+    // Matches packaging/linux/ketplus-pro.desktop, so Wayland compositors use its name and icon.
+    QGuiApplication::setDesktopFileName(QStringLiteral("ketplus-pro"));
     QApplication::setWindowIcon(QIcon(QStringLiteral(":/brand/ketplus-app-icon.png")));
+    // Benchmarks and captures against large fixtures: preferences and per-app data live in this
+    // directory, so a run never reads or overwrites the installed app's windows, repositories or
+    // conversation worktrees. Point KETPLUS_DAEMON_* at a separate daemon as well.
+    if (const QString profile = qEnvironmentVariable("KETPLUS_PROFILE_DIR");
+        !profile.isEmpty() && !qEnvironmentVariableIsSet("KETPLUS_QA_SETTINGS_DIR")) {
+        QDir().mkpath(profile);
+        QSettings::setDefaultFormat(QSettings::IniFormat);
+        QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, profile);
+        QCoreApplication::setApplicationName(QStringLiteral("KetPlus-Profile-") +
+                                             QString::number(qHash(QDir(profile).absolutePath())));
+    }
 
     ketplus::ThemeManager theme(app);
     ketplus::InterfaceUiFont::apply(app, theme.interfaceTextPixels());
@@ -42,8 +99,14 @@ int main(int argc, char* argv[]) {
         ketplus::InterfaceUiFont::apply(app, theme.interfaceTextPixels());
     });
     ketplus::RepositoryRouter repositories;
+    // The app's one set of Linux machines (ADR 0119): every window shows it, and it connects
+    // once, at launch, so each window's picker lists the machines before Connections opens.
+    ketplus::LinuxMachines linuxMachines;
+    linuxMachines.attachSshBackend();
+    linuxMachines.attachRelayBackend();
+    linuxMachines.start();
     std::function<ketplus::MainWindow*()> createWindow;
-    createWindow = [&app, &theme, &repositories, &createWindow] {
+    createWindow = [&app, &theme, &repositories, &createWindow, &linuxMachines] {
         auto* window = new ketplus::MainWindow(theme);
         window->setAttribute(Qt::WA_DeleteOnClose);
         QObject::connect(window, &ketplus::MainWindow::newWindowRequested, &app,
@@ -58,6 +121,7 @@ int main(int argc, char* argv[]) {
                          &ketplus::RepositoryRouter::openFile);
         QObject::connect(window, &ketplus::MainWindow::repositoryFileDiffRequested, &repositories,
                          &ketplus::RepositoryRouter::openFileDiff);
+        window->useLinuxMachines(&linuxMachines);
         return window;
     };
     QObject::connect(&repositories, &ketplus::RepositoryRouter::worktreeRequested, &app,
@@ -124,6 +188,12 @@ int main(int argc, char* argv[]) {
     }
     if (!openedArgument) {
         window->restoreLastWorkspace();
+    }
+    // Benchmarks of a large install open Agent Workspace, which lists every conversation, without
+    // a keystroke that would take the focus from whatever the user is doing.
+    if (qEnvironmentVariableIsSet("KETPLUS_BENCHMARK_AGENT_WORKSPACE")) {
+        if (auto* action = window->findChild<QAction*>(QStringLiteral("agentWorkspaceAction")))
+            action->setChecked(true);
     }
     // Scheduled update checks start once a window is up, so they never delay launch.
     QTimer::singleShot(0, &app, [] { ketplus::AppUpdater::instance().start(); });

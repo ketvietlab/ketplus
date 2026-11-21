@@ -20,6 +20,8 @@ class AppUpdater : public QObject {
     // The process-wide updater, created on first use. A build without a configured feed (or a
     // platform without Sparkle) gets an updater whose isConfigured() is false.
     static AppUpdater& instance();
+    // Called during QA startup, before the first use of the process-wide updater.
+    static void enableQaSettingsIsolation();
     // Replaces the process-wide updater; the caller keeps ownership. Tests only.
     static void setInstanceForTesting(AppUpdater* updater);
 

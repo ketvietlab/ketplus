@@ -46,6 +46,7 @@ bool RemotePeers::accept(const QString& id, const QString& device, int version,
     peer->grant = grant;
     peer->link = link;
     peer->epoch = epoch;
+    link->setDiagnosticEpoch(epoch);
     peer->created = now();
     peer->lastPing = now();
     peers_.insert(id, peer);
@@ -82,7 +83,8 @@ bool RemotePeers::authorized(const QString& id, const QJsonObject& command) cons
                           : kind == "worktree.branches.read" ? QStringLiteral("session.create")
                                                              : kind;
     const auto content = command.value("content").toObject();
-    return !kind.isEmpty() && kind != "session.delete" &&
+    // ADR 0116 §2: team commands travel only through the mailbox in this version.
+    return !kind.isEmpty() && kind != "session.delete" && !kind.startsWith("team.") &&
            command.value("id").toString().size() <= 128 &&
            !command.value("id").toString().isEmpty() &&
            !command.value("idempotencyKey").toString().isEmpty() &&

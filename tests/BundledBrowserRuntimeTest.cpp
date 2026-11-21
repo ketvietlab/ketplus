@@ -106,8 +106,20 @@ class BundledBrowserRuntimeTest final : public QObject {
         }
         QCOMPARE(bundledBrowserRuntimeCandidates(QStringLiteral("/A/Contents/Helpers")),
                  (QStringList{QStringLiteral("/A/Contents/Resources/ketplus-browser"),
-                              QStringLiteral("/A/Contents/Helpers/ketplus-browser")}));
+                              QStringLiteral("/A/Contents/Helpers/ketplus-browser"),
+                              QStringLiteral("/A/Contents/lib/ketplus/ketplus-browser")}));
         QVERIFY(!findBundledBrowserRuntime(QString()).has_value());
+    }
+
+    void findsTheInstalledLinuxPrefix() {
+        FakeBundle prefix;
+        prefix.runtimeParent = prefix.root.filePath(QStringLiteral("usr/lib/ketplus"));
+        prefix.create();
+        const QString bin = prefix.root.filePath(QStringLiteral("usr/bin"));
+        QVERIFY(QDir().mkpath(bin));
+        const auto runtime = findBundledBrowserRuntime(bin);
+        QVERIFY(runtime.has_value());
+        QCOMPARE(runtime->rootDir, QFileInfo(prefix.runtime()).canonicalFilePath());
     }
 
     void rejectsInvalidRuntimes() {

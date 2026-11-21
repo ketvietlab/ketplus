@@ -1,0 +1,168 @@
+{
+  "schemaVersion": 1,
+  "id": "builtin-dark",
+  "name": "KétPlus Dark",
+  "kind": "dark",
+  "extends": "builtin-dark",
+  "ui": {
+    "chrome": {
+      "appBackground": "#1B1F24",
+      "pageBackground": "#1B1F24",
+      "panelBackground": "#1D2228",
+      "panelSubtle": "#171B20",
+      "surfaceRaised": "#23282F",
+      "surfaceHover": "#292F37",
+      "textMain": "#F2F4F7",
+      "textSecondary": "#B4BAC4",
+      "textMuted": "#858D99",
+      "textDisabled": "#505862",
+      "border": "#292E34",
+      "borderStrong": "#3A3F44",
+      "accent": "#365FD6",
+      "accentHover": "#3151C6",
+      "accentActive": "#2B46B7",
+      "accentSubtle": "#202C4B",
+      "accentMuted": "#23315D",
+      "accentText": "#9EB5FF",
+      "positive": "#40C97B",
+      "warning": "#E5A93C",
+      "danger": "#EF665C",
+      "info": "#9EB5FF"
+    },
+    "sidebar": {
+      "bg": "#171B20",
+      "fg": "#F2F4F7",
+      "border": "#292E34"
+    },
+    "input": {
+      "bg": "#20252C",
+      "fg": "#F2F4F7",
+      "border": "#292E34"
+    },
+    "list": {
+      "hover": "#292F37",
+      "selection": "#313844",
+      "fg": "#F2F4F7",
+      "selectionFg": "#F2F4F7"
+    },
+    "focus": {
+      "border": "#668CFF"
+    },
+    "tab": {
+      "activeFg": "#9EB5FF",
+      "activeBg": "#1D2228",
+      "inactiveBg": "#171B20",
+      "inactiveFg": "#858D99"
+    },
+    "button": {
+      "bg": "#365FD6",
+      "hover": "#3151C6",
+      "active": "#2B46B7",
+      "fg": "#FFFFFF"
+    }
+  },
+  "editor": {
+    "bg": "#1D2228",
+    "fg": "#F2F4F7",
+    "selection": "#23315D",
+    "selectionFg": "#F2F4F7",
+    "caret": "#365FD6",
+    "lineHighlight": "#202C4B24",
+    "gutterBg": "#171B20",
+    "gutterFg": "#858D99"
+  },
+  "syntax": {
+    "keyword": {
+      "fg": "#9EB5FF",
+      "bold": false,
+      "italic": false,
+      "underline": false
+    },
+    "string": {
+      "fg": "#3FC98A",
+      "bold": false,
+      "italic": false,
+      "underline": false
+    },
+    "number": {
+      "fg": "#E5A93C",
+      "bold": false,
+      "italic": false,
+      "underline": false
+    },
+    "type": {
+      "fg": "#45C2D1",
+      "bold": false,
+      "italic": false,
+      "underline": false
+    },
+    "comment": {
+      "fg": "#858D99",
+      "bold": false,
+      "italic": false,
+      "underline": false
+    },
+    "attribute": {
+      "fg": "#B389E8",
+      "bold": false,
+      "italic": false,
+      "underline": false
+    },
+    "function": {
+      "fg": "#9EB5FF",
+      "bold": false,
+      "italic": false,
+      "underline": false
+    },
+    "variable": {
+      "fg": "#F2F4F7",
+      "bold": false,
+      "italic": false,
+      "underline": false
+    },
+    "constant": {
+      "fg": "#E5A93C",
+      "bold": false,
+      "italic": false,
+      "underline": false
+    },
+    "operator": {
+      "fg": "#F2F4F7",
+      "bold": false,
+      "italic": false,
+      "underline": false
+    }
+  },
+  "terminal": {
+    "bg": "#171B20",
+    "fg": "#F2F4F7",
+    "cursor": "#365FD6",
+    "selection": "#23315D",
+    "ansi0": "#30363F",
+    "ansi1": "#EF665C",
+    "ansi2": "#40C97B",
+    "ansi3": "#E5A93C",
+    "ansi4": "#668CFF",
+    "ansi5": "#B389E8",
+    "ansi6": "#45C2D1",
+    "ansi7": "#B4BAC4",
+    "ansi8": "#858D99",
+    "ansi9": "#FF8A80",
+    "ansi10": "#5FE39A",
+    "ansi11": "#F5C66A",
+    "ansi12": "#9EB5FF",
+    "ansi13": "#D0B0F5",
+    "ansi14": "#4EDAFF",
+    "ansi15": "#F2F4F7"
+  },
+  "diff": {
+    "added": "#40C97B",
+    "removed": "#EF665C"
+  },
+  "metadata": {
+    "sourceApp": "KetPlus",
+    "sourceFile": "ket-tokens.json",
+    "license": "MIT",
+    "sourceVersion": "0.1.44"
+  }
+}

@@ -47,7 +47,7 @@
         },
         {
           "id": "feature-parity",
-          "title": "Native functionality and API parity for every mapped state/edge; see tasks/desktop-refactor/01-screen-feature-matrix.md",
+          "title": "Native functionality and API parity for every mapped state/edge; see docs/testing.md",
           "done": false,
           "nodes": [
             {
@@ -777,7 +777,7 @@
           "id": "design-pr-16",
           "kind": "pr",
           "title": "Mock flow changes, not native implementation",
-          "url": "https://github.com/ketvietlab/ketplus-desktop/pull/16",
+          "url": "https://github.com/ketvietlab/ketplus/blob/integration/docs/testing.md",
           "state": "merged",
           "revision": "7efc058d99b37f269fdebd5b69044fff32b84195"
         },
@@ -785,20 +785,20 @@
           "id": "refactor-plan",
           "kind": "reference",
           "title": "Native refactor plan, screen matrix and acceptance gates",
-          "url": "https://github.com/ketvietlab/ketplus-desktop/blob/design/desktop-ketatlas/tasks/desktop-refactor/README.md"
+          "url": "https://github.com/ketvietlab/ketplus/blob/integration/docs/testing.md"
         },
         {
           "id": "desktop-pixel-implementation",
           "kind": "reference",
           "title": "Desktop pixel alignment implementation",
-          "url": "https://github.com/ketvietlab/ketplus-desktop/commit/c5d012d086bed0e85e69ecf22bcb99da65cf4641",
+          "url": "https://github.com/ketvietlab/ketplus/blob/integration/docs/testing.md",
           "revision": "c5d012d086bed0e85e69ecf22bcb99da65cf4641"
         },
         {
           "id": "desktop-private-suite",
           "kind": "test",
           "title": "Full private deterministic suite: 21/21 passed",
-          "url": "https://github.com/ketvietlab/ketplus-desktop/commit/c5d012d086bed0e85e69ecf22bcb99da65cf4641",
+          "url": "https://github.com/ketvietlab/ketplus/blob/integration/docs/testing.md",
           "state": "passed",
           "revision": "c5d012d086bed0e85e69ecf22bcb99da65cf4641"
         },
@@ -872,7 +872,7 @@
           "id": "daemon-activity-details-tests",
           "kind": "test",
           "title": "Isolated Qt/SQLite/IPC group tests and native rendering; see ADR 0022 validation",
-          "url": "https://github.com/ketvietlab/ketplus-desktop/blob/feat/daemon-activity-summary/docs/decisions/0022-daemon-activity-group-details.md",
+          "url": "https://github.com/ketvietlab/ketplus/blob/integration/docs/testing.md",
           "state": "passed",
           "revision": "508e83a575be917499858208d0032c52928d701a",
           "environment": "macOS 26.2 ARM64; Qt 6.11.1 Release; offscreen plus native Cocoa fixtures; no live providers"
@@ -918,7 +918,7 @@
         },
         {
           "id": "feature-parity",
-          "title": "Native functionality and API parity for every mapped state/edge; see tasks/desktop-refactor/01-screen-feature-matrix.md",
+          "title": "Native functionality and API parity for every mapped state/edge; see docs/testing.md",
           "done": false,
           "nodes": [
             {
@@ -979,7 +979,7 @@
           "id": "design-pr-16",
           "kind": "pr",
           "title": "Mock flow changes, not native implementation",
-          "url": "https://github.com/ketvietlab/ketplus-desktop/pull/16",
+          "url": "https://github.com/ketvietlab/ketplus/blob/integration/docs/testing.md",
           "state": "merged",
           "revision": "7efc058d99b37f269fdebd5b69044fff32b84195"
         },
@@ -987,20 +987,20 @@
           "id": "refactor-plan",
           "kind": "reference",
           "title": "Native refactor plan, screen matrix and acceptance gates",
-          "url": "https://github.com/ketvietlab/ketplus-desktop/blob/design/desktop-ketatlas/tasks/desktop-refactor/README.md"
+          "url": "https://github.com/ketvietlab/ketplus/blob/integration/docs/testing.md"
         },
         {
           "id": "desktop-pixel-implementation",
           "kind": "reference",
           "title": "Desktop pixel alignment implementation",
-          "url": "https://github.com/ketvietlab/ketplus-desktop/commit/c5d012d086bed0e85e69ecf22bcb99da65cf4641",
+          "url": "https://github.com/ketvietlab/ketplus/blob/integration/docs/testing.md",
           "revision": "c5d012d086bed0e85e69ecf22bcb99da65cf4641"
         },
         {
           "id": "desktop-private-suite",
           "kind": "test",
           "title": "Full private deterministic suite: 21/21 passed",
-          "url": "https://github.com/ketvietlab/ketplus-desktop/commit/c5d012d086bed0e85e69ecf22bcb99da65cf4641",
+          "url": "https://github.com/ketvietlab/ketplus/blob/integration/docs/testing.md",
           "state": "passed",
           "revision": "c5d012d086bed0e85e69ecf22bcb99da65cf4641"
         },
@@ -1042,7 +1042,7 @@
       "checks": [
         {
           "id": "feature-parity",
-          "title": "Native functionality and API parity for every mapped state/edge; see tasks/desktop-refactor/01-screen-feature-matrix.md",
+          "title": "Native functionality and API parity for every mapped state/edge; see docs/testing.md",
           "done": false,
           "nodes": [
             {
@@ -1115,7 +1115,7 @@
           "id": "design-pr-16",
           "kind": "pr",
           "title": "Mock design baseline, not native implementation",
-          "url": "https://github.com/ketvietlab/ketplus-desktop/pull/16",
+          "url": "https://github.com/ketvietlab/ketplus/blob/integration/docs/testing.md",
           "state": "merged",
           "revision": "7efc058d99b37f269fdebd5b69044fff32b84195"
         },
@@ -1123,20 +1123,20 @@
           "id": "refactor-plan",
           "kind": "reference",
           "title": "Native refactor plan, screen matrix and acceptance gates",
-          "url": "https://github.com/ketvietlab/ketplus-desktop/blob/design/desktop-ketatlas/tasks/desktop-refactor/README.md"
+          "url": "https://github.com/ketvietlab/ketplus/blob/integration/docs/testing.md"
         },
         {
           "id": "desktop-pixel-implementation",
           "kind": "reference",
           "title": "Desktop pixel alignment implementation",
-          "url": "https://github.com/ketvietlab/ketplus-desktop/commit/c5d012d086bed0e85e69ecf22bcb99da65cf4641",
+          "url": "https://github.com/ketvietlab/ketplus/blob/integration/docs/testing.md",
           "revision": "c5d012d086bed0e85e69ecf22bcb99da65cf4641"
         },
         {
           "id": "desktop-private-suite",
           "kind": "test",
           "title": "Full private deterministic suite: 21/21 passed",
-          "url": "https://github.com/ketvietlab/ketplus-desktop/commit/c5d012d086bed0e85e69ecf22bcb99da65cf4641",
+          "url": "https://github.com/ketvietlab/ketplus/blob/integration/docs/testing.md",
           "state": "passed",
           "revision": "c5d012d086bed0e85e69ecf22bcb99da65cf4641"
         },
@@ -1184,7 +1184,7 @@
       "checks": [
         {
           "id": "feature-parity",
-          "title": "Native functionality and API parity for every mapped state/edge; see tasks/desktop-refactor/01-screen-feature-matrix.md",
+          "title": "Native functionality and API parity for every mapped state/edge; see docs/testing.md",
           "done": false,
           "nodes": [
             {
@@ -1245,7 +1245,7 @@
           "id": "design-pr-16",
           "kind": "pr",
           "title": "Mock design baseline, not native implementation",
-          "url": "https://github.com/ketvietlab/ketplus-desktop/pull/16",
+          "url": "https://github.com/ketvietlab/ketplus/blob/integration/docs/testing.md",
           "state": "merged",
           "revision": "7efc058d99b37f269fdebd5b69044fff32b84195"
         },
@@ -1253,20 +1253,20 @@
           "id": "refactor-plan",
           "kind": "reference",
           "title": "Native refactor plan, screen matrix and acceptance gates",
-          "url": "https://github.com/ketvietlab/ketplus-desktop/blob/design/desktop-ketatlas/tasks/desktop-refactor/README.md"
+          "url": "https://github.com/ketvietlab/ketplus/blob/integration/docs/testing.md"
         },
         {
           "id": "desktop-pixel-implementation",
           "kind": "reference",
           "title": "Desktop pixel alignment implementation",
-          "url": "https://github.com/ketvietlab/ketplus-desktop/commit/c5d012d086bed0e85e69ecf22bcb99da65cf4641",
+          "url": "https://github.com/ketvietlab/ketplus/blob/integration/docs/testing.md",
           "revision": "c5d012d086bed0e85e69ecf22bcb99da65cf4641"
         },
         {
           "id": "desktop-private-suite",
           "kind": "test",
           "title": "Full private deterministic suite: 21/21 passed",
-          "url": "https://github.com/ketvietlab/ketplus-desktop/commit/c5d012d086bed0e85e69ecf22bcb99da65cf4641",
+          "url": "https://github.com/ketvietlab/ketplus/blob/integration/docs/testing.md",
           "state": "passed",
           "revision": "c5d012d086bed0e85e69ecf22bcb99da65cf4641"
         },
@@ -1319,7 +1319,7 @@
         },
         {
           "id": "feature-parity",
-          "title": "Native functionality and API parity for every mapped state/edge; see tasks/desktop-refactor/01-screen-feature-matrix.md",
+          "title": "Native functionality and API parity for every mapped state/edge; see docs/testing.md",
           "done": false,
           "nodes": [
             {
@@ -1500,7 +1500,7 @@
           "id": "design-pr-16",
           "kind": "pr",
           "title": "Mock flow changes, not native implementation",
-          "url": "https://github.com/ketvietlab/ketplus-desktop/pull/16",
+          "url": "https://github.com/ketvietlab/ketplus/blob/integration/docs/testing.md",
           "state": "merged",
           "revision": "7efc058d99b37f269fdebd5b69044fff32b84195"
         },
@@ -1508,20 +1508,20 @@
           "id": "refactor-plan",
           "kind": "reference",
           "title": "Native refactor plan, screen matrix and acceptance gates",
-          "url": "https://github.com/ketvietlab/ketplus-desktop/blob/design/desktop-ketatlas/tasks/desktop-refactor/README.md"
+          "url": "https://github.com/ketvietlab/ketplus/blob/integration/docs/testing.md"
         },
         {
           "id": "desktop-pixel-implementation",
           "kind": "reference",
           "title": "Desktop pixel alignment implementation",
-          "url": "https://github.com/ketvietlab/ketplus-desktop/commit/c5d012d086bed0e85e69ecf22bcb99da65cf4641",
+          "url": "https://github.com/ketvietlab/ketplus/blob/integration/docs/testing.md",
           "revision": "c5d012d086bed0e85e69ecf22bcb99da65cf4641"
         },
         {
           "id": "desktop-private-suite",
           "kind": "test",
           "title": "Full private deterministic suite: 21/21 passed",
-          "url": "https://github.com/ketvietlab/ketplus-desktop/commit/c5d012d086bed0e85e69ecf22bcb99da65cf4641",
+          "url": "https://github.com/ketvietlab/ketplus/blob/integration/docs/testing.md",
           "state": "passed",
           "revision": "c5d012d086bed0e85e69ecf22bcb99da65cf4641"
         },
@@ -1573,7 +1573,7 @@
         },
         {
           "id": "feature-parity",
-          "title": "Native functionality and API parity for every mapped state/edge; see tasks/desktop-refactor/01-screen-feature-matrix.md",
+          "title": "Native functionality and API parity for every mapped state/edge; see docs/testing.md",
           "done": false,
           "nodes": [
             {
@@ -1838,7 +1838,7 @@
           "id": "design-pr-16",
           "kind": "pr",
           "title": "Mock flow changes, not native implementation",
-          "url": "https://github.com/ketvietlab/ketplus-desktop/pull/16",
+          "url": "https://github.com/ketvietlab/ketplus/blob/integration/docs/testing.md",
           "state": "merged",
           "revision": "7efc058d99b37f269fdebd5b69044fff32b84195"
         },
@@ -1846,20 +1846,20 @@
           "id": "refactor-plan",
           "kind": "reference",
           "title": "Native refactor plan, screen matrix and acceptance gates",
-          "url": "https://github.com/ketvietlab/ketplus-desktop/blob/design/desktop-ketatlas/tasks/desktop-refactor/README.md"
+          "url": "https://github.com/ketvietlab/ketplus/blob/integration/docs/testing.md"
         },
         {
           "id": "desktop-pixel-implementation",
           "kind": "reference",
           "title": "Desktop pixel alignment implementation",
-          "url": "https://github.com/ketvietlab/ketplus-desktop/commit/c5d012d086bed0e85e69ecf22bcb99da65cf4641",
+          "url": "https://github.com/ketvietlab/ketplus/blob/integration/docs/testing.md",
           "revision": "c5d012d086bed0e85e69ecf22bcb99da65cf4641"
         },
         {
           "id": "desktop-private-suite",
           "kind": "test",
           "title": "Full private deterministic suite: 21/21 passed",
-          "url": "https://github.com/ketvietlab/ketplus-desktop/commit/c5d012d086bed0e85e69ecf22bcb99da65cf4641",
+          "url": "https://github.com/ketvietlab/ketplus/blob/integration/docs/testing.md",
           "state": "passed",
           "revision": "c5d012d086bed0e85e69ecf22bcb99da65cf4641"
         },
@@ -1912,7 +1912,7 @@
         },
         {
           "id": "feature-parity",
-          "title": "Native functionality and API parity for every mapped state/edge; see tasks/desktop-refactor/01-screen-feature-matrix.md",
+          "title": "Native functionality and API parity for every mapped state/edge; see docs/testing.md",
           "done": false,
           "nodes": [
             {
@@ -2057,7 +2057,7 @@
           "id": "design-pr-16",
           "kind": "pr",
           "title": "Mock flow changes, not native implementation",
-          "url": "https://github.com/ketvietlab/ketplus-desktop/pull/16",
+          "url": "https://github.com/ketvietlab/ketplus/blob/integration/docs/testing.md",
           "state": "merged",
           "revision": "7efc058d99b37f269fdebd5b69044fff32b84195"
         },
@@ -2065,20 +2065,20 @@
           "id": "refactor-plan",
           "kind": "reference",
           "title": "Native refactor plan, screen matrix and acceptance gates",
-          "url": "https://github.com/ketvietlab/ketplus-desktop/blob/design/desktop-ketatlas/tasks/desktop-refactor/README.md"
+          "url": "https://github.com/ketvietlab/ketplus/blob/integration/docs/testing.md"
         },
         {
           "id": "desktop-pixel-implementation",
           "kind": "reference",
           "title": "Desktop pixel alignment implementation",
-          "url": "https://github.com/ketvietlab/ketplus-desktop/commit/c5d012d086bed0e85e69ecf22bcb99da65cf4641",
+          "url": "https://github.com/ketvietlab/ketplus/blob/integration/docs/testing.md",
           "revision": "c5d012d086bed0e85e69ecf22bcb99da65cf4641"
         },
         {
           "id": "desktop-private-suite",
           "kind": "test",
           "title": "Full private deterministic suite: 21/21 passed",
-          "url": "https://github.com/ketvietlab/ketplus-desktop/commit/c5d012d086bed0e85e69ecf22bcb99da65cf4641",
+          "url": "https://github.com/ketvietlab/ketplus/blob/integration/docs/testing.md",
           "state": "passed",
           "revision": "c5d012d086bed0e85e69ecf22bcb99da65cf4641"
         },
@@ -2120,7 +2120,7 @@
       "checks": [
         {
           "id": "feature-parity",
-          "title": "Native functionality and API parity for every mapped state/edge; see tasks/desktop-refactor/01-screen-feature-matrix.md",
+          "title": "Native functionality and API parity for every mapped state/edge; see docs/testing.md",
           "done": false,
           "nodes": [
             {
@@ -2169,7 +2169,7 @@
           "id": "design-pr-16",
           "kind": "pr",
           "title": "Mock design baseline, not native implementation",
-          "url": "https://github.com/ketvietlab/ketplus-desktop/pull/16",
+          "url": "https://github.com/ketvietlab/ketplus/blob/integration/docs/testing.md",
           "state": "merged",
           "revision": "7efc058d99b37f269fdebd5b69044fff32b84195"
         },
@@ -2177,20 +2177,20 @@
           "id": "refactor-plan",
           "kind": "reference",
           "title": "Native refactor plan, screen matrix and acceptance gates",
-          "url": "https://github.com/ketvietlab/ketplus-desktop/blob/design/desktop-ketatlas/tasks/desktop-refactor/README.md"
+          "url": "https://github.com/ketvietlab/ketplus/blob/integration/docs/testing.md"
         },
         {
           "id": "desktop-pixel-implementation",
           "kind": "reference",
           "title": "Desktop pixel alignment implementation",
-          "url": "https://github.com/ketvietlab/ketplus-desktop/commit/c5d012d086bed0e85e69ecf22bcb99da65cf4641",
+          "url": "https://github.com/ketvietlab/ketplus/blob/integration/docs/testing.md",
           "revision": "c5d012d086bed0e85e69ecf22bcb99da65cf4641"
         },
         {
           "id": "desktop-private-suite",
           "kind": "test",
           "title": "Full private deterministic suite: 21/21 passed",
-          "url": "https://github.com/ketvietlab/ketplus-desktop/commit/c5d012d086bed0e85e69ecf22bcb99da65cf4641",
+          "url": "https://github.com/ketvietlab/ketplus/blob/integration/docs/testing.md",
           "state": "passed",
           "revision": "c5d012d086bed0e85e69ecf22bcb99da65cf4641"
         },

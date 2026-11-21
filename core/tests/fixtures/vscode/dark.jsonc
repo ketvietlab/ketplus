@@ -1,0 +1,15 @@
+{
+  "name":"Fixture Midnight", "type":"dark", "include":"parent.jsonc",
+  "colors": {"editor.foreground":"#CCDDEE", "sideBar.background":null, "terminal.ansiRed":"#D44D", "diffEditor.insertedTextBackground":"#22443380", "input.foreground":"not-a-color"},
+  "tokenColors": [
+    {"scope":"keyword.control", "settings":{"fontStyle":""}},
+    {"scope":["entity.name.type", "variable.parameter"], "settings":{"foreground":"#AABBCC", "fontStyle":"bold underline"}},
+    {"scope":"keyword.operator, constant.language", "settings":{"foreground":"#887766"}},
+    {"scope":"source.js keyword", "settings":{"foreground":"#FF0000"}},
+    {"scope":"unknown.scope", "settings":{"foreground":"#FF0000"}},
+    {"scope":"comment", "settings":{"fontStyle":"italic strikethrough", "background":"#000000"}},
+  ],
+  "semanticTokenColors":{"variable.readonly":"#00FF00", "function":"#FF00FF"},
+  "semanticHighlighting":true,
+  "unsupportedFeature":true
+}

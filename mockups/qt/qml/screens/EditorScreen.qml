@@ -21,8 +21,8 @@ Item {
     property alias terminal: terminalPanel
     property string quickOpenKey: "⌘ K"
     property var openFolders: Fixtures.explorer.filter(f => f.folder && f.open).map(f => f.name)
-    property var tabs: ["NavigationRail.qml", "design-system.md"]
-    property string current: "NavigationRail.qml"
+    property var tabs: ["TrailList.qml", "release-checklist.md"]
+    property string current: "TrailList.qml"
     property int cursorLine: 8
 
     function px(value) { return KetTheme.px(value, KetTheme.zoom) }
@@ -44,7 +44,9 @@ Item {
     }
 
     readonly property var sources: ({
-        "NavigationRail.qml": Fixtures.navigationRail,
+        "TrailList.qml": Fixtures.trailList,
+        "TrailRow.qml": Fixtures.trailRow,
+        "release-checklist.md": Fixtures.releaseChecklist,
         "design-system.md": Fixtures.designSystem,
         "licensing.md": Mock.resourceText(":/docs/licensing.md")
     })
@@ -215,7 +217,7 @@ Item {
                     Layout.fillWidth: true
                     visible: screen.current !== ""
                     path: screen.markdown ? ["docs", screen.current]
-                          : ["modules", "ai", "src", "agent", "qml", screen.current]
+                          : ["src", "trails", screen.current]
                     KetButton {
                         visible: !screen.current.endsWith(".md")
                         text: "View diff"
@@ -325,7 +327,7 @@ Item {
                 TerminalPanel {
                     id: terminalPanel
                     Layout.fillWidth: true
-                    Layout.preferredHeight: screen.px(280)
+                    Layout.preferredHeight: screen.px(325)
                     visible: screen.window.editorTerminal
                     window: screen.window
                     onHideRequested: screen.window.editorTerminal = false

@@ -1,8 +1,10 @@
 #include "terminal_app/TerminalWindow.h"
 
+#include "terminal/TerminalSession.h"
 #include "terminal/TerminalTab.h"
 #include "terminal/TerminalView.h"
 #include "ui/KetFonts.h"
+#include "ui/theme/ThemeSchemeController.h"
 
 #include "KetAppearance.h"
 #include "KetDialog.h"
@@ -16,8 +18,12 @@
 #include <QDir>
 #include <QFontDatabase>
 #include <QFontInfo>
+#include <QInputMethodEvent>
+#include <QInputMethodQueryEvent>
 #include <QLabel>
+#include <QScopeGuard>
 #include <QSettings>
+#include <QSignalSpy>
 #include <QTabWidget>
 #include <QTimer>
 #include <QtTest>
@@ -31,6 +37,7 @@ class TerminalAppTest final : public QObject {
     void initTestCase();
     void cleanup();
     void createsAndClosesTabs();
+    void newTabsInheritAnUnsavedSchemePreview();
     void drawsTheTabStripActions();
     void followsTheKitAppearance();
     void savesAndRestoresTheAppearance();
@@ -39,6 +46,8 @@ class TerminalAppTest final : public QObject {
     void showsTheKetPlusName();
     void aboutUsesTheKitDialog();
     void drawsTheTerminalInKetSansMono();
+    void composingTextCoversTheCellsUnderIt();
+    void inputMethodsRewriteTheWordBeingTyped();
 };
 
 void TerminalAppTest::initTestCase() {
@@ -117,6 +126,29 @@ void TerminalAppTest::followsTheKitAppearance() {
 
     ket::Appearance::instance().setMode(ket::Appearance::Mode::Dark);
     QTRY_COMPARE(background(), ket::Tokens::color(u"page-bg", ket::Theme::Dark));
+}
+
+void TerminalAppTest::newTabsInheritAnUnsavedSchemePreview() {
+    TerminalWindow window(QDir::tempPath());
+    window.show();
+    auto* original = window.currentTab();
+    auto* controller = qApp->findChild<ThemeSchemeController*>(QStringLiteral("terminalSchemes"));
+    QVERIFY(controller);
+    auto scheme = builtinColorScheme(SchemeKind::Light);
+    scheme.id = QStringLiteral("unsaved-terminal");
+    scheme.terminal[QStringLiteral("bg")] = QColor(12, 34, 56);
+    controller->preview(scheme);
+    const auto restore = qScopeGuard([&] { controller->cancelPreview(); });
+    QTRY_COMPARE(controller->scheme().id, QStringLiteral("unsaved-terminal"));
+    const auto background = [](TerminalTab* tab) {
+        const auto image = tab->view()->viewport()->grab().toImage();
+        return image.pixelColor(image.width() - 4, image.height() - 4);
+    };
+    QTRY_COMPARE(background(original), QColor(12, 34, 56));
+    QCOMPARE(window.currentTab(), original);
+    window.addTab(QDir::tempPath());
+    QVERIFY(window.currentTab() != original);
+    QTRY_COMPARE(background(window.currentTab()), QColor(12, 34, 56));
 }
 
 void TerminalAppTest::savesAndRestoresTheAppearance() {
@@ -227,6 +259,74 @@ void TerminalAppTest::drawsTheTerminalInKetSansMono() {
     TerminalWindow window(QDir::tempPath());
     QCOMPARE(QFontInfo(window.currentTab()->view()->font()).family(),
              QStringLiteral("KET Sans Mono"));
+}
+
+void TerminalAppTest::composingTextCoversTheCellsUnderIt() {
+    // An IME keeps the word being typed as preedit text while zsh-autosuggestions draws its
+    // dimmed suggestion under the cursor. The preedit must hide that suggestion rather than be
+    // painted on top of it, so the result matches composing over empty cells.
+    const auto render = [](const QByteArray& shellOutput) {
+        TerminalSession session;
+        TerminalView view(session);
+        view.setFocusPolicy(Qt::NoFocus);
+        view.resize(320, 120);
+        view.show();
+        session.feedOutput(shellOutput);
+        QInputMethodEvent compose(QStringLiteral("a"), {});
+        QCoreApplication::sendEvent(&view, &compose);
+        QCoreApplication::processEvents();
+        return view.viewport()->grab().toImage();
+    };
+    const QImage overSuggestion = render(QByteArrayLiteral("\x1b[90mW\x1b[0m\r"));
+    const QImage overBlank = render(QByteArrayLiteral("\r"));
+    QCOMPARE(overSuggestion.size(), overBlank.size());
+    QVERIFY(overSuggestion == overBlank);
+}
+
+void TerminalAppTest::inputMethodsRewriteTheWordBeingTyped() {
+    // VNInput types each letter straight into the shell (so zsh completion sees it) and later
+    // rewrites the word, for example "duy" -> "dụy". The terminal reports what was typed as the
+    // text before the cursor and turns a replacement into backspaces plus the new text.
+    TerminalSession session;
+    TerminalView view(session);
+    QByteArray sent;
+    QObject::connect(&session, &TerminalSession::inputGenerated,
+                     [&sent](const QByteArray& bytes) { sent += bytes; });
+    const auto commit = [&view](const QString& text, int from = 0, int length = 0) {
+        QInputMethodEvent event;
+        event.setCommitString(text, from, length);
+        QCoreApplication::sendEvent(&view, &event);
+    };
+    const auto query = [&view](Qt::InputMethodQuery property) {
+        QInputMethodQueryEvent event(property);
+        QCoreApplication::sendEvent(&view, &event);
+        return event.value(property);
+    };
+
+    commit(QStringLiteral("d"));
+    commit(QStringLiteral("u"));
+    commit(QStringLiteral("y"));
+    QCOMPARE(query(Qt::ImSurroundingText).toString(), QStringLiteral("duy"));
+    QCOMPARE(query(Qt::ImCursorPosition).toInt(), 3);
+    QCOMPARE(sent, QByteArrayLiteral("duy"));
+
+    sent.clear();
+    commit(QString::fromUtf8("dụy"), -3, 3);
+    QCOMPARE(sent, QByteArray("\x7f\x7f\x7f") + QString::fromUtf8("dụy").toUtf8());
+    QCOMPARE(query(Qt::ImSurroundingText).toString(), QString::fromUtf8("dụy"));
+
+    // Replacing only the middle keeps the tail, which is typed again after it.
+    sent.clear();
+    commit(QStringLiteral("u"), -2, 1);
+    QCOMPARE(sent, QByteArrayLiteral("\x7f\x7fuy"));
+    QCOMPARE(query(Qt::ImSurroundingText).toString(), QStringLiteral("duy"));
+
+    // A key that moves the shell cursor ends the word: nothing before it can be rewritten.
+    QTest::keyClick(&view, Qt::Key_Left);
+    QCOMPARE(query(Qt::ImSurroundingText).toString(), QString());
+    sent.clear();
+    commit(QStringLiteral("x"), -3, 3);
+    QCOMPARE(sent, QByteArrayLiteral("x"));
 }
 
 } // namespace ketplus

@@ -801,7 +801,9 @@ void AgentWorkspaceViewTest::messageImageSizeRejectsNonRegularFiles() {
     QVERIFY(directory.isValid());
     ketplus::AgentWorkspaceView view;
 
-    // A FIFO would block QImageReader forever; it must be rejected unopened.
+#if defined(Q_OS_UNIX)
+    // A FIFO would block QImageReader forever; it must be rejected unopened. Windows has no
+    // FIFO files, so this part only runs on POSIX hosts.
     const QString fifo = directory.filePath("pipe.png");
     QCOMPARE(::mkfifo(QFile::encodeName(fifo).constData(), 0600), 0);
     QElapsedTimer timer;
@@ -811,6 +813,7 @@ void AgentWorkspaceViewTest::messageImageSizeRejectsNonRegularFiles() {
     QVERIFY(QFile::link(fifo, link));
     QVERIFY(!view.messageImageSize(QUrl::fromLocalFile(link)).isValid());
     QVERIFY(timer.elapsed() < 1000);
+#endif
     QVERIFY(!view.messageImageSize(QUrl(QStringLiteral("https://example.com/a.png"))).isValid());
 
     // Missing files are negative-cached: creating the file later does not

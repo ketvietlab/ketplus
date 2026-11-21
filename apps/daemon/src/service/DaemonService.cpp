@@ -1,6 +1,7 @@
 #include "service/DaemonService.h"
 #include "DaemonCredentialFile.h"
 #include "DaemonPaths.h"
+#include "OwnerOnlyAccess.h"
 #include "providers/ClaudeAccountUsage.h"
 #include "providers/ClaudeCredentials.h"
 
@@ -8,7 +9,10 @@
 #include "ipc/LocalIpcServer.h"
 #include "providers/ClaudeAdapter.h"
 #include "providers/CodexAdapter.h"
+#include "providers/CopilotAdapter.h"
 #include "providers/CursorAdapter.h"
+#include "runner/entry/RemoteJobEntry.h"
+#include "runner/remote/RemoteJobsService.h"
 #include "runtime/SessionHost.h"
 #include "storage/JournalSpace.h"
 #include "storage/LocalJournal.h"
@@ -116,6 +120,9 @@ DaemonService::~DaemonService() {
         cursor_->stop();
     }
     ipc_.reset();
+    if (host_)
+        host_->setRemoteJobs(nullptr);
+    remoteJobs_.reset();
     cloud_.reset();
     host_.reset();
     cursor_.reset();
@@ -136,6 +143,15 @@ bool DaemonService::start() {
     // a place to keep or replace them.
     if (!restrictDirectory(stateInfo.absolutePath()) ||
         !restrictDirectory(tokenInfo.absolutePath())) {
+        error_ = QStringLiteral("Unable to restrict the daemon state directory to its owner.");
+        return false;
+    }
+#endif
+#if defined(Q_OS_WIN)
+    // Mode bits do not exist here: replace the directory's access list with the current user
+    // alone and make everything created below inherit it (journal, WAL/SHM, token, media).
+    if (!remote::restrictToCurrentUser(stateInfo.absolutePath(), true, &error_) ||
+        !remote::restrictToCurrentUser(tokenInfo.absolutePath(), true, &error_)) {
         error_ = QStringLiteral("Unable to restrict the daemon state directory to its owner.");
         return false;
     }
@@ -205,8 +221,10 @@ bool DaemonService::start() {
     claude_ = std::make_unique<ClaudeAdapter>(configuration_.claudeExecutable);
     claude_->setCredentials(claudeCredentials_.get());
     cursor_ = std::make_unique<CursorAdapter>(configuration_.cursorExecutable);
-    host_ =
-        std::make_unique<SessionHost>(journal_.get(), adapter_.get(), claude_.get(), cursor_.get());
+    copilot_ = std::make_unique<CopilotAdapter>(configuration_.copilotExecutable);
+    host_ = std::make_unique<SessionHost>(
+        journal_.get(), adapter_.get(),
+        QList<ProviderAdapter*>{claude_.get(), cursor_.get(), copilot_.get()});
     host_->setClaudeAccountUsage(accountUsage);
     connect(claudeCredentials_.get(), &ClaudeCredentials::changed, host_.get(),
             [host = host_.get()] { host->forgetProviderFailure(QStringLiteral("claude")); });
@@ -214,6 +232,15 @@ bool DaemonService::start() {
     ipc_ = std::make_unique<LocalIpcServer>(host_.get(), configuration_.socketName, token,
                                             cloud_.get());
     ipc_->setClaudeCredentials(claudeCredentials_.get());
+    ipc_->setHostKeyFingerprint([cloud = cloud_.get()] {
+        QString error;
+        const QString fingerprint = cloud->hostKeyFingerprint(&error);
+        // Without it an SSH client cannot name this machine and refuses the hello: say why.
+        if (fingerprint.isEmpty())
+            qWarning("host identity: key set unavailable, daemon.hello names no fingerprint: %s",
+                     qPrintable(error.isEmpty() ? QStringLiteral("unknown error") : error));
+        return fingerprint;
+    });
     connect(ipc_.get(), &LocalIpcServer::shutdownRequested, QCoreApplication::instance(),
             &QCoreApplication::quit, Qt::QueuedConnection);
     if (!ipc_->listen()) {
@@ -223,6 +250,11 @@ bool DaemonService::start() {
     }
     // ADR 0027: agents reach this endpoint through `ketplus_daemon --mcp-agents`.
     host_->setAgentEndpoint(ipc_->fullServerName(), QCoreApplication::applicationFilePath());
+    // Remote jobs resume and take runner messages before the Relay socket first opens.
+    remoteJobs_ = std::make_unique<runner::remote::RemoteJobsService>(
+        journal_->backgroundTasks(), *cloud_, stateInfo.absolutePath());
+    remoteJobs_->start();
+    host_->setRemoteJobs(&remoteJobs_->entry());
     cloud_->start();
     spaceTimer_ = new QTimer(this);
     spaceTimer_->setInterval(reclaimIntervalMs);
@@ -275,6 +307,7 @@ DaemonConfiguration DaemonService::defaultConfiguration() {
     return {remote::DaemonPaths::state(),
             remote::DaemonPaths::token(),
             remote::DaemonPaths::socket(),
+            {},
             {},
             {},
             {}};

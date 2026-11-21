@@ -1,0 +1,18 @@
+{
+  "name": "Fixture UI",
+  "dark": true,
+  "editorScheme": "dark.icls",
+  "colors": {"ink":"#DDEEFF", "panel":"#18202880", "alias":"ink", "unused":"#123456"},
+  "ui": {
+    "Panel.background":"panel",
+    "Label.foreground":"alias",
+    "TextField": {"background":"#102030", "foreground":"ink"},
+    "EditorTabs": {"selectedForeground":"#ABCDEF", "selectedBackground":"#223344"},
+    "Tree.selectionBackground":"#445566",
+    "CustomWidget.border":"#123456",
+    "*.background":"#000000",
+    "Button.fontSize": 18
+  },
+  "icons":{"ColorPalette":{"Actions.Red":"#AA0000"}},
+  "author":"KetPlus test fixture authors"
+}

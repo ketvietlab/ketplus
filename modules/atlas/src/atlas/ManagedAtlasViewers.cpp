@@ -1,6 +1,8 @@
 #include "atlas/ManagedAtlasViewers.h"
 
+#include "KetDialog.h"
 #include "atlas/AtlasProcess.h"
+#include "atlas/AtlasRendererPermission.h"
 
 #include <QCoreApplication>
 #include <QDesktopServices>
@@ -12,6 +14,7 @@
 #include <QProcessEnvironment>
 #include <QTcpServer>
 #include <QTimer>
+#include <memory>
 
 namespace ketplus {
 
@@ -38,7 +41,13 @@ int ManagedAtlasViewers::runningCount() const {
 
 QString ManagedAtlasViewers::errorFor(const QString& path) const { return errors_.value(path); }
 
-void ManagedAtlasViewers::open(const AtlasDescriptor& atlas) {
+void ManagedAtlasViewers::open(const AtlasDescriptor& atlas, QWidget* anchor) {
+    if (auto pending = permissions_.value(atlas.path)) {
+        pending->raise();
+        pending->setFocus();
+        return;
+    }
+    permissions_.remove(atlas.path);
     if (auto existing = processes_.find(atlas.path); existing != processes_.end()) {
         if (existing->viewer.state == State::Running)
             QDesktopServices::openUrl(existing->viewer.url);
@@ -53,28 +62,80 @@ void ManagedAtlasViewers::open(const AtlasDescriptor& atlas) {
         emit changed();
         return;
     }
-    QTcpServer portProbe;
-    if (!portProbe.listen(QHostAddress::LocalHost, 0)) {
+    auto portProbe = std::make_shared<QTcpServer>();
+    auto rendererProbe = std::make_shared<QTcpServer>();
+    if (!portProbe->listen(QHostAddress::LocalHost, 0)) {
         errors_.insert(atlas.path, tr("Could not reserve a local viewer port."));
         emit changed();
         return;
     }
-    const auto port = portProbe.serverPort();
-    portProbe.close();
-
-    auto* process = new QProcess(this);
-    process->setProcessChannelMode(QProcess::MergedChannels);
-    process->setWorkingDirectory(atlas.directory);
+    const bool rendererPortAvailable = rendererProbe->listen(QHostAddress::LocalHost, 0);
+    const auto port = portProbe->serverPort();
+    const auto rendererPort = rendererProbe->serverPort();
     auto environment = QProcessEnvironment::systemEnvironment();
     environment.insert(QStringLiteral("PATH"), QFileInfo(cli).absolutePath() +
                                                    QDir::listSeparator() +
                                                    environment.value(QStringLiteral("PATH")));
+    const auto permission = AtlasRendererPermission::read(atlas, environment, rendererPort);
+    if (!permission.present || !permission.error.isEmpty() || !anchor || !rendererPortAvailable) {
+        if (!permission.error.isEmpty())
+            errors_.insert(atlas.path, permission.error);
+        else if (permission.present && !rendererPortAvailable)
+            errors_.insert(atlas.path,
+                           tr("Could not reserve a renderer port. Opening static content."));
+        portProbe->close();
+        rendererProbe->close();
+        launch(atlas, cli, environment, port, rendererPort, nullptr);
+        return;
+    }
+    auto* dialog = rendererPermissionDialog(anchor, permission);
+    permissions_.insert(atlas.path, dialog);
+    connect(dialog, &ket::Dialog::finished, this,
+            [this, atlas, cli, environment, port, rendererPort, permission, dialog, portProbe,
+             rendererProbe](bool accepted) {
+                if (permissions_.value(atlas.path) != dialog)
+                    return; // Stop/revocation removes the pending request before rejecting it.
+                permissions_.remove(atlas.path);
+                portProbe->close();
+                rendererProbe->close();
+                launch(atlas, cli, environment, port, rendererPort,
+                       accepted ? &permission : nullptr);
+                dialog->deleteLater();
+            });
+    connect(dialog, &QObject::destroyed, this, [this, path = atlas.path] {
+        if (permissions_.contains(path) && permissions_.value(path).isNull())
+            permissions_.remove(path);
+    });
+}
+
+void ManagedAtlasViewers::launch(const AtlasDescriptor& atlas, const QString& cli,
+                                 const QProcessEnvironment& environment, quint16 port,
+                                 quint16 rendererPort, const AtlasRendererPermission* permission) {
+    const auto current = AtlasIndex::readManifest(atlas.path, atlas.workspaceRoot);
+    if (current.path.isEmpty() || current.path != atlas.path ||
+        current.directory != atlas.directory) {
+        errors_.insert(atlas.path, tr("The Atlas path changed. Open it again from its worktree."));
+        emit changed();
+        return;
+    }
+    const auto command = AtlasProcess::launchCommand(cli);
+    if (!command) {
+        errors_.insert(atlas.path,
+                       tr("%1 is an npm shim and the ketatlas package next to it was not found. "
+                          "Reinstall it with npm install -g ketatlas or select its executable.")
+                           .arg(cli));
+        emit changed();
+        return;
+    }
+    auto* process = new QProcess(this);
+    process->setProcessChannelMode(QProcess::MergedChannels);
+    process->setWorkingDirectory(atlas.directory);
     process->setProcessEnvironment(environment);
     auto* timeout = new QTimer(process);
     timeout->setSingleShot(true);
     timeout->setInterval(20000);
     processes_.insert(atlas.path,
-                      ProcessEntry{Viewer{atlas, State::Starting, {}}, process, timeout, {}});
+                      ProcessEntry{Viewer{atlas, State::Starting, {}}, process, timeout, {}, {}});
     connect(timeout, &QTimer::timeout, this, [this, path = atlas.path, process] {
         finish(path, process, tr("KetAtlas did not become ready within 20 seconds."));
         process->kill();
@@ -105,9 +166,18 @@ void ManagedAtlasViewers::open(const AtlasDescriptor& atlas) {
     QStringList arguments{QStringLiteral("serve"),     atlas.path,
                           QStringLiteral("--managed"), QStringLiteral("--port"),
                           QString::number(port),       QStringLiteral("--no-preload")};
-    if (QFileInfo::exists(atlas.directory + QStringLiteral("/atlas.renderer.json")))
-        arguments.append(QStringLiteral("--renderer"));
-    process->start(cli, arguments);
+    // No event-loop boundary may intervene between this recheck and starting the CLI.
+    if (permission) {
+        const auto latest = AtlasRendererPermission::read(atlas, environment, rendererPort);
+        if (latest == *permission && latest.error.isEmpty()) {
+            arguments.append({QStringLiteral("--renderer"), QStringLiteral("--html-port"),
+                              QString::number(rendererPort)});
+        } else {
+            errors_.insert(atlas.path, tr("The renderer contract or path changed. Opening static "
+                                          "content; open again to review a new renderer launch."));
+        }
+    }
+    process->start(command->program, command->leadingArguments + arguments);
     timeout->start();
     emit changed();
 }
@@ -154,6 +224,10 @@ void ManagedAtlasViewers::consumeOutput(const QString& path) {
 }
 
 void ManagedAtlasViewers::stop(const QString& path) {
+    if (auto dialog = permissions_.take(path)) {
+        dialog->reject();
+        dialog->deleteLater();
+    }
     auto it = processes_.find(path);
     if (it == processes_.end() || it->viewer.state == State::Stopping)
         return;

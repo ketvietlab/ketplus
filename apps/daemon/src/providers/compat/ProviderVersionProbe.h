@@ -26,6 +26,8 @@ class ProviderVersionProbe final : public QObject {
     struct Invocation final {
         QString program;
         QStringList arguments;
+        QString
+            nativeArguments{}; // Windows cmd.exe command line; see QProcess::setNativeArguments.
     };
     using InvocationBuilder = std::function<Invocation(const QString& executable)>;
 
@@ -40,7 +42,8 @@ class ProviderVersionProbe final : public QObject {
     [[nodiscard]] std::optional<Runtime> cached(const QString& executable) const;
     [[nodiscard]] const Policy& policy() const noexcept { return policy_; }
 
-  private:
+    // The executable generation on disk: a symlink resolves to its target, so switching an
+    // installer's "current" link to a new release changes the fingerprint.
     struct Fingerprint final {
         QString path;
         qint64 size{-1};
@@ -48,6 +51,8 @@ class ProviderVersionProbe final : public QObject {
         bool operator==(const Fingerprint&) const = default;
     };
     [[nodiscard]] static Fingerprint fingerprintOf(const QString& executable);
+
+  private:
     void finish(const QString& output);
 
     Policy policy_;

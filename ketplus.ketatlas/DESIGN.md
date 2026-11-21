@@ -2,12 +2,8 @@
 
 ## Pinned references
 
-The selected reference is the mobile bundle at
-[`ketplus-app` `e909d4e`](https://github.com/ketvietlab/ketplus-app/tree/e909d4e/ketplus-worktree-mobile.ketatlas),
-unchanged in the latest fetched `origin/develop` (`2508489`). Desktop matched
-`5aba76d` in the earlier review and was rebased to `771c761` before this change.
-
-Desktop pins the Két 0.1.44 static adapter (Két Blue, ketviet `e8adee2d`),
+This public bundle is the desktop design reference. Companion mobile references
+are maintained privately. The desktop adapter uses Két Design System 0.1.44,
 its semantic colors, the public AppShell without the KetSuite application
 switcher, KÉT Sans 1.1, KÉT Sans Mono 0.10.4 and Két Symbol 0.11.0. Accent-coloured text and icons use
 `--kv-accent-text` and `--kv-nav-selected-text`, never `--kv-accent`, so they
@@ -117,7 +113,7 @@ acceptance, provider integration or performance benchmarks.
 Limits: one pending synthetic operation, fixed sample files/history, no real Git,
 process, account or device actions. Existing deletion fixtures retain the conservative
 clean-worktree path; the native optional force-remove path is not represented here.
-Full native acceptance remains in `atlas.progress.json` and `tasks/desktop-refactor/`.
+Full native acceptance remains in `atlas.progress.json` and `docs/testing.md`.
 
 ## Content language
 

@@ -1,0 +1,3899 @@
+{
+    "counts": {
+        "approximated": 144,
+        "mapped": 43,
+        "skipped": 461
+    },
+    "diagnostics": [
+    ],
+    "items": [
+        {
+            "disposition": "skipped",
+            "reason": "Preserved as inert metadata only; semantic highlighting is not applied",
+            "sourcePath": "themes/OneDark-Pro.json/semanticTokenColors",
+            "targetPath": "metadata.vscodeSemanticTokenColors"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Declaration preserved without enabling semantic highlighting",
+            "sourcePath": "themes/OneDark-Pro.json/semanticHighlighting",
+            "targetPath": "metadata"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/OneDark-Pro.json/colors/editor.background",
+            "targetPath": "editor.bg"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/OneDark-Pro.json/colors/editor.foreground",
+            "targetPath": "editor.fg"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/OneDark-Pro.json/colors/editor.selectionBackground",
+            "targetPath": "editor.selection"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/OneDark-Pro.json/colors/editorCursor.foreground",
+            "targetPath": "editor.caret"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/OneDark-Pro.json/colors/editor.lineHighlightBackground",
+            "targetPath": "editor.lineHighlight"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "First available fallback color used for nearest KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/editor.background",
+            "targetPath": "editor.gutterBg"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/OneDark-Pro.json/colors/editorLineNumber.foreground",
+            "targetPath": "editor.gutterFg"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/OneDark-Pro.json/colors/titleBar.activeBackground",
+            "targetPath": "ui.chrome.appBackground"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/OneDark-Pro.json/colors/editor.background",
+            "targetPath": "ui.chrome.pageBackground"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "First available fallback color used for nearest KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/editor.background",
+            "targetPath": "ui.chrome.panelBackground"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/OneDark-Pro.json/colors/sideBarSectionHeader.background",
+            "targetPath": "ui.chrome.panelSubtle"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "First available fallback color used for nearest KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/editor.foreground",
+            "targetPath": "ui.chrome.textMain"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/OneDark-Pro.json/colors/descriptionForeground",
+            "targetPath": "ui.chrome.textSecondary"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "First available fallback color used for nearest KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/descriptionForeground",
+            "targetPath": "ui.chrome.textDisabled"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "First available fallback color used for nearest KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/panel.border",
+            "targetPath": "ui.chrome.border"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/OneDark-Pro.json/colors/focusBorder",
+            "targetPath": "ui.chrome.accent"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/OneDark-Pro.json/colors/sideBar.background",
+            "targetPath": "ui.sidebar.bg"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/OneDark-Pro.json/colors/sideBar.foreground",
+            "targetPath": "ui.sidebar.fg"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "First available fallback color used for nearest KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/panel.border",
+            "targetPath": "ui.sidebar.border"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/OneDark-Pro.json/colors/input.background",
+            "targetPath": "ui.input.bg"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/OneDark-Pro.json/colors/input.foreground",
+            "targetPath": "ui.input.fg"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/OneDark-Pro.json/colors/list.hoverBackground",
+            "targetPath": "ui.list.hover"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/OneDark-Pro.json/colors/list.activeSelectionBackground",
+            "targetPath": "ui.list.selection"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/OneDark-Pro.json/colors/list.activeSelectionForeground",
+            "targetPath": "ui.list.selectionFg"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "First available fallback color used for nearest KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/editor.foreground",
+            "targetPath": "ui.list.fg"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/OneDark-Pro.json/colors/tab.activeBackground",
+            "targetPath": "ui.tab.activeBg"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/OneDark-Pro.json/colors/tab.activeForeground",
+            "targetPath": "ui.tab.activeFg"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/OneDark-Pro.json/colors/tab.inactiveBackground",
+            "targetPath": "ui.tab.inactiveBg"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "First available fallback color used for nearest KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/descriptionForeground",
+            "targetPath": "ui.tab.inactiveFg"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/OneDark-Pro.json/colors/focusBorder",
+            "targetPath": "ui.focus.border"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/OneDark-Pro.json/colors/button.background",
+            "targetPath": "ui.button.bg"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "First available fallback color used for nearest KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/button.background",
+            "targetPath": "ui.button.hover"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/OneDark-Pro.json/colors/terminal.background",
+            "targetPath": "terminal.bg"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/OneDark-Pro.json/colors/terminal.foreground",
+            "targetPath": "terminal.fg"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "First available fallback color used for nearest KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/editorCursor.foreground",
+            "targetPath": "terminal.cursor"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/OneDark-Pro.json/colors/terminal.selectionBackground",
+            "targetPath": "terminal.selection"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/OneDark-Pro.json/colors/terminal.ansiBlack",
+            "targetPath": "terminal.ansi0"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/OneDark-Pro.json/colors/terminal.ansiRed",
+            "targetPath": "terminal.ansi1"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/OneDark-Pro.json/colors/terminal.ansiGreen",
+            "targetPath": "terminal.ansi2"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/OneDark-Pro.json/colors/terminal.ansiYellow",
+            "targetPath": "terminal.ansi3"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/OneDark-Pro.json/colors/terminal.ansiBlue",
+            "targetPath": "terminal.ansi4"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/OneDark-Pro.json/colors/terminal.ansiMagenta",
+            "targetPath": "terminal.ansi5"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/OneDark-Pro.json/colors/terminal.ansiCyan",
+            "targetPath": "terminal.ansi6"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/OneDark-Pro.json/colors/terminal.ansiWhite",
+            "targetPath": "terminal.ansi7"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/OneDark-Pro.json/colors/terminal.ansiBrightBlack",
+            "targetPath": "terminal.ansi8"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/OneDark-Pro.json/colors/terminal.ansiBrightRed",
+            "targetPath": "terminal.ansi9"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/OneDark-Pro.json/colors/terminal.ansiBrightGreen",
+            "targetPath": "terminal.ansi10"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/OneDark-Pro.json/colors/terminal.ansiBrightYellow",
+            "targetPath": "terminal.ansi11"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/OneDark-Pro.json/colors/terminal.ansiBrightBlue",
+            "targetPath": "terminal.ansi12"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/OneDark-Pro.json/colors/terminal.ansiBrightMagenta",
+            "targetPath": "terminal.ansi13"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/OneDark-Pro.json/colors/terminal.ansiBrightCyan",
+            "targetPath": "terminal.ansi14"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/OneDark-Pro.json/colors/terminal.ansiBrightWhite",
+            "targetPath": "terminal.ansi15"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/OneDark-Pro.json/colors/diffEditor.insertedTextBackground",
+            "targetPath": "diff.added"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/actionBar.toggledBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/activityBar.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/activityBar.foreground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/activityBarBadge.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/activityBarBadge.foreground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/agentSessionReadIndicator.foreground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/agentSessionSelectedBadge.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/agentSessionSelectedUnfocusedBadge.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/agentStatusIndicator.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/agents.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/agentsBadge.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/agentsBadge.foreground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/agentsChatInput.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/agentsChatInput.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/agentsChatInput.focusBorder",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/agentsChatInput.foreground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/agentsChatInput.placeholderForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/agentsGradient.tintColor",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/agentsNewSessionButton.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/agentsNewSessionButton.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/agentsNewSessionButton.foreground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/agentsNewSessionButton.hoverBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/agentsPanel.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/agentsPanel.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/agentsPanel.foreground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/agentsUnreadBadge.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/agentsUnreadBadge.foreground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/badge.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/button.secondaryBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/button.secondaryForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/chat.avatarBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/chat.avatarForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/chat.checkpointSeparator",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/chat.editedFileForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/chat.linesAddedForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/chat.linesRemovedForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/chat.requestBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/chat.requestBorder",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/chat.requestBubbleBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/chat.requestBubbleHoverBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/chat.requestCodeBorder",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/chat.slashCommandBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/chat.slashCommandForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/chat.thinkingShimmer",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/checkbox.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/debugToolBar.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/dropdown.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/dropdown.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/editor.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/editor.findMatchBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/editor.findMatchBorder",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/editor.findMatchHighlightBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/editor.linkedEditingBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/editor.selectionHighlightBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/editor.selectionHighlightBorder",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/editor.wordHighlightBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/editor.wordHighlightBorder",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/editor.wordHighlightStrongBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/editor.wordHighlightStrongBorder",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/editorBracketHighlight.foreground1",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/editorBracketHighlight.foreground2",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/editorBracketHighlight.foreground3",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/editorBracketMatch.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/editorBracketMatch.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/editorCursor.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/editorError.foreground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/editorGroup.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/editorGroup.emptyBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Higher-priority fallback supplied the target",
+            "sourcePath": "themes/OneDark-Pro.json/colors/editorGroupHeader.tabsBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/editorGutter.addedBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/editorGutter.deletedBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/editorGutter.modifiedBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/editorHoverWidget.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/editorHoverWidget.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/editorHoverWidget.highlightForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/editorIndentGuide.activeBackground1",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/editorIndentGuide.background1",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/editorInlayHint.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/editorInlayHint.foreground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/editorLineNumber.activeForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/editorMarkerNavigation.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/editorMinimap.inlineChatInserted",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/editorOverviewRuler.addedForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/editorOverviewRuler.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/editorOverviewRuler.deletedForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/editorOverviewRuler.inlineChatInserted",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/editorOverviewRuler.inlineChatRemoved",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/editorOverviewRuler.modifiedForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/editorRuler.foreground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/editorStickyScroll.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/editorStickyScroll.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/editorStickyScroll.shadow",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/editorStickyScrollGutter.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/editorStickyScrollHover.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/editorSuggestWidget.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/editorSuggestWidget.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/editorSuggestWidget.selectedBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/editorWarning.foreground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/editorWhitespace.foreground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/editorWidget.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/git.blame.editorDecorationForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/gitDecoration.ignoredResourceForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/inlineChat.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/inlineChat.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/inlineChat.foreground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/inlineChat.shadow",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/inlineChatDiff.inserted",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/inlineChatDiff.removed",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/inlineChatInput.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/inlineChatInput.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/inlineChatInput.focusBorder",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/inlineChatInput.placeholderForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/list.focusBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/list.focusForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/list.highlightForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/list.hoverForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Higher-priority fallback supplied the target",
+            "sourcePath": "themes/OneDark-Pro.json/colors/list.inactiveSelectionBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Higher-priority fallback supplied the target",
+            "sourcePath": "themes/OneDark-Pro.json/colors/list.inactiveSelectionForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/list.warningForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/menu.foreground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/menu.separatorBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/minimap.chatEditHighlight",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/minimapGutter.addedBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/minimapGutter.deletedBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/minimapGutter.modifiedBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/modernActivityBar.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/modernActivityBar.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/modernActivityBar.inactiveBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/modernPanel.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/modernUI.inactiveShellBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/modernUI.shellBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/multiDiffEditor.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/multiDiffEditor.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/multiDiffEditor.headerBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/panelSectionHeader.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/peekViewEditor.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/peekViewEditor.matchHighlightBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/peekViewEditorStickyScroll.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/peekViewEditorStickyScrollGutter.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/peekViewResult.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/scmGraph.foreground1",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/scmGraph.foreground2",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/scmGraph.foreground3",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/scmGraph.foreground4",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/scmGraph.foreground5",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/scmGraph.historyItemBaseRefColor",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/scmGraph.historyItemHoverAdditionsForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/scmGraph.historyItemHoverDefaultLabelBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/scmGraph.historyItemHoverDefaultLabelForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/scmGraph.historyItemHoverDeletionsForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/scmGraph.historyItemHoverLabelForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/scmGraph.historyItemRefColor",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/scmGraph.historyItemRemoteRefColor",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/scrollbar.shadow",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/scrollbarSlider.activeBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/scrollbarSlider.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/scrollbarSlider.hoverBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/settings.focusedRowBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/settings.headerForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/sideBarSectionHeader.foreground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/sideBarStickyScroll.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/sideBarStickyScroll.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/sideBarStickyScroll.shadow",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/statusBar.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/statusBar.debuggingBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/statusBar.debuggingBorder",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/statusBar.debuggingForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/statusBar.foreground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/statusBar.noFolderBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/statusBarItem.remoteBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/statusBarItem.remoteForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/surface.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/surface.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/tab.activeBorder",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/tab.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/tab.hoverBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/tab.unfocusedHoverBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/terminal.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/terminalStickyScroll.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/terminalStickyScroll.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/terminalStickyScrollHover.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/textBlockQuote.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/textBlockQuote.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/textLink.foreground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/textPreformat.foreground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/titleBar.activeForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/titleBar.inactiveBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/titleBar.inactiveForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/tree.indentGuidesStroke",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/walkThrough.embeddedEditorBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/OneDark-Pro.json/colors/welcomePage.tileHoverBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/0/scope/meta.embedded",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/1/scope/punctuation.definition.delayed.unison",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/1/scope/punctuation.definition.list.begin.unison",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/1/scope/punctuation.definition.list.end.unison",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/1/scope/punctuation.definition.ability.begin.unison",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/1/scope/punctuation.definition.ability.end.unison",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/1/scope/punctuation.operator.assignment.as.unison",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/1/scope/punctuation.separator.pipe.unison",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/1/scope/punctuation.separator.delimiter.unison",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/1/scope/punctuation.definition.hash.unison",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/2",
+            "targetPath": "syntax.variable"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/3",
+            "targetPath": "syntax.type"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/4/scope/support.variable.magic.python",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/5/scope/punctuation.separator.period.python",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/5/scope/punctuation.separator.element.python",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/5/scope/punctuation.parenthesis.begin.python",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/5/scope/punctuation.parenthesis.end.python",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/6",
+            "targetPath": "syntax.variable"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/7",
+            "targetPath": "syntax.variable"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/8",
+            "targetPath": "syntax.keyword"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/9",
+            "targetPath": "syntax.function"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/10/scope/entity.name.lifetime.rust",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/11",
+            "targetPath": "syntax.variable"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/12/scope/support.constant.edge",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/13",
+            "targetPath": "syntax.constant"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/14/scope/keyword.operator.wordlike keyword.operator",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/14",
+            "targetPath": "syntax.operator"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/15",
+            "targetPath": "syntax.operator"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/16",
+            "targetPath": "syntax.variable"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/17/scope/comment markup.link",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/18/scope/markup.changed.diff",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/19/scope/meta.diff.header.from-file",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/19/scope/meta.diff.header.to-file",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/19/scope/punctuation.definition.from-file.diff",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/19/scope/punctuation.definition.to-file.diff",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/20/scope/markup.inserted.diff",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/21/scope/markup.deleted.diff",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/22/scope/meta.function.c",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/22/scope/meta.function.cpp",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/23/scope/punctuation.section.block.begin.bracket.curly.cpp",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/23/scope/punctuation.section.block.end.bracket.curly.cpp",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/23/scope/punctuation.terminator.statement.c",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/23/scope/punctuation.section.block.begin.bracket.curly.c",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/23/scope/punctuation.section.block.end.bracket.curly.c",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/23/scope/punctuation.section.parens.begin.bracket.round.c",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/23/scope/punctuation.section.parens.end.bracket.round.c",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/23/scope/punctuation.section.parameters.begin.bracket.round.c",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/23/scope/punctuation.section.parameters.end.bracket.round.c",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/24/scope/punctuation.separator.key-value",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/25",
+            "targetPath": "syntax.operator"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/26/scope/support.constant.math",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/27/scope/support.constant.property.math",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/28",
+            "targetPath": "syntax.variable"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/29",
+            "targetPath": "syntax.type"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/30/scope/source.java",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/31/scope/punctuation.section.block.begin.java",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/31/scope/punctuation.section.block.end.java",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/31/scope/punctuation.definition.method-parameters.begin.java",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/31/scope/punctuation.definition.method-parameters.end.java",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/31/scope/meta.method.identifier.java",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/31/scope/punctuation.section.method.begin.java",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/31/scope/punctuation.section.method.end.java",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/31/scope/punctuation.terminator.java",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/31/scope/punctuation.section.class.begin.java",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/31/scope/punctuation.section.class.end.java",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/31/scope/punctuation.section.inner-class.begin.java",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/31/scope/punctuation.section.inner-class.end.java",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/31/scope/meta.method-call.java",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/31/scope/punctuation.section.class.begin.bracket.curly.java",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/31/scope/punctuation.section.class.end.bracket.curly.java",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/31/scope/punctuation.section.method.begin.bracket.curly.java",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/31/scope/punctuation.section.method.end.bracket.curly.java",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/31/scope/punctuation.separator.period.java",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/31/scope/punctuation.bracket.angle.java",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/31/scope/punctuation.definition.annotation.java",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/31/scope/meta.method.body.java",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/32/scope/meta.method.java",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/33",
+            "targetPath": "syntax.keyword"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/33",
+            "targetPath": "syntax.type"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/34",
+            "targetPath": "syntax.operator"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/35/scope/meta.definition.variable.name.java",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/36",
+            "targetPath": "syntax.operator"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/37",
+            "targetPath": "syntax.operator"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/38",
+            "targetPath": "syntax.operator"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/39/scope/support.constant.property-value.scss",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/39/scope/support.constant.property-value.css",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/40",
+            "targetPath": "syntax.operator"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/41/scope/support.constant.color.w3c-standard-color-name.css",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/41/scope/support.constant.color.w3c-standard-color-name.scss",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/42/scope/punctuation.separator.list.comma.css",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/43/scope/support.constant.color.w3c-standard-color-name.css",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/44",
+            "targetPath": "syntax.type"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/45/scope/support.module.node",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/45/scope/support.module.node",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/45",
+            "targetPath": "syntax.type"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/46",
+            "targetPath": "syntax.type"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/47/scope/meta.object-literal.key",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/47/scope/support.variable.property",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/47/scope/support.variable.object.process",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/47/scope/support.variable.object.node",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/47",
+            "targetPath": "syntax.variable"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/48/scope/support.constant.json",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/49",
+            "targetPath": "syntax.operator"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/50",
+            "targetPath": "syntax.type"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/51/scope/support.variable.property.process",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/52",
+            "targetPath": "syntax.function"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/53",
+            "targetPath": "syntax.operator"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/54",
+            "targetPath": "syntax.operator"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/55",
+            "targetPath": "syntax.operator"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/56",
+            "targetPath": "syntax.type"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/57/scope/support.variable.dom",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/57/scope/support.variable.property.dom",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/58",
+            "targetPath": "syntax.operator"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/59",
+            "targetPath": "syntax.operator"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/60/scope/punctuation.separator.delimiter",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/61/scope/punctuation.separator.c",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/61/scope/punctuation.separator.cpp",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/62",
+            "targetPath": "syntax.type"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/63",
+            "targetPath": "syntax.operator"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/64",
+            "targetPath": "syntax.variable"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/65",
+            "targetPath": "syntax.type"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/66",
+            "targetPath": "syntax.operator"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/67",
+            "targetPath": "syntax.variable"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/68/scope/punctuation.definition.arguments.begin.python",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/68/scope/punctuation.definition.arguments.end.python",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/68/scope/punctuation.separator.arguments.python",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/68/scope/punctuation.definition.list.begin.python",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/68/scope/punctuation.definition.list.end.python",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/69/scope/meta.function-call.generic.python",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/70",
+            "targetPath": "syntax.constant"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/71",
+            "targetPath": "syntax.operator"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/72",
+            "targetPath": "syntax.operator"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/73",
+            "targetPath": "syntax.operator"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/74",
+            "targetPath": "syntax.keyword"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/75/scope/entity.name.namespace",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/76",
+            "targetPath": "syntax.variable"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/77",
+            "targetPath": "syntax.variable"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/78",
+            "targetPath": "syntax.variable"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/79/scope/token.variable.parameter.java",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/80/scope/import.storage.java",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/81/scope/token.package.keyword",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/82/scope/token.package",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/83/scope/meta.require",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/83",
+            "targetPath": "syntax.function"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/83",
+            "targetPath": "syntax.variable"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/84",
+            "targetPath": "syntax.type"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/85",
+            "targetPath": "syntax.type"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/86",
+            "targetPath": "syntax.type"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/87",
+            "targetPath": "syntax.type"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/87",
+            "targetPath": "syntax.variable"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/88",
+            "targetPath": "syntax.variable"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/89",
+            "targetPath": "syntax.type"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/90",
+            "targetPath": "syntax.keyword"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/91/scope/control.elements",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/91",
+            "targetPath": "syntax.operator"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/92",
+            "targetPath": "syntax.keyword"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/93/scope/storage",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/94/scope/token.storage",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/95",
+            "targetPath": "syntax.operator"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/96/scope/token.storage.type.java",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/97",
+            "targetPath": "syntax.function"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/98",
+            "targetPath": "syntax.type"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/99",
+            "targetPath": "syntax.type"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/100/scope/support.constant.property-value",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/101/scope/support.constant.font-name",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/102/scope/meta.tag",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/103",
+            "targetPath": "syntax.string"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/104",
+            "targetPath": "syntax.constant"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/105",
+            "targetPath": "syntax.number"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/106",
+            "targetPath": "syntax.constant"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/107/scope/punctuation.definition.constant",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/108/scope/entity.name.tag",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/109",
+            "targetPath": "syntax.attribute"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/110",
+            "targetPath": "syntax.attribute"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/111",
+            "targetPath": "syntax.attribute"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/112/scope/meta.selector",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/113/scope/markup.heading",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/114/scope/markup.heading punctuation.definition.heading",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/114/scope/entity.name.section",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/115",
+            "targetPath": "syntax.keyword"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/116/scope/markup.bold",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/116/scope/todo.bold",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/117/scope/punctuation.definition.bold",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/118/scope/markup.italic",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/118/scope/punctuation.definition.italic",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/118/scope/todo.emphasis",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/119/scope/emphasis md",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/120/scope/entity.name.section.markdown",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/121/scope/punctuation.definition.heading.markdown",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/122/scope/punctuation.definition.list.begin.markdown",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/123/scope/markup.heading.setext",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/124/scope/punctuation.definition.bold.markdown",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/125/scope/markup.inline.raw.markdown",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/126/scope/markup.inline.raw.string.markdown",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/127/scope/punctuation.definition.raw.markdown",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/128/scope/punctuation.definition.list.markdown",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/129/scope/punctuation.definition.string.begin.markdown",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/129/scope/punctuation.definition.string.end.markdown",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/129/scope/punctuation.definition.metadata.markdown",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/130/scope/beginning.punctuation.definition.list.markdown",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/131/scope/punctuation.definition.metadata.markdown",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/132/scope/markup.underline.link.markdown",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/132/scope/markup.underline.link.image.markdown",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/133",
+            "targetPath": "syntax.string"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/134/scope/markup.raw.monospace.asciidoc",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/135/scope/punctuation.definition.asciidoc",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/136/scope/markup.list.asciidoc",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/137/scope/markup.link.asciidoc",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/137/scope/markup.other.url.asciidoc",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/138/scope/markup.other.url.asciidoc",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/138",
+            "targetPath": "syntax.string"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/139",
+            "targetPath": "syntax.string"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/140/scope/punctuation.section.embedded",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/140",
+            "targetPath": "syntax.variable"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/141/scope/punctuation.section.embedded.begin",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/141/scope/punctuation.section.embedded.end",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/142/scope/invalid.illegal",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/143/scope/invalid.illegal.bad-ampersand.html",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/144/scope/invalid.illegal.unrecognized-tag.html",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/145/scope/invalid.broken",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/146/scope/invalid.deprecated",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/147/scope/invalid.deprecated.entity.other.attribute-name.html",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/148/scope/invalid.unimplemented",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/149/scope/source.json meta.structure.dictionary.json > string.quoted.json",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/150/scope/source.json meta.structure.dictionary.json > string.quoted.json > punctuation.string",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/151/scope/source.json meta.structure.dictionary.json > value.json > string.quoted.json",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/151/scope/source.json meta.structure.array.json > value.json > string.quoted.json",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/151/scope/source.json meta.structure.dictionary.json > value.json > string.quoted.json > punctuation",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/151/scope/source.json meta.structure.array.json > value.json > string.quoted.json > punctuation",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/152/scope/source.json meta.structure.dictionary.json > constant.language.json",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/152/scope/source.json meta.structure.array.json > constant.language.json",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/153",
+            "targetPath": "syntax.type"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/154/scope/support.type.property-name.json punctuation",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/155/scope/text.html.laravel-blade source.php.embedded.line.html entity.name.tag.laravel-blade",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/156/scope/text.html.laravel-blade source.php.embedded.line.html support.constant.laravel-blade",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/157/scope/support.other.namespace.use.php",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/157/scope/support.other.namespace.use-as.php",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/157/scope/entity.other.alias.php",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/157/scope/meta.interface.php",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/158",
+            "targetPath": "syntax.operator"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/159",
+            "targetPath": "syntax.operator"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/160/scope/punctuation.section.array.begin.php",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/161/scope/punctuation.section.array.end.php",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/162/scope/invalid.illegal.non-null-typehinted.php",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/163/scope/meta.other.type.phpdoc.php",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/163",
+            "targetPath": "syntax.type"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/163",
+            "targetPath": "syntax.keyword"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/164/scope/meta.function-call.php",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/164/scope/meta.function-call.object.php",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/164/scope/meta.function-call.static.php",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/165/scope/punctuation.definition.parameters.begin.bracket.round.php",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/165/scope/punctuation.definition.parameters.end.bracket.round.php",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/165/scope/punctuation.separator.delimiter.php",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/165/scope/punctuation.section.scope.begin.php",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/165/scope/punctuation.section.scope.end.php",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/165/scope/punctuation.terminator.expression.php",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/165/scope/punctuation.definition.arguments.begin.bracket.round.php",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/165/scope/punctuation.definition.arguments.end.bracket.round.php",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/165/scope/punctuation.definition.storage-type.begin.bracket.round.php",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/165/scope/punctuation.definition.storage-type.end.bracket.round.php",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/165/scope/punctuation.definition.array.begin.bracket.round.php",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/165/scope/punctuation.definition.array.end.bracket.round.php",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/165/scope/punctuation.definition.begin.bracket.round.php",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/165/scope/punctuation.definition.end.bracket.round.php",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/165/scope/punctuation.definition.begin.bracket.curly.php",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/165/scope/punctuation.definition.end.bracket.curly.php",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/165/scope/punctuation.definition.section.switch-block.end.bracket.curly.php",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/165/scope/punctuation.definition.section.switch-block.start.bracket.curly.php",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/165/scope/punctuation.definition.section.switch-block.begin.bracket.curly.php",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/165/scope/punctuation.definition.section.switch-block.end.bracket.curly.php",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/166/scope/support.constant.core.rust",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/167/scope/support.constant.ext.php",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/167/scope/support.constant.std.php",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/167/scope/support.constant.core.php",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/167/scope/support.constant.parser-token.php",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/168/scope/entity.name.goto-label.php",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/168/scope/support.other.php",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/169",
+            "targetPath": "syntax.operator"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/170",
+            "targetPath": "syntax.operator"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/171",
+            "targetPath": "syntax.operator"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/172",
+            "targetPath": "syntax.operator"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/173/scope/meta.function.decorator.python",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/174/scope/support.token.decorator.python",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/174/scope/meta.function.decorator.identifier.python",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/175/scope/function.parameter",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/176/scope/function.brace",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/177/scope/function.parameter.ruby",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/177/scope/function.parameter.cs",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/178",
+            "targetPath": "syntax.constant"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/179",
+            "targetPath": "syntax.constant"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/180/scope/rgb-value",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/181/scope/inline-color-decoration rgb-value",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/182/scope/less rgb-value",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/183/scope/selector.sass",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/184",
+            "targetPath": "syntax.type"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/185/scope/block.scope.end",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/185/scope/block.scope.begin",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/186",
+            "targetPath": "syntax.type"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/187/scope/entity.name.variable.local.cs",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/188/scope/token.info-token",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/189/scope/token.warn-token",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/190/scope/token.error-token",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/191/scope/token.debug-token",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/192/scope/punctuation.definition.template-expression.begin",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/192/scope/punctuation.definition.template-expression.end",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/192/scope/punctuation.section.embedded",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/193/scope/meta.template.expression",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/194",
+            "targetPath": "syntax.operator"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/195",
+            "targetPath": "syntax.type"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/196",
+            "targetPath": "syntax.type"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/197/scope/meta.property.object",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/198",
+            "targetPath": "syntax.variable"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/199",
+            "targetPath": "syntax.keyword"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/200",
+            "targetPath": "syntax.keyword"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/201",
+            "targetPath": "syntax.keyword"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/202",
+            "targetPath": "syntax.keyword"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/203",
+            "targetPath": "syntax.operator"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/204",
+            "targetPath": "syntax.operator"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/205",
+            "targetPath": "syntax.operator"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/206",
+            "targetPath": "syntax.operator"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/207/scope/entity.name.package.go",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/208",
+            "targetPath": "syntax.type"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/209/scope/support.constant.elm",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/210/scope/punctuation.quasi.element",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/211",
+            "targetPath": "syntax.constant"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/212",
+            "targetPath": "syntax.attribute"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/213/scope/entity.global.clojure",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/214/scope/meta.symbol.clojure",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/215",
+            "targetPath": "syntax.constant"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/216/scope/meta.arguments.coffee",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/216",
+            "targetPath": "syntax.variable"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/217/scope/source.ini",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/218/scope/meta.scope.prerequisites.makefile",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/219/scope/source.makefile",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/220",
+            "targetPath": "syntax.keyword"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/221/scope/meta.method.groovy",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/222/scope/meta.definition.variable.name.groovy",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/223/scope/meta.definition.class.inherited.classes.groovy",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/224/scope/support.variable.semantic.hlsl",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/225",
+            "targetPath": "syntax.type"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/226/scope/text.variable",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/226/scope/text.bracketed",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/227",
+            "targetPath": "syntax.type"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/228",
+            "targetPath": "syntax.function"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/229",
+            "targetPath": "syntax.type"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/230",
+            "targetPath": "syntax.constant"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/231",
+            "targetPath": "syntax.constant"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/232",
+            "targetPath": "syntax.keyword"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/233/scope/invalid.xi",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/234/scope/beginning.punctuation.definition.quote.markdown.xi",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/235/scope/beginning.punctuation.definition.list.markdown.xi",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/236",
+            "targetPath": "syntax.constant"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/237/scope/accent.xi",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/238/scope/wikiword.xi",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/239",
+            "targetPath": "syntax.constant"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/240/scope/punctuation.definition.tag.xi",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/241/scope/entity.name.label.cs",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/241/scope/entity.name.scope-resolution.function.call",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/241/scope/entity.name.scope-resolution.function.definition",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/242/scope/entity.name.label.cs",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/242/scope/markup.heading.setext.1.markdown",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/242/scope/markup.heading.setext.2.markdown",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/243/scope/meta.brace.square",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/244/scope/punctuation.definition.comment",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/244",
+            "targetPath": "syntax.comment"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/245/scope/markup.quote.markdown",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/246/scope/punctuation.definition.block.sequence.item.yaml",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/247",
+            "targetPath": "syntax.constant"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/248/scope/entity.name.variable.parameter.cs",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/249/scope/entity.name.variable.field.cs",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/250/scope/markup.deleted",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/251/scope/markup.inserted",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/252/scope/markup.underline",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/253/scope/punctuation.section.embedded.begin.php",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/253/scope/punctuation.section.embedded.end.php",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/254/scope/support.other.namespace.php",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/255",
+            "targetPath": "syntax.variable"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/256",
+            "targetPath": "syntax.variable"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/257",
+            "targetPath": "syntax.variable"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/258/scope/entity.other.inherited-class",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/259",
+            "targetPath": "syntax.variable"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/260/scope/entity.name.variable.parameter.php",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/260/scope/punctuation.separator.colon.php",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/260",
+            "targetPath": "syntax.constant"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/261",
+            "targetPath": "syntax.number"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/262/scope/support.other.parenthesis.regexp",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/263",
+            "targetPath": "syntax.constant"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/264",
+            "targetPath": "syntax.string"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/265/scope/log.info",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/266/scope/log.warning",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/267/scope/log.error",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/268",
+            "targetPath": "syntax.operator"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/269/scope/entity.name.label",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/270",
+            "targetPath": "syntax.type"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/270",
+            "targetPath": "syntax.constant"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/271",
+            "targetPath": "syntax.constant"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/272",
+            "targetPath": "syntax.attribute"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/272",
+            "targetPath": "syntax.variable"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/273",
+            "targetPath": "syntax.comment"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/OneDark-Pro.json/tokenColors/274/scope/markup.italic.markdown",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Lexilla uses shared roles, not TextMate scope stacks; rule order is parent first then child, later explicit fields override",
+            "sourcePath": "themes/OneDark-Pro.json",
+            "targetPath": "syntax"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Extension JavaScript, grammars, semantic token providers and UI contributions are never executed",
+            "sourcePath": "themes/OneDark-Pro.json",
+            "targetPath": ""
+        }
+    ]
+}

@@ -29,7 +29,7 @@ Qt application shell
         -> libvterm screen and keyboard model
         -> PTY process backend
             -> forkpty (macOS/Linux)
-            -> ConPTY (future Windows backend)
+            -> ConPTY (Windows 10 1809+)
     -> reusable settings shell from KetPlus CM
         -> shared appearance snapshot and built-in theme preview
         -> private pages remain consumer-owned through SettingsPage
@@ -91,8 +91,9 @@ Qt application shell
   processes, including bounded output and a
   timeout; this does not expand the public Git service's mutation surface.
 - `core/src/terminal` owns the embedded terminal surface, VT state, scrollback, and
-  process transport. `PtyProcess` isolates platform process creation from the
-  renderer so a ConPTY backend can be added without changing terminal UI code.
+  process transport. `PtyProcess` keeps one public API and delegates to a
+  `PtyBackend`: `PtyBackendPosix.cpp` (forkpty) or `PtyBackendWindows.cpp` (ConPTY, chosen by
+  CMake per platform). The Windows shell is `SHELL` if set, else pwsh, powershell, then cmd.
 - `core/src/app/SettingsDialog` owns the reusable settings shell and
   public appearance persistence. `core/src/app/SettingsWorkspace` recomposes its
   live theme and typography controls as the non-modal, full-page Két settings
@@ -144,8 +145,17 @@ Qt application shell
   down (`AtlasProcess::toolSearchPaths`).
 - A conversation header opens an Atlas list in the Agent detail tabs. The sidebar
   has no Atlas destination. `ManagedAtlasViewers` launches KetAtlas 0.6.1 in
-  managed mode for explicit external-browser viewing, starts the declared native
-  renderer only when the bundle has `atlas.renderer.json`, tracks running viewers
+  managed mode for explicit external-browser viewing. A renderer sidecar triggers
+  a per-launch permission dialog showing its resolved executable, arguments and
+  working directory; it never grants execution by its presence. Both desktop
+  entry points and the install retry use this shared gate. View static, Escape or
+  closing the dialog launches without the renderer; Stop cancels a pending launch.
+  Approval is not saved, and exact manifest/sidecar bytes and canonical paths are
+  checked again immediately before launch. See
+  [ADR 0128](decisions/0128-atlas-renderer-per-launch-consent.md).
+  Remote daemon viewers use static mode; their start/reattach requests have no
+  host-side renderer permission handoff and expose only the viewer origin.
+  The registry tracks running viewers
   across worktrees, and stops them on a browser close or KétPlus Stop command.
   Edit opens the existing in-app Atlas Builder in the current worktree.
 - Completed assistant messages can show compact Atlas result cards from explicit
@@ -224,6 +234,46 @@ tree); there is no option to leave it out, and the bundle check fails without it
 bundle and replaces the installed copies, so neither keeps files from the tree
 the bundle was last built with (#124), as for the browser runtime (#94).
 
+ACP providers share `providers/acp/AcpAdapter`: it owns stdio process lifetime,
+bounded JSON-RPC framing and response correlation, initialization, session
+creation/loading with host-supplied MCP servers, prompt/cancel, permission
+responses and canonical transcript events. CLI discovery, launch/version policy,
+model catalogs and provider extensions stay in each concrete adapter. Cursor's
+`cursor/*` requests and account/model error explanations remain Cursor-specific;
+the shared engine has no provider names or installation paths. MCP permission
+exemptions default to denied: only a concrete adapter can interpret its own
+trusted tool identity. Provider-specific client capability metadata and session
+mode identifiers are opt-in hooks.
+
+Managed background tools use the daemon registry (ADR 0127). The injected agent
+MCP read credential does not authorize start/stop: those operations require a
+separate, immutable per-turn capability bound to owner, generation, effective
+policy and transport epoch. Reviews receive no mutation grant. Accepted jobs
+retain their policy snapshot after the originating turn ends. The host revokes
+old authority before setup and grants new authority only for the exact refreshed
+epoch acknowledged by the adapter.
+
+Claude waits for the owned SDK subprocess's actual exit before recreating its
+query with the prior resume ID. Codex and ACP isolate managed conversations into
+dedicated provider processes so one conversation's refresh never restarts another.
+They confirm exit before loading the same history ID in the replacement process;
+load failure cannot fall back to new history. Deleting an idle conversation also
+releases only its owned transports, including prior provider handoffs, before
+removing the local record. The offline adapter fixtures and installed-provider
+history validation gaps are recorded in the
+[refresh evidence](decisions/0127-provider-origin-refresh-evidence.md).
+Cursor's installed `2026.11.11-043ef28` production-adapter probes verify completed
+synthetic history, same-ID replacement, old-context exit and inventory attributed
+to a fresh injected worker after load. Its implementation enables managed
+mutations using the same dedicated-process barrier and exact epoch ACK. Reviews,
+pending/missing ACKs and stale credentials still receive no mutation authority;
+registry reads retain their separate grants. Unverified adapters remain gated.
+Fixture or load-ACK success alone is not the native inventory evidence.
+Copilot's installed 1.0.112 production-adapter probe verifies completed synthetic
+history, same-ID replacement, MCP rotation and process exit with one authorized
+Auto turn. Its implementation enables managed mutations; each actual turn still
+requires successful history restoration and the exact new transport epoch ACK.
+
 A Cursor adapter can run beside Codex and Claude when the user-installed
 Cursor CLI is available. Discovery uses `PATH`, `KETPLUS_CURSOR_AGENT`,
 Unix `~/.local/bin/agent`, and on native Windows
@@ -235,7 +285,13 @@ Windows), speaks ACP JSON-RPC on stdio, and normalizes `session/update` and
 `agent models`. Effort suffixes are grouped into families; the adapter maps the
 selected family plus effort back to a CLI id before `--model` and
 `session/set_config_option`. After `session/new` the adapter also sends
-`session/set_config_option` for the selected model. The CLI is never
+`session/set_config_option` for the selected model. A process started with
+`--model` keeps that model, so a turn that switches to Auto ends the idle
+process and starts it again without `--model`; the next turn loads its ACP
+session again. A failed turn keeps Cursor's own words: a team or account usage
+limit ("Your team has reached its usage limit … return on MM/DD/YYYY") is
+reported as `limit_reached` with `resets_at` at local midnight of that day, and
+a plan refusal puts the CLI-login explanation in front of Cursor's text. The CLI is never
 bundled; authentication stays with `agent login` or `CURSOR_API_KEY` /
 `CURSOR_AUTH_TOKEN`. The daemon does not call ACP `authenticate`. Override the
 binary with `--cursor` or `KETPLUS_CURSOR_AGENT`.
@@ -286,8 +342,9 @@ while the envelope major stays 0.
 ## Shared browser tools
 
 `modules/browser` resolves one host-controlled MCP launch for Codex, Claude and
-Cursor. The browser remains a separate stdio worker. Claude SDK receives the
-server map per query; Cursor ACP receives it on session creation and loading.
+Cursor and Copilot. The browser remains a separate stdio worker. Claude SDK receives the
+server map per query; ACP receives it on session creation and loading. Copilot
+keeps normal approvals until its structured MCP identity is verified (ADR 0120).
 The same local settings control origins and enablement for all providers;
 settings changes wait for the next Claude/Cursor turn. Source readiness probes
 share engine selection with the worker, and built-in skill discovery uses the
@@ -348,7 +405,12 @@ an active turn. Claude supports selection between turns, with startup, shutdown,
 pending input and live background tasks fenced by the daemon. Its next SDK query
 resumes the same thread in the selected cwd, after copying the newest persisted
 project transcript there; returning to a former cwd must not restore stale history.
-The sidecar independently rejects a cwd change while its background tasks run.
+The sidecar independently rejects a cwd change while legacy native background
+tasks drain. New managed jobs use the daemon registry of ADR 0127 with immutable
+job cwd; the shared `ketplus_agents` MCP tools bind every provider to that API.
+Claude native background/subagent entry points are disabled through the pinned
+SDK settings, tool exclusions and deny hooks. Completion is delivered by the
+daemon's durable owner-wake boundary, not by keeping a Claude query alive.
 The existing `switch_supported` and `switch_available` fields drive both clients;
 no mobile binary or relay contract change is required. Cursor remains unsupported.
 
@@ -416,7 +478,14 @@ Explorer and Source Control render Két row recipes through Qt item delegates, r
 
 ### Pro sidebar presentation
 
-The native sidebar composes Két NavItem, GroupHeader, ConversationRow and UpdatePill controls; the standalone Agent Workspace uses their QML counterparts. Conversation selection, context actions, collapsed repositories and preview limits keep their existing session-manager routing. Tags are rendered and filtered from supplied metadata; this UI does not invent tags or infer a finished turn's approval intent. The `awaitingReply` projection has a distinct kit state when supplied.
+Sidebar placement is separate from mutable execution scope. Conversations retain the
+repository captured by their generation's first navigation record; teams retain their
+creation placement and keep member rows together when tasks use other repositories.
+Known no-repository is distinct from legacy unknown placement. Local and paired display
+metadata preserve this distinction without changing execution routing or authorization
+([decision](decisions/2026-11-17-sidebar-origin-placement.md)).
+
+The native sidebar composes Két NavItem, GroupHeader, ConversationRow and UpdatePill controls; the standalone Agent Workspace uses their QML counterparts. Conversation selection, context actions, collapsed repositories and preview limits keep their existing session-manager routing. Rows draw no user tags and the sidebar has no tag filter (ADR 0117); a team member's row draws only its locked role tag. This UI does not infer a finished turn's approval intent. The `awaitingReply` projection has a distinct kit state when supplied.
 
 The sidebar reads the local daemon's `storage.size.read` capability through the existing CodexAppServer facade. The adapter accepts only read/apply operation names and requires a ready daemon advertising the exact operation. A visible window refreshes advisory status at most once a minute, with one in-flight request, a deadline and stale-response fencing. It shows the warning only from an authoritative successful response, hides stale status on disconnect, and links to Settings. This does not change retention policy or start a provider turn.
 
@@ -431,7 +500,19 @@ composition. It does not render a worktree rail; the execution picker owns
 checkout selection, and worktrees are created for a conversation (ADR 0111). The native shell retains
 its multi-repository grouping.
 
-Pro Quick search wraps the kit CommandPalette in a transparent native popup so it
+The native sidebar's kit text field filters the existing repository/conversation tree in place.
+It compares repository names/paths and conversation titles case-insensitively, without searching
+transcripts or requesting a search API. Repository matches retain the whole group; title matches
+retain their repository/team ancestors. The tree materializes matching history rows using its
+existing per-group diff; unmatched hidden history stays unbuilt. Filtering changes presentation,
+not projections, selection,
+pins, ordering or saved folds. The query is temporary window state and survives model updates.
+After visibility changes, native guide/folder/group layouts refresh from children to parents
+before the list measures its content height. Hidden rows and preview footers contribute no
+reserved height; extra viewport space stays outside the repository tree.
+Ctrl+Alt+K (Cmd+Option+K on macOS) focuses it; Ctrl+K remains an editor chord prefix.
+
+Global Spotlight (Ctrl+P, Cmd+P on macOS) wraps the kit CommandPalette in a transparent native popup so it
 stays above the embedded QQuickView. Product filtering retains ranked name/path
 matches and Atlas IDs; unavailable entries cannot activate and produce an explicit
 empty-state explanation when they are the only matches. Context menus use kit
@@ -448,3 +529,29 @@ status badges and palette/profile values. The execution picker retains its
 paginated QListWidget model and paints visible rows from treeItemRecipe; search,
 revision fencing and acknowledgment-driven context changes retain their existing
 ownership. Pairing confirmation and changed-claim rejection remain daemon-backed.
+
+## App-wide toast and embedded input placement
+
+Agent Workspace maps its QML composer's upper edge through the embedded view into
+window coordinates and registers the reserved bottom height with the kit's generic
+Toast API. Composer and ancestor geometry/visibility notifications refresh the
+reservation; reparenting refreshes the watched widget ancestors and releases the
+old window only when this workspace owns its reservation. Hiding the workspace or
+its composer clears the owned reservation, and teardown disables geometry callbacks
+before unloading QML. The mock and workspace-local QML toast map the composer into
+the toast parent's coordinate space for the equivalent Quick reservation. This changes overlay placement only, not transcript/input layout.
+
+Machine Workspace registers its own QWidget composer using the same toast ownership
+property. Its transcript-only Agent Workspace cannot clear the Machine reservation.
+Composer growth, visibility, ancestor movement and reparenting refresh the measured
+window-space top; teardown and hide clear only a reservation held by that view.
+
+### Color-scheme publication
+
+ThemeManager delegates canonical selection and snapshot preparation to
+`ThemeSchemeController` in `core/src/ui/theme/`. A revisioned selection store owns
+committed process-wide preferences; temporary previews never write it. User
+schemes are prepared on Qt Concurrent workers and generation-checked before one
+GUI-thread publication through ket-qt runtime color overrides. Consumers retain
+their existing documents and terminal sessions. See `color-schemes.md` for the
+current API and integration limits.

@@ -13,6 +13,7 @@ QString randomSecret() {
 } // namespace
 void CloudControlClient::signInDevice(LocalCallback callback) {
     const auto epoch = ++accountEpoch_;
+    invalidateSenderKeys();
     dropBrowserSignIn();
     signInError_.clear();
     auto installation = storedString("installation-id");

@@ -480,7 +480,7 @@ class DesktopTranscriptWindowTest final : public QObject {
         Environment env;
         QVERIFY(env.directory.isValid());
         const auto providerLog = env.directory.filePath("provider.log");
-        const auto executable = env.directory.filePath("fake-codex");
+        const auto executable = env.directory.filePath(fixtureName("fake-codex"));
         QVERIFY(writeFakeCodex(executable, providerLog));
         DaemonService service({env.directory.filePath("journal.sqlite3"),
                                env.directory.filePath("local.token"),

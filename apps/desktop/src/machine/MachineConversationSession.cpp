@@ -1,0 +1,422 @@
+#include "machine/MachineConversationSession.h"
+
+#include "MachineLargeEvents.h"
+#include "MachineRows.h"
+
+#include <QJsonArray>
+
+#include <algorithm>
+#include <memory>
+#include <utility>
+
+namespace ketplus {
+
+namespace {
+
+bool endsRequest(const QString& type) {
+    return type == QLatin1String("approval.resolved") ||
+           type == QLatin1String("approval.expired") ||
+           type == QLatin1String("question.answered") || type == QLatin1String("question.expired");
+}
+
+} // namespace
+
+MachineConversationSession::MachineConversationSession(remote::MachineBackend* backend,
+                                                       QString sessionId, const qint64 generation,
+                                                       QObject* parent)
+    : QObject(parent), backend_(backend), sessionId_(std::move(sessionId)),
+      generation_(generation) {
+    if (backend == nullptr)
+        return;
+    machineId_ = backend->machineId();
+    lastState_ = backend->connectionState();
+    connect(backend, &remote::MachineBackend::eventReceived, this,
+            &MachineConversationSession::applyEvent);
+    connect(backend, &remote::MachineBackend::commandCompleted, this,
+            &MachineConversationSession::commandCompleted);
+    connect(backend, &remote::MachineBackend::connectionStateChanged, this,
+            [this](const State state, const QString&) {
+                const State previous = lastState_;
+                lastState_ = state;
+                // Recovery is automatic: what happened while away is read again.
+                // Only a conversation still shown is followed again.
+                if (state == State::Connected && previous != State::Connected && open_)
+                    load();
+                emit changed();
+            });
+    connect(backend, &QObject::destroyed, this, &MachineConversationSession::changed);
+}
+
+remote::MachineBackend::Callback
+MachineConversationSession::guarded(std::function<void(const QJsonObject&, const QString&)> done) {
+    // An answer after this conversation closed reaches nothing.
+    return [self = QPointer<MachineConversationSession>(this),
+            done = std::move(done)](const QJsonObject& result, const QString& error) {
+        if (self != nullptr)
+            done(result, error);
+    };
+}
+
+void MachineConversationSession::setRunning(const bool running) {
+    if (running_ == running)
+        return;
+    running_ = running;
+    emit changed();
+}
+
+bool MachineConversationSession::canAct() const {
+    return backend_ != nullptr && backend_->connectionState() == State::Connected;
+}
+
+QString MachineConversationSession::blockedReason() const {
+    if (backend_ == nullptr)
+        return tr("This machine is no longer connected.");
+    const QString reason = backend_->connectionReason();
+    switch (backend_->connectionState()) {
+    case State::Connected:
+        return {};
+    case State::Connecting:
+        return tr("Connecting…");
+    case State::Reconnecting:
+        return reason.isEmpty() ? tr("Reconnecting…") : tr("Reconnecting… %1").arg(reason);
+    case State::Offline:
+        return reason.isEmpty() ? tr("This machine is offline.") : reason;
+    }
+    return {};
+}
+
+MachineConversationSession::~MachineConversationSession() { close(); }
+
+void MachineConversationSession::close() {
+    if (open_ && backend_ != nullptr)
+        backend_->conversationClosed(sessionId_);
+    open_ = false;
+}
+
+void MachineConversationSession::load() {
+    if (backend_ == nullptr)
+        return;
+    open_ = true;
+    const quint64 load = ++windowLoad_;
+    loadingOlder_ = false;
+    windowLoading_ = true;
+    backend_->transcriptWindow(
+        sessionId_, generation_, {{QStringLiteral("turn_limit"), 3}},
+        guarded([this, load](const QJsonObject& window, const QString& error) {
+            if (load != windowLoad_)
+                return;
+            if (!error.isEmpty()) {
+                fail(error); // the cached transcript stays as it was
+                finishWindow();
+                return;
+            }
+            remote::resolveLargeEvents(
+                backend_, sessionId_, generation_, window,
+                guarded([this, load](const QJsonObject& result, const QString& resolveError) {
+                    if (load != windowLoad_)
+                        return;
+                    if (!resolveError.isEmpty()) {
+                        fail(resolveError);
+                        finishWindow();
+                        return;
+                    }
+                    lastError_.clear();
+                    transcript_.reset(result.value(QLatin1String("events")).toArray());
+                    snapshotCursor_ = result.value(QLatin1String("snapshot_cursor")).toInteger();
+                    hasOlder_ = result.value(QLatin1String("has_more_before")).toBool() &&
+                                transcript_.firstCursor() > 1;
+                    emit changed();
+                    finishWindow();
+                }));
+        }));
+    loadApprovals();
+}
+
+void MachineConversationSession::finishWindow() {
+    // What arrived while the window loaded follows it; what the window already holds is
+    // dropped by its cursor.
+    windowLoading_ = false;
+    pumpLive();
+}
+
+void MachineConversationSession::loadOlder() {
+    if (backend_ == nullptr || !hasOlder_ || loadingOlder_)
+        return;
+    const qint64 before = transcript_.firstCursor();
+    if (before <= 1) {
+        hasOlder_ = false;
+        emit changed();
+        return;
+    }
+    // One request both routes read: the daemon's session.transcript_page (before_cursor,
+    // limit) and the Relay's window before a cursor (before_cursor, turn_limit, a snapshot
+    // fence that covers live events read since the window).
+    const QJsonObject request{
+        {QStringLiteral("before_cursor"), before},
+        {QStringLiteral("limit"), 3},
+        {QStringLiteral("turn_limit"), 3},
+        {QStringLiteral("snapshot_cursor"), std::max(snapshotCursor_, before - 1)}};
+    const quint64 load = windowLoad_;
+    loadingOlder_ = true;
+    emit changed();
+    const auto failed = [this, load](const QString& error) {
+        if (load != windowLoad_)
+            return;
+        loadingOlder_ = false;
+        fail(error); // nothing is added; scrolling up again retries
+    };
+    backend_->transcriptPage(
+        sessionId_, generation_, request,
+        guarded([this, load, before, failed](const QJsonObject& page, const QString& error) {
+            if (load != windowLoad_)
+                return;
+            if (!error.isEmpty()) {
+                failed(error);
+                return;
+            }
+            remote::resolveLargeEvents(
+                backend_, sessionId_, generation_, page,
+                guarded([this, load, before, failed](const QJsonObject& result,
+                                                     const QString& resolveError) {
+                    if (load != windowLoad_)
+                        return;
+                    if (!resolveError.isEmpty()) {
+                        failed(resolveError);
+                        return;
+                    }
+                    loadingOlder_ = false;
+                    const QJsonArray events = result.value(QLatin1String("events")).toArray();
+                    transcript_.prepend(events);
+                    // A page that adds nothing ends paging, so a confused route cannot loop.
+                    hasOlder_ = result.value(QLatin1String("has_more_before")).toBool() &&
+                                transcript_.firstCursor() < before && transcript_.firstCursor() > 1;
+                    emit changed();
+                }));
+        }));
+}
+
+void MachineConversationSession::loadApprovals() {
+    // Pages until the machine says there are no more, then replaces the cards at once. A newer
+    // load supersedes one still paging.
+    loadApprovalsPage({}, std::make_shared<QVector<QJsonObject>>(), ++approvalsLoad_);
+}
+
+void MachineConversationSession::loadApprovalsPage(
+    const QString& afterId, const std::shared_ptr<QVector<QJsonObject>>& collected,
+    const quint64 load) {
+    if (backend_ == nullptr)
+        return;
+    backend_->pendingApprovals(
+        sessionId_, generation_, afterId,
+        guarded([this, collected, load](const QJsonObject& result, const QString& error) {
+            if (load != approvalsLoad_)
+                return;
+            if (!error.isEmpty()) {
+                fail(error);
+                return;
+            }
+            for (const QJsonValue& value :
+                 result.value(QLatin1String("pending_approvals")).toArray())
+                collected->append(value.toObject());
+            const QString nextId =
+                result.value(QLatin1String("pending_approvals_next_id")).toString();
+            if (result.value(QLatin1String("pending_approvals_has_more")).toBool() &&
+                !nextId.isEmpty()) {
+                loadApprovalsPage(nextId, collected, load);
+                return;
+            }
+            approvals_ = *collected;
+            emit changed();
+        }));
+}
+
+void MachineConversationSession::applyEvent(const QJsonObject& delivered) {
+    const QJsonObject event = remote::windowEvent(delivered);
+    if (event.value(QLatin1String("session_id")).toString() != sessionId_)
+        return;
+    if (event.contains(QLatin1String("session_generation")) &&
+        event.value(QLatin1String("session_generation")).toInteger() != generation_)
+        return;
+    live_.append(event);
+    pumpLive();
+}
+
+void MachineConversationSession::pumpLive() {
+    while (!windowLoading_ && !resolvingLive_ && !live_.isEmpty()) {
+        const QJsonObject event = live_.takeFirst();
+        if (event.value(QLatin1String("payload"))
+                .toObject()
+                .value(QLatin1String("large_event"))
+                .toObject()
+                .isEmpty()) {
+            applyLive(event);
+            continue;
+        }
+        // A large live item (SSH and the local socket): its content is read as a window's is,
+        // and the events after it wait so the rows keep their order.
+        resolvingLive_ = true;
+        remote::resolveLargeEvents(
+            backend_, sessionId_, generation_,
+            {{QStringLiteral("events"), QJsonArray{event}},
+             {QStringLiteral("partial_items"), QJsonArray{}}},
+            guarded([this](const QJsonObject& page, const QString& error) {
+                resolvingLive_ = false;
+                const QJsonArray events = page.value(QLatin1String("events")).toArray();
+                if (!error.isEmpty() || events.isEmpty())
+                    fail(error.isEmpty() ? tr("A large transcript item could not be read.")
+                                         : error);
+                else
+                    applyLive(events.first().toObject());
+                pumpLive();
+            }));
+        return;
+    }
+}
+
+void MachineConversationSession::applyLive(const QJsonObject& event) {
+    const QString type = event.value(QLatin1String("event_type")).toString();
+    bool changed = transcript_.apply(event);
+    if (type == QLatin1String("turn.started") || type == QLatin1String("user.message")) {
+        changed = changed || !running_;
+        running_ = true;
+    } else if (type == QLatin1String("turn.completed")) {
+        changed = changed || running_;
+        running_ = false;
+        // A turn's pending requests expire with it.
+        loadApprovals();
+    }
+    if (type == QLatin1String("approval.requested") || type == QLatin1String("question.request")) {
+        loadApprovals();
+    } else if (endsRequest(type)) {
+        const QString id = event.value(QLatin1String("payload"))
+                               .toObject()
+                               .value(QLatin1String("approval_id"))
+                               .toString();
+        const auto removed = approvals_.removeIf([&id](const QJsonObject& request) {
+            return request.value(QLatin1String("approval_id")).toString() == id;
+        });
+        changed = changed || removed > 0;
+    }
+    if (changed)
+        emit this->changed();
+}
+
+void MachineConversationSession::send(const QString& text, const QJsonArray& attachmentIds) {
+    const QString prompt = text.trimmed();
+    if ((prompt.isEmpty() && attachmentIds.isEmpty()) || !canAct())
+        return;
+    QJsonObject request{{QStringLiteral("prompt"), prompt}};
+    if (!attachmentIds.isEmpty())
+        request.insert(QStringLiteral("attachment_ids"), attachmentIds);
+    if (!attachmentIds.isEmpty())
+        ++attachmentSendCount_;
+    const auto update = write({});
+    const auto done =
+        guarded([this, attachmentIds, update](const QJsonObject& result, const QString& error) {
+            const QString commandId = remote::queuedCommandId(result);
+            if (error.isEmpty() && !commandId.isEmpty() && !attachmentIds.isEmpty())
+                attachmentSends_.insert(commandId, attachmentIds);
+            update(result, error);
+            if ((!error.isEmpty() || commandId.isEmpty()) && !attachmentIds.isEmpty()) {
+                --attachmentSendCount_;
+                emit attachmentsSent(attachmentIds, error);
+            }
+        });
+    if (running_)
+        backend_->steerTurn(sessionId_, generation_, request, done);
+    else
+        backend_->startTurn(sessionId_, generation_, request, done);
+}
+
+void MachineConversationSession::stop() {
+    if (!canAct())
+        return;
+    backend_->stopTurn(sessionId_, generation_, write({}));
+}
+
+void MachineConversationSession::resolveApproval(const QString& approvalId, const bool accept) {
+    if (!canAct())
+        return;
+    backend_->resolveApproval(sessionId_, generation_, approvalId,
+                              {{QStringLiteral("decision"),
+                                accept ? QStringLiteral("accept") : QStringLiteral("decline")}},
+                              write(approvalId));
+}
+
+void MachineConversationSession::answerQuestion(const QString& questionId,
+                                                const QJsonObject& resolution) {
+    if (!canAct())
+        return;
+    backend_->answerQuestion(sessionId_, generation_, questionId, resolution, write(questionId));
+}
+
+remote::MachineBackend::Callback MachineConversationSession::write(const QString& approvalId) {
+    // A write the route holds (Connecting, Reconnecting: up to 15 minutes on the Relay) is
+    // shown as waiting; one it queued finishes on commandCompleted().
+    ++waiting_;
+    emit changed();
+    return guarded([this, approvalId](const QJsonObject& result, const QString& error) {
+        --waiting_;
+        const QString commandId = remote::queuedCommandId(result);
+        if (error.isEmpty() && !commandId.isEmpty()) {
+            queued_.insert(commandId, approvalId);
+            emit changed();
+            return;
+        }
+        finishWrite(approvalId, error);
+    });
+}
+
+void MachineConversationSession::commandCompleted(const QString& commandId, const QJsonObject&,
+                                                  const QString& error) {
+    const auto it = queued_.constFind(commandId);
+    if (it == queued_.cend())
+        return;
+    const QString approvalId = *it;
+    queued_.erase(it);
+    finishWrite(approvalId, error);
+    const auto attachments = attachmentSends_.take(commandId);
+    if (!attachments.isEmpty()) {
+        --attachmentSendCount_;
+        emit attachmentsSent(attachments, error);
+    }
+}
+
+void MachineConversationSession::finishWrite(const QString& approvalId, const QString& error) {
+    if (error.isEmpty()) {
+        lastError_.clear();
+        emit changed();
+    } else if (!approvalId.isEmpty()) {
+        markExpired(approvalId, error);
+    } else {
+        fail(error);
+    }
+}
+
+QString MachineConversationSession::writeStatus() const {
+    if (waiting_ > 0 && !canAct())
+        return tr("Waiting for the machine to reconnect. What you sent goes through when it "
+                  "does (held for up to 15 minutes).");
+    if (waiting_ > 0)
+        return tr("Sending…");
+    if (!queued_.isEmpty())
+        return tr("Sent. Waiting for the machine to confirm…");
+    return {};
+}
+
+void MachineConversationSession::markExpired(const QString& approvalId, const QString& error) {
+    // ADR 0119: an answer that fails (expired, offline) marks the card expired.
+    for (QJsonObject& request : approvals_)
+        if (request.value(QLatin1String("approval_id")).toString() == approvalId) {
+            request.insert(QStringLiteral("expired"), true);
+            request.insert(QStringLiteral("expired_reason"), error);
+        }
+    fail(error);
+}
+
+void MachineConversationSession::fail(const QString& error) {
+    lastError_ = error;
+    emit changed();
+}
+
+} // namespace ketplus

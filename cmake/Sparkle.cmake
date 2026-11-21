@@ -8,6 +8,9 @@ set(KETPLUS_UPDATE_FEED_URL "" CACHE STRING
     "HTTPS appcast URL compiled into KetPlus.app; empty disables in-app updates")
 set(KETPLUS_UPDATE_PUBLIC_ED_KEY "" CACHE STRING
     "Base64 Ed25519 public key that verifies update archives; required with the feed URL")
+set(KETPLUS_UPDATE_CHANNEL "" CACHE STRING
+    "staging or production; required for a macOS build with in-app updates")
+option(KETPLUS_REQUIRE_UPDATES "Require in-app updates for this release build" OFF)
 set(KETPLUS_SPARKLE_ARCHIVE "" CACHE FILEPATH
     "Local copy of the pinned Sparkle release archive, for offline builds")
 
@@ -17,6 +20,9 @@ set(ketplus_sparkle_sha256
 
 set(KETPLUS_UPDATES_ENABLED OFF)
 if(KETPLUS_UPDATE_FEED_URL STREQUAL "" AND KETPLUS_UPDATE_PUBLIC_ED_KEY STREQUAL "")
+    if(KETPLUS_REQUIRE_UPDATES)
+        message(FATAL_ERROR "This build requires KETPLUS_UPDATE_FEED_URL and KETPLUS_UPDATE_PUBLIC_ED_KEY")
+    endif()
     message(STATUS "KetPlus in-app updates: disabled (no KETPLUS_UPDATE_FEED_URL)")
     return()
 endif()
@@ -26,9 +32,7 @@ if(KETPLUS_UPDATE_FEED_URL STREQUAL "" OR KETPLUS_UPDATE_PUBLIC_ED_KEY STREQUAL 
 endif()
 # Info.plist embeds the URL verbatim, so it must not need XML escaping.
 if(NOT KETPLUS_UPDATE_FEED_URL MATCHES "^https://[A-Za-z0-9.-]+(:[0-9]+)?(/[A-Za-z0-9._~%/-]*)?$")
-    message(FATAL_ERROR
-        "KETPLUS_UPDATE_FEED_URL must be an https:// URL without a query; "
-        "got '${KETPLUS_UPDATE_FEED_URL}'")
+    message(FATAL_ERROR "KETPLUS_UPDATE_FEED_URL must be an https:// URL without a query")
 endif()
 # An Ed25519 public key is 32 bytes: 43 base64 characters plus one padding character. CMake
 # regular expressions have no {n} repetition, so the length is checked separately.
@@ -40,9 +44,16 @@ if(NOT ketplus_update_key_length EQUAL 44
         "generate_keys, never the private key")
 endif()
 if(NOT APPLE)
+    if(KETPLUS_REQUIRE_UPDATES)
+        message(FATAL_ERROR "This build requires macOS for Sparkle updates")
+    endif()
     message(STATUS "KetPlus in-app updates: not available on this platform")
     return()
 endif()
+
+include("${CMAKE_CURRENT_LIST_DIR}/KetPlusUpdateScope.cmake")
+ketplus_verify_update_scope("${KETPLUS_UPDATE_FEED_URL}" "${KETPLUS_UPDATE_CHANNEL}"
+    "${CMAKE_OSX_ARCHITECTURES}")
 
 include(FetchContent)
 if(KETPLUS_SPARKLE_ARCHIVE)
@@ -76,5 +87,4 @@ target_link_libraries(ketplus_sparkle INTERFACE "-framework Sparkle")
 list(APPEND CMAKE_BUILD_RPATH "${KETPLUS_SPARKLE_DIR}")
 
 set(KETPLUS_UPDATES_ENABLED ON)
-message(STATUS
-    "KetPlus in-app updates: Sparkle ${ketplus_sparkle_version}, feed ${KETPLUS_UPDATE_FEED_URL}")
+message(STATUS "KetPlus in-app updates: Sparkle ${ketplus_sparkle_version} (${KETPLUS_UPDATE_CHANNEL}/${CMAKE_OSX_ARCHITECTURES})")

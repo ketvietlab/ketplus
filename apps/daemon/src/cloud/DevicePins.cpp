@@ -59,9 +59,18 @@ QString DevicePins::hostFingerprint(const QJsonObject& keys) {
 QJsonObject DevicePins::read(QString* error) const {
     QString readError;
     const QByteArray bytes = store_->read(account, &readError);
+    QJsonParseError parseError;
+    const auto document = QJsonDocument::fromJson(bytes, &parseError);
+    const auto pins = document.object();
+    if (readError.isEmpty() && !bytes.isEmpty() &&
+        (parseError.error != QJsonParseError::NoError || !document.isObject() ||
+         pins.value(QStringLiteral("version")).toInt() != 1 ||
+         !pins.value(QStringLiteral("devices")).isObject()))
+        readError =
+            QStringLiteral("The device pin record is invalid; existing trust was preserved.");
     if (error != nullptr)
         *error = readError;
-    return QJsonDocument::fromJson(bytes).object();
+    return readError.isEmpty() ? pins : QJsonObject{};
 }
 
 bool DevicePins::write(const QJsonObject& pins, QString* error) const {
@@ -76,12 +85,17 @@ bool DevicePins::initialized(QString* error) const {
     return readError.isEmpty() && pins.value(QStringLiteral("version")).toInt() == 1;
 }
 
-bool DevicePins::adopt(const QJsonArray& devices, QString* error) const {
+bool DevicePins::adopt(const QJsonArray& devices, bool legacyEnrollment, QString* error) const {
     QString readError;
     if (initialized(&readError) || !readError.isEmpty()) {
         if (error != nullptr)
             *error = readError;
         return readError.isEmpty();
+    }
+    if (!legacyEnrollment) {
+        if (error)
+            *error = QStringLiteral("Device adoption requires a restored legacy enrollment.");
+        return false;
     }
     QJsonObject pinned;
     for (const QJsonValue& value : devices) {
@@ -156,10 +170,21 @@ bool DevicePins::trusts(const QJsonObject& device) const {
                                         device.value(QStringLiteral("keys")).toObject());
 }
 
-QJsonArray DevicePins::trusted(const QJsonArray& devices) const {
+QJsonArray DevicePins::trusted(const QJsonArray& devices, QString* error) const {
+    QString readError;
+    const auto pinned = read(&readError).value(QStringLiteral("devices")).toObject();
+    if (error)
+        *error = readError;
+    if (!readError.isEmpty())
+        return {};
     QJsonArray result;
     for (const QJsonValue& value : devices) {
-        if (trusts(value.toObject()))
+        const auto device = value.toObject();
+        const auto id = device.value(QStringLiteral("id")).toString();
+        const auto print = fingerprint(device.value(QStringLiteral("keys")).toObject());
+        if (active(device) && !id.isEmpty() && !print.isEmpty() &&
+            pinned.value(pinKey(id, device.value(QStringLiteral("keyVersion")).toInt()))
+                    .toString() == print)
             result.append(value);
     }
     return result;

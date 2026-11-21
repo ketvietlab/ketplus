@@ -28,13 +28,15 @@ class CodexItemsTest final : public QObject {
         const auto describe = [](const QJsonArray& actions) {
             return withCommandDescription(command(actions)).value("description").toString();
         };
-        QCOMPARE(describe({QJsonObject{{"type", "read"}, {"name", "a.cpp"}, {"path", "src/a.cpp"}}}),
-                 QStringLiteral("Read a.cpp"));
+        QCOMPARE(
+            describe({QJsonObject{{"type", "read"}, {"name", "a.cpp"}, {"path", "src/a.cpp"}}}),
+            QStringLiteral("Read a.cpp"));
         QCOMPARE(describe({QJsonObject{{"type", "read"}, {"path", "/w/src/a.cpp"}},
                            QJsonObject{{"type", "read"}, {"path", "/w/src/b.cpp"}}}),
                  QStringLiteral("Read 2 files"));
-        QCOMPARE(describe({QJsonObject{{"type", "search"}, {"query", "stopTask"}, {"path", "src"}}}),
-                 QStringLiteral("Search for “stopTask” in src"));
+        QCOMPARE(
+            describe({QJsonObject{{"type", "search"}, {"query", "stopTask"}, {"path", "src"}}}),
+            QStringLiteral("Search for “stopTask” in src"));
         QCOMPARE(describe({QJsonObject{{"type", "listFiles"}, {"path", "apps"}}}),
                  QStringLiteral("List files in apps"));
         QCOMPARE(describe({QJsonObject{{"type", "read"}, {"name", "a.cpp"}},
@@ -44,11 +46,11 @@ class CodexItemsTest final : public QObject {
 
     // Codex could not read the command, and a provider's own words always win.
     void unknownCommandsAndProviderWordsStayAsTheyAre() {
-        const QJsonObject unknown =
-            withCommandDescription(command({QJsonObject{{"type", "unknown"}, {"command", "gh pr view"}}}));
+        const QJsonObject unknown = withCommandDescription(
+            command({QJsonObject{{"type", "unknown"}, {"command", "gh pr view"}}}));
         QVERIFY(!unknown.contains("description"));
-        QCOMPARE(withCommandDescription(
-                     command({QJsonObject{{"type", "read"}, {"name", "a.cpp"}}}, "Inspect the parser"))
+        QCOMPARE(withCommandDescription(command({QJsonObject{{"type", "read"}, {"name", "a.cpp"}}},
+                                                "Inspect the parser"))
                      .value("description")
                      .toString(),
                  QStringLiteral("Inspect the parser"));

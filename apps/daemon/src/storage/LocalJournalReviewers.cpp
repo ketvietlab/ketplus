@@ -61,8 +61,12 @@ bool LocalJournal::isConversationReviewer(const QString& sessionId) const {
 
 int LocalJournal::reviewRequestsInChain(const QString& chainId, const QString& sessionId) const {
     QSqlQuery query(database_);
-    query.prepare(QStringLiteral("SELECT COUNT(*) FROM agent_messages WHERE chain_id = ? AND "
-                                 "from_session = ? AND kind = 'review'"));
+    // Invalid source snapshots are not content reviews: neither proven changes nor
+    // unavailable source consumes a round. Ordinary review requests still count.
+    query.prepare(
+        QStringLiteral("SELECT COUNT(*) FROM agent_messages WHERE chain_id = ? AND "
+                       "from_session = ? AND kind = 'review' AND "
+                       "COALESCE(error, '') NOT IN ('review_tampered', 'review_interrupted')"));
     query.addBindValue(chainId);
     query.addBindValue(sessionId);
     return query.exec() && query.next() ? query.value(0).toInt() : 0;

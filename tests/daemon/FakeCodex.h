@@ -1,5 +1,7 @@
 #pragma once
 
+#include "ScriptFixture.h"
+
 #include <QFile>
 #include <QString>
 
@@ -27,6 +29,14 @@ approvals = {}
 names = {}
 previews = {}
 limit_used = False
+
+def safe_setup(params):
+    value=json.loads(json.dumps(params))
+    for env in value.get('config', {}).values():
+        if isinstance(env, dict):
+            for key in ('KETPLUS_AGENT_MUTATION_TOKEN','KETPLUS_AGENT_TRANSPORT_EPOCH'):
+                if key in env: env[key]='[redacted]'
+    return value
 
 def emit(value):
     with lock:
@@ -78,9 +88,11 @@ for line in sys.stdin:
         log('delete:' + message['params']['threadId'])
         emit({'id': message_id, 'result': {}})
     elif method == 'thread/start':
-        log('setup:' + json.dumps(message['params']))
+        log('setup:' + json.dumps(safe_setup(message['params'])))
         threads += 1
         thread_id = 'thread-' + str(threads)
+        if message['params'].get('config',{}).get('mcp_servers.ketplus_agents.env',{}).get('KETPLUS_AGENT_TRANSPORT_EPOCH'):
+            thread_id = 'thread-' + str(os.getpid()) + '-' + str(threads)
         emit({'id': message_id, 'result': {'thread': {'id': thread_id}}})
     elif method == 'thread/fork':
         log('fork:' + json.dumps(message['params'], sort_keys=True))
@@ -91,9 +103,12 @@ for line in sys.stdin:
         emit({'id': message_id, 'result': {'thread': {
             'id': thread_id, 'forkedFromId': message['params']['threadId']}}})
     elif method == 'thread/resume':
-        log('setup:' + json.dumps(message['params']))
+        log('setup:' + json.dumps(safe_setup(message['params'])))
         thread_id = message['params']['threadId']
         emit({'id': message_id, 'result': {'thread': {'id': thread_id}}})
+    elif method == 'mcpServerStatus/list':
+        emit({'id':message_id,'result':{'data':[{'name':'ketplus_agents','tools':{
+            name:{'name':name} for name in ('agents_whoami','background_task_list','background_task_get','background_task_output','background_task_start','background_task_stop')}}], 'nextCursor':None}})
     elif method == 'thread/read':
         thread_id = message['params']['threadId']
         emit({'id': message_id, 'result': {'thread': {
@@ -108,6 +123,8 @@ for line in sys.stdin:
         emit({'method': 'thread/name/updated', 'params': {
             'threadId': thread_id, 'threadName': name}})
     elif method == 'turn/start':
+        if os.environ.get('KETPLUS_FAKE_CODEX_LOG_INPUT'):
+            log('input:' + json.dumps(message['params']['input']))
         log('turn-start:' + json.dumps({'approvalPolicy': message['params'].get('approvalPolicy'),
                                         'sandboxPolicy': message['params'].get('sandboxPolicy')}))
         turns += 1
@@ -134,6 +151,8 @@ for line in sys.stdin:
             continue
         if text == 'limit-final':
             # #170: the weekly limit, as Codex reports it; the rate limits read then shows it.
+)PY"
+                                             R"PY(
             limit_used = True
             emit({'id': message_id, 'result': {'turn': {'id': turn_id}}})
             emit({'method': 'turn/started', 'params': {
@@ -243,6 +262,26 @@ for line in sys.stdin:
                     'id': 'tool-' + turn_id, 'type': 'mcpToolCall', 'server': server,
                     'tool': 'browser_pages', 'arguments': {}, 'status': status}}})
             finish(thread_id, turn_id)
+        elif 'KetPlus records the reviewed branch' in text:
+            # ketplus#295: a review with Full access. A test may leave a shell command in
+            # `<log>.review` that the review runs in its worktree (a commit, a dirty file...),
+            # and the reply in `<log>.reply`.
+            action = log_path + '.review'
+            if os.path.exists(action):
+                with open(action, encoding='utf-8') as source:
+                    command = source.read()
+                os.remove(action)
+                import subprocess
+                subprocess.run(command, shell=True, cwd=message['params'].get('cwd') or '.')
+            reply = 'Verdict: no findings'
+            if os.path.exists(log_path + '.reply'):
+                with open(log_path + '.reply', encoding='utf-8') as source:
+                    reply = source.read()
+            log('review-turn')
+            emit({'method': 'item/agentMessage/delta', 'params': {
+                'threadId': thread_id, 'itemId': 'answer-' + turn_id, 'delta': reply}})
+            emit({'method': 'turn/completed', 'params': {
+                'threadId': thread_id, 'turn': {'id': turn_id, 'status': 'completed'}}})
         elif text == 'ask' and default_mode_request_user_input:
             request_id = 900 + turns
             approvals[request_id] = ('input', thread_id, turn_id)
@@ -286,7 +325,5 @@ for line in sys.stdin:
     if (script.write(encoded) != encoded.size()) {
         return false;
     }
-    script.close();
-    return script.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner |
-                                 QFileDevice::ExeOwner);
+    return finalizeScriptFixture(script);
 }

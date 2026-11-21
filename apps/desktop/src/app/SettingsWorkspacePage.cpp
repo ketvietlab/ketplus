@@ -1,5 +1,6 @@
 #include "app/SettingsWorkspacePage.h"
 
+#include "ComputerToolLaunch.h"
 #include "KetSelect.h"
 #include "agent/AgentWorkspaceView.h"
 #include "app/AgentConversationWidth.h"
@@ -52,7 +53,9 @@ SettingsWorkspacePage::SettingsWorkspacePage(SettingsDialog* dialog,
                                              SettingsProvidersPage::Fetcher providers,
                                              QWidget* parent,
                                              SettingsClaudeCredentials::Requester credentials,
-                                             SettingsStoragePage::Requester storageRequester)
+                                             SettingsStoragePage::Requester storageRequester,
+                                             SettingsTeamsPage::Requester teamsRequester,
+                                             runners::Requester runnersRequester)
     : SettingsWorkspace(dialog, QStringLiteral("⌘ ,"), InterfaceUiFont::settingsLabel(), parent) {
     addConversationWidth();
     account_ = new SettingsAccountPage({}, this);
@@ -63,10 +66,21 @@ SettingsWorkspacePage::SettingsWorkspacePage(SettingsDialog* dialog,
     // Account has no settings of its own; Restore defaults does not apply to it.
     addSection(tr("Account & devices"), QStringLiteral("account-devices"), account_, false);
     addLink(tr("Agent models"), QStringLiteral("agent-models"));
+    // The daemon keeps the value and it applies as it is left; Restore defaults does not
+    // apply to it.
+    addSection(tr("Teams"), QStringLiteral("teams"),
+               new SettingsTeamsPage(std::move(teamsRequester), this), false);
+    // Runners live in the account; nothing here is a local setting to restore.
+    runners_ = new SettingsRunnersPage(std::move(runnersRequester), this);
+    connect(runners_, &SettingsRunnersPage::accountRequested, this,
+            [this] { showSection(QStringLiteral("account-devices")); });
+    addSection(tr("Runners"), QStringLiteral("runners"), runners_, false);
     addSection(tr("Browser"), QStringLiteral("browser"),
                new SettingsBrowserPage({}, {}, browser_tools::systemProbes(), this));
-    addSection(tr("Computer use"), QStringLiteral("computer"),
-               new SettingsComputerPage({}, {}, this));
+    if (computer_tools::isSupportedOnThisPlatform()) {
+        addSection(tr("Computer use"), QStringLiteral("computer"),
+                   new SettingsComputerPage({}, {}, this));
+    }
     auto* providersPage =
         new SettingsProvidersPage(std::move(providers), this, std::move(credentials));
     connect(providersPage, &SettingsProvidersPage::typeInTerminalRequested, this,
@@ -98,6 +112,7 @@ SettingsWorkspacePage::SettingsWorkspacePage(SettingsDialog* dialog,
 QLabel#storageUsage, QLabel#storageStatus, QComboBox#storageDetailDays,
 QComboBox#computerWorkDisplay { color:%2; font-size:{{reading}}px; }
 QLabel#computerStatus, QLabel#browserToolsStatus { color:%3; font-size:{{body}}px; }
+QLabel#teamsTurnBudgetError { font-size:{{body}}px; }
 )QSS"));
     connect(this, &SettingsWorkspace::linkActivated, this, [this](const QString& id) {
         if (id == QStringLiteral("agent-models"))

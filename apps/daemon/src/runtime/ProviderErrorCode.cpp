@@ -42,9 +42,14 @@ QString providerErrorCode(const QString& provider, const QJsonValue& providerInf
         return QStringLiteral("provider_unavailable");
     if (opens(message, "selected model is at capacity|overloaded\\b|\\{.*overloaded_error"))
         return QStringLiteral("model_capacity");
+    // Before the plan check: a used-up Cursor team fails every model until it resets.
+    if (provider == QStringLiteral("cursor") && CursorAdapter::looksLikeUsageLimit(message))
+        return QStringLiteral("limit_reached");
     if (provider == QStringLiteral("cursor") &&
         (CursorAdapter::looksLikePlanLimit(message) || opens(message, "cursor blocked this model")))
         return QStringLiteral("plan_blocked");
+    if (provider == QStringLiteral("copilot") && opens(message, "github copilot cli needs sign-in"))
+        return QStringLiteral("auth_required");
     // Codex named another kind of failure: its words are not about the account.
     if (!info.isEmpty())
         return {};

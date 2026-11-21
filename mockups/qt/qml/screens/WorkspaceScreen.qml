@@ -11,6 +11,20 @@ import KetPlusMock.Native
 Item {
     id: screen
 
+    property Item toastCoordinateSpace: null
+    readonly property real toastBottomAvoidance: {
+        if (!composerBar.visible || !toastCoordinateSpace)
+            return 0
+        // Track ancestor geometry explicitly, then map into the toast parent's space.
+        for (let item = composerBar; item; item = item.parent) {
+            item.y; item.height; item.scale; item.rotation
+        }
+        for (let item = toastCoordinateSpace; item; item = item.parent) {
+            item.y; item.height; item.scale; item.rotation
+        }
+        return Math.max(0, toastCoordinateSpace.height
+                        - composerBar.mapToItem(toastCoordinateSpace, 0, 0).y)
+    }
     required property var window
     property bool detailsOpen: false
     property var contentSession: null
@@ -63,15 +77,15 @@ Item {
     }
     function openContentDemo(kind) {
         contentSession.tabs = []; contentSession.currentId = ""; contentSession.terminalSerial = 0
-        detailsPane.openFile("NavigationRail.qml")
-        detailsPane.openFile("WorktreeItem.qml")
+        detailsPane.openFile("TrailList.qml")
+        detailsPane.openFile("TrailRow.qml")
         const first = contentSession.newTerminal()
         contentSession.patch(first, { draft: "cmake --build build" })
         const second = contentSession.newTerminal()
         contentSession.patch(second, { draft: "ctest --test-dir build" })
         openPlan("continuing")
         if (kind === "terminal") contentSession.select(second)
-        if (kind === "file") detailsPane.openFile("NavigationRail.qml")
+        if (kind === "file") detailsPane.openFile("TrailList.qml")
     }
     function planStatus(number, fallback) {
         const model = planStore.plans[number]
@@ -85,6 +99,8 @@ Item {
     onConversationChanged: { detailsOpen = false; syncPlan() }
 
     function px(value) { return KetTheme.px(value, KetTheme.zoom) }
+    function scheduleEvidenceChecks(state) { return composerBar.scheduleEvidenceChecks(state) }
+    function scheduleChecks() { return composerBar.scheduleChecks() }
     function openComposerPanel(name) {
         if (name === "content-tabs") detailsPane.openTabMenu()
         // The header's Plan ring, and the Atlas action pressed twice (it closes the pane again).
@@ -92,8 +108,6 @@ Item {
         else if (name === "atlas-toggle") { toggleContent("atlas"); toggleContent("atlas") }
         else if (name === "reviewer")
             conversationHeader.openReviewerMenu()
-        else if (name === "manage-tags")
-            conversationHeader.openManageTags()
         else
             composerBar.openPanel(name)
     }
@@ -143,11 +157,20 @@ Item {
                             run: screen.planRun
                         }
                     }
+                    Loader {
+                        active: screen.window.scheduledTranscript
+                        visible: active
+                        width: Math.min(parent.width - KetTheme.px(48, KetTheme.zoom), KetTheme.px(760, KetTheme.zoom))
+                        anchors.horizontalCenter: parent.horizontalCenter
+                        sourceComponent: ScheduleRunMessage { window: screen.window }
+                    }
                     Transcript {
-                        visible: !screen.planRun || !screen.planRun.presented
+                        visible: !screen.window.scheduledTranscript && (!screen.planRun || !screen.planRun.presented)
                         width: parent.width
                         window: screen.window
                         kind: screen.kind
+                        changesOpen: screen.detailsOpen && screen.kind === "activity"
+                        reportOpen: screen.detailsOpen && screen.detailsTab === "report"
                         conversation: screen.conversation
                         onOpenDetails: tab => screen.openContent(tab)
                     }
@@ -218,6 +241,7 @@ Item {
 
         DetailsPane {
             id: detailsPane
+            reportEvidence: screen.kind === "report"
             visible: screen.detailsOpen
             Layout.fillHeight: true
             // Half of the workspace beside the rule: the pane matches the conversation's width.

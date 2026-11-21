@@ -1,0 +1,55 @@
+name: Linux Pro engineering packages
+on:
+  workflow_call:
+    inputs:
+      architecture:
+        description: Native architecture
+        type: string
+        required: true
+permissions:
+  contents: read
+jobs:
+  package:
+    runs-on: ${{ inputs.architecture == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-24.04' }}
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+      - name: Build native SDK image (no emulation or host changes)
+        run: >-
+          docker build --platform linux/${{ inputs.architecture }}
+          --build-arg KETPLUS_DESKTOP=1
+          --build-arg 'QT_MODULES=qt5compat qtwebengine qtwebview qtwebsockets qtwebchannel qtpositioning qtshadertools'
+          -f packaging/linux/Dockerfile.build -t ketplus-pro-builder .
+      - name: Build and package
+        run: |
+          mkdir -p "$RUNNER_TEMP/ketplus-pro-build/home"
+          docker run --rm --user "$(id -u):$(id -g)" \
+            -e HOME=/build/home -v "$PWD:/src:ro" \
+            -v "$RUNNER_TEMP/ketplus-pro-build:/build" \
+            ketplus-pro-builder bash /src/packaging/linux/build-desktop.sh /src /build/desktop
+      - name: Verify engineering artifact checksums
+        run: |
+          cd "$RUNNER_TEMP/ketplus-pro-build/desktop/linux-packages"
+          sha256sum -c SHA256SUMS
+          cat SHA256SUMS
+      - name: Retain unsigned engineering artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: linux-pro-engineering-${{ inputs.architecture }}
+          path: ${{ runner.temp }}/ketplus-pro-build/desktop/linux-packages/*
+          if-no-files-found: error
+          retention-days: 7
+      # No release upload, feed mutation or signing; publication remains separately gated.
+      # Retain the successful assembly for diagnosis even when the later smoke fails.
+      # Only a green job proves runtime acceptance.
+      - name: Clean runtime image
+        run: docker build -f packaging/linux/Dockerfile.desktop-smoke -t ketplus-pro-smoke .
+      - name: Smoke both formats without network or SDK
+        run: |
+          for artifact in "$RUNNER_TEMP/ketplus-pro-build/desktop/linux-packages/"*.{AppImage,deb}; do
+            docker run --rm --network=none -v "$(dirname "$artifact"):/artifacts:ro" \
+              ketplus-pro-smoke "/artifacts/$(basename "$artifact")" https://api.ketplus.app
+          done

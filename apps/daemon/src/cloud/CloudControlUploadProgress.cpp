@@ -1,6 +1,7 @@
 #include "cloud/CloudControlClient.h"
 #include "storage/LocalJournal.h"
 #include <QJsonDocument>
+#include <QSet>
 
 namespace ketplus::daemon {
 QString CloudControlClient::uploadScope() const {
@@ -15,9 +16,12 @@ qint64 CloudControlClient::uploadedCursor(const QString& sessionId, qint64 gener
         lastError_ = journal_->errorString();
         return -1;
     }
-    return qMax(durable,
-                storedString(QStringLiteral("uploaded-cursor-%1-%2").arg(sessionId).arg(generation))
-                    .toLongLong());
+    const qint64 cursor =
+        qMax(durable,
+             storedString(QStringLiteral("uploaded-cursor-%1-%2").arg(sessionId).arg(generation))
+                 .toLongLong());
+    knownUploadedCursors_.insert(QStringLiteral("%1:%2").arg(sessionId).arg(generation), cursor);
+    return cursor;
 }
 
 void CloudControlClient::uploadEvents() {
@@ -32,8 +36,27 @@ void CloudControlClient::uploadEvents() {
             !registerCloudCursor(session))
             return;
     }
+    // Forget cursors of deleted sessions and replaced generations.
+    QSet<QString> current;
+    for (const StoredSession& session : sessions)
+        current.insert(QStringLiteral("%1:%2").arg(session.id).arg(session.generation));
+    knownUploadedCursors_.removeIf([&current](const QHash<QString, qint64>::iterator entry) {
+        return !current.contains(entry.key());
+    });
     for (const StoredSession& session : sessions) {
         if (refusedSessions_.contains(session.id))
+            continue;
+        // Every heartbeat and journaled event runs this over every stored session. A session
+        // already uploaded through its last event, being sent or waiting out a failure needs no
+        // journal read; reading each one kept the daemon's main thread busy.
+        const QString key = QStringLiteral("%1:%2").arg(session.id).arg(session.generation);
+        if (eventUploadsInFlight_.contains(key))
+            continue;
+        if (const auto backoff = eventUploadBackoff_.constFind(key);
+            backoff != eventUploadBackoff_.cend() && !backoff->retryAt.hasExpired())
+            continue;
+        if (const auto known = knownUploadedCursors_.constFind(key);
+            known != knownUploadedCursors_.cend() && *known >= session.lastCursor)
             continue;
         const qint64 cursor = uploadedCursor(session.id, session.generation);
         if (cursor < 0)
@@ -45,6 +68,7 @@ void CloudControlClient::uploadEvents() {
 
 bool CloudControlClient::registerCloudCursors() {
     registeredCloudCursors_.clear();
+    knownUploadedCursors_.clear();
     for (const StoredSession& session : journal_->sessions()) {
         if (!registerCloudCursor(session))
             return false;

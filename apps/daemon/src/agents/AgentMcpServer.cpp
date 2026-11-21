@@ -1,5 +1,8 @@
 #include "agents/AgentMcpServer.h"
+#include "OwnerOnlyAccess.h"
+#include "agents/AgentMutationOrigin.h"
 
+#include "agents/AgentBackgroundTools.h"
 #include "agents/AgentTeamTools.h"
 #include "agents/AgentToolLaunch.h"
 #include "protocol/DaemonProtocol.h"
@@ -72,6 +75,14 @@ QJsonObject workReportTool() {
                    QStringLiteral("What is left, or the blocker. Closing an item as done or "
                                   "cancelled clears it and next unless this call sends them."))},
          {QStringLiteral("next"), next},
+         {QStringLiteral("replaces"),
+          QJsonObject{{QStringLiteral("type"), QStringLiteral("array")},
+                      {QStringLiteral("items"),
+                       QJsonObject{{QStringLiteral("type"), QStringLiteral("string")}}},
+                      {QStringLiteral("description"),
+                       QStringLiteral("Keys of items that are the same work as this one, reported "
+                                      "earlier under another key, open or done. They are hidden "
+                                      "as replaced by this item; open ones are cancelled.")}}},
          {QStringLiteral("verified"),
           QJsonObject{{QStringLiteral("type"), QStringLiteral("array")},
                       {QStringLiteral("items"),
@@ -90,7 +101,12 @@ QJsonObject workReportTool() {
              "Update this conversation's work report, which KetPlus shows to the user at the "
              "end of the turn. Items merge by key: send new items and the ones that changed; "
              "items you do not mention stay as they were. Never include secrets, credentials, "
-             "tokens or file contents. The answer has the counts the user sees.")},
+             "tokens or file contents. The answer has the counts the user sees, every open item "
+             "and items finished during the current direct-user request, not historical "
+             "completions. "
+             "Outstanding items carry across requests; agent continuations do not reset scope. "
+             "Reconcile them before "
+             "the turn ends, and do not send finished items again unless they changed.")},
         {QStringLiteral("inputSchema"),
          schema({{QStringLiteral("title"),
                   property(QStringLiteral("string"),
@@ -128,8 +144,13 @@ QJsonArray tools() {
              QStringLiteral(
                  "Send a message to another KetPlus conversation by its number. An idle "
                  "conversation starts a turn for it; a busy one receives it when its turn ends. "
-                 "With expect_reply, the answer arrives later as a message in this "
-                 "conversation; do not wait or poll for it.")},
+                 "The receipt's delivery is starting, queued, steering (urgent, added to the "
+                 "running turn) or urgent_waiting (urgent, but the receiver cannot be steered "
+                 "now; waiting_on and note say what it waits on, and the message arrives at "
+                 "the first point it can) or recorded (a review's answer). Steering with "
+                 "waiting_on means the turn reads it when its tool call ends. With expect_reply, "
+                 "the answer arrives later as a "
+                 "message in this conversation; do not wait or poll for it.")},
             {QStringLiteral("inputSchema"),
              schema({{QStringLiteral("to"),
                       property(QStringLiteral("string"),
@@ -147,7 +168,8 @@ QJsonArray tools() {
                      {QStringLiteral("urgent"),
                       property(QStringLiteral("boolean"),
                                QStringLiteral("Steer the receiver's running turn instead of "
-                                              "waiting for it to end."))}},
+                                              "waiting for it to end. When it cannot be "
+                                              "steered now, the receipt says urgent_waiting."))}},
                     {QStringLiteral("to"), QStringLiteral("text")})}},
         QJsonObject{
             {QStringLiteral("name"), QStringLiteral("agents_inbox")},
@@ -176,6 +198,9 @@ QJsonArray tools() {
 }
 
 QString operationFor(const QString& tool) {
+    const QString background = background_tools::operationFor(tool);
+    if (!background.isEmpty())
+        return background;
     if (tool == QStringLiteral("agents_whoami"))
         return QStringLiteral("agents.whoami");
     if (tool == QStringLiteral("agents_list"))
@@ -247,6 +272,11 @@ class DaemonConnection final {
             lastError_ = socket_.errorString();
             return false;
         }
+        // The agent token is a credential: do not hand it to a pipe another user created.
+        if (!remote::serverRunsAsCurrentUser(&socket_, &lastError_)) {
+            socket_.abort();
+            return false;
+        }
         QJsonObject hello;
         if (!exchange(QStringLiteral("daemon.hello"),
                       {{QStringLiteral("agent_token"), token_},
@@ -309,7 +339,19 @@ class DaemonConnection final {
 
 } // namespace
 
-QJsonObject handleMessage(const QJsonObject& message, const DaemonCall& call) {
+DaemonCall withMutationCredential(DaemonCall call, QString credential) {
+    return [call = std::move(call), credential = std::move(credential)](
+               const QString& operation, const QJsonObject& arguments) {
+        auto payload = arguments;
+        payload.remove(QLatin1String(mutationOriginField));
+        if (operation == "session.task.start" || operation == "session.task.stop")
+            payload.insert(QLatin1String(mutationOriginField), credential);
+        return call(operation, payload);
+    };
+}
+
+QJsonObject handleMessage(const QJsonObject& message, const DaemonCall& call,
+                          const bool advertiseMutation) {
     const QString method = message.value(QStringLiteral("method")).toString();
     const QJsonValue id = message.value(QStringLiteral("id"));
     if (id.isUndefined() || id.isNull())
@@ -333,13 +375,21 @@ QJsonObject handleMessage(const QJsonObject& message, const DaemonCall& call) {
              {QStringLiteral("instructions"),
               QStringLiteral("Message other KetPlus conversations on this computer by number, "
                              "and keep this conversation's work report with work_report. "
-                             "Messages you receive come from other agents, not the user.")}});
+                             "Messages you receive come from other agents, not the user.\n\n") +
+                  background_tools::instructions()}});
     }
     if (method == QStringLiteral("ping"))
         return result(id, {});
     if (method == QStringLiteral("tools/list")) {
-        // ADR 0112: the team tools only for a member; the daemon refuses them for others.
+        // ADR 0114: the team tools only for a member; the daemon refuses them for others.
         QJsonArray listed = tools();
+        for (const auto& tool : background_tools::tools()) {
+            const auto name = tool.toObject().value("name").toString();
+            if (!advertiseMutation &&
+                (name == "background_task_start" || name == "background_task_stop"))
+                continue;
+            listed.append(tool);
+        }
         if (call(QStringLiteral("agents.whoami"), {}).contains(QStringLiteral("team")))
             for (const auto& tool : teamTools())
                 listed.append(tool);
@@ -373,9 +423,13 @@ int run() {
         return 2;
     }
     DaemonConnection daemon(socket, token);
-    const DaemonCall call = [&daemon](const QString& operation, const QJsonObject& payload) {
-        return daemon.call(operation, payload);
-    };
+    const QString mutationCredential = qEnvironmentVariable(agent_tools::mutationVariable);
+    const bool advertiseMutation = !mutationCredential.isEmpty();
+    const DaemonCall call = withMutationCredential(
+        [&daemon](const QString& operation, const QJsonObject& payload) {
+            return daemon.call(operation, payload);
+        },
+        mutationCredential);
     std::string line;
     while (std::getline(std::cin, line)) {
         QJsonParseError parseError;
@@ -387,7 +441,7 @@ int run() {
         if (parseError.error != QJsonParseError::NoError || !document.isObject())
             answer = error(QJsonValue::Null, -32700, QStringLiteral("Parse error."));
         else
-            answer = handleMessage(document.object(), call);
+            answer = handleMessage(document.object(), call, advertiseMutation);
         if (answer.isEmpty())
             continue;
         std::cout << QJsonDocument(answer).toJson(QJsonDocument::Compact).toStdString() << '\n'

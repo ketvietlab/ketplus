@@ -29,9 +29,19 @@ void touch(const QString& path, const QFileDevice::Permissions permissions = {})
 
 // A fake source checkout: <root>/apps/browser with mcp.mjs and node_modules, plus a fake node.
 struct Checkout final {
+#if defined(Q_OS_WIN)
+    // A double quote is not a legal file name character on Windows.
+    QTemporaryDir root{QDir::tempPath() + QStringLiteral("/ketplus browser 'quoted'-XXXXXX")};
+#else
     QTemporaryDir root{QDir::tempPath() + QStringLiteral("/ketplus browser \"quoted\"-XXXXXX")};
+#endif
     QString app() const { return root.filePath(QStringLiteral("apps/browser")); }
+#if defined(Q_OS_WIN)
+    // Windows treats only files with an executable suffix as executable.
+    QString node() const { return root.filePath(QStringLiteral("bin/node.exe")); }
+#else
     QString node() const { return root.filePath(QStringLiteral("bin/node")); }
+#endif
     void create(const bool modules = true) const {
         touch(app() + QStringLiteral("/src/mcp.mjs"));
         touch(node(), QFileDevice::ReadOwner | QFileDevice::ExeOwner);
@@ -115,7 +125,9 @@ void CodexBrowserToolsTest::enabledProducesEscapedMcpServerConfig() {
     const QString script = QDir(app).filePath("src/mcp.mjs");
     QCOMPARE(arguments.at(3),
              QStringLiteral("mcp_servers.ketplus_browser.args=[") + tomlString(script) + "]");
+#if !defined(Q_OS_WIN) // a double quote cannot be part of a Windows file name
     QVERIFY(arguments.at(3).contains(QStringLiteral("\\\"quoted\\\"")));
+#endif
     QCOMPARE(arguments.at(5), QStringLiteral("mcp_servers.ketplus_browser.cwd=") + tomlString(app));
     QCOMPARE(arguments.at(7),
              QStringLiteral("mcp_servers.ketplus_browser.default_tools_approval_mode=\"approve\""));
@@ -291,7 +303,13 @@ void CodexBrowserToolsTest::prerequisiteCacheKeyTracksInputsAndSurvivesSettingsS
 
     // Node binary mtime change -> miss.
     QFile node(checkout.node());
+#if defined(Q_OS_WIN)
+    // Windows needs write access to set a file time.
+    QVERIFY(node.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner));
+    QVERIFY(node.open(QIODevice::ReadWrite));
+#else
     QVERIFY(node.open(QIODevice::ReadOnly));
+#endif
     QVERIFY(node.setFileTime(QDateTime::currentDateTime().addSecs(-3600),
                              QFileDevice::FileModificationTime));
     node.close();

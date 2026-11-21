@@ -3,7 +3,9 @@
 #include "cloud-privacy/MemoryCredentials.h"
 #include "providers/CodexAdapter.h"
 #include "runtime/SessionHost.h"
+#include "transport/SelectedPath.h"
 #include "transport/Signaling.h"
+#include <QRegularExpression>
 #include <QTemporaryDir>
 #include <QtTest>
 #include <atomic>
@@ -67,6 +69,32 @@ EventPage empty(const QString&, qint64 generation, qint64 cursor) {
 class PeerTransportTest final : public QObject {
     Q_OBJECT
   private slots:
+    void selectedPathDecisionTracksReconnectAndCompletedPairChanges() {
+        using Type = rtc::Candidate::Type;
+        SelectedPathDecision decision;
+        QVERIFY(decision.shouldLog(Type::Host, Type::Host, false)); // channel open
+        QVERIFY(!decision.shouldLog(Type::Host, Type::Host, false, true));
+        QVERIFY(!decision.shouldLog(Type::Relayed, Type::Host, false)); // not Completed yet
+        QVERIFY(decision.shouldLog(Type::Relayed, Type::Host, false, true));
+        QVERIFY(!decision.shouldLog(Type::Relayed, Type::Host, false, true));
+        QVERIFY(decision.shouldLog(Type::Relayed, Type::Host, true)); // real reconnect
+        QVERIFY(!decision.shouldLog(Type::Relayed, Type::Host, false, true));
+    }
+    void selectedPathLogContainsOnlyBoundedTypes() {
+        const auto at = QDateTime::fromMSecsSinceEpoch(1000, Qt::UTC);
+        QCOMPARE(selectedPathLog(rtc::Candidate::Type::Relayed, rtc::Candidate::Type::Host, 7,
+                                 false, at),
+                 QString("ice-path local=relay remote=host turn=udp epoch=7 event=open "
+                         "at=1970-01-01T00:00:01.000Z"));
+        const auto changed = selectedPathLog(rtc::Candidate::Type::Relayed,
+                                             rtc::Candidate::Type::Host, 7, false, at, true);
+        QVERIFY(changed.contains("event=path-changed"));
+        QVERIFY(!changed.contains("event=open"));
+        const auto restarted = selectedPathLog(rtc::Candidate::Type::Host,
+                                               static_cast<rtc::Candidate::Type>(999), 8, true, at);
+        QVERIFY(
+            restarted.contains("local=host remote=unknown turn=none epoch=8 event=ice-connected"));
+    }
     void init() { r03::resetCredentials(); }
     void transfersAreBoundedOrderedAndExpire() {
         const QJsonObject frame{{"type", "command"}, {"payload", QString(200'000, 'x')}};
@@ -259,6 +287,12 @@ class PeerTransportTest final : public QObject {
     }
 
     void signedNativePairCarriesFramesAndBulk() {
+        // Exercise the real native open callback, not only the formatter.
+        QTest::ignoreMessage(
+            QtInfoMsg,
+            QRegularExpression("^ice-path local=(host|srflx|prflx|relay|unknown) "
+                               "remote=(host|srflx|prflx|relay|unknown) turn=(udp|none|unknown) "
+                               "epoch=[0-9]+ event=open at=[0-9TZ:.-]+$"));
         const QString id = "pc_abcdefghijklmnopqrstuvwx";
         CredentialStore hostStore("native-host"), deviceStore("native-device");
         CloudCrypto hostCrypto(&hostStore), deviceCrypto(&deviceStore);

@@ -1,10 +1,12 @@
 #include "terminal/TerminalTab.h"
+#include "terminal/RunCommand.h"
 
 #include "terminal/TerminalView.h"
 #include "ui/Theme.h"
 
 #include <QDir>
 #include <QFileInfo>
+#include <QRegularExpression>
 #include <QTimer>
 #include <QVBoxLayout>
 
@@ -12,11 +14,6 @@
 
 namespace ketplus {
 namespace {
-
-QString shellQuote(QString value) {
-    value.replace(QLatin1Char('\''), QStringLiteral("'\\''"));
-    return QStringLiteral("'%1'").arg(value);
-}
 
 QString displayNameForDirectory(const QString& path) {
     if (QDir::cleanPath(path) == QDir::cleanPath(QDir::homePath())) {
@@ -45,7 +42,16 @@ TerminalTab::TerminalTab(const QString& workingDirectory, const QString& command
     connect(&session_, &TerminalSession::started, this, [this] {
         setTitle({});
         if (!pendingCommandPath_.isEmpty()) {
-            session_.sendBytes(commandForPath(std::exchange(pendingCommandPath_, {})));
+            if (const QByteArray command = commandForPath(std::exchange(pendingCommandPath_, {}));
+                !command.isEmpty()) {
+                // PowerShell's line editor drops what arrives before its first prompt; the
+                // other shells keep it in the terminal's input queue.
+                if (shellKindFor(session_.shellPath()) == ShellKind::PowerShell) {
+                    pendingRun_ = command;
+                    runDeadline_.start();
+                } else
+                    session_.sendBytes(command);
+            }
         }
         shellReady_ = false;
         sinceStart_.start();
@@ -55,11 +61,43 @@ TerminalTab::TerminalTab(const QString& workingDirectory, const QString& command
     promptSettled_.setSingleShot(true);
     promptSettled_.setInterval(150);
     connect(&session_, &TerminalSession::outputReceived, this, [this] {
-        if (!shellReady_)
-            promptSettled_.start();
+        if (shellReady_)
+            return;
+        // A command waiting for PowerShell must not go before its line editor is loaded, which
+        // drops input, even if the banner paused. The default prompt shows it; a prompt of the
+        // user's own does not, so a longer silence counts as ready too, and the deadline
+        // sends it anyway and says so.
+        if (!pendingRun_.isEmpty()) {
+            if (powerShellPromptVisible())
+                promptSettled_.start();
+            else
+                runQuiet_.start();
+            return;
+        }
+        promptSettled_.start();
+    });
+    runQuiet_.setSingleShot(true);
+    runQuiet_.setInterval(2000);
+    connect(&runQuiet_, &QTimer::timeout, this, [this] {
+        if (!shellReady_ && !pendingRun_.isEmpty())
+            promptSettled_.start(0);
+    });
+    runDeadline_.setSingleShot(true);
+    runDeadline_.setInterval(20000);
+    connect(&runDeadline_, &QTimer::timeout, this, [this] {
+        if (shellReady_ || pendingRun_.isEmpty())
+            return;
+        emit statusMessageRequested(
+            tr("PowerShell was slow to start; the command was sent anyway. If nothing ran, run "
+               "the file again."));
+        promptSettled_.start(0);
     });
     connect(&promptSettled_, &QTimer::timeout, this, [this] {
         shellReady_ = true;
+        runQuiet_.stop();
+        runDeadline_.stop();
+        if (!pendingRun_.isEmpty())
+            session_.sendBytes(std::exchange(pendingRun_, {}));
         if (!pendingTypedText_.isEmpty())
             session_.sendPaste(std::exchange(pendingTypedText_, {}));
     });
@@ -68,6 +106,15 @@ TerminalTab::TerminalTab(const QString& workingDirectory, const QString& command
 }
 
 TerminalTab::~TerminalTab() { stop(); }
+
+bool TerminalTab::powerShellPromptVisible() const {
+    // The screen ends with a prompt such as `PS C:\Users\me>`. A long prompt wraps, so the
+    // rows are joined first.
+    static const QRegularExpression prompt(QStringLiteral(R"(PS [^>]*>\s*$)"));
+    QString text = terminal_->visibleText();
+    text.remove(QLatin1Char('\n'));
+    return prompt.match(text).hasMatch();
+}
 
 QString TerminalTab::workingDirectory() const { return workingDirectory_; }
 
@@ -93,6 +140,9 @@ void TerminalTab::start() {
 
 bool TerminalTab::restart() {
     pendingCommandPath_.clear();
+    pendingRun_.clear();
+    runQuiet_.stop();
+    runDeadline_.stop();
     return terminal_->restart();
 }
 
@@ -117,18 +167,22 @@ void TerminalTab::typeText(const QString& text) {
 }
 
 void TerminalTab::typePendingTextWhenReady() {
-    if (shellReady_ || pendingTypedText_.isEmpty())
+    // A pending run command has its own readiness rules (runQuiet_, runDeadline_).
+    if (shellReady_ || pendingTypedText_.isEmpty() || !pendingRun_.isEmpty())
         return;
     // A shell that prints nothing still gets the text, after at most three seconds.
     constexpr qint64 longestWaitMs = 3000;
     const qint64 left = longestWaitMs - (sinceStart_.isValid() ? sinceStart_.elapsed() : 0);
     QTimer::singleShot(qMax<qint64>(0, left), this, [this] {
-        if (!shellReady_ && !pendingTypedText_.isEmpty())
+        if (!shellReady_ && !pendingTypedText_.isEmpty() && pendingRun_.isEmpty())
             promptSettled_.start(0);
     });
 }
 
 void TerminalTab::applyTheme(const ThemePalette& palette) { terminal_->applyTheme(palette); }
+void TerminalTab::applyColorScheme(const ColorScheme& scheme) {
+    terminal_->applyColorScheme(scheme);
+}
 
 void TerminalTab::setTypography(const int fontSizePixels, const int lineHeightPixels,
                                 const QString& fontFamily) {
@@ -147,18 +201,16 @@ void TerminalTab::setTitle(const QString& title) {
     emit titleChanged(title_);
 }
 
-QByteArray TerminalTab::commandForPath(const QString& path) const {
+QByteArray TerminalTab::commandForPath(const QString& path) {
     const QFileInfo file(path);
-    QString command;
-    if (file.isExecutable()) {
-        command = shellQuote(file.absoluteFilePath());
-    } else {
-        const QString shell =
-            session_.shellPath().isEmpty() ? QStringLiteral("/bin/sh") : session_.shellPath();
-        command =
-            QStringLiteral("%1 %2").arg(shellQuote(shell), shellQuote(file.absoluteFilePath()));
+    const QString shell = session_.shellPath();
+    const RunCommand command =
+        runCommandFor(shellKindFor(shell), shell, file.absoluteFilePath(), file.isExecutable());
+    if (!command.error.isEmpty()) {
+        emit statusMessageRequested(command.error);
+        return {};
     }
-    return (command + QLatin1Char('\r')).toUtf8();
+    return (command.line + QLatin1Char('\r')).toUtf8();
 }
 
 } // namespace ketplus

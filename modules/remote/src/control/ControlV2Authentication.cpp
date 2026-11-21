@@ -44,6 +44,7 @@ bool ControlV2Client::setCredential(const QJsonObject& credential, QString* erro
                             error))
         return false;
     ++epoch_;
+    signerVersions_.clear();
     credential_ = value;
     credentialUnsaved_ = false;
     deviceId_.clear();
@@ -144,6 +145,10 @@ void ControlV2Client::startSignIn(Callback done) {
         });
 }
 void ControlV2Client::accessToken(std::function<void(const QString&, const QString&)> done) {
+    if (!storageReadError_.isEmpty()) {
+        done({}, storageReadError_);
+        return;
+    }
     if (credential_.isEmpty()) {
         done({}, "Sign in before connecting to a remote host.");
         return;
@@ -206,8 +211,10 @@ void ControlV2Client::accessToken(std::function<void(const QString&, const QStri
                 else
                     credentials_.remove("refresh-operation");
             }
-            if (status == 401) {
+            const bool revoked = status == 401;
+            if (revoked) {
                 ++epoch_;
+                signerVersions_.clear();
                 ++pairingEpoch_;
                 credential_ = {};
                 deviceId_.clear();
@@ -219,12 +226,19 @@ void ControlV2Client::accessToken(std::function<void(const QString&, const QStri
             for (const auto& waiter : waiters)
                 waiter(failure.isEmpty() ? credential_.value("accessToken").toString() : QString{},
                        failure);
+            if (revoked)
+                emit credentialRevoked();
         });
 }
 void ControlV2Client::signOut(Callback done) {
+    if (!storageReadError_.isEmpty()) {
+        done({}, storageReadError_);
+        return;
+    }
     cancelSignIn();
     const auto previous = credential_;
     ++epoch_;
+    signerVersions_.clear();
     credential_ = {};
     credentialUnsaved_ = false;
     deviceId_.clear();

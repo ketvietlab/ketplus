@@ -28,7 +28,7 @@ KetPlus hỗ trợ **bold**, *italic*, ~~strikethrough~~, `inline code` và
 
 ### Ảnh tương đối
 
-![KetPlus logo](../assets/brand/ketplus.svg)
+![KetPlus logo](../assets/brand/ketplus-mark-256.png)
 
 ## Code
 

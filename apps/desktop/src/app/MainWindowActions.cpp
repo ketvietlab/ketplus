@@ -1,4 +1,8 @@
 #include "app/MainWindow.h"
+#include "app/theme/SchemeQuickPicker.h"
+#include "ui/AboutDialog.h"
+#include "workspace/SidebarControls.h"
+#include "workspace/SidebarFilterText.h"
 
 #include "app/RepositoryRouter.h"
 #include "app/SpotlightDialog.h"
@@ -354,6 +358,10 @@ void MainWindow::createActions() {
     goToFileAction->setObjectName(QStringLiteral("goToFileAction"));
     goToFileAction->setShortcut(QKeySequence(QStringLiteral("Ctrl+P")));
     connect(goToFileAction, &QAction::triggered, this, &MainWindow::showFileSpotlight);
+    auto* filterAction = goMenu->addAction(sidebar_filter::text(sidebar_filter::name));
+    filterAction->setObjectName(QStringLiteral("sidebarFilterAction"));
+    filterAction->setShortcut(SidebarFilterField::shortcut());
+    connect(filterAction, &QAction::triggered, activityBar_, &ActivityBar::focusRepositoryFilter);
     auto* goToSymbolAction = goMenu->addAction(QStringLiteral("Go to &Symbol…"));
     goToSymbolAction->setShortcuts(
         {QKeySequence(QStringLiteral("Ctrl+Shift+O")), QKeySequence(QStringLiteral("Ctrl+R"))});
@@ -444,6 +452,7 @@ void MainWindow::createActions() {
     connect(searchPanelAction_, &QAction::toggled, this, &MainWindow::setSearchPanelVisible);
 
     agentWorkspaceAction_ = viewMenu->addAction(QStringLiteral("Agent Workspace"));
+    agentWorkspaceAction_->setObjectName(QStringLiteral("agentWorkspaceAction"));
     agentWorkspaceAction_->setCheckable(true);
     agentWorkspaceAction_->setShortcut(QKeySequence(QStringLiteral("Ctrl+Shift+A")));
     connect(agentWorkspaceAction_, &QAction::toggled, this, [this](const bool checked) {
@@ -611,10 +620,10 @@ void MainWindow::createActions() {
         this, {.document = [this] { return documentOwner(); },
                .restyle =
                    [this](EditorWidget* editor) {
-                       editor->applyTheme(theme_.palette());
+                       editor->applyColorScheme(theme_.colorScheme());
                        if (editor == splitSource_ && splitEditor_ != nullptr) {
                            splitEditor_->shareDocumentWith(*editor);
-                           splitEditor_->applyTheme(theme_.palette());
+                           splitEditor_->applyColorScheme(theme_.colorScheme());
                        }
                    },
                .reopened =
@@ -629,6 +638,11 @@ void MainWindow::createActions() {
 
     viewMenu->addSeparator();
     auto* appearanceMenu = viewMenu->addMenu(QStringLiteral("Appearance"));
+    auto* schemeAction = appearanceMenu->addAction(tr("Color Scheme…"));
+    schemeAction->setObjectName(QStringLiteral("selectColorScheme"));
+    connect(schemeAction, &QAction::triggered, this,
+            [this] { showColorSchemePicker(theme_, this); });
+    appearanceMenu->addSeparator();
     auto* appearanceGroup = new QActionGroup(this);
     appearanceGroup->setExclusive(true);
 
@@ -650,6 +664,19 @@ void MainWindow::createActions() {
             action->setChecked(action->data().toInt() == static_cast<int>(theme_.mode()));
         }
     });
+
+    // About sits in a trailing Help menu; on macOS, AboutRole moves it into the application
+    // menu instead, so it stays in Edit there rather than leaving an empty Help menu.
+#ifdef Q_OS_MACOS
+    QMenu* aboutMenu = editMenu;
+#else
+    QMenu* aboutMenu = menuBar()->addMenu(QStringLiteral("&Help"));
+#endif
+    auto* aboutAction = aboutMenu->addAction(QStringLiteral("About ketPlus Pro"));
+    aboutAction->setObjectName(QStringLiteral("aboutAction"));
+    aboutAction->setMenuRole(QAction::AboutRole);
+    connect(aboutAction, &QAction::triggered, this,
+            [this] { showAboutDialog(this, BrandLockup::Edition::Pro); });
 }
 
 void MainWindow::showUpdateSettings() { showSettingsSection(QStringLiteral("updates")); }

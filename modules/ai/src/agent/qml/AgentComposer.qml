@@ -105,6 +105,7 @@ Item {
                         bottomPadding: composer.recipe.textPaddingBlock + leadingShift
                         // As in the mock's composer: a new conversation asks what to build, later turns name the provider.
                         property string hint: agentHost.presentationState.folder === "missing" ? "Continue in the main worktree…"
+                                              : root.copilotUnavailable ? "GitHub Copilot is unavailable on this daemon. Choose another provider…"
                                               : root.providerBlocked ? "Write your message now; it sends once " + root.providerTitle(root.selectedProvider) + " is set up"
                                               : agentHost.composerHint !== "" ? agentHost.composerHint
                                               : root.messageCount === 0 ? "Describe what you want to build…"
@@ -199,7 +200,7 @@ Item {
                     id: sendButton
                     objectName: "sendButton"
                     visible: !stopButton.visible
-                    enabled: agentHost.agentAvailable && !agentHost.steeringPending && (prompt.text.trim().length > 0 || agentHost.attachments.length > 0)
+                    enabled: agentHost.agentAvailable && !agentHost.steeringPending && !root.copilotUnavailable && (prompt.text.trim().length > 0 || agentHost.attachments.length > 0)
                     text: agentHost.sessionRunning ? "Steer current turn" : "Send message"
                     onClicked: root.submitCurrentPrompt()
                 }

@@ -16,6 +16,28 @@ transcript-page and transcript-window responses replace eligible tool events wit
 `families`, `running_count`, `failed_count`, `revision` and `last_change_cursor`.
 It contains no command, arguments, stdout or tool-result body.
 
+Since 2026-11-13 (T-91) a summary also carries `latest`, so a running group's heading can
+name the step it is on as that step's own row words it ("Checking Git status", "Using
+github · list_issues"). `latest` is `{item, completed}`: the newest state of the group's last
+member, the one that joined it last and has not left it. Its `item` drops `aggregatedOutput`,
+`output`, `formattedOutput`, `result`, `contentItems`, `content`, `stdout`, `stderr`, `diff` and
+`unified_diff`, keeps at most 512 characters of any string and 20 entries of any list, and is
+cut 6 levels deep.
+
+This is an accepted exception to the rule above (leader decision, 2026-11-13), and it holds
+only while all of the following stay true:
+
+- `latest` is a single step's command or tool label, with the arguments that label needs,
+  truncated as above. It never carries output, a result body, stdout, stderr or a diff.
+- It travels over local IPC only: an authenticated `daemon.hello` on the daemon's local socket
+  that opted in with `transcript_activity_groups`. The relay and mobile protocol do not carry
+  summaries, and an SSH machine's `DaemonClient` (`SshMachineBackend`) does not opt in, so
+  neither Relay nor SSH sends `latest` to another device.
+- Neither the daemon nor the Desktop logs it.
+
+A Desktop that predates the field ignores it, and a daemon that predates it sends none, so the
+heading keeps "<summary> · Running".
+
 Since 2026-11-09 a summary also carries `files`, so the Desktop can show a turn's changed-files
 card without opening its groups. `files` lists the files the group's completed `fileChange`
 items changed: `path`, `destination` (a move's target, otherwise empty), `operation`

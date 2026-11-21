@@ -7,9 +7,9 @@
 #include "KetSyntax.h"
 #include "KetTokens.h"
 #include <QEvent>
-#include <QIcon>
 #include <QPainter>
 #include <QPainterPath>
+#include <QPixmap>
 
 namespace ketplus {
 namespace {
@@ -203,11 +203,13 @@ void WorkspacePreview::paintEvent(QPaintEvent*) {
 
     // A finished agent message under the code, with the badge placed by layoutBadge().
     const int top = height() - messageHeight();
-    const QString mark = current == ket::Theme::Dark
-                             ? QStringLiteral(":/agent/icons/ketplus-mark-dark.svg")
-                             : QStringLiteral(":/agent/icons/ketplus-mark-light.svg");
-    QIcon(mark).paint(&painter, QRect(messageInset(), top + (messageHeight() - markSize()) / 2,
-                                      markSize(), markSize()));
+    // The approved ketPlus mark, which each application embeds (as the mock's preview row).
+    const QPixmap mark(QStringLiteral(":/brand/ketplus-mark-256.png"));
+    painter.setRenderHint(QPainter::SmoothPixmapTransform);
+    if (!mark.isNull())
+        painter.drawPixmap(
+            QRect(messageInset(), top + (messageHeight() - markSize()) / 2, markSize(), markSize()),
+            mark);
     QFont message = font();
     message.setPixelSize(qRound(px(13)));
     painter.setFont(message);

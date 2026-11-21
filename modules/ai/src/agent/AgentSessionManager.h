@@ -11,9 +11,12 @@
 #include <QVector>
 
 #include "agent/AgentTranscriptWindowBudget.h"
+#include "agent/CallbackGuard.h"
 
 #include <functional>
 #include <memory>
+
+class QSettings;
 
 namespace ketplus {
 
@@ -68,7 +71,12 @@ class AgentSessionManager final : public QObject {
     // follows the conversation's later reports.
     void readWorkReport(const QString& worktreePath);
     void stopBackgroundTask(const QString& worktreePath, const QString& taskId);
-    void readBackgroundTaskOutput(const QString& worktreePath, const QString& taskId);
+    [[nodiscard]] QVariantMap backgroundTaskState(const QString& worktreePath) const;
+    void loadBackgroundTasks(const QString& worktreePath, bool more);
+    void resolveBackgroundTaskCleanup(const QString& worktreePath, const QString& taskId,
+                                      qint64 revision);
+    void readBackgroundTaskOutput(const QString& worktreePath, const QString& taskId,
+                                  const QString& cursor = {}, quint64 request = 0);
 
     void executionWorktreeCommand(const QString& path, const QString& type,
                                   const QJsonObject& payload,
@@ -91,13 +99,6 @@ class AgentSessionManager final : public QObject {
     void markConversationSeen(const QString& worktreePath, const QString& conversationId);
     void renameConversation(const QString& worktreePath, const QString& conversationId,
                             const QString& title);
-    // Adds or removes one label; the daemon stores the result (`session.tags.set`).
-    void setConversationTag(const QString& worktreePath, const QString& conversationId,
-                            const QString& label, bool tagged);
-    // #429: every label this Mac offers, [{label, color}], as the daemon keeps them. Saving
-    // replaces the whole catalog; renames maps an old label to its new one.
-    [[nodiscard]] QVariantList tagCatalog() const { return tagCatalog_; }
-    void saveTagCatalog(const QVariantList& tags, const QVariantMap& renames);
     // #125 "Mark as done": the conversation no longer waits for the user (`session.mark_done`).
     void markConversationDone(const QString& worktreePath, const QString& conversationId);
     bool archiveConversation(const QString& worktreePath, const QString& conversationId);
@@ -176,7 +177,6 @@ class AgentSessionManager final : public QObject {
                              const QString& status, bool running);
     void workingDetailChanged(const QString& worktreePath, const QString& detail);
     void conversationsChanged(const QString& worktreePath, const QVariantList& conversations);
-    void tagCatalogChanged(const QVariantList& catalog);
     void conversationConfigurationChanged(const QString& worktreePath,
                                           const QVariantMap& configuration);
     void conversationConfigurationApplyFinished(const QString& path, const QString& conversationId,
@@ -372,8 +372,10 @@ class AgentSessionManager final : public QObject {
     void emitConfiguration(const SessionPtr& session);
     void emitUsageSnapshot(const SessionPtr& session);
     void emitBackgroundTasks(const SessionPtr& session);
+    void refreshBackgroundTaskMetadata(const SessionPtr& session);
+    void updateBackgroundTaskProjection(const SessionPtr& session, const QVariantList& tasks);
     void callBackgroundTask(const QString& worktreePath, const QString& taskId,
-                            const QString& action);
+                            const QString& action, const QJsonObject& parameters = {});
     int appendMessage(const SessionPtr& session, QVariantMap message);
     [[nodiscard]] int messageIndexForItem(const SessionPtr& session, const QString& itemId);
     void updateMessage(const SessionPtr& session, int index, QVariantMap message);
@@ -394,19 +396,17 @@ class AgentSessionManager final : public QObject {
                             bool refresh = true);
     void syncConversationTitle(const SessionPtr& session);
     void syncArchived(const SessionPtr& session);
-    [[nodiscard]] QVariantList listedTags(const SessionPtr& session) const;
-    void syncTags(const SessionPtr& session);
-    // #429, in AgentSessionTags.cpp.
-    void installTagCatalog();
-    void loadTagCatalog();
-    void setTagCatalogFromDaemon(const QJsonArray& catalog);
-    void applyTagChange(const QJsonObject& change);
-    // Labels chosen before the first turn go to the daemon once it knows the conversation.
-    void sendStartTags(const SessionPtr& session);
-    QVariantList tagCatalog_;
     void applyDaemonArchiveState(const SessionPtr& session, bool archivedByDaemon);
     void selectAwayFromArchived(const SessionPtr& session);
+    // Writes the workspace's conversations to the settings. While a daemon catalog is applied,
+    // the writes and the list and activity signals wait for the next event-loop turn, once per
+    // workspace: a catalog of thousands of conversations would otherwise write each workspace and
+    // rebuild each list again for every one of them.
     void persistWorkspace(const QString& path) const;
+    void writeWorkspace(QSettings& settings, const QString& path) const;
+    void notifyConversationsChanged(const QString& path);
+    void notifyActivityChanged();
+    void flushDeferredUpdates();
     void snapshotTurnWorktrees(const SessionPtr& session);
     void captureTurnWorktrees(const SessionPtr& session);
     // Calls `done(ok, paths)` once, asynchronously when git runs.
@@ -430,6 +430,23 @@ class AgentSessionManager final : public QObject {
     [[nodiscard]] static QString normalizedPath(const QString& path);
 
     CodexAppServer* server_{nullptr};
+    // The server may outlive the manager (or, as its child, be destroyed after the members its
+    // callbacks use); callbacks given to it go through this so they stop once the manager goes.
+    CallbackGuard callbackGuard_;
+    using ServerCallback = CallbackGuard::Callback;
+    void serverCall(const QString& method, const QJsonObject& params, ServerCallback done);
+    void serverReadDaemonTranscriptWindow(const QString& sessionId, const QJsonObject& params,
+                                          ServerCallback done, bool preserveLiveBuffer = false);
+    void serverExecutionWorktreeCommand(const QString& sessionId, const QString& type,
+                                        const QJsonObject& payload, ServerCallback done);
+    void serverSetDaemonSessionArchived(const QString& sessionId, bool archived,
+                                        ServerCallback done);
+    void serverReadDaemonActivityGroup(const QString& sessionId, const QJsonObject& params,
+                                       ServerCallback done);
+    void serverMarkDaemonSessionSeen(const QString& sessionId, qint64 cursor, ServerCallback done);
+    void serverMarkDaemonSessionDone(const QString& sessionId, ServerCallback done);
+    void serverFinishDaemonTranscriptCatchup(const QString& sessionId, const QJsonObject& page,
+                                             ServerCallback done);
     CodexRateLimits* rateLimits_{nullptr};
     ProviderRuntimeStatus* providerStatus_{nullptr};
     std::unique_ptr<ConversationWorktreeStore> worktreeStore_;
@@ -437,6 +454,11 @@ class AgentSessionManager final : public QObject {
     QHash<QString, QVector<SessionPtr>> conversationsByPath_;
     QHash<QString, SessionPtr> sessionsByThread_;
     QHash<QString, QSet<QString>> deletedThreadsByPath_;
+    int deferUpdates_{0};
+    bool deferredFlushScheduled_{false};
+    mutable QSet<QString> deferredWorkspaces_;
+    QSet<QString> deferredConversationPaths_;
+    bool deferredActivity_{false};
     QHash<QString, qint64> deletedDaemonGenerations_;
     QVariantList models_;
     bool loadingModels_{false};

@@ -55,6 +55,257 @@ class WorkReportTest final : public QObject {
   private slots:
     void initTestCase() { QStandardPaths::setTestModeEnabled(true); }
 
+    void acceptedInputPublishesScopeThroughLiveReportEvents() {
+        Fixture fixture;
+        QVERIFY(fixture.open());
+        const auto id = fixture.start("codex", "hang");
+        QVERIFY(!id.isEmpty());
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(id, "turn.started"), 1, 5000);
+        QVERIFY(fixture
+                    .agents(id, "agents.work_report",
+                            call({item("old", "done", {{"evidence", "verified"}}),
+                                  item("carried", "waiting")}))
+                    .value("ok")
+                    .toBool());
+        const auto first = fixture.journal->sessions().first();
+        emit fixture.codex->notificationReceived(
+            "turn/completed",
+            {{"threadId", first.threadId},
+             {"turn", QJsonObject{{"id", first.turnId}, {"status", "completed"}}}});
+        QCOMPARE(fixture.count(id, "turn.completed"), 1);
+        QSignalSpy delivered(fixture.host.get(), &SessionHost::eventReady);
+        QCOMPARE(fixture.start("codex", "hang", id), id);
+        // This is the same event consumed by daemon/workReport -> workReportChanged ->
+        // the open Report pane, not a manually supplied pane snapshot or another tool call.
+        const auto reports = [&] {
+            QList<QJsonObject> result;
+            for (const auto& args : delivered) {
+                const auto event = args.first().toJsonObject();
+                if (event.value("event_type") == "work_report.updated")
+                    result.append(event);
+            }
+            return result;
+        };
+        QTRY_COMPARE(reports().size(), 1);
+        auto scope = reports().last().value("payload").toObject();
+        QVERIFY(scope.value("scope_only").toBool());
+        QVERIFY(
+            projectEventPayloadForCloud("work_report.updated", scope).value("scope_only").toBool());
+        QCOMPARE(scope.value("items").toArray().size(), 1);
+        QCOMPARE(scope.value("items").toArray().first().toObject().value("key"), "carried");
+        const auto boundary = scope.value("request_id").toInteger();
+        QVERIFY(reports().last().value("cursor").toInteger() > boundary);
+        QCOMPARE(fixture.journal->workReport(id, 1).value("request_id").toInteger(), boundary);
+        QCOMPARE(fixture.journal->workReport(id, 1).value("items").toArray().size(), 2);
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(id, "turn.started"), 2, 5000);
+        QVERIFY(fixture
+                    .agents(id, "agents.work_report",
+                            call({item("carried", "done", {{"evidence", "finished"}})}))
+                    .value("ok")
+                    .toBool());
+        delivered.clear();
+        const auto steer = fixture.host->handleCommand(
+            request("session.steer", {{"prompt", "next request"}, {"expected_context_revision", 1}},
+                    id, 1),
+            "desktop-test");
+        QVERIFY2(steer.value("ok").toBool(), qPrintable(text(steer)));
+        QTRY_COMPARE(reports().size(), 1);
+        scope = reports().last().value("payload").toObject();
+        QVERIFY(scope.value("request_id").toInteger() > boundary);
+        // The pending completion cannot hide an unresolved published item on a steer.
+        QCOMPARE(scope.value("items").toArray().size(), 1);
+        QCOMPARE(found(scope, "carried").value("status"), "waiting");
+        QCOMPARE(scope.value("turn").toInteger(), 1);
+        // Rejected direct input must not emit a scope refresh.
+        delivered.clear();
+        const auto rejected = fixture.host->handleCommand(
+            request("session.start_turn", {{"prompt", "rejected generation"}}, id, 2),
+            "desktop-test");
+        QVERIFY(!rejected.value("ok").toBool());
+        QVERIFY(reports().isEmpty());
+        const auto sender = fixture.start("claude", "sender");
+        QVERIFY(!sender.isEmpty());
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(sender, "turn.completed"), 1, 5000);
+        delivered.clear();
+        const auto sent = fixture.agents(
+            sender, "agents.send",
+            {{"to", fixture.number(id)}, {"text", "agent continuation"}, {"urgent", true}});
+        QCOMPARE(sent.value("delivery").toString(), "steering");
+        QTRY_COMPARE(fixture.count(id, "turn.steered"), 2);
+        QVERIFY(reports().isEmpty());
+    }
+
+    void requestScopeSurvivesAgentTurnsAndRestart() {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto path = directory.filePath("journal.sqlite3");
+        qint64 secondRequest = 0;
+        {
+            LocalJournal journal(path);
+            QVERIFY(journal.isOpen());
+            StoredSession session;
+            session.id = "scope";
+            session.worktreePath = directory.path();
+            session.adapter = "codex";
+            session.state = "ready";
+            QVERIFY(journal.upsertSession(session));
+            const auto firstRequest =
+                journal.appendEvent("scope", 1, "user.message", {{"text", "First"}});
+            QVERIFY(firstRequest > 0);
+            auto first = work_report::merge(
+                journal.workReport("scope", 1),
+                call({item("old", "done", {{"evidence", "verified"}}), item("carried", "waiting")}),
+                1);
+            QVERIFY(first.error.isEmpty());
+            QVERIFY(journal.storeWorkReport("scope", 1, first.ledger));
+            // Accepted direct steer starts a new request even within the same provider turn.
+            secondRequest = journal.appendEvent("scope", 1, "turn.steered", {{"text", "Second"}});
+            QVERIFY(secondRequest > firstRequest);
+            auto current = journal.workReport("scope", 1);
+            QCOMPARE(current.value("request_id").toInteger(), secondRequest);
+            QCOMPARE(current.value("items").toArray().size(), 2); // Audit is untouched.
+            QCOMPARE(work_report::currentRequest(current).value("items").toArray().size(), 1);
+            QVERIFY(journal.appendEvent("scope", 1, "user.message",
+                                        {{"text", "Agent continuation"}, {"origin", "agent"}}) > 0);
+            QVERIFY(journal.appendEvent("scope", 1, "turn.steered",
+                                        {{"text", "Agent steer"}, {"origin", "agent"}}) > 0);
+            QVERIFY(journal.appendEvent("scope", 1, "user.message",
+                                        {{"text", "Scheduled"}, {"schedule_id", "schedule"}}) > 0);
+            QVERIFY(journal.appendEvent("scope", 1, "turn.steer_failed", {{"text", "Rejected"}}) >
+                    0);
+            QVERIFY(journal.appendEvent("scope", 1, "turn.queued",
+                                        {{"text", "Not accepted input"}}) > 0);
+            QString rejectedError;
+            QVERIFY(journal.appendEvent("scope", 2, "user.message", {{"text", "Wrong generation"}},
+                                        &rejectedError) < 0);
+            QVERIFY(!rejectedError.isEmpty());
+            // If later acceptance steps fail, the request marker rolls back with the input.
+            const QJsonObject tooLarge{
+                {"data", QString(protocol::maximumEventPayloadBytes + 1, QLatin1Char('x'))}};
+            QVERIFY(
+                journal
+                    .appendTurnStart(session, {{"text", "Rolled back"}}, tooLarge, &rejectedError)
+                    .isEmpty());
+            QCOMPARE(journal.workReport("scope", 1).value("request_id").toInteger(), secondRequest);
+            const auto done = work_report::merge(
+                journal.workReport("scope", 1),
+                call({item("carried", "done", {{"evidence", "now verified"}})}), 3);
+            QVERIFY(done.error.isEmpty());
+            QVERIFY(journal.storeWorkReport("scope", 1, done.ledger));
+            const auto summary = work_report::summary(done);
+            QCOMPARE(summary.value("done").toInt(), 1);
+            QCOMPARE(summary.value("total").toInt(), 1);
+            QCOMPARE(summary.value("done_items").toArray().first().toObject().value("key"),
+                     "carried");
+            // Rewording old evidence cannot reintroduce a historical completion.
+            const auto reworded = work_report::merge(
+                done.ledger, call({item("old", "done", {{"evidence", "wording corrected"}})}), 4);
+            QCOMPARE(work_report::summary(reworded).value("total").toInt(), 1);
+            QVERIFY(journal.storeWorkReport("scope", 1, reworded.ledger));
+        }
+        LocalJournal reopened(path);
+        const auto retained = reopened.workReport("scope", 1);
+        QCOMPARE(retained.value("request_id").toInteger(), secondRequest);
+        QCOMPARE(retained.value("items").toArray().size(), 2);
+        QCOMPARE(work_report::currentRequest(retained).value("items").toArray().size(), 1);
+        const auto nextRequest =
+            reopened.appendEvent("scope", 1, "user.message", {{"text", "Third"}});
+        QVERIFY(nextRequest > secondRequest);
+        QVERIFY(work_report::currentRequest(reopened.workReport("scope", 1))
+                    .value("items")
+                    .toArray()
+                    .isEmpty());
+    }
+
+    void publishedReadRequiresTerminalProofAndSurvivesAcknowledgement() {
+        QTemporaryDir directory;
+        const auto path = directory.filePath("journal.sqlite3");
+        LocalJournal journal(path);
+        QVERIFY(journal.isOpen());
+        StoredSession session;
+        session.id = "published";
+        session.worktreePath = directory.path();
+        session.adapter = "codex";
+        session.state = "ready";
+        QVERIFY(journal.upsertSession(session));
+        QVERIFY(journal.appendEvent(session.id, 1, "user.message", {{"text", "Synthetic"}}) > 0);
+        const auto report = work_report::merge(journal.workReport(session.id, 1),
+                                               call({item("work", "waiting")}), 1)
+                                .ledger;
+        QVERIFY(journal.storeWorkReport(session.id, 1, report));
+        QVERIFY(journal.appendEvent(session.id, 1, "work_report.updated", report) > 0);
+        QVERIFY(journal.publishedWorkReport(session.id, 1).isEmpty());
+        auto wrongTurn = report;
+        wrongTurn.insert("turn", 2);
+        QVERIFY(journal.appendEvent(session.id, 1, "turn.completed",
+                                    {{"status", "completed"}, {"work_report", wrongTurn}}) > 0);
+        QVERIFY(journal.publishedWorkReport(session.id, 1).isEmpty());
+        QVERIFY(journal.appendEvent(session.id, 1, "turn.completed",
+                                    {{"status", "running"}, {"work_report", report}}) > 0);
+        QVERIFY(journal.publishedWorkReport(session.id, 1).isEmpty());
+        const auto end = journal.appendEvent(session.id, 1, "turn.completed",
+                                             {{"status", "interrupted"}, {"work_report", report}});
+        QVERIFY(end > 0);
+        const auto published = journal.publishedWorkReport(session.id, 1);
+        QCOMPARE(found(published, "work").value("status"), "waiting");
+        QCOMPARE(published.value("terminal_status"), "interrupted");
+        QVERIFY(journal.acknowledgeCursor("test-client", session.id, 1, end));
+        QVERIFY(journal.pruneAcknowledgedEvents());
+        QCOMPARE(journal.publishedWorkReport(session.id, 1), published);
+        LocalJournal reopened(path);
+        QVERIFY(reopened.isOpen());
+        QCOMPARE(reopened.publishedWorkReport(session.id, 1), published);
+        QVERIFY(reopened.publishedWorkReport(session.id, 2).isEmpty());
+    }
+
+    void legacyLedgerFallsBackWithoutLifetimeCompletions() {
+        const QJsonObject legacy{
+            {"turn", 50},
+            {"items",
+             QJsonArray{item("old", "done", {{"closed_turn", 2}, {"updated_turn", 50}}),
+                        item("unmarked", "done", {{"updated_turn", 50}}),
+                        item("latest", "done", {{"closed_turn", 50}}), item("waiting", "waiting"),
+                        item("duplicate", "done", {{"closed_turn", 50}, {"replaced_by", "latest"}}),
+                        item("cancelled", "cancelled", {{"closed_turn", 50}})}}};
+        work_report::Merge merged;
+        merged.ledger = legacy;
+        const auto answer = work_report::summary(merged);
+        QCOMPARE(answer.value("done").toInt(), 1);
+        QCOMPARE(answer.value("total").toInt(), 2);
+        QCOMPARE(answer.value("open").toInt(), 1);
+        QCOMPARE(answer.value("done_items").toArray().size(), 1);
+        QVERIFY(found(work_report::currentRequest(legacy), "old").isEmpty());
+        QVERIFY(found(work_report::currentRequest(legacy), "unmarked").isEmpty());
+        QCOMPARE(merged.ledger, legacy);
+    }
+
+    void lifetimeCompletionsDoNotInflateCurrentCounts() {
+        QJsonArray items;
+        for (int i = 0; i < 148; ++i)
+            items.append(item(QString("old-%1").arg(i), "done",
+                              {{"closed_request", 1}, {"evidence", "audit"}}));
+        for (int i = 0; i < 17; ++i)
+            items.append(item(QString("open-%1").arg(i), "waiting"));
+        const QJsonObject ledger{
+            {"request_id", 100}, {"version", 7}, {"turn", 20}, {"items", items}};
+        const auto finished = work_report::merge(
+            ledger, call({item("open-0", "done", {{"evidence", "finished now"}})}), 20);
+        QVERIFY(finished.error.isEmpty());
+        QCOMPARE(finished.ledger.value("items").toArray().size(), 165);
+        const auto answer = work_report::summary(finished);
+        QCOMPARE(answer.value("done").toInt(), 1);
+        QCOMPARE(answer.value("open").toInt(), 16);
+        QCOMPARE(answer.value("total").toInt(), 17);
+        QCOMPARE(work_report::cloudProjection(finished.ledger).value("items").toArray().size(), 17);
+        const auto reopened =
+            work_report::merge(finished.ledger, call({item("old-0", "active")}), 21);
+        QVERIFY(!found(reopened.ledger, "old-0").contains("closed_request"));
+        const auto completedAgain = work_report::merge(
+            reopened.ledger, call({item("old-0", "done", {{"evidence", "new verification"}})}), 22);
+        QCOMPARE(work_report::summary(completedAgain).value("done").toInt(), 2);
+        QCOMPARE(found(completedAgain.ledger, "old-0").value("closed_request").toInt(), 100);
+    }
+
     void mergesByKeyAndKeepsUnmentionedItems() {
         const auto first = work_report::merge(
             {},
@@ -212,6 +463,130 @@ class WorkReportTest final : public QObject {
     }
 
     // Closing an item drops a next step the call does not repeat; it would read as work left.
+    // A long conversation forgets its keys. The answer lists every open item, newest first,
+    // marks the ones no call changed for staleTurns, and asks the agent to reconcile them.
+    void theAnswerListsOpenItemsAndMarksStaleOnes() {
+        work_report::Merge first = work_report::merge(
+            {{"request_id", 1}},
+            call({item("first-assignments", "waiting"), item("t-13-signin", "active"),
+                  item("t-12", "done", {{"evidence", "PR #80 merged"}})}),
+            2);
+        QVERIFY2(first.error.isEmpty(), qPrintable(first.error));
+        const work_report::Merge later = work_report::merge(
+            first.ledger, call({item("t-13", "active", {{"title", "T-13 sign-in"}})}),
+            2 + work_report::staleTurns);
+        QVERIFY2(later.error.isEmpty(), qPrintable(later.error));
+        const QJsonObject answer = work_report::summary(later);
+        QCOMPARE(answer.value("open").toInt(), 3);
+        QCOMPARE(answer.value("stale").toInt(), 2);
+        const QJsonArray listed = answer.value("open_items").toArray();
+        QCOMPARE(listed.size(), 3);
+        QCOMPARE(listed.at(0).toObject().value("key").toString(), "t-13");
+        QVERIFY(!listed.at(0).toObject().contains("stale"));
+        QCOMPARE(listed.at(1).toObject().value("key").toString(), "first-assignments");
+        QVERIFY(listed.at(1).toObject().value("stale").toBool());
+        QCOMPARE(listed.at(1).toObject().value("updated_turn").toInteger(), 2);
+        QVERIFY(answer.value("reconcile").toString().contains("Never add a new key"));
+        // Finished work is listed too, so it is not reported again under a new key.
+        const QJsonArray done = answer.value("done_items").toArray();
+        QCOMPARE(done.size(), 1);
+        QCOMPARE(done.at(0).toObject().value("key").toString(), "t-12");
+        QVERIFY(answer.value("reconcile").toString().contains("done_items"));
+        // With nothing open, only the finished items are left to keep in mind.
+        const work_report::Merge closed = work_report::merge(
+            later.ledger,
+            call({item("t-13", "done", {{"evidence", "PR #77 merged"}}),
+                  item("first-assignments", "cancelled"), item("t-13-signin", "cancelled")}),
+            30);
+        const QJsonObject closedAnswer = work_report::summary(closed);
+        QCOMPARE(closedAnswer.value("open_items").toArray().size(), 0);
+        QCOMPARE(closedAnswer.value("done_items").toArray().at(0).toObject().value("key"), "t-13");
+        QVERIFY(!closedAnswer.value("reconcile").toString().contains("open_items"));
+        // An empty report has nothing to reconcile.
+        const work_report::Merge cancelled =
+            work_report::merge({}, call({item("gone", "cancelled")}), 1);
+        QVERIFY(!work_report::summary(cancelled).contains("reconcile"));
+    }
+
+    // An item records the turn it was closed in; rewording it later keeps that turn, reopening
+    // it drops it. The answer lists finished items by that turn, most recent first.
+    void closedItemsKeepTheTurnTheyFinishedIn() {
+        const auto first = work_report::merge(
+            {{"request_id", 1}},
+            call({item("a", "active"), item("b", "done", {{"evidence", "PR #1"}})}), 4);
+        QVERIFY2(first.error.isEmpty(), qPrintable(first.error));
+        QVERIFY(!found(first.ledger, "a").contains("closed_turn"));
+        QCOMPARE(found(first.ledger, "b").value("closed_turn").toInteger(), 4);
+        const auto finished =
+            work_report::merge(first.ledger, call({item("a", "done", {{"evidence", "PR #2"}})}), 7);
+        QCOMPARE(found(finished.ledger, "a").value("closed_turn").toInteger(), 7);
+        const auto reworded = work_report::merge(
+            finished.ledger, call({item("b", "done", {{"evidence", "PR #1 merged"}})}), 9);
+        QCOMPARE(found(reworded.ledger, "b").value("closed_turn").toInteger(), 4);
+        QCOMPARE(found(reworded.ledger, "b").value("updated_turn").toInteger(), 9);
+        const QJsonArray done = work_report::summary(reworded).value("done_items").toArray();
+        QCOMPARE(done.at(0).toObject().value("key").toString(), "a");
+        QCOMPARE(done.at(1).toObject().value("key").toString(), "b");
+        const auto reopened = work_report::merge(reworded.ledger, call({item("a", "active")}), 10);
+        QVERIFY(!found(reopened.ledger, "a").contains("closed_turn"));
+    }
+
+    // The same work reported under two keys: the item that replaces the others stands, the
+    // replaced open ones are cancelled with replaced_by and stop counting. A replaced done item
+    // keeps its status and evidence, but is marked and no longer counted or listed.
+    void replacesMergesTheSameWorkUnderAnotherKey() {
+        const work_report::Merge first = work_report::merge(
+            {},
+            call({item("t-13-signin", "waiting",
+                       {{"next", QJsonObject{{"action", "Review"}, {"owner", "user"}}},
+                        {"remaining", "Review"}}),
+                  item("t-12-old", "done", {{"evidence", "merged"}})}),
+            3);
+        QVERIFY2(first.error.isEmpty(), qPrintable(first.error));
+        const work_report::Merge merged = work_report::merge(
+            first.ledger,
+            call({item("t-13", "active", {{"replaces", QJsonArray{"t-13-signin", "t-12-old"}}})}),
+            9);
+        QVERIFY2(merged.error.isEmpty(), qPrintable(merged.error));
+        QJsonObject replaced, kept;
+        for (const QJsonValue& value : merged.ledger.value("items").toArray()) {
+            if (value.toObject().value("key") == "t-13-signin")
+                replaced = value.toObject();
+            if (value.toObject().value("key") == "t-12-old")
+                kept = value.toObject();
+        }
+        QCOMPARE(replaced.value("status").toString(), "cancelled");
+        QCOMPARE(replaced.value("replaced_by").toString(), "t-13");
+        QVERIFY(!replaced.contains("next"));
+        QVERIFY(!replaced.contains("remaining"));
+        QCOMPARE(replaced.value("updated_turn").toInteger(), 9);
+        QCOMPARE(kept.value("status").toString(), "done");
+        QCOMPARE(kept.value("evidence").toString(), "merged");
+        QCOMPARE(kept.value("replaced_by").toString(), "t-13");
+        const QJsonObject answer = work_report::summary(merged);
+        QCOMPARE(answer.value("open").toInt(), 1);
+        QCOMPARE(answer.value("done").toInt(), 0);
+        QCOMPARE(answer.value("total").toInt(), 1);
+        QVERIFY(answer.value("done_items").toArray().isEmpty());
+        // Replacing it again changes nothing.
+        const auto again = work_report::merge(
+            merged.ledger, call({item("t-13", "active", {{"replaces", QJsonArray{"t-12-old"}}})}),
+            10);
+        QVERIFY2(again.error.isEmpty(), qPrintable(again.error));
+        QCOMPARE(again.updated, 0);
+        // A key the report does not have, or one the same call reports, is refused in words.
+        QVERIFY(
+            work_report::merge(
+                first.ledger, call({item("t-13", "active", {{"replaces", QJsonArray{"nope"}}})}), 9)
+                .error.contains("is not in the report"));
+        QVERIFY(work_report::merge(
+                    first.ledger,
+                    call({item("t-13", "active", {{"replaces", QJsonArray{"t-13-signin"}}}),
+                          item("t-13-signin", "active")}),
+                    9)
+                    .error.contains("which this call also reports"));
+    }
+
     void closingAnItemClearsItsStaleNextStep() {
         const auto first = work_report::merge(
             {},
@@ -304,6 +679,16 @@ class WorkReportTest final : public QObject {
             fixture.agents(id, "agents.work_report",
                            call({item("live", "active", {{"evidence", "token=s3cret"}})}));
         QVERIFY2(reported.value("ok").toBool(), qPrintable(text(reported)));
+        QCOMPARE(fixture.count(id, "work_report.updated"), 0);
+        QCOMPARE(fixture.count(id, "turn.completed"), 0);
+        QVERIFY(fixture.agents(id, "agents.whoami", {}).contains("number"));
+        QVERIFY(fixture
+                    .agents(id, "agents.work_report",
+                            call({item("live", "done", {{"evidence", "verified"}})}))
+                    .value("ok")
+                    .toBool());
+        QCOMPARE(fixture.count(id, "work_report.updated"), 0);
+        QCOMPARE(fixture.count(id, "turn.completed"), 0);
         const QJsonObject asked = question.value("questions").toArray().first().toObject();
         const QJsonObject resolution{
             {"request_id", question.value("request_id")},
@@ -325,6 +710,7 @@ class WorkReportTest final : public QObject {
         QTRY_COMPARE_WITH_TIMEOUT(fixture.count(id, "turn.completed"), 1, 5000);
         const QJsonObject end = fixture.payloads(id, "turn.completed").first();
         QCOMPARE(end.value("work_report").toObject(), fixture.journal->workReport(id, 1));
+        QCOMPARE(found(end.value("work_report").toObject(), "live").value("status"), "done");
         QVERIFY(!text(end).contains("s3cret"));
         // A copy written by an older daemon is redacted again on its way to the cloud.
         QJsonObject legacy = end;
@@ -406,31 +792,28 @@ class WorkReportTest final : public QObject {
         const QJsonObject second = fixture.agents(
             id, "agents.work_report", call({item("picker", "done", {{"evidence", "12/12"}})}));
         QVERIFY2(second.value("ok").toBool(), qPrintable(text(second)));
-        QCOMPARE(second.value("version").toInteger(), 2);
+        QCOMPARE(second.value("version").toInteger(), 3);
         QCOMPARE(second.value("done").toInt(), 2);
 
         const QJsonObject stored = fixture.journal->workReport(id, 1);
-        QCOMPARE(stored.value("version").toInteger(), 2);
+        QCOMPARE(stored.value("version").toInteger(), 3);
         QCOMPARE(found(stored, "picker").value("status").toString(), QStringLiteral("done"));
-        // Each call journals the ledger it produced, so a turn keeps its own snapshot.
-        const QList<QJsonObject> snapshots = fixture.payloads(id, "work_report.updated");
-        QCOMPARE(snapshots.size(), 2);
-        QCOMPARE(found(snapshots.first(), "picker").value("status").toString(),
-                 QStringLiteral("active"));
-        QCOMPARE(snapshots.last(), stored);
+        // Calls persist pending audit data without publishing a transcript report.
+        QCOMPARE(fixture.count(id, "work_report.updated"), 0);
 
         const QJsonObject rejected =
             fixture.agents(id, "agents.work_report", call({item("x", "done")}));
         QVERIFY(!rejected.value("ok").toBool());
         QCOMPARE(rejected.value("error_code").toString(), QStringLiteral("invalid_report"));
-        QCOMPARE(fixture.count(id, "work_report.updated"), 2);
+        QCOMPARE(fixture.count(id, "work_report.updated"), 0);
         QCOMPARE(fixture.journal->workReport(id, 1), stored);
 
-        // The desktop reads the current ledger; only the local UI may.
+        // These calls happened after the terminal event: they are durable pending data,
+        // not a published report. Explicit pane reads cannot expose them either.
         const QJsonObject read = fixture.host->handleCommand(
             request("session.work_report.read", {}, id, 1), "desktop-test");
         QVERIFY2(read.value("ok").toBool(), qPrintable(text(read)));
-        QCOMPARE(read.value("report").toObject(), stored);
+        QVERIFY(read.value("report").toObject().value("items").toArray().isEmpty());
         QCOMPARE(
             fixture.host
                 ->handleCommand(request("session.work_report.read", {}, id, 1), "cloud-control-v2")
@@ -442,12 +825,116 @@ class WorkReportTest final : public QObject {
         // The ledger survives a restart, and a forged credential reaches nothing.
         fixture.restart();
         QCOMPARE(fixture.journal->workReport(id, 1), stored);
+        QVERIFY(fixture.host
+                    ->handleCommand(request("session.work_report.read", {}, id, 1), "desktop-test")
+                    .value("report")
+                    .toObject()
+                    .value("items")
+                    .toArray()
+                    .isEmpty());
         QCOMPARE(
             fixture.host
                 ->handleAgentCommand("forged", "agents.work_report", call({item("y", "active")}))
                 .value("error_code")
                 .toString(),
             QStringLiteral("authentication_failed"));
+    }
+
+    void onlyMatchingTerminalEventPublishesPendingReport_data() {
+        QTest::addColumn<QString>("status");
+        for (const auto* status : {"completed", "interrupted", "failed"})
+            QTest::newRow(status) << QString::fromLatin1(status);
+    }
+
+    void onlyMatchingTerminalEventPublishesPendingReport() {
+        QFETCH(QString, status);
+        Fixture fixture;
+        QVERIFY(fixture.open());
+        const auto id = fixture.start("codex", "hang");
+        QVERIFY(!id.isEmpty());
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(id, "turn.started"), 1, 5000);
+        const auto session = fixture.journal->sessions().first();
+        const auto finish = [&](const QString& turn) {
+            emit fixture.codex->notificationReceived(
+                "turn/completed", {{"threadId", session.threadId},
+                                   {"turn", QJsonObject{{"id", turn}, {"status", status}}}});
+        };
+        QVERIFY(fixture.agents(id, "agents.work_report", call({item("work", "active")}))
+                    .value("ok")
+                    .toBool());
+        emit fixture.codex->notificationReceived(
+            "item/started", {{"threadId", session.threadId},
+                             {"turnId", session.turnId},
+                             {"item", QJsonObject{{"id", "after-report"},
+                                                  {"type", "commandExecution"},
+                                                  {"command", "synthetic continued work"}}}});
+        QCOMPARE(fixture.count(id, "turn.completed"), 0);
+        QCOMPARE(fixture.count(id, "work_report.updated"), 0);
+        QVERIFY(fixture.count(id, "item.started") > 0);
+        QVERIFY(fixture.agents(id, "agents.work_report", call({item("work", "waiting")}))
+                    .value("ok")
+                    .toBool());
+        const auto readPane = [&] {
+            return fixture.host
+                ->handleCommand(request("session.work_report.read", {}, id, 1), "desktop-test")
+                .value("report")
+                .toObject();
+        };
+        // Opening/reopening, including a separate journal reader, must not publish pending
+        // data.
+        QVERIFY(readPane().value("items").toArray().isEmpty());
+        QVERIFY(readPane().value("items").toArray().isEmpty());
+        {
+            LocalJournal reopened(fixture.journal->databasePath());
+            QVERIFY(reopened.isOpen());
+            QVERIFY(reopened.publishedWorkReport(id, 1).isEmpty());
+        }
+        finish("stale-other-turn");
+        QCOMPARE(fixture.count(id, "turn.completed"), 0);
+        finish(session.turnId);
+        QCOMPARE(fixture.count(id, "turn.completed"), 1);
+        const auto end = fixture.payloads(id, "turn.completed").first();
+        QCOMPARE(end.value("status"), status);
+        QCOMPARE(found(end.value("work_report").toObject(), "work").value("status"), "waiting");
+        QCOMPARE(found(readPane(), "work").value("status"), "waiting");
+        QCOMPARE(readPane().value("terminal_status"), status);
+        finish(session.turnId);
+        QCOMPARE(fixture.count(id, "turn.completed"), 1);
+        QVERIFY(!fixture.start("codex", "hang", id).isEmpty());
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(id, "turn.started"), 2, 5000);
+        finish(session.turnId);
+        QCOMPARE(fixture.count(id, "turn.completed"), 1);
+        const auto secondTurn = fixture.journal->sessions().first().turnId;
+        finish(secondTurn);
+        QCOMPARE(fixture.count(id, "turn.completed"), 2);
+        QVERIFY(!fixture.payloads(id, "turn.completed").last().contains("work_report"));
+        QCOMPARE(readPane().value("turn").toInteger(), 1);
+        QCOMPARE(found(readPane(), "work").value("status"), "waiting");
+    }
+
+    void pendingReportSurvivesRestartOnlyOnItsInterruptedTurn() {
+        Fixture fixture;
+        QVERIFY(fixture.open());
+        const auto id = fixture.start("codex", "hang");
+        QVERIFY(!id.isEmpty());
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(id, "turn.started"), 1, 5000);
+        QVERIFY(fixture.agents(id, "agents.work_report", call({item("pending", "active")}))
+                    .value("ok")
+                    .toBool());
+        QCOMPARE(fixture.count(id, "work_report.updated"), 0);
+        QCOMPARE(fixture.count(id, "turn.completed"), 0);
+        const auto pending = fixture.journal->workReport(id, 1);
+        fixture.restart();
+        QCOMPARE(fixture.journal->workReport(id, 1), pending);
+        QCOMPARE(fixture.count(id, "turn.completed"), 1);
+        const auto end = fixture.payloads(id, "turn.completed").last();
+        QCOMPARE(end.value("status"), "interrupted");
+        QCOMPARE(end.value("work_report").toObject(), work_report::currentRequest(pending));
+        fixture.restart();
+        QCOMPARE(fixture.count(id, "turn.completed"), 1);
+        QVERIFY(!fixture.start("codex", "next", id).isEmpty());
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(id, "turn.completed"), 2, 5000);
+        QVERIFY(!fixture.payloads(id, "turn.completed").last().contains("work_report"));
     }
 
     void ledgerForksAndIsDeletedWithItsConversation() {
@@ -461,8 +948,9 @@ class WorkReportTest final : public QObject {
         source.state = "ready";
         QVERIFY(journal.upsertSession(source));
         QVERIFY(journal.appendEvent("source", 1, "user.message", {{"text", "hello"}}) > 0);
-        const QJsonObject ledger =
-            work_report::merge({}, call({item("a", "active")}, "Source"), 1).ledger;
+        const QJsonObject ledger = work_report::merge(journal.workReport("source", 1),
+                                                      call({item("a", "active")}, "Source"), 1)
+                                       .ledger;
         QVERIFY(journal.storeWorkReport("source", 1, ledger));
         // An older version never replaces a newer one.
         QJsonObject older = ledger;
@@ -526,7 +1014,7 @@ class WorkReportTest final : public QObject {
               QJsonObject{{"name", "work_report"}, {"arguments", call({item("a", "active")})}}}},
             daemon);
         QVERIFY(!answer.value("result").toObject().value("isError").toBool());
-        // tools/list asks whoami whether to add the team tools (ADR 0112).
+        // tools/list asks whoami whether to add the team tools (ADR 0114).
         QCOMPARE(operations, (QStringList{"agents.whoami", "agents.work_report"}));
         QVERIFY(AgentBroker::isOperation("agents.work_report"));
     }

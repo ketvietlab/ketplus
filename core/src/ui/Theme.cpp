@@ -1,5 +1,6 @@
 #include "ui/Theme.h"
 #include "ui/InterfaceZoom.h"
+#include "ui/theme/ThemeSchemeController.h"
 
 #include "KetAppearance.h"
 #include "KetProfile.h"
@@ -88,28 +89,6 @@ ThemePalette paletteFor(const ket::Theme theme) {
         .syntaxComment = hex(syntax.comment),
         .syntaxAttribute = hex(syntax.attribute),
     };
-}
-
-QString modeName(const ThemeManager::Mode mode) {
-    switch (mode) {
-    case ThemeManager::Mode::Light:
-        return QStringLiteral("light");
-    case ThemeManager::Mode::Dark:
-        return QStringLiteral("dark");
-    case ThemeManager::Mode::System:
-        return QStringLiteral("system");
-    }
-    return QStringLiteral("system");
-}
-
-ThemeManager::Mode modeFromName(const QString& name) {
-    if (name == QStringLiteral("light")) {
-        return ThemeManager::Mode::Light;
-    }
-    if (name == QStringLiteral("dark")) {
-        return ThemeManager::Mode::Dark;
-    }
-    return ThemeManager::Mode::System;
 }
 
 } // namespace
@@ -689,7 +668,7 @@ QToolButton[kvRole="sidebarAction"]:hover {
 
 } // namespace
 
-ThemeManager::ThemeManager(QApplication& application, QObject* parent)
+ThemeManager::ThemeManager(QApplication& application, QObject* parent, QString schemeDirectory)
     : QObject(parent), application_(application) {
     // The kit's style draws menus, tooltips, tab bars, select popups, progress bars and
     // sliders from Két DS recipes, and keeps the application palette on ket::Appearance;
@@ -708,18 +687,30 @@ ThemeManager::ThemeManager(QApplication& application, QObject* parent)
     ket::Style::install(application_);
     loadInterfaceFont();
 
-    QSettings settings;
-    mode_ = modeFromName(
-        settings.value(QStringLiteral("appearance/theme"), QStringLiteral("system")).toString());
-
-    // ket::Appearance owns light, dark and following the system; QML (KetTheme), the kit's
-    // style and KétPlus Terminal read it, so the palette follows it too.
-    connect(&ket::Appearance::instance(), &ket::Appearance::themeChanged, this,
-            [this] { apply(); });
-    syncAppearance();
+    schemes_ = new ThemeSchemeController(
+        std::move(schemeDirectory),
+        QSettings().value(QStringLiteral("appearance/theme"), QStringLiteral("system")).toString(),
+        this);
+    connect(schemes_, &ThemeSchemeController::applied, this, [this] { apply(); });
+    connect(schemes_, &ThemeSchemeController::failed, this, &ThemeManager::schemeFailed);
+    apply(false);
+    schemes_->start();
 }
 
-ThemeManager::Mode ThemeManager::mode() const noexcept { return mode_; }
+ThemeManager::Mode ThemeManager::mode() const noexcept { return schemes_->mode(); }
+
+const ColorScheme& ThemeManager::colorScheme() const noexcept { return schemes_->scheme(); }
+ThemeSelection ThemeManager::schemeSelection() const { return schemes_->selection(); }
+bool ThemeManager::hasSchemePreview() const { return schemes_->hasPreview(); }
+QString ThemeManager::schemeError() const { return schemes_->lastError(); }
+bool ThemeManager::setSchemeSelection(const ThemeSelection& selection) {
+    return schemes_->commit(selection);
+}
+bool ThemeManager::commitSchemePreview() { return schemes_->commitPreview(); }
+void ThemeManager::previewSchemeSelection(const ThemeSelection& selection) {
+    schemes_->preview(selection);
+}
+void ThemeManager::previewColorScheme(const ColorScheme& scheme) { schemes_->preview(scheme); }
 
 const ThemePalette& ThemeManager::palette() const noexcept { return palette_; }
 
@@ -734,31 +725,24 @@ int ThemeManager::interfaceTextPixels() const noexcept {
 }
 
 void ThemeManager::setMode(const Mode mode) {
-    const bool needsApply = mode_ != mode || previewMode_.has_value();
-    mode_ = mode;
-    previewMode_.reset();
-    QSettings().setValue(QStringLiteral("appearance/theme"), modeName(mode_));
-    if (!needsApply) {
-        return;
-    }
-    syncAppearance();
+    auto wanted = schemeSelection();
+    wanted.followSystem = mode == Mode::System;
+    if (!wanted.followSystem)
+        wanted.schemeId =
+            mode == Mode::Dark ? QStringLiteral("builtin-dark") : QStringLiteral("builtin-light");
+    (void)setSchemeSelection(wanted);
 }
 
 void ThemeManager::previewMode(const Mode mode) {
-    if (previewMode_ == mode) {
-        return;
-    }
-    previewMode_ = mode;
-    syncAppearance();
+    auto wanted = schemeSelection();
+    wanted.followSystem = mode == Mode::System;
+    if (!wanted.followSystem)
+        wanted.schemeId =
+            mode == Mode::Dark ? QStringLiteral("builtin-dark") : QStringLiteral("builtin-light");
+    previewSchemeSelection(wanted);
 }
 
-void ThemeManager::cancelPreview() {
-    if (!previewMode_.has_value()) {
-        return;
-    }
-    previewMode_.reset();
-    syncAppearance();
-}
+void ThemeManager::cancelPreview() { schemes_->cancelPreview(); }
 
 void ThemeManager::setInterfaceScale(const int fontSizePixels, const int zoomPercent) {
     const int size = qBound(8, fontSizePixels, 24);
@@ -781,20 +765,8 @@ void ThemeManager::setInterfaceScale(const int fontSizePixels, const int zoomPer
     emit themeChanged();
 }
 
-void ThemeManager::syncAppearance() {
-    const Mode mode = effectiveMode();
-    const auto previousTheme = ket::Appearance::instance().theme();
-    ket::Appearance::instance().setMode(mode == Mode::Dark    ? ket::Appearance::Mode::Dark
-                                        : mode == Mode::Light ? ket::Appearance::Mode::Light
-                                                              : ket::Appearance::Mode::System);
-    // A changed theme already calls apply() before the kit widgets' observers.
-    // Reapplying afterwards would overwrite the fonts they just refreshed.
-    if (previousTheme == ket::Appearance::instance().theme())
-        apply();
-}
-
 void ThemeManager::apply(const bool notify) {
-    palette_ = paletteFor(ket::Appearance::instance().theme());
+    palette_ = schemes_->palette();
 
     const auto sheet = styleSheetFor(palette_, interfaceTextPixels(), interfaceZoomPercent_);
     if (application_.styleSheet() != sheet)
@@ -803,10 +775,6 @@ void ThemeManager::apply(const bool notify) {
 
     if (notify)
         emit themeChanged();
-}
-
-ThemeManager::Mode ThemeManager::effectiveMode() const noexcept {
-    return previewMode_.value_or(mode_);
 }
 
 void ThemeManager::loadInterfaceFont() {

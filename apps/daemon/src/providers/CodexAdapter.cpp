@@ -1,8 +1,10 @@
 #include "providers/CodexAdapter.h"
 #include "BrowserAgentInstructions.h"
+#include "platform/ProcessTree.h"
 #include "providers/ProviderFrameValidation.h"
 #include "providers/ProviderResponseEnvelope.h"
 #include "providers/ProviderResponseId.h"
+#include "providers/WindowsScriptLaunch.h"
 
 #include "CodexBrowserTools.h"
 #include "CodexLaunchReloader.h"
@@ -40,15 +42,23 @@ QString errorText(const QJsonObject& error) {
 } // namespace
 
 CodexAdapter::CodexAdapter(const QString& executable, QObject* parent)
-    : ProviderAdapter(parent), executable_(executable.isEmpty() ? findExecutable() : executable),
+    : ProviderAdapter(parent), executable_(executable, &findExecutable),
       process_(new QProcess(this)),
       stdoutReader_(maximumProviderMessageBytes,
                     {QStringLiteral("id"), QStringLiteral("method"),
                      QStringLiteral("params.threadId"), QStringLiteral("params.turnId"),
                      QStringLiteral("params.turn.id")}),
       restartTimer_(new QTimer(this)),
-      versionProbe_(
-          new compat::ProviderVersionProbe(compat::policy(QStringLiteral("codex")), {}, this)) {
+      versionProbe_(new compat::ProviderVersionProbe(
+          compat::policy(QStringLiteral("codex")),
+          [](const QString& executable) {
+              const ScriptLaunch launch =
+                  scriptLaunchForHost(executable, {QStringLiteral("--version")});
+              return compat::ProviderVersionProbe::Invocation{launch.program, launch.arguments,
+                                                              launch.nativeArguments};
+          },
+          this)) {
+    attachProcessTree(process_);
     restartTimer_->setSingleShot(true);
     reloader_ = new browser_tools::CodexLaunchReloader(
         [this] { return browserArguments(); }, [this] { return isIdle(); },
@@ -130,21 +140,33 @@ CodexAdapter::~CodexAdapter() {
     stop();
 }
 
-bool CodexAdapter::isAvailable() const { return !executable_.isEmpty(); }
+bool CodexAdapter::isAvailable() const { return !executable_.path().isEmpty(); }
 
 QString CodexAdapter::missingMessage() const {
     return compat::missing(compat::policy(QStringLiteral("codex"))).message;
 }
 
-bool CodexAdapter::isReady() const { return ready_; }
+bool CodexAdapter::isReady() const {
+    if (ready_)
+        return true;
+    for (const auto& worker : sessionWorkers_)
+        if (worker.adapter && worker.adapter->isReady())
+            return true;
+    return false;
+}
 
-QString CodexAdapter::executable() const { return executable_; }
+QString CodexAdapter::executable() const { return executable_.path(); }
 
 void CodexAdapter::call(const QString& method, const QJsonObject& params, Callback callback) {
+    if (routeIsolatedCall(method, params, callback))
+        return;
     if (!isAvailable()) {
         callback({}, QStringLiteral("Codex CLI was not found."));
         return;
     }
+    // Listing models is when an updated CLI matters: restart onto it first, once idle.
+    if (method == QStringLiteral("model/list"))
+        restartForUpdatedExecutable();
     if (!ready_) {
         queued_.append({method, params, std::move(callback)});
         ensureStarted();
@@ -154,7 +176,7 @@ void CodexAdapter::call(const QString& method, const QJsonObject& params, Callba
 }
 
 void CodexAdapter::runtimeStatus(std::function<void(const compat::Runtime&)> callback) {
-    versionProbe_->check(executable_,
+    versionProbe_->check(executable_.path(),
                          [this, callback = std::move(callback)](const compat::Runtime& runtime) {
                              callback(narrowing_.apply(runtime));
                          });
@@ -163,7 +185,7 @@ void CodexAdapter::runtimeStatus(std::function<void(const compat::Runtime&)> cal
 bool CodexAdapter::supports(const QString& capability) const {
     if (narrowing_.removed(capability))
         return false;
-    const auto runtime = versionProbe_->cached(executable_);
+    const auto runtime = versionProbe_->cached(executable_.path());
     return runtime ? runtime->supports(capability)
                    : versionProbe_->policy().baselineSupports(capability);
 }
@@ -207,15 +229,18 @@ void CodexAdapter::configurationCatalog(Callback callback) {
 }
 
 void CodexAdapter::respond(const QJsonValue& requestId, const QJsonObject& result) {
+    if (respondIsolated(requestId, result))
+        return;
     sendObject({{QStringLiteral("id"), requestId}, {QStringLiteral("result"), result}});
 }
 
 void CodexAdapter::respondError(const QJsonValue& requestId, const QString& code,
                                 const QString& message) {
+    if (respondIsolated(requestId, {}, code, message))
+        return;
     sendObject({{QStringLiteral("id"), requestId},
-                {QStringLiteral("error"),
-                 QJsonObject{{QStringLiteral("code"), code},
-                             {QStringLiteral("message"), message}}}});
+                {QStringLiteral("error"), QJsonObject{{QStringLiteral("code"), code},
+                                                      {QStringLiteral("message"), message}}}});
 }
 
 int CodexAdapter::restartDelayMs() const { return restartDelayMs_; }
@@ -224,7 +249,7 @@ bool CodexAdapter::restartScheduled() const { return restartTimer_->isActive(); 
 
 bool CodexAdapter::isIdle() const {
     return activeTurns_.isEmpty() && pending_.isEmpty() && queued_.isEmpty() && !starting_ &&
-           !checkingVersion_;
+           !checkingVersion_ && isolatedWorkersIdle();
 }
 
 void CodexAdapter::trackTurn(const QString& method, const QJsonObject& params) {
@@ -260,6 +285,17 @@ void CodexAdapter::restartForBrowserSettings() {
     emit reloaded(QStringLiteral("browser_settings"));
 }
 
+bool CodexAdapter::restartForUpdatedExecutable() {
+    if (process_->state() == QProcess::NotRunning || !ready_ || !isIdle() ||
+        compat::ProviderVersionProbe::fingerprintOf(executable_.path()) == launchedExecutable_)
+        return false;
+    // The same planned stop as a browser settings reload; the next call launches the new CLI,
+    // which the version probe checks again because its fingerprint changed.
+    stop();
+    emit reloaded(QStringLiteral("executable_updated"));
+    return true;
+}
+
 void CodexAdapter::noteUnexpectedStop() {
     // A crash after a long healthy run is a fresh failure, not part of a crash loop.
     const bool stable = readySince_.isValid() && readySince_.elapsed() >= stableRunMs;
@@ -271,13 +307,14 @@ void CodexAdapter::noteUnexpectedStop() {
 }
 
 void CodexAdapter::stop() {
+    stopSessionWorkers();
     stopping_ = true;
     restartTimer_->stop();
     failPending(QStringLiteral("Codex app-server is shutting down."));
     if (process_->state() != QProcess::NotRunning) {
         process_->terminate();
         if (!process_->waitForFinished(500)) {
-            process_->kill();
+            killProcessTree(process_);
             process_->waitForFinished(500);
         }
     }
@@ -301,7 +338,7 @@ void CodexAdapter::ensureStarted() {
         if (checkingVersion_)
             return;
         checkingVersion_ = true;
-        versionProbe_->check(executable_, [this](const compat::Runtime& runtime) {
+        versionProbe_->check(executable_.path(), [this](const compat::Runtime& runtime) {
             checkingVersion_ = false;
             if (runtime.blocksLaunch()) {
                 failPending(runtime.message);
@@ -321,16 +358,27 @@ void CodexAdapter::ensureStarted() {
     starting_ = true;
     stdoutReader_.clear();
     stderrBuffer_.clear();
-    process_->setProgram(executable_);
     // Browser tools (ADR 0008) are read from the shared settings file on every start; a later
     // settings change restarts an idle provider through reloader_.
     launchedBrowserArguments_ = browserArguments();
     const QStringList& browserArguments = launchedBrowserArguments_;
-    process_->setArguments(
+    const ScriptLaunch launch = scriptLaunchForHost(
+        executable_.path(),
         QStringList{QStringLiteral("app-server"), QStringLiteral("--stdio"), QStringLiteral("-c"),
                     QStringLiteral("features.default_mode_request_user_input=true")} +
-        browserArguments);
+            browserArguments);
+    if (!launch.error.isEmpty()) {
+        starting_ = false;
+        failPending(launch.error);
+        return;
+    }
+    process_->setProgram(launch.program);
+    process_->setArguments(launch.arguments);
+#if defined(Q_OS_WIN)
+    process_->setNativeArguments(launch.nativeArguments);
+#endif
     reloader_->launched(browserArguments);
+    launchedExecutable_ = compat::ProviderVersionProbe::fingerprintOf(executable_.path());
     process_->start();
 }
 
@@ -445,23 +493,22 @@ void CodexAdapter::skipOversized(const OversizedProviderLine& line) {
     if (line.fields.contains(QStringLiteral("id"))) {
         // A request Codex waits on: answer it so the turn does not hang.
         sendObject({{QStringLiteral("id"), id},
-                    {QStringLiteral("error"),
-                     QJsonObject{{QStringLiteral("code"), -32603},
-                                 {QStringLiteral("message"), reason}}}});
+                    {QStringLiteral("error"), QJsonObject{{QStringLiteral("code"), -32603},
+                                                          {QStringLiteral("message"), reason}}}});
         return;
     }
     const QString thread = line.fields.value(QStringLiteral("params.threadId")).toString();
     emit notificationSkipped(method, thread, line.bytes);
     if (method == QStringLiteral("turn/completed")) {
         // The turn still ends; only its final payload is lost.
-        const QString turn = line.fields.value(QStringLiteral("params.turn.id"))
-                                 .toString(line.fields.value(QStringLiteral("params.turnId"))
-                                               .toString());
-        handleNotification(method,
-                           {{QStringLiteral("threadId"), thread},
-                            {QStringLiteral("turn"),
-                             QJsonObject{{QStringLiteral("id"), turn},
-                                         {QStringLiteral("status"), QStringLiteral("completed")}}}});
+        const QString turn =
+            line.fields.value(QStringLiteral("params.turn.id"))
+                .toString(line.fields.value(QStringLiteral("params.turnId")).toString());
+        handleNotification(
+            method, {{QStringLiteral("threadId"), thread},
+                     {QStringLiteral("turn"),
+                      QJsonObject{{QStringLiteral("id"), turn},
+                                  {QStringLiteral("status"), QStringLiteral("completed")}}}});
     }
 }
 
@@ -482,7 +529,7 @@ void CodexAdapter::consumeLine(const QByteArray& line) {
         setReady(false);
         stdoutReader_.clear();
         process_->closeReadChannel(QProcess::StandardOutput);
-        process_->kill();
+        killProcessTree(process_);
         return;
     }
     const QJsonObject object = document.object();

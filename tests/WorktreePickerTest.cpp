@@ -104,13 +104,14 @@ class WorktreePickerTest : public QObject {
                  b);
         QTRY_VERIFY(window.findChild<QAbstractButton*>("productRepositoryGroupButton"));
         const auto groups = window.findChildren<QAbstractButton*>("productRepositoryGroupButton");
-        QCOMPARE(groups.first()->toolTip(), QFileInfo(b).canonicalFilePath());
+        // T-92: execution moves the header and Files, not the conversation's owning group.
+        QCOMPARE(groups.first()->toolTip(), QFileInfo(a).canonicalFilePath());
         emit server->executionContextChanged("same-conversation", "old", a, 1);
         QCOMPARE(agent->executionPath(), b);
         manager->activate(anchor, false);
         QCOMPARE(agent->executionPath(), b);
         QVERIFY(manager->isRunning(anchor));
-        // A removed linked tree keeps the conversation in the target repository group.
+        // A removed execution tree still leaves the conversation in its owning group.
         QCOMPARE(QProcess::execute("git", {"-C", b, "-c", "user.name=Fixture", "-c",
                                            "user.email=fixture@example.invalid", "-c",
                                            "commit.gpgsign=false", "commit", "--allow-empty", "-qm",
@@ -122,13 +123,14 @@ class WorktreePickerTest : public QObject {
                                              QFileInfo(linked).canonicalFilePath(), 3);
         QCOMPARE(QProcess::execute("git", {"-C", b, "worktree", "remove", linked}), 0);
         manager->activate(anchor, false);
-        QTest::qWait(50);
-        bool targetActive = false;
-        for (auto* group : window.findChildren<QAbstractButton*>("productRepositoryGroupButton")) {
-            if (group->toolTip() == QFileInfo(b).canonicalFilePath())
-                targetActive = group->property("activeRepository").toBool();
-        }
-        QVERIFY(targetActive);
+        const auto owningGroupIsActive = [&] {
+            for (auto* group :
+                 window.findChildren<QAbstractButton*>("productRepositoryGroupButton"))
+                if (group->toolTip() == QFileInfo(a).canonicalFilePath())
+                    return group->property("activeRepository").toBool();
+            return false;
+        };
+        QTRY_VERIFY(owningGroupIsActive());
     }
 
     void transcriptFilesSwitchCheckoutInSameWindow() {

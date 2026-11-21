@@ -1,4 +1,4 @@
-#include "KetConversationRow.h"
+#include "KetSidebarTree.h"
 #include "agent/AgentSessionManager.h"
 #include "agent/CodexAppServer.h"
 #include "app/WaitingBadge.h"
@@ -71,8 +71,8 @@ for line in sys.stdin:
         QSignalSpy changes(&manager, &AgentSessionManager::conversationsChanged);
         manager.submitPrompt(path, "Synthetic attention test");
         QTRY_COMPARE(manager.messages(path).size(), 2);
-        ket::ConversationRow* icon = nullptr;
-        QTRY_VERIFY((icon = bar.findChild<ket::ConversationRow*>("productConversationButton")));
+        ket::SidebarRow* icon = nullptr;
+        QTRY_VERIFY((icon = bar.findChild<ket::SidebarRow*>("productConversationButton")));
         QVERIFY((icon->status() == ket::ConversationStatus::Working));
 
         // This conversation is now in the background; attention must still update its row.
@@ -183,8 +183,8 @@ for line in sys.stdin:
         QTRY_VERIFY(!manager.isRunning(path));
         const auto row = [&] { return manager.conversations(path).first().toMap(); };
         QVERIFY(row().value("awaitingReply").toBool());
-        ket::ConversationRow* icon = nullptr;
-        QTRY_VERIFY((icon = bar.findChild<ket::ConversationRow*>("productConversationButton")));
+        ket::SidebarRow* icon = nullptr;
+        QTRY_VERIFY((icon = bar.findChild<ket::SidebarRow*>("productConversationButton")));
         QCOMPARE(icon->status(), ket::ConversationStatus::AwaitingReply);
 
         auto& badge = WaitingBadge::instance();
@@ -228,7 +228,7 @@ for line in sys.stdin:
             bar.setRepositories({{"/synthetic/repository", "Repository", true, conversations}});
             bar.show();
             QVERIFY(QTest::qWaitForWindowExposed(&bar));
-            const auto icons = bar.findChildren<ket::ConversationRow*>("productConversationButton");
+            const auto icons = bar.findChildren<ket::SidebarRow*>("productConversationButton");
             QCOMPARE(icons.size(), 4);
             for (int index = 0; index < icons.size(); ++index) {
                 QCOMPARE((icons.at(index)->status() == ket::ConversationStatus::Working),

@@ -5,11 +5,13 @@
 #include "cloud/RelayWakeups.h"
 #include "cloud/RemoteWorktreeQuota.h"
 #include "cloud/SessionCredentials.h"
+#include "cloud/WorktreeRevisionCache.h"
 #include "transport/RemotePeers.h"
 #include "transport/Signaling.h"
 
 #include <QDateTime>
 #include <QDeadlineTimer>
+#include <QElapsedTimer>
 #include <QJsonObject>
 #include <QJsonValue>
 #include <QList>
@@ -25,9 +27,15 @@
 
 #include <atomic>
 #include <functional>
+#include <memory>
 #include <optional>
 
 namespace ketplus::daemon {
+
+namespace runner {
+class CloudRunnerRelay;
+class RunnerService;
+} // namespace runner
 
 class BrowserSignIn;
 class LocalJournal;
@@ -48,8 +56,9 @@ class CloudControlClient final : public QObject {
     // with the remote demo, the KETPLUS_CONTROL_URL environment variable.
     [[nodiscard]] static QUrl configuredControlUrl();
     [[nodiscard]] bool handles(const QString& messageType) const;
-    void handleLocal(const QString& messageType, const QJsonObject& payload,
-                     LocalCallback callback);
+    // `clientId` names the local connection that sent the request; empty when there is none.
+    void handleLocal(const QString& messageType, const QJsonObject& payload, LocalCallback callback,
+                     const QString& clientId = {});
 
     // The relay drops an unclaimed Stop after 15s (interruptTtlSeconds); a Stop whose wake-up
     // is lost must still be polled before then.
@@ -63,8 +72,24 @@ class CloudControlClient final : public QObject {
                       relayInterruptTtlMilliseconds,
                   "a Stop must be claimed before the relay expires it");
 
+    // ADR 0119 "Machine identity": the fingerprint of this host's key set, the same one a pairing
+    // QR code carries. The keys are created on first use, so a host has one without signing in.
+    [[nodiscard]] QString hostKeyFingerprint(QString* error = nullptr);
+    // Runner pairing and management (runner/RunnerService.h), created on first use.
+    [[nodiscard]] runner::RunnerService& runners();
+
+    // Messages of the Relay socket for remote jobs. `take` answers true for a message it handled;
+    // any other message, and every message while none is set, takes the device path. `opened`
+    // runs each time the socket opens. Neither may destroy this client; `take` may send.
+    using RelayMessageTake = std::function<bool(const QJsonObject& message)>;
+    void setRunnerMessages(RelayMessageTake take, std::function<void()> opened);
+    // One message on the Relay socket; false when it is not open.
+    bool sendRelayMessage(const QJsonObject& message);
+
   private:
     friend class CloudPrivacyTestAccess;
+    // Calls the runner routes only, with this client's machine credential.
+    friend class runner::CloudRunnerRelay;
     using ReplyCallback = std::function<void(int, const QJsonValue&, const QString&)>;
     using ReadyCallback = std::function<void(bool, const QString&)>;
 
@@ -113,23 +138,33 @@ class CloudControlClient final : public QObject {
                           QString* error);
     void sync();
     void heartbeat();
+    struct AccountFence {
+        quint64 epoch;
+        quint64 enrollmentRevision;
+        QString machine;
+        QString workspace;
+    };
     void sendHeartbeatBatches(const QList<QJsonArray>& batches, qsizetype index,
-                              quint64 accountEpoch, const QString& machineId,
-                              const QString& workspaceId);
+                              const AccountFence& account);
     void uploadEvents();
     void uploadSessionEvents(const QString& sessionId, qint64 generation, qint64 afterCursor);
     // A deleted generation's history awaits purge but must never leave the machine (ADR 0093).
     [[nodiscard]] bool isLiveGeneration(const QString& sessionId, qint64 generation) const;
     void distributeKeys();
+    QJsonArray sessionKeyEnvelopes(const QJsonArray& devices, bool requirePins, qsizetype limit,
+                                   QJsonArray* trusted, QString* error);
     void pollCommands();
     // A wake-up that lands while a poll is in flight polls again once it returns: that poll
     // may have read before the command it announces was written.
     void wakeCommandPoll();
     void noteCommandPollFailure(int status);
-    // The active rows of a relay device list that are pinned here, adopting them on first use.
-    QJsonArray trustedDevices(const QJsonArray& devices);
+    [[nodiscard]] AccountFence accountFence() const;
+    [[nodiscard]] bool accountCurrent(const AccountFence& fence) const;
+    // Only a restored legacy enrollment can adopt its first device list.
+    QJsonArray trustedDevices(const QJsonArray& devices, const AccountFence& fence);
+    void invalidateSenderKeys();
     using SenderKeysCallback = std::function<void(const QJsonObject&, const QString&)>;
-    // A phone's published keys, read from the relay at most once per senderKeyCacheMilliseconds.
+    // Cached published keys remain usable only within the current enrollment and local pin.
     void withSenderKeys(const QString& senderId, int version, SenderKeysCallback callback);
     void executeCommand(const QJsonObject& command);
     void executeWorkspaceFiles(const QJsonObject& command, const QJsonObject& payload);
@@ -158,6 +193,7 @@ class CloudControlClient final : public QObject {
     struct AtlasAccessFence final {
         quint64 machine{0};
         quint64 device{0};
+        AccountFence account{};
     };
     [[nodiscard]] AtlasAccessFence atlasAccessFence(const QString& device) const;
     [[nodiscard]] bool atlasAccessCurrent(const QString& device,
@@ -168,25 +204,37 @@ class CloudControlClient final : public QObject {
                      const QHash<QString, QString>& repositories,
                      QHash<QString, QJsonObject>* metadata = nullptr,
                      const QHash<QString, QJsonObject>& agentMetadata = {},
-                     const QHash<QString, QString>& tagColors = {});
+                     const QHash<QString, QString>& tagColors = {},
+                     WorktreeRevisionCache* revisionCache = nullptr, qint64 nowMs = 0);
     // Seals each snapshot's metadata (branch, machine name, whether its worktree still
     // exists, conversation number, the conversation whose message started its turn) for the
-    // phone; a snapshot whose metadata cannot be sealed is
-    // sent without it.
+    // phone. A failed credential transaction cancels publication of this heartbeat.
     [[nodiscard]] QList<QJsonArray>
     withSessionMetadata(const QList<QJsonArray>& batches,
                         const QHash<QString, QJsonObject>& metadata);
     [[nodiscard]] QJsonObject sealedSessionMetadata(const QJsonObject& snapshot,
-                                                    const QJsonObject& metadata);
+                                                    const QJsonObject& metadata,
+                                                    CloudCrypto& crypto);
     QByteArray ensurePathIdSalt(QString* error = nullptr);
     // Where a conversation can start: every checkout of each repository a conversation
     // ran in, those with conversations first.
     [[nodiscard]] QStringList catalogWorktreePaths() const;
+    [[nodiscard]] static std::optional<bool> sidebarRepositoryVisible(const QString& path);
     [[nodiscard]] QJsonArray worktreeSnapshots() const;
     // session.create and worktree.branches.read: checked against the catalog worktree they
     // name, answered sealed to the phone that asked.
     void executeWorktreeCommand(const QJsonObject& command, const QJsonObject& payload,
                                 const QByteArray& senderAgreementKey);
+    void publishPreparedSession(const QJsonObject& command, const QJsonObject& result,
+                                const QByteArray& senderAgreementKey);
+    // ADR 0116: a team command, checked against this Mac, its owner and the capability it
+    // names, run by the session host and answered sealed to the device that sent it.
+    void executeTeamCommand(const QJsonObject& command, const QJsonObject& payload,
+                            const QByteArray& senderAgreementKey);
+    // ADR 0116 §3: a team change reaches the phones with the next heartbeat, at most one
+    // every teamHeartbeatMilliseconds.
+    void noteTeamChanged();
+    static constexpr int teamHeartbeatMilliseconds = 2'000;
     void startCreatedConversation(const QJsonObject& command, const QJsonObject& payload,
                                   const QString& worktreePath,
                                   const QByteArray& senderAgreementKey);
@@ -201,6 +249,7 @@ class CloudControlClient final : public QObject {
                                                            qint64 responseCursor, bool terminal,
                                                            const QString& responseDigest,
                                                            const QJsonObject& content) const;
+    void restoreEnrollment();
     [[nodiscard]] QString storedString(const QString& account) const;
     bool storeString(const QString& account, const QString& value, QString* error = nullptr);
 
@@ -215,6 +264,8 @@ class CloudControlClient final : public QObject {
     QTimer syncTimer_;
     QTimer commandTimer_;
     QTimer stateSyncTimer_;
+    QTimer teamSyncTimer_;
+    QElapsedTimer lastTeamSync_;
     QUrl baseUrl_;
     RelayWakeups wakeups_;
     transport::RemotePeers* peers_{nullptr};
@@ -248,8 +299,12 @@ class CloudControlClient final : public QObject {
     struct EventUploadBackoff {
         int failures{0};
         bool refused{false};
+        bool gap{false};
         QDeadlineTimer retryAt;
     };
+    // session:generation -> the cursor the relay accepted through, as last read or acknowledged
+    // here. uploadEvents() skips a session with nothing newer without reading the journal.
+    QHash<QString, qint64> knownUploadedCursors_;
     // session:generation -> consecutive failed uploads and when the next one may be sent.
     QHash<QString, EventUploadBackoff> eventUploadBackoff_;
     // Sessions the last heartbeat was refused for; their events and keys stay local.
@@ -260,22 +315,38 @@ class CloudControlClient final : public QObject {
     // session -> (what was sealed, sealed metadata); resealed only when either changes.
     QHash<QString, std::pair<QByteArray, QJsonObject>> sealedMetadata_;
     bool sessionMetadataRefused_{false};
-    // "device/version" -> (published keys, when to read them again).
-    QHash<QString, std::pair<QJsonObject, QDateTime>> senderKeys_;
+    struct SenderKeyEntry {
+        QJsonObject keys;
+        QDateTime expiresAt;
+        AccountFence account;
+    };
+    // "device/version" -> keys scoped to the enrollment that authorized them.
+    QHash<QString, SenderKeyEntry> senderKeys_;
+    quint64 senderKeysRevision_{0};
     // Command id -> when this daemon claimed it, for the result log line.
     QHash<QString, qint64> commandStartedAt_;
     RemoteWorktreeQuota worktreeQuota_;
     int machineKeyVersion_{1};
     quint64 accountEpoch_{0};
+    quint64 enrollmentRevision_{0};
+    bool legacyPinAdoptionPending_{false};
     // Raised by revokeAtlasAccess, for the machine and for each revoked device.
     quint64 atlasMachineEpoch_{0};
     QHash<QString, quint64> atlasDeviceEpochs_;
     QThreadPool workspaceFilesPool_;
     // Heartbeats hash every worktree; on their own thread they never queue a phone's read.
     QThreadPool heartbeatPool_;
+    // Owned by the heartbeat: copied into its thread and handed back with the result.
+    WorktreeRevisionCache revisionCache_;
     std::atomic_int workspaceFilesPending_{0};
     // session -> (workspace revision, ms since epoch) this daemon recently published for it.
     QHash<QString, QList<std::pair<QString, qint64>>> publishedRevisions_;
+    // The Relay listed runner.relay/1 in its last heartbeat answer.
+    bool runnerRelayAvailable_{false};
+    RelayMessageTake runnerMessages_;
+    std::function<void()> relayOpened_;
+    // Last, so it goes first: it calls back into this client.
+    std::unique_ptr<runner::RunnerService> runners_;
 };
 
 } // namespace ketplus::daemon

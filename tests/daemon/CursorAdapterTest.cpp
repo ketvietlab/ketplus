@@ -1,4 +1,5 @@
 #include "providers/CursorAdapter.h"
+#include "TestPaths.h"
 #include "protocol/DaemonProtocol.h"
 #include "providers/CodexAdapter.h"
 #include "runtime/SessionHost.h"
@@ -6,8 +7,11 @@
 
 #include "FakeCursor.h"
 
+#include <QDate>
+#include <QDateTime>
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QJsonObject>
@@ -68,10 +72,70 @@ class CursorAdapterTest final : public QObject {
     Q_OBJECT
 
   private slots:
+    void findsTheCliInstalledAfterStartup() {
+        // The daemon outlives a CLI install: Cursor's installer runs while KetPlus is open and
+        // the setup banner's Retry has to see it without restarting KetPlus.
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QByteArray oldPath = qgetenv("PATH");
+        const QByteArray oldHome = qgetenv("HOME");
+        const QByteArray oldOverride = qgetenv("KETPLUS_CURSOR_AGENT");
+        const QByteArray oldLocalAppData = qgetenv("LOCALAPPDATA");
+        const auto restore = qScopeGuard([&] {
+            qputenv("PATH", oldPath);
+            qputenv("HOME", oldHome);
+            if (oldLocalAppData.isNull())
+                qunsetenv("LOCALAPPDATA");
+            else
+                qputenv("LOCALAPPDATA", oldLocalAppData);
+            if (oldOverride.isNull())
+                qunsetenv("KETPLUS_CURSOR_AGENT");
+            else
+                qputenv("KETPLUS_CURSOR_AGENT", oldOverride);
+        });
+        const QString bin = directory.filePath(QStringLiteral("bin"));
+        QVERIFY(QDir().mkpath(bin));
+        qputenv("PATH", QFile::encodeName(bin));
+        qputenv("HOME", QFile::encodeName(directory.path()));
+        // On Windows the installer's well-known place is under %LOCALAPPDATA%, not ~/.local/bin.
+        qputenv("LOCALAPPDATA", QFile::encodeName(directory.path()));
+        qunsetenv("KETPLUS_CURSOR_AGENT");
+
+        CursorAdapter cursor;
+        QVERIFY(!cursor.isAvailable());
+
+        const QString agent = QDir(bin).filePath(fixtureName(QStringLiteral("agent")));
+        QVERIFY(writeFakeCursor(agent, directory.filePath(QStringLiteral("cursor.log"))));
+        QTRY_VERIFY_WITH_TIMEOUT(cursor.isAvailable(), 5000);
+        QCOMPARE(cursor.executable(), agent);
+
+        // An updater that removes the binary it replaced is found again at its new path.
+#if defined(Q_OS_WIN)
+        const QString updatedDirectory = directory.filePath(QStringLiteral("cursor-agent"));
+#else
+        const QString updatedDirectory = directory.filePath(QStringLiteral(".local/bin"));
+#endif
+        const QString updated =
+            QDir(updatedDirectory).filePath(fixtureName(QStringLiteral("cursor-agent")));
+        QVERIFY(QDir().mkpath(QFileInfo(updated).path()));
+        QVERIFY(QFile::rename(agent, updated));
+#if defined(Q_OS_WIN)
+        // The launcher runs the script that sits next to it (ScriptFixture.h).
+        QVERIFY(QFile::rename(agent + QStringLiteral(".py"), updated + QStringLiteral(".py")));
+#endif
+        QTRY_COMPARE_WITH_TIMEOUT(cursor.executable(), updated, 5000);
+    }
+
+    void keepsAnExplicitCliPath() {
+        CursorAdapter cursor(QStringLiteral("/missing-cursor-for-explicit-test"));
+        QCOMPARE(cursor.executable(), QStringLiteral("/missing-cursor-for-explicit-test"));
+        QVERIFY(cursor.isAvailable());
+    }
+
     void startsCursorTurnWithoutAcpAuthenticate() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const QString cursor = directory.filePath(QStringLiteral("fake-cursor"));
+        const QString cursor = directory.filePath(fixtureName(QStringLiteral("fake-cursor")));
         const QString logPath = directory.filePath(QStringLiteral("cursor.log"));
         QVERIFY(writeFakeCursor(cursor, logPath));
 
@@ -158,7 +222,7 @@ class CursorAdapterTest final : public QObject {
         const auto restore = qScopeGuard([] { qunsetenv("KETPLUS_FAKE_CURSOR_LOAD_SESSION"); });
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const QString cursor = directory.filePath(QStringLiteral("fake-cursor"));
+        const QString cursor = directory.filePath(fixtureName(QStringLiteral("fake-cursor")));
         const QString logPath = directory.filePath(QStringLiteral("cursor.log"));
         QVERIFY(writeFakeCursor(cursor, logPath));
         LocalJournal journal(directory.filePath(QStringLiteral("journal.sqlite3")));
@@ -275,7 +339,7 @@ class CursorAdapterTest final : public QObject {
     void listsCursorModelsFromCli() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const QString cursor = directory.filePath(QStringLiteral("fake-cursor"));
+        const QString cursor = directory.filePath(fixtureName(QStringLiteral("fake-cursor")));
         const QString logPath = directory.filePath(QStringLiteral("cursor.log"));
         QVERIFY(writeFakeCursor(cursor, logPath));
         LocalJournal journal(directory.filePath(QStringLiteral("journal.sqlite3")));
@@ -310,7 +374,7 @@ class CursorAdapterTest final : public QObject {
     void pinsSelectedCursorModel() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const QString cursor = directory.filePath(QStringLiteral("fake-cursor"));
+        const QString cursor = directory.filePath(fixtureName(QStringLiteral("fake-cursor")));
         const QString logPath = directory.filePath(QStringLiteral("cursor.log"));
         QVERIFY(writeFakeCursor(cursor, logPath));
         LocalJournal journal(directory.filePath(QStringLiteral("journal.sqlite3")));
@@ -373,7 +437,7 @@ class CursorAdapterTest final : public QObject {
     void journalsCursorAutoPlanLimitAsError() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const QString cursor = directory.filePath(QStringLiteral("fake-cursor"));
+        const QString cursor = directory.filePath(fixtureName(QStringLiteral("fake-cursor")));
         const QString logPath = directory.filePath(QStringLiteral("cursor.log"));
         QVERIFY(writeFakeCursor(cursor, logPath));
         LocalJournal journal(directory.filePath(QStringLiteral("journal.sqlite3")));
@@ -406,10 +470,26 @@ class CursorAdapterTest final : public QObject {
         adapter.stop();
     }
 
+    void reportsCursorPlanLimitWithoutPretendingToAnswer_data() {
+        QTest::addColumn<QString>("prompt");
+        QTest::addColumn<bool>("plan");
+        QTest::newRow("upgrade") << QStringLiteral("always-upgrade") << true;
+        QTest::newRow("named") << QStringLiteral("assistant-named-limit") << true;
+        QTest::newRow("free") << QStringLiteral("assistant-free-limit") << true;
+        QTest::newRow("switch") << QStringLiteral("assistant-switch-limit") << true;
+        QTest::newRow("action") << QStringLiteral("assistant-action-limit") << true;
+        QTest::newRow("usage") << QStringLiteral("assistant-usage-limit") << false;
+    }
+
     void reportsCursorPlanLimitWithoutPretendingToAnswer() {
+        QFETCH(QString, prompt);
+        QFETCH(bool, plan);
+        // FakeCursor's always-upgrade branch sends assistant plan text followed
+        // by a successful end_turn RPC response. Transport success must not
+        // turn that provider refusal into a completed assistant answer.
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const QString cursor = directory.filePath(QStringLiteral("fake-cursor"));
+        const QString cursor = directory.filePath(fixtureName(QStringLiteral("fake-cursor")));
         const QString logPath = directory.filePath(QStringLiteral("cursor.log"));
         QVERIFY(writeFakeCursor(cursor, logPath));
         LocalJournal journal(directory.filePath(QStringLiteral("journal.sqlite3")));
@@ -421,7 +501,7 @@ class CursorAdapterTest final : public QObject {
             request(
                 QStringLiteral("session.start_turn"), QStringLiteral("start-cursor-limit"),
                 {{QStringLiteral("worktree_path"), directory.path()},
-                 {QStringLiteral("prompt"), QStringLiteral("always-upgrade")},
+                 {QStringLiteral("prompt"), prompt},
                  {QStringLiteral("options"),
                   QJsonObject{{QStringLiteral("provider"), QStringLiteral("cursor")},
                               {QStringLiteral("model"), QStringLiteral("composer-2.5")},
@@ -433,10 +513,39 @@ class CursorAdapterTest final : public QObject {
         const auto events = eventsOf(journal, sessionId);
         QTRY_VERIFY_WITH_TIMEOUT(!events(QStringLiteral("runtime.error")).isEmpty(), 3000);
         QCOMPARE(events(QStringLiteral("assistant.delta")).size(), 0);
-        QVERIFY(events(QStringLiteral("runtime.error"))
-                    .first()["payload"]["message"]
-                    .toString()
-                    .contains(CursorAdapter::loginCommand()));
+        QCOMPARE(events(QStringLiteral("runtime.error"))
+                     .first()["payload"]["message"]
+                     .toString()
+                     .contains(CursorAdapter::loginCommand()),
+                 plan);
+        QTRY_VERIFY_WITH_TIMEOUT(!events(QStringLiteral("turn.completed")).isEmpty(), 3000);
+        QCOMPARE(events(QStringLiteral("turn.completed"))
+                     .last()[QStringLiteral("payload")][QStringLiteral("status")]
+                     .toString(),
+                 QStringLiteral("failed"));
+        QCOMPARE(events(QStringLiteral("item.completed")).size(), 0);
+        adapter.stop();
+    }
+
+    void assistantExplanationQuotingPlanWordingStillCompletes() {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString cursor = directory.filePath(fixtureName(QStringLiteral("fake-cursor")));
+        QVERIFY(writeFakeCursor(cursor, directory.filePath(QStringLiteral("cursor.log"))));
+        LocalJournal journal(directory.filePath(QStringLiteral("journal.sqlite3")));
+        QVERIFY(journal.isOpen());
+        CodexAdapter codex(QStringLiteral("/missing-codex-for-cursor-test"));
+        CursorAdapter adapter(cursor);
+        SessionHost host(&journal, &codex, nullptr, &adapter);
+        const auto id = startCursor(host, directory.path(), QStringLiteral("explain-plan-quote"));
+        QVERIFY(!id.isEmpty());
+        const auto events = eventsOf(journal, id);
+        QTRY_VERIFY_WITH_TIMEOUT(!events(QStringLiteral("turn.completed")).isEmpty(), 3000);
+        QCOMPARE(events(QStringLiteral("turn.completed")).last()["payload"]["status"].toString(),
+                 QStringLiteral("completed"));
+        QVERIFY(events(QStringLiteral("runtime.error")).isEmpty());
+        QVERIFY(!events(QStringLiteral("assistant.delta")).isEmpty());
+        QVERIFY(!events(QStringLiteral("item.completed")).isEmpty());
         adapter.stop();
     }
 
@@ -452,10 +561,101 @@ class CursorAdapterTest final : public QObject {
         QVERIFY(message.contains(QStringLiteral("Agent CLI")));
     }
 
+    void keepsCursorUsageLimitWordsAndResetDate() {
+        const QString said = QStringLiteral(
+            "ActionRequiredError: Your team has reached its usage limit Please reach out to an "
+            "admin to enable on-demand usage, or return on 11/15/2026 when your limit resets.");
+        QVERIFY(CursorAdapter::looksLikeUsageLimit(said));
+        QVERIFY(!CursorAdapter::looksLikePlanLimit(said));
+        QVERIFY(!CursorAdapter::looksLikeUsageLimit(QStringLiteral("Upgrade your plan")));
+        const QString shown = CursorAdapter::failureMessage(said);
+        QVERIFY(shown.startsWith(QStringLiteral("Your team has reached its usage limit")));
+        QVERIFY(!shown.contains(CursorAdapter::loginCommand()));
+        QCOMPARE(CursorAdapter::usageLimitResetsAt(said),
+                 QDate(2026, 11, 15).startOfDay().toSecsSinceEpoch());
+        QCOMPARE(CursorAdapter::usageLimitResetsAt(QStringLiteral("usage limit reached")), 0);
+        // A plan refusal keeps the explanation and adds Cursor's own words.
+        const QString plan =
+            CursorAdapter::failureMessage(QStringLiteral("Named models unavailable"));
+        QVERIFY(plan.startsWith(CursorAdapter::planLimitMessage()));
+        QVERIFY(plan.endsWith(QStringLiteral("Cursor said: Named models unavailable")));
+    }
+
+    void reportsCursorTeamUsageLimitAsItsOwnError() {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString cursor = directory.filePath(fixtureName(QStringLiteral("fake-cursor")));
+        const QString logPath = directory.filePath(QStringLiteral("cursor.log"));
+        QVERIFY(writeFakeCursor(cursor, logPath));
+        LocalJournal journal(directory.filePath(QStringLiteral("journal.sqlite3")));
+        QVERIFY2(journal.isOpen(), qPrintable(journal.errorString()));
+        CodexAdapter codex(QStringLiteral("/missing-codex-for-cursor-test"));
+        CursorAdapter adapter(cursor);
+        SessionHost host(&journal, &codex, nullptr, &adapter);
+        const auto stop = qScopeGuard([&adapter] { adapter.stop(); });
+        const QString sessionId = startCursor(host, directory.path(), QStringLiteral("team-limit"));
+        const auto events = eventsOf(journal, sessionId);
+        QTRY_VERIFY_WITH_TIMEOUT(!events(QStringLiteral("runtime.error")).isEmpty(), 3000);
+        const QJsonObject payload =
+            events(QStringLiteral("runtime.error")).first()[QStringLiteral("payload")].toObject();
+        const QString message = payload.value(QStringLiteral("message")).toString();
+        QVERIFY2(message.startsWith(QStringLiteral("Your team has reached its usage limit")),
+                 qPrintable(message));
+        QVERIFY(!message.contains(CursorAdapter::loginCommand()));
+        QCOMPARE(payload.value(QStringLiteral("resets_at")).toInteger(),
+                 QDate(2026, 11, 15).startOfDay().toSecsSinceEpoch());
+    }
+
+    void switchingToAutoRestartsAPinnedProcess() {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString cursor = directory.filePath(fixtureName(QStringLiteral("fake-cursor")));
+        const QString logPath = directory.filePath(QStringLiteral("cursor.log"));
+        QVERIFY(writeFakeCursor(cursor, logPath));
+        LocalJournal journal(directory.filePath(QStringLiteral("journal.sqlite3")));
+        QVERIFY2(journal.isOpen(), qPrintable(journal.errorString()));
+        CodexAdapter codex(QStringLiteral("/missing-codex-for-cursor-test"));
+        CursorAdapter adapter(cursor);
+        SessionHost host(&journal, &codex, nullptr, &adapter);
+        const auto stop = qScopeGuard([&adapter] { adapter.stop(); });
+        const auto options = [](const QString& model) {
+            return QJsonObject{{QStringLiteral("provider"), QStringLiteral("cursor")},
+                               {QStringLiteral("model"), model},
+                               {QStringLiteral("permission"), QStringLiteral("workspace-write")}};
+        };
+        const QJsonObject started = host.handleCommand(
+            request(QStringLiteral("session.start_turn"), QStringLiteral("pinned"),
+                    {{QStringLiteral("worktree_path"), directory.path()},
+                     {QStringLiteral("prompt"), QStringLiteral("First")},
+                     {QStringLiteral("options"), options(QStringLiteral("composer-2.5"))}}),
+            QStringLiteral("desktop-test"));
+        const QString sessionId = started.value(QStringLiteral("session_id")).toString();
+        const qint64 generation = started.value(QStringLiteral("session_generation")).toInteger();
+        QVERIFY(!sessionId.isEmpty());
+        const auto events = eventsOf(journal, sessionId);
+        QTRY_COMPARE_WITH_TIMEOUT(events(QStringLiteral("turn.completed")).size(), 1, 5000);
+        QCOMPARE(logText(logPath).count("args:[\"--model\", \"composer-2.5\", \"acp\"]"), 1);
+
+        const QJsonObject next = host.handleCommand(
+            request(QStringLiteral("session.start_turn"), QStringLiteral("auto"),
+                    {{QStringLiteral("prompt"), QStringLiteral("Second")},
+                     {QStringLiteral("options"), options(QStringLiteral("auto"))}},
+                    sessionId, generation),
+            QStringLiteral("desktop-test"));
+        QVERIFY2(next.value(QStringLiteral("ok")).toBool(),
+                 qPrintable(QJsonDocument(next).toJson(QJsonDocument::Compact)));
+        QTRY_COMPARE_WITH_TIMEOUT(events(QStringLiteral("turn.completed")).size(), 2, 5000);
+        const QByteArray log = logText(logPath);
+        QCOMPARE(log.count("args:[\"acp\"]"), 1);
+        QVERIFY(log.lastIndexOf("args:[\"acp\"]") >
+                log.lastIndexOf("args:[\"--model\", \"composer-2.5\", \"acp\"]"));
+        QCOMPARE(events(QStringLiteral("runtime.error")).size(), 0);
+    }
+
     void pinsCursorFamilyEffort() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const QString cursor = directory.filePath(QStringLiteral("fake-cursor"));
+        const QString cursor = directory.filePath(fixtureName(QStringLiteral("fake-cursor")));
         const QString logPath = directory.filePath(QStringLiteral("cursor.log"));
         QVERIFY(writeFakeCursor(cursor, logPath));
         LocalJournal journal(directory.filePath(QStringLiteral("journal.sqlite3")));
@@ -500,7 +700,7 @@ class CursorAdapterTest final : public QObject {
         QFETCH(QByteArray, option);
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const QString cursor = directory.filePath(QStringLiteral("fake-cursor"));
+        const QString cursor = directory.filePath(fixtureName(QStringLiteral("fake-cursor")));
         const QString logPath = directory.filePath(QStringLiteral("cursor.log"));
         QVERIFY(writeFakeCursor(cursor, logPath));
         LocalJournal journal(directory.filePath(QStringLiteral("journal.sqlite3")));
@@ -533,7 +733,7 @@ class CursorAdapterTest final : public QObject {
     // the same id from the next process, which numbers its requests from the start again.
     void requestsOfAnExitedProcessAreForgotten() {
         QTemporaryDir directory;
-        const auto cursor = directory.filePath("fake-cursor");
+        const auto cursor = directory.filePath(fixtureName("fake-cursor"));
         const auto logPath = directory.filePath("cursor.log");
         QVERIFY(writeFakeCursor(cursor, logPath));
         LocalJournal journal(directory.filePath("journal.sqlite3"));
@@ -572,7 +772,7 @@ class CursorAdapterTest final : public QObject {
 
     void stopWhilePermissionIsPending() {
         QTemporaryDir directory;
-        const auto cursor = directory.filePath("fake-cursor");
+        const auto cursor = directory.filePath(fixtureName("fake-cursor"));
         const auto logPath = directory.filePath("cursor.log");
         QVERIFY(writeFakeCursor(cursor, logPath));
         LocalJournal journal(directory.filePath("journal.sqlite3"));
@@ -600,7 +800,7 @@ class CursorAdapterTest final : public QObject {
 
     void planWaitsForConfirmation() {
         QTemporaryDir directory;
-        const auto cursor = directory.filePath("fake-cursor");
+        const auto cursor = directory.filePath(fixtureName("fake-cursor"));
         const auto logPath = directory.filePath("cursor.log");
         QVERIFY(writeFakeCursor(cursor, logPath));
         LocalJournal journal(directory.filePath("journal.sqlite3"));
@@ -628,7 +828,7 @@ class CursorAdapterTest final : public QObject {
     void questionBlocksUntilAnswered() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const QString cursor = directory.filePath(QStringLiteral("fake-cursor"));
+        const QString cursor = directory.filePath(fixtureName(QStringLiteral("fake-cursor")));
         const QString logPath = directory.filePath(QStringLiteral("cursor.log"));
         QVERIFY(writeFakeCursor(cursor, logPath));
         LocalJournal journal(directory.filePath(QStringLiteral("journal.sqlite3")));
@@ -671,7 +871,7 @@ class CursorAdapterTest final : public QObject {
     void interruptBeforePromptEndsTurn() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const QString cursor = directory.filePath(QStringLiteral("fake-cursor"));
+        const QString cursor = directory.filePath(fixtureName(QStringLiteral("fake-cursor")));
         const QString logPath = directory.filePath(QStringLiteral("cursor.log"));
         QVERIFY(writeFakeCursor(cursor, logPath));
         LocalJournal journal(directory.filePath(QStringLiteral("journal.sqlite3")));
@@ -698,7 +898,7 @@ class CursorAdapterTest final : public QObject {
     void interruptDuringSessionStartupEndsTurn() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const QString cursor = directory.filePath(QStringLiteral("fake-cursor"));
+        const QString cursor = directory.filePath(fixtureName(QStringLiteral("fake-cursor")));
         const QString logPath = directory.filePath(QStringLiteral("cursor.log"));
         QVERIFY(writeFakeCursor(cursor, logPath));
         LocalJournal journal(directory.filePath(QStringLiteral("journal.sqlite3")));
@@ -750,7 +950,7 @@ class CursorAdapterTest final : public QObject {
         QVERIFY(directory.isValid());
         const QDir loginDir(directory.filePath(QStringLiteral("needs-login")));
         QVERIFY(loginDir.mkpath(QStringLiteral(".")));
-        const QString cursor = directory.filePath(QStringLiteral("fake-cursor"));
+        const QString cursor = directory.filePath(fixtureName(QStringLiteral("fake-cursor")));
         const QString logPath = directory.filePath(QStringLiteral("cursor.log"));
         QVERIFY(writeFakeCursor(cursor, logPath));
         LocalJournal journal(directory.filePath(QStringLiteral("journal.sqlite3")));
@@ -775,15 +975,8 @@ class CursorAdapterTest final : public QObject {
 #if defined(Q_OS_WIN)
         QVERIFY(known.first().contains(QStringLiteral("cursor-agent")));
         QVERIFY(known.first().endsWith(QStringLiteral("agent.cmd")));
-        const auto cmd = CursorAdapter::processInvocation(
-            QStringLiteral("C:/Users/dev/AppData/Local/cursor-agent/agent.cmd"));
-        QCOMPARE(cmd.program, QStringLiteral("cmd.exe"));
-        QCOMPARE(cmd.arguments.at(0), QStringLiteral("/c"));
-        QCOMPARE(cmd.arguments.last(), QStringLiteral("acp"));
-        const auto ps1 = CursorAdapter::processInvocation(
-            QStringLiteral("C:/Users/dev/AppData/Local/cursor-agent/agent.ps1"));
-        QCOMPARE(ps1.program, QStringLiteral("powershell.exe"));
-        QVERIFY(ps1.arguments.contains(QStringLiteral("-File")));
+        // The cmd.exe / PowerShell invocations are checked by CursorInvocationTest, which is not
+        // disabled on Windows like this fixture-driven suite.
         QCOMPARE(CursorAdapter::installCommand(),
                  QStringLiteral("irm 'https://cursor.com/install?win32=true' | iex"));
         QVERIFY(

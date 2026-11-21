@@ -9,6 +9,9 @@
 #include <QWidget>
 
 class QButtonGroup;
+namespace ketplus {
+class BrandLockup;
+}
 class QComboBox;
 class QLabel;
 class QMenu;
@@ -22,8 +25,7 @@ class Banner;
 
 namespace ketplus {
 
-class SidebarSearchButton;
-class SidebarTagFilterChip;
+class SidebarFilterField;
 
 struct ThemePalette;
 
@@ -42,15 +44,17 @@ class ActivityBar final : public QWidget {
     explicit ActivityBar(QWidget* parent = nullptr);
 
     void setMode(Mode mode);
+    void focusRepositoryFilter();
     void setSidebarWidth(int width);
     // Unscaled (Medium) width, persisted as `sidebar/width`.
     [[nodiscard]] int sidebarWidth() const noexcept { return sidebarWidth_; }
     void setSourceControlAvailable(bool available);
     void setSourceControlCount(int count);
     void setRepositories(const QVector<SidebarRepository>& repositories);
-    void setTagFilter(const QString& tag);
+    [[nodiscard]] SidebarRepositoryList* repositoryList() const { return repositoryList_; }
     void setMachines(const QStringList& machineIds, const QStringList& names,
                      const QString& selectedId);
+    // A remote machine is picked: no Add repository, and a notice while it lists none.
     void setRemoteMachineSelected(bool selected);
     // Shows the "Update ready" reminder above the identity button; empty hides it.
     void setStorageStatus(const QVariantMap& result);
@@ -63,7 +67,6 @@ class ActivityBar final : public QWidget {
 
   signals:
     void modeRequested(ketplus::ActivityBar::Mode mode);
-    void quickSearchRequested();
     void repositoryRequested();
     void machineRequested(const QString& machineId);
     void repositoryActivationRequested(const QString& path);
@@ -84,26 +87,27 @@ class ActivityBar final : public QWidget {
     bool eventFilter(QObject* watched, QEvent* event) override;
 
   private:
+    void refreshMachineNotice();
     void syncShownWidth();
     void refreshIdentityText();
     ket::NavItem* addModeButton(const QByteArray& svgBody, const QString& label, Mode mode);
     void refreshIcons();
 
     QButtonGroup* group_{nullptr};
-    SidebarSearchButton* quickSearchButton_{nullptr};
-    QLabel* brandWordmark_{nullptr};
+    SidebarFilterField* repositoryFilter_{nullptr};
+    BrandLockup* brandLockup_{nullptr};
     ket::NavItem* explorerButton_{nullptr};
     ket::NavItem* sourceControlButton_{nullptr};
     ket::NavItem* agentButton_{nullptr};
     ket::NavItem* remoteButton_{nullptr};
-    SidebarTagFilterChip* tagFilter_{nullptr};
-    QWidget* tagFilterRow_{nullptr};
     QWidget* storageNotice_{nullptr};
     ket::Banner* storageBanner_{nullptr};
     SidebarRepositoryList* repositoryList_{nullptr};
     QComboBox* machineSelect_{nullptr};
     QToolButton* repositoryAction_{nullptr};
     QLabel* machineNotice_{nullptr};
+    bool remoteMachineSelected_{false};
+    int repositoryCount_{0};
     ket::UpdatePill* updateReadyButton_{nullptr};
     QToolButton* identityButton_{nullptr};
     QLabel* identityAvatar_{nullptr};

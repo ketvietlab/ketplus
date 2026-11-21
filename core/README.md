@@ -1,7 +1,10 @@
 # KétPlus editor core
 
 <p align="center">
-  <img src="assets/brand/ketplus.svg" alt="KétPlus logo" width="144">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/brand/ketplus-lockup-dark.png">
+    <img src="assets/brand/ketplus-lockup-light.png" alt="ketPlus" height="72">
+  </picture>
 </p>
 
 `core/` is the fast, lightweight, cross-platform editor shared by both editions
@@ -84,6 +87,13 @@ monospace family (KÉT Sans Mono when installed, then the platform's).
   script runs it in a new terminal window.
 - Set `-DKETPLUS_CM_BUILD_TERMINAL_APP=OFF` to omit the bundle.
 
+Input methods see the text typed since the shell's cursor last moved (an arrow,
+Tab, Enter, a click or a paste ends it) as the text before the cursor. When one
+rewrites part of it, as Vietnamese Telex/VNI do for tone marks, the terminal
+sends backspaces and the new text, so the shell and its completion see each
+letter as it is typed. Composition an input method keeps marked is drawn
+underlined over cleared cells.
+
 For a self-contained Release bundle with the required Qt frameworks, install to
 a staging directory after building:
 
@@ -142,10 +152,10 @@ npm install -g @mermaid-js/mermaid-cli
 
 KetPlus CM also checks `KETPLUS_MMDC` when a custom `mmdc` executable path is needed.
 
-Diagrams use the canonical Két Design System Mermaid theme in light and dark mode:
-KÉT Sans 13px, compact spacing, 12px corners and shared semantic role colors. The resolved
-configuration snapshots and upstream revision are recorded in `resources/mermaid/`.
-Qt SVG compatibility preserves explicit label fills and existing pill-shaped nodes.
+Diagrams look as they do on mermaid.live: the ELK layout, the neo look and the redux
+(light) or redux-dark theme, configured in `resources/mermaid/` and described in
+`docs/mermaid-theme-review.md`. Qt SVG compatibility adds explicit label fills and hex
+stylesheet colours.
 
 ## Current capabilities
 
