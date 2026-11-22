@@ -64,13 +64,22 @@ KetDialog {
         draftEffort = Math.max(0, Fixtures.efforts.indexOf(effort))
     }
 
-    KetRouteTabs {
+    // A select box, not tabs: four providers or more do not fit a row of tabs.
+    KetFieldRow {
         visible: dialog.onlyProvider === ""
         Layout.fillWidth: true
-        tabs: Fixtures.providers.map(entry => entry.label)
-        currentIndex: dialog.providerIndex(dialog.draftProvider)
-        onCurrentIndexChanged: if (Fixtures.providers[currentIndex].id !== dialog.draftProvider)
-                                   dialog.chooseProvider(currentIndex)
+        stacked: true
+        label: "Provider"
+        KetSelect {
+            objectName: "modelContextProvider"
+            width: parent.width
+            model: Fixtures.providers.map(entry => Fixtures.providerChoice(entry))
+            currentIndex: dialog.providerIndex(dialog.draftProvider)
+            onActivated: index => {
+                if (Fixtures.providers[index].id !== dialog.draftProvider)
+                    dialog.chooseProvider(index)
+            }
+        }
     }
 
     // A provider with a setup state: what is wrong and the way to its guide, whether or not
@@ -195,7 +204,7 @@ KetDialog {
 
     Rectangle { Layout.fillWidth: true; Layout.topMargin: dialog.px(6); implicitHeight: 1; color: KetTheme.t.panelBorder }
 
-    KetStepSlider {
+    NotchedStepSlider {
         Layout.fillWidth: true
         Layout.topMargin: dialog.px(16)
         Layout.bottomMargin: dialog.px(8)

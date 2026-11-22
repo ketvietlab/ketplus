@@ -300,6 +300,15 @@ Item {
             startRemove(team.id, "8215")
         else if (name === "add-member" && team)
             addMemberDialog.open()
+        else if (name === "add-developers" && team) {
+            addMemberDialog.open()
+            developerRows.resize(2)
+        }
+        else if ((name === "change-provider" || name === "change-provider-codex") && team) {
+            providerDialog.open()
+            if (name === "change-provider-codex")
+                providerFields.choose("codex")
+        }
         else if (name === "add-reviewer" && team) {
             addMemberDialog.chooseRole("reviewer")
             addMemberDialog.open()
@@ -586,6 +595,33 @@ Item {
         change({ members: members.concat([member]) })
         window.notify(copy("Added ") + reference(member.number) + copy(" as a developer"))
         return member.number
+    }
+    // Several developers at once, each a new conversation with the same agent.
+    function addDevelopers(entries, agent) {
+        if (!team)
+            return []
+        const room = Fixtures.mostDevelopers - developers
+        const added = entries.slice(0, room).map(e => newMember(team.repository, "developer", e.name, agent, e.lane, []))
+        if (added.length === 0)
+            return []
+        change({ members: members.concat(added) })
+        window.notify(added.length === 1 ? copy("Added ") + reference(added[0].number) + copy(" as a developer")
+                                         : copy("Added ") + added.length + copy(" developers"))
+        return added.map(m => m.number)
+    }
+    // Change provider…: the chosen members' next turn runs on `agent` in a fresh context; a
+    // member running a turn switches when it ends. `fullAccess` is the user's consent for a
+    // Codex reviewer.
+    function changeProvider(numbers, agent, fullAccess) {
+        if (!team || numbers.length === 0)
+            return
+        const label = agent.label + " · " + agent.model
+        change(Object.assign({ members: members.map(m => numbers.indexOf(m.number) < 0 ? m
+            : m.state === "working" ? Object.assign({}, m, { pendingProvider: label,
+                                                             now: copy("Switches to ") + label + copy(" when this turn ends") })
+            : Object.assign({}, m, { provider: label, pendingProvider: "" })) },
+            fullAccess ? { permission: "Full access" } : {}))
+        window.notify(copy("Switched ") + numbers.length + copy(" members to ") + agent.label)
     }
     // A second reviewer for the current team, as a new conversation (T-23): each task in
     // review then goes to one of the two.
@@ -1687,6 +1723,13 @@ Item {
         }
         KetMenuItem { text: screen.copy("New team…"); iconName: "bot"; onTriggered: screen.startNewTeam(screen.team.repository) }
         KetMenuItem {
+            objectName: "teamChangeProvider"
+            text: screen.copy("Change provider…")
+            description: screen.copy("For every member at once")
+            iconName: "refresh"
+            onTriggered: providerDialog.open()
+        }
+        KetMenuItem {
             text: screen.team && screen.team.paused ? screen.copy("Resume automatic turns") : screen.copy("Pause automatic turns")
             description: screen.copy("Members finish their turn, then wait for you")
             iconName: screen.team && screen.team.paused ? "resume" : "pause-circle"
@@ -2143,8 +2186,7 @@ Item {
         title: screen.copy("Add a member to ") + (screen.team ? screen.team.name : "")
         onOpened: {
             tried = false
-            laneName.text = ""
-            lanePaths.text = ""
+            developerRows.resize(1)
             memberName.text = ""
         }
         onClosed: chooseRole("developer")
@@ -2177,21 +2219,16 @@ Item {
                     }
                 }
             }
-            KetFieldRow {
+            // Several developers at once: how many in a select box, then a row each.
+            TeamDeveloperRows {
+                id: developerRows
                 visible: !addMemberDialog.reviewer
                 width: parent.width
-                label: screen.copy("Lane")
-                help: screen.copy("The part of the code this developer owns.")
-                error: addMemberDialog.tried && laneName.text.trim() === "" ? screen.copy("Name the lane.") : ""
-                KetTextField { id: laneName; width: parent.width; placeholderText: screen.copy("Onboarding"); invalid: addMemberDialog.tried && text.trim() === "" }
-            }
-            KetFieldRow {
-                visible: !addMemberDialog.reviewer
-                width: parent.width
-                label: screen.copy("Paths")
-                help: screen.copy("Folders separated by commas. An edit outside them is flagged on the task.")
-                error: addMemberDialog.tried && lanePaths.text.trim() === "" ? screen.copy("Give at least one folder.") : ""
-                KetTextField { id: lanePaths; width: parent.width; placeholderText: "apps/desktop/src/onboarding/"; invalid: addMemberDialog.tried && text.trim() === "" }
+                language: screen.teamLanguage
+                tried: addMemberDialog.tried
+                room: Fixtures.mostDevelopers - screen.developers
+                takenNames: screen.members.map(m => m.title)
+                takenLanes: screen.members.map(m => m.lane).filter(l => l)
             }
             KetFieldRow {
                 width: parent.width
@@ -2206,30 +2243,31 @@ Item {
                 }
             }
             KetFieldRow {
+                visible: addMemberDialog.reviewer
                 width: parent.width
                 label: screen.copy("Name")
                 help: screen.copy("How the conversation shows in the team's folder. Its role is a tag beside it.")
-                error: addMemberDialog.tried && !addMemberDialog.reviewer && memberName.text.trim() === "" ? screen.copy("Name the conversation.") : ""
                 KetTextField {
                     id: memberName
                     width: parent.width
-                    placeholderText: addMemberDialog.reviewer ? screen.copy("Reviewer ") + (screen.reviewers + 1)
-                                                              : laneName.text.trim() || screen.copy("Onboarding")
-                    invalid: addMemberDialog.tried && !addMemberDialog.reviewer && text.trim() === ""
+                    placeholderText: screen.copy("Reviewer ") + (screen.reviewers + 1)
                 }
             }
             KetBanner {
-                visible: !addMemberDialog.reviewer && screen.developers >= 3 && screen.reviewers < Fixtures.mostReviewers
+                visible: !addMemberDialog.reviewer && screen.developers + developerRows.count >= 4 && screen.reviewers < Fixtures.mostReviewers
                 width: parent.width
                 tone: KetTheme.BannerTone.Info
-                title: screen.developers === 3 ? screen.copy("A fourth developer") : screen.copy("Reviews already queue")
+                title: screen.developers >= 4 ? screen.copy("Reviews already queue")
+                     : screen.developers + developerRows.count === 4 ? screen.copy("A fourth developer")
+                     : screen.copy("Reviews will queue")
                 message: screen.copy("The team's one reviewer keeps up with two or three developers. Past that, reviews queue; a second reviewer shortens the queue.")
             }
         }
         actions: [
             KetButton { text: screen.copy("Cancel"); variant: KetTheme.ButtonVariant.Ghost; onClicked: addMemberDialog.reject() },
             KetButton {
-                text: screen.copy("Add")
+                text: addMemberDialog.reviewer || developerRows.count === 1 ? screen.copy("Add")
+                      : screen.copy("Add ") + developerRows.count + screen.copy(" developers")
                 variant: KetTheme.ButtonVariant.Primary
                 onClicked: {
                     addMemberDialog.tried = true
@@ -2240,14 +2278,12 @@ Item {
                                            memberName.text.trim())
                         return
                     }
-                    const name = memberName.text.trim()
-                    const lane = laneName.text.trim()
-                    if (name === "" || lane === "" || lanePaths.text.trim() === "")
+                    if (!developerRows.valid)
                         return
                     addMemberDialog.accept()
-                    screen.addDeveloper(name, lane, lanePaths.text.split(",").map(p => p.trim()).filter(p => p),
-                                        { id: addMemberDialog.agentProvider, label: addMemberDialog.agentLabel,
-                                          model: addMemberDialog.agentModel, effort: addMemberDialog.agentEffort })
+                    screen.addDevelopers(developerRows.entries.map(e => ({ name: e.name.trim(), lane: e.lane.trim() })),
+                        { id: addMemberDialog.agentProvider, label: addMemberDialog.agentLabel,
+                          model: addMemberDialog.agentModel, effort: addMemberDialog.agentEffort })
                 }
             }
         ]
@@ -2517,6 +2553,39 @@ Item {
                     if (teamStart.recurring) screen.window.scheduleStore.save(Object.assign({}, teamStart.recurringDraft, {
                         name: screen.copy("Morning release brief"), prompt: teamStart.workOrder, target: 2, teamId: created, teamName: name,
                         conversation: screen.team.members[0].number, date: teamStart.date, busy: 0, missed: 0 }))
+                }
+            }
+        ]
+    }
+
+    // Change provider…: every member at once, or the ones left checked.
+    KetDialog {
+        id: providerDialog
+        title: screen.copy("Change provider for ") + (screen.team ? screen.team.name : "")
+        onOpened: {
+            providerFields.members = screen.members
+            providerFields.permission = screen.team ? screen.team.permission || "Workspace" : "Workspace"
+            const codex = screen.members.filter(m => m.provider.indexOf("Codex") === 0).length
+            providerFields.reset(codex * 2 >= screen.members.length ? "codex" : "claude")
+        }
+        DialogBody {
+            TeamProviderFields { id: providerFields; width: parent.width; language: screen.teamLanguage }
+        }
+        actions: [
+            KetButton { text: screen.copy("Cancel"); variant: KetTheme.ButtonVariant.Ghost; onClicked: providerDialog.reject() },
+            KetButton {
+                objectName: "teamProviderSwitch"
+                enabled: providerFields.switching.length > 0
+                text: providerFields.switching.length === screen.members.length
+                      ? screen.copy("Switch all ") + providerFields.switching.length + screen.copy(" members")
+                      : screen.copy("Switch ") + providerFields.switching.length + screen.copy(" members")
+                variant: KetTheme.ButtonVariant.Primary
+                onClicked: {
+                    providerDialog.accept()
+                    screen.changeProvider(providerFields.switching.map(m => m.number),
+                        { id: providerFields.provider, label: providerFields.labelOf(providerFields.provider),
+                          model: providerFields.model, effort: providerFields.effort },
+                        providerFields.reviewerNeedsAccess && providerFields.fullAccess)
                 }
             }
         ]

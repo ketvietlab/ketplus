@@ -180,11 +180,14 @@ QtObject {
 
     // Model & context: providers, their captions and models. KétRouter is not available yet.
     readonly property var providers: [
-        { id: "codex", label: "Codex", caption: "Codex is ready. Claude and Cursor are available." },
-        { id: "claude", label: "Claude", caption: "Claude uses the local Agent SDK sidecar." },
-        { id: "cursor", label: "Cursor", caption: "Cursor lists models from the installed CLI (`agent models`)." },
-        { id: "ketrouter", label: "KétRouter", caption: "KétRouter is not available yet." }
+        { id: "codex", company: "OpenAI", label: "Codex", caption: "Codex is ready. Claude and Cursor are available." },
+        { id: "claude", company: "Anthropic", label: "Claude", caption: "Claude uses the local Agent SDK sidecar." },
+        { id: "cursor", company: "Anysphere", label: "Cursor", caption: "Cursor lists models from the installed CLI (`agent models`)." },
+        { id: "copilot", company: "GitHub", product: "Copilot", label: "GitHub Copilot", caption: "GitHub Copilot uses the signed-in Copilot CLI." },
+        { id: "ketrouter", company: "KétViệt", label: "KétRouter", caption: "KétRouter is not available yet." }
     ]
+    // A provider in a select box: its company first, as "OpenAI – Codex"; short labels elsewhere.
+    function providerChoice(entry) { return entry.company ? entry.company + " – " + (entry.product || entry.label) : entry.label }
     readonly property var providerModels: ({
         codex: [
             { name: "GPT-5.6 Luna", description: "Fast frontier model for everyday coding", isDefault: true },
@@ -199,6 +202,11 @@ QtObject {
         cursor: [
             { name: "Auto", description: "Cursor picks a model for each request", isDefault: true },
             { name: "Composer 2", description: "Cursor's own coding model" }
+        ],
+        copilot: [
+            { name: "Auto", description: "Copilot picks a model for each request", isDefault: true },
+            { name: "Claude Sonnet 5.5", description: "Through your Copilot plan" },
+            { name: "GPT-5.6", description: "Through your Copilot plan" }
         ],
         ketrouter: []
     })

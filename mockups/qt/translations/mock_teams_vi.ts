@@ -962,5 +962,133 @@
             <source>here</source>
             <translation>ở đây</translation>
         </message>
+        <message>
+            <source>Switches to </source>
+            <translation>Chuyển sang </translation>
+        </message>
+        <message>
+            <source> when this turn ends</source>
+            <translation> khi lượt này kết thúc</translation>
+        </message>
+        <message>
+            <source>Switched </source>
+            <translation>Đã chuyển </translation>
+        </message>
+        <message>
+            <source> members to </source>
+            <translation> thành viên sang </translation>
+        </message>
+        <message>
+            <source>Change provider…</source>
+            <translation>Đổi provider…</translation>
+        </message>
+        <message>
+            <source>For every member at once</source>
+            <translation>Cho mọi thành viên cùng lúc</translation>
+        </message>
+        <message>
+            <source>Add </source>
+            <translation>Thêm </translation>
+        </message>
+        <message>
+            <source>Change provider for </source>
+            <translation>Đổi provider cho </translation>
+        </message>
+        <message>
+            <source>Switch all </source>
+            <translation>Chuyển cả </translation>
+        </message>
+        <message>
+            <source>Switch </source>
+            <translation>Chuyển </translation>
+        </message>
+        <message>
+            <source>Provider</source>
+            <translation>Provider</translation>
+        </message>
+        <message>
+            <source>Only providers that are set up on this computer can be chosen.</source>
+            <translation>Chỉ chọn được provider đã cài đặt trên máy này.</translation>
+        </message>
+        <message>
+            <source>Every member switches unless you clear it.</source>
+            <translation>Mọi thành viên đều chuyển, trừ người bạn bỏ chọn.</translation>
+        </message>
+        <message>
+            <source>All members</source>
+            <translation>Tất cả thành viên</translation>
+        </message>
+        <message>
+            <source>switches when its turn ends</source>
+            <translation>chuyển khi lượt hiện tại kết thúc</translation>
+        </message>
+        <message>
+            <source>A Codex reviewer needs Full access</source>
+            <translation>Reviewer chạy Codex cần Toàn quyền</translation>
+        </message>
+        <message>
+            <source>Claude keeps a review read-only. Codex reviews only when the team starts members with Full access, which skips permission prompts for every member.</source>
+            <translation>Claude giữ việc review ở chế độ chỉ đọc. Codex chỉ review được khi team khởi chạy thành viên với Toàn quyền, tức là bỏ qua hỏi quyền cho mọi thành viên.</translation>
+        </message>
+        <message>
+            <source>Give the team Full access so the reviewer runs on Codex</source>
+            <translation>Cấp Toàn quyền cho team để reviewer chạy Codex</translation>
+        </message>
+        <message>
+            <source>No member is chosen</source>
+            <translation>Chưa chọn thành viên nào</translation>
+        </message>
+        <message>
+            <source>Each member starts a fresh context</source>
+            <translation>Mỗi thành viên bắt đầu context mới</translation>
+        </message>
+        <message>
+            <source>A member's next turn runs on </source>
+            <translation>Lượt kế tiếp của thành viên chạy trên </translation>
+        </message>
+        <message>
+            <source> with the conversation so far as a transcript it reads when needed; nothing is replayed.</source>
+            <translation> với hội thoại đến nay là một transcript để đọc khi cần; không phát lại gì cả.</translation>
+        </message>
+        <message>
+            <source> running now switch when their turn ends; no turn is interrupted.</source>
+            <translation> người đang chạy sẽ chuyển khi lượt của họ kết thúc; không lượt nào bị ngắt.</translation>
+        </message>
+        <message>
+            <source>The reviewer stays on its provider.</source>
+            <translation>Reviewer giữ provider hiện tại.</translation>
+        </message>
+        <message>
+            <source>Developers to add</source>
+            <translation>Số developer cần thêm</translation>
+        </message>
+        <message>
+            <source>Each one starts as a new conversation with the agent below.</source>
+            <translation>Mỗi người bắt đầu là một hội thoại mới với agent bên dưới.</translation>
+        </message>
+        <message>
+            <source>The team has the most developers a team has.</source>
+            <translation>Team đã có số developer tối đa.</translation>
+        </message>
+        <message>
+            <source>Developer </source>
+            <translation>Developer </translation>
+        </message>
+        <message>
+            <source>Name and lane</source>
+            <translation>Tên và lane</translation>
+        </message>
+        <message>
+            <source>A member or lane of the team already has this name.</source>
+            <translation>Thành viên hoặc lane của team đã dùng tên này.</translation>
+        </message>
+        <message>
+            <source>Name the developer and its lane.</source>
+            <translation>Đặt tên developer và lane.</translation>
+        </message>
+        <message>
+            <source>Reviews will queue</source>
+            <translation>Review sẽ phải xếp hàng</translation>
+        </message>
     </context>
 </TS>

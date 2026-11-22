@@ -27,6 +27,8 @@ class TeamCopyCatalogTest(unittest.TestCase):
         paths = [MOCK / "qml/screens/TeamsScreen.qml",
                  MOCK / "qml/parts/TeamReviewFields.qml",
                  MOCK / "qml/parts/TeamGoalField.qml",
+                 MOCK / "qml/parts/TeamProviderFields.qml",
+                 MOCK / "qml/parts/TeamDeveloperRows.qml",
                  MOCK / "qml/schedules/TeamSchedules.qml"]
         sources = set()
         for path in paths:
