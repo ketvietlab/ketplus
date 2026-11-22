@@ -7,7 +7,8 @@
   "sessionMetadataTeam": {
     "id": "3",
     "revision": 11,
-    "role": "developer"
+    "role": "developer",
+    "activity": 42
   },
   "directory": {
     "request": {
@@ -52,24 +53,33 @@
             {
               "session_id": "session-leader",
               "number": "9692",
-              "role": "leader"
+              "role": "leader",
+              "state": "idle",
+              "task": ""
             },
             {
               "session_id": "session-dev-1",
               "number": "3651",
-              "role": "developer"
+              "role": "developer",
+              "state": "working",
+              "task": "T-3"
             },
             {
               "session_id": "session-dev-2",
               "number": "4120",
-              "role": "developer"
+              "role": "developer",
+              "state": "waiting_for_review",
+              "task": ""
             },
             {
               "session_id": "session-reviewer",
               "number": "6913",
-              "role": "reviewer"
+              "role": "reviewer",
+              "state": "working",
+              "task": ""
             }
-          ]
+          ],
+          "working": 2
         }
       ],
       "teams_total": 1,

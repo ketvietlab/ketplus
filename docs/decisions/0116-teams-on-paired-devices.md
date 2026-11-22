@@ -90,7 +90,14 @@ describes them.
 ### 3. Live changes and reconnects reach the phone through the sealed metadata
 
 - **The `team` field.** Each member's sealed session metadata (ADR 0113) gains one
-  field: `team: {id, revision, role}`.
+  field: `team: {id, revision, role, activity?}`.
+  - `activity` (T-8) counts the turns of the team's members that started or ended since
+    the daemon started. A phone that sees it differ from the value it last read reads
+    `team.list` again, within the same limit of one read per team every 2 seconds. The
+    heartbeat that a turn's start and end already trigger carries it, so it adds no
+    heartbeat. It is not a revision: commands are still fenced on `revision`, which a
+    turn does not change. It restarts from 0 with the daemon, so a phone compares it for
+    a difference, never for greater.
   - `role` is `leader`, `developer` or `reviewer`. It is a field of its own, never a tag:
     the phone-facing model carries no tags (§6).
   - The field is absent when the conversation is on no team.
@@ -265,7 +272,8 @@ objects carries a local path or a tag.
 | `paused`, `paused_reason` | the reason is `user`, `budget`, `empty_role` or empty |
 | `open_decisions` | drives the warning mark |
 | `tasks_total`, `tasks_done` | |
-| `members` | every member, at most 8 entries `{session_id, number, role}`: the leader, five developers and two reviewers |
+| `members` | every member, at most 8 entries `{session_id, number, role, state?, task?}`: the leader, five developers and two reviewers. `state` is the member's state as in the summary (`working`, `waiting_for_review`, `blocked` or `idle`) and `task` the id of the task it works on (`in_progress`), or empty (T-8) |
+| `working` | optional: how many members are `working` now (T-8) |
 
 `sidebar_repository_id` is additive display metadata in the existing encrypted answer,
 not command authority or task scope. New clients group by it when present; an absent
@@ -275,6 +283,11 @@ can ignore the field. No origin path is exposed and the contract stays version 1
 See [sidebar origin placement](2026-11-17-sidebar-origin-placement.md).
 
 At most 100 entries are returned, followed by `teams_total`.
+
+`state`, `task` and `working` (T-8) let Home show what a team does without opening its
+page. They are additive in the same encrypted answer and the contract stays version 1; an
+older phone ignores them. A member's turn that starts or ends changes them without a new
+team revision, so the `team` metadata carries `activity` for it (§3).
 
 **Settings**: `team.list` also answers an optional object `settings` with the Mac's
 global automatic-turn budget. It has the four fields of the local `team.settings.get`, with

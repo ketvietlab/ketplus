@@ -172,9 +172,11 @@ QHash<QString, QJsonObject> SessionHost::teamMetadata() const {
         return metadata;
     for (const teams::Team* team : teams_->teams())
         for (const teams::Member& member : team->members)
-            metadata.insert(member.sessionId, {{QStringLiteral("id"), QString::number(team->id)},
-                                               {QStringLiteral("revision"), team->revision},
-                                               {QStringLiteral("role"), member.role}});
+            metadata.insert(member.sessionId,
+                            {{QStringLiteral("id"), QString::number(team->id)},
+                             {QStringLiteral("revision"), team->revision},
+                             {QStringLiteral("role"), member.role},
+                             {QStringLiteral("activity"), teamActivity_.value(team->id)}});
     return metadata;
 }
 
@@ -270,9 +272,17 @@ QJsonObject SessionHost::remoteTeamAnswer(const QString& type, const QJsonObject
     } else if (type == QStringLiteral("team.list")) {
         const QJsonArray teams = answer.value(QStringLiteral("teams")).toArray();
         QJsonArray entries;
-        for (const QJsonValue& value : teams)
-            if (entries.size() < remote::maximumDirectoryEntries)
-                entries.append(remote::directoryEntry(value.toObject(), ids));
+        for (const QJsonValue& value : teams) {
+            if (entries.size() >= remote::maximumDirectoryEntries)
+                break;
+            // T-8: a member's state reads its tasks, which the directory form leaves out.
+            const teams::Team* listed =
+                teams_ ? teams_->team(
+                             value.toObject().value(QStringLiteral("id")).toString().toLongLong())
+                       : nullptr;
+            entries.append(
+                remote::directoryEntry(listed ? teams_->teamJson(*listed) : value.toObject(), ids));
+        }
         result = {{QStringLiteral("ok"), true},
                   {QStringLiteral("teams"), entries},
                   {QStringLiteral("teams_total"), teams.size()}};

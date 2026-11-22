@@ -735,6 +735,10 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     ProviderReadiness readiness_;
     AgentBroker* agents_{nullptr};
     teams::TeamCoordinator* teams_{nullptr};
+    // T-8: per team, how often one of its members started or ended a turn since the daemon
+    // started. The sealed `team` metadata carries it, so a phone reads team.list again when
+    // the team's activity changes, without a revision a phone command would be fenced on.
+    QHash<qint64, qint64> teamActivity_;
     // Worktree path → the repository's main worktree, for team membership.
     mutable QHash<QString, QString> repositoryByWorktree_;
     // Paths git did not answer for, until the event loop turns: one command asks once.
