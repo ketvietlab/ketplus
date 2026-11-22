@@ -108,7 +108,9 @@ class TeamProviderDialogTest final : public QObject {
         const auto* items = qobject_cast<QStandardItemModel*>(providers->model());
         QVERIFY(items->item(providers->findData("codex"))->isEnabled());
         QVERIFY(!items->item(providers->findData("cursor"))->isEnabled());
-        QVERIFY(!items->item(providers->findData("copilot"))->toolTip().isEmpty());
+        // The provider's name, not a number, says what to set up.
+        QCOMPARE(items->item(providers->findData("copilot"))->toolTip(),
+                 QStringLiteral("Set up GitHub Copilot in Settings → Agents first."));
         QCOMPARE(providers->currentData().toString(), QStringLiteral("claude"));
         QCOMPARE(form.chooser()->agent().model, QStringLiteral("opus"));
         const QPoint model = form.chooser()->modelSelect()->mapTo(&form, QPoint{});
@@ -251,9 +253,13 @@ class TeamProviderDialogTest final : public QObject {
     void theDialogSwitchesAndThenOnlyCloses_data() {
         QTest::addColumn<bool>("dark");
         QTest::addColumn<qreal>("zoom");
-        QTest::newRow("light-100") << false << 1.0;
-        QTest::newRow("dark-125") << true << 1.25;
-        QTest::newRow("light-150") << false << 1.5;
+        for (const bool dark : {false, true})
+            for (const qreal zoom : {1.0, 1.25, 1.5})
+                QTest::newRow(
+                    qPrintable(QStringLiteral("%1-%2")
+                                   .arg(dark ? QStringLiteral("dark") : QStringLiteral("light"))
+                                   .arg(qRound(zoom * 100))))
+                    << dark << zoom;
     }
     void theDialogSwitchesAndThenOnlyCloses() {
         QFETCH(bool, dark);
@@ -273,6 +279,11 @@ class TeamProviderDialogTest final : public QObject {
         QCOMPARE(send->text(), QStringLiteral("Switch 3 members"));
         QTRY_VERIFY(dialog->card()->geometry().bottom() < window.height());
         QVERIFY(dialog->card()->geometry().left() >= 0);
+        // The theme switches live while the dialog is open: it keeps its choices and still fits.
+        theme.setMode(dark ? ThemeManager::Mode::Light : ThemeManager::Mode::Dark);
+        QCoreApplication::processEvents();
+        QCOMPARE(send->text(), QStringLiteral("Switch 3 members"));
+        QTRY_VERIFY(dialog->card()->geometry().bottom() < window.height());
         QTest::mouseClick(send, Qt::LeftButton);
         QVERIFY(form->showsResults());
         QVERIFY(!send->isVisible());

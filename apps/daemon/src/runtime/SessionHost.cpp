@@ -1470,6 +1470,14 @@ QJsonObject SessionHost::startTurn(const QJsonObject& request, bool localClient,
         input.prepend(QJsonObject{{QStringLiteral("type"), QStringLiteral("text")},
                                   {QStringLiteral("text"), it->contextResetNote}});
     const StoredSession previous = it->stored;
+    if (localClient && options.contains("permission")) {
+        const auto permission = options.value("permission").toString();
+        it->stored.executionPolicy = permission == "danger-full-access" ? "full"
+                                     : permission == "read-only"        ? "read-only"
+                                                                        : "ask";
+    }
+    // After the client's permission: a desktop composer sends the conversation's current one,
+    // which the team's Full access (T-3) or a Codex reviewer's policy replaces with this turn.
     applyTeamProviderSwitch(*it, teamSwitch);
     it->stored.state = QStringLiteral("starting");
     QJsonObject userMessage{{QStringLiteral("text"), displayText},
@@ -1489,12 +1497,6 @@ QJsonObject SessionHost::startTurn(const QJsonObject& request, bool localClient,
         const QString value = payload.value(key).toString();
         if (!value.isEmpty())
             userMessage.insert(key, value);
-    }
-    if (localClient && options.contains("permission")) {
-        const auto permission = options.value("permission").toString();
-        it->stored.executionPolicy = permission == "danger-full-access" ? "full"
-                                     : permission == "read-only"        ? "read-only"
-                                                                        : "ask";
     }
     if (!options.value("model").toString().isEmpty())
         it->stored.model = options.value("model").toString();

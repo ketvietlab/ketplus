@@ -344,8 +344,11 @@ class TeamProviderSwitchTest final : public QObject {
         // Nothing changes before a turn: the policy waits with the member.
         QCOMPARE(stored(fixture, developer).executionPolicy, QStringLiteral("ask"));
 
+        // A desktop composer sends the conversation's current permission with every prompt; the
+        // team's Full access still reaches the member with that turn.
+        const QJsonObject asked{{"options", QJsonObject{{"permission", "workspace-write"}}}};
         for (const QString& member : {leader, developer, reviewer})
-            QVERIFY(turn(fixture, member, "Ready?"));
+            QVERIFY(turn(fixture, member, "Ready?", asked));
         QCOMPARE(stored(fixture, developer).executionPolicy, QStringLiteral("full"));
         QCOMPARE(stored(fixture, developer).adapter, QStringLiteral("codex"));
         QCOMPARE(stored(fixture, leader).executionPolicy, QStringLiteral("full"));

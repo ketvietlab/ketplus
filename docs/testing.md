@@ -475,7 +475,8 @@ daemon: the provider select and its company-first labels, every member checked b
 default, a member left out, a reviewer that stays without Full access or moves with the
 team's Full access acknowledged, each member's
 result from `team.provider.set` and a refusal, in light and dark at 100%, 125% and
-150% in a 1024 × 640 window. No provider or real team is started.
+150% in a 1024 × 640 window, with the theme switched while the dialog is open. An
+unready provider's tooltip names it. No provider or real team is started.
 
 The [layout verification record](evidence/new-team-dialog-layout.md) retains the
 full Pro matrix results, initial failures, one isolated retry and platform skips.
