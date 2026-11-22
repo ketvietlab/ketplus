@@ -1294,8 +1294,16 @@ QJsonObject SessionHost::startTurn(const QJsonObject& request, bool localClient,
             QStringLiteral("worktree_path must identify an existing directory for a new session."));
     }
     QJsonObject options = payload.value(QStringLiteral("options")).toObject();
-    // T-2: a team member's pending provider switch takes this turn to the new provider.
-    const bool teamSwitch = it != sessions_.end() && takeTeamProviderSwitch(*it, options);
+    // T-2: a team member's pending provider switch takes this turn to the new provider. It is
+    // only looked at for a turn the session can take; a refused start_turn keeps it pending.
+    const TeamProviderSwitch teamSwitch =
+        it != sessions_.end() &&
+                request.value(QStringLiteral("session_generation"))
+                        .toInteger(it->stored.generation) == it->stored.generation &&
+                it->stored.worktreePath == worktree && !it->startingTurn &&
+                it->stored.state != QStringLiteral("running")
+            ? takeTeamProviderSwitch(*it, options)
+            : TeamProviderSwitch{};
     const QString adapter = requestedAdapter(
         options, it == sessions_.end() ? QStringLiteral("codex") : it->stored.adapter);
     // A handoff starts a fresh native context, so it needs only a provider that runs in a
@@ -1472,9 +1480,8 @@ QJsonObject SessionHost::startTurn(const QJsonObject& request, bool localClient,
                         {QStringLiteral("text"),
                          provider_handoff::handoffNote(it->handoffFrom, handoffTranscript, 0)}});
     }
-    if (teamSwitch)
-        finishTeamProviderSwitch(*it);
     const StoredSession previous = it->stored;
+    applyTeamProviderSwitch(*it, teamSwitch);
     it->stored.state = QStringLiteral("starting");
     QJsonObject userMessage{{QStringLiteral("text"), displayText},
                             {QStringLiteral("command_id"), request.value("message_id")}};
@@ -1539,6 +1546,7 @@ QJsonObject SessionHost::startTurn(const QJsonObject& request, bool localClient,
         releaseTurnAttachments(*it);
         return error("journal_error", appendError);
     }
+    finishTeamProviderSwitch(*it, teamSwitch);
     if (agentOrigin.isEmpty() && !payload.contains("schedule_id"))
         resumeManagedTaskWake(sessionId, it->stored.generation);
     it->startingTurn = true;

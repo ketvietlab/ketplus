@@ -681,7 +681,11 @@ default; the previous provider's model is never carried over. A reviewer moved t
 takes the team's Full access, one moved away from Codex a conversation's default. When
 the switch can no longer apply at that turn (the member moved to a worktree, the
 provider signed out, the team lost Full access), the member stays on its agent and an
-actionable `provider_switch_dropped` update says why. Without `members` the provider
+actionable `provider_switch_dropped` update says why. The switch is looked at only for a
+turn the member can take and is recorded only once that turn is accepted: a refused
+`session.start_turn` (busy, stale generation, journal error) leaves it pending, and the
+accepted turn's `session.configuration_changed` names the model, effort or policy the
+switch changed. Without `members` the provider
 also becomes the team's `provider`, the agent a member added later without one starts
 with; `team.create` sets it when every member runs on one provider. Updates
 `provider_set` and `provider_switched` record the change and each member's move.

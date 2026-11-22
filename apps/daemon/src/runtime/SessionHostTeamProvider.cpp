@@ -177,16 +177,15 @@ QJsonObject SessionHost::setTeamProvider(const QJsonObject& payload) {
             {QStringLiteral("results"), results}};
 }
 
-bool SessionHost::takeTeamProviderSwitch(Session& session, QJsonObject& options) {
+SessionHost::TeamProviderSwitch SessionHost::takeTeamProviderSwitch(const Session& session,
+                                                                    QJsonObject& options) const {
     if (!teams_ || !teams_->isLoaded())
-        return false;
+        return {};
     const auto pending = teams_->pendingSwitch(session.stored.id);
-    if (!pending)
-        return false;
     const teams::Team* team = teams_->teamOf(session.stored.id);
     const teams::Member* member = team ? team->member(session.stored.id) : nullptr;
-    if (!member)
-        return false;
+    if (!pending || !member)
+        return {};
     // What held when the switch was asked may not hold now: the member may have moved to a
     // task worktree, or the provider may have signed out. It then stays where it is.
     QJsonObject blocker =
@@ -194,11 +193,8 @@ bool SessionHost::takeTeamProviderSwitch(Session& session, QJsonObject& options)
     if (blocker.isEmpty())
         if (const QJsonObject refused = providerNotReady(pending->provider); !refused.isEmpty())
             blocker = {{QStringLiteral("reason"), refused.value(QStringLiteral("error_message"))}};
-    if (!blocker.isEmpty()) {
-        teams_->finishProviderSwitch(session.stored.id,
-                                     blocker.value(QStringLiteral("reason")).toString());
-        return false;
-    }
+    if (!blocker.isEmpty())
+        return {.dropped = blocker.value(QStringLiteral("reason")).toString()};
     options.insert(QStringLiteral("provider"), pending->provider);
     // A model or effort chosen for the previous provider does not carry over.
     for (const auto& [key, value] : {std::pair{QStringLiteral("model"), pending->model},
@@ -211,30 +207,35 @@ bool SessionHost::takeTeamProviderSwitch(Session& session, QJsonObject& options)
     if (pending->provider != QStringLiteral("codex") &&
         pending->provider != QStringLiteral("claude"))
         options.insert(QStringLiteral("compactWindow"), QJsonValue(QJsonValue::Null));
-    return true;
+    return {.applies = pending};
 }
 
-void SessionHost::finishTeamProviderSwitch(Session& session) {
-    const auto pending = teams_->pendingSwitch(session.stored.id);
-    const teams::Team* team = teams_->teamOf(session.stored.id);
-    const teams::Member* member = team ? team->member(session.stored.id) : nullptr;
-    if (!pending || !member)
+void SessionHost::applyTeamProviderSwitch(Session& session,
+                                          const TeamProviderSwitch& change) const {
+    if (!change.applies)
         return;
     // Empty is the provider's default; startTurn applies a non-empty one from the options.
-    session.stored.model = pending->model;
-    session.stored.effort = pending->effort;
-    // ketplus#295: a Codex reviewer takes the team's Full access (checked above); any other
-    // reviewer keeps a conversation's default. The team's own policy never changes here.
-    if (member->role == teams::role::reviewer) {
+    session.stored.model = change.applies->model;
+    session.stored.effort = change.applies->effort;
+    // ketplus#295: a Codex reviewer takes the team's Full access (checked when taken); any
+    // other reviewer keeps a conversation's default. The team's own policy never changes here.
+    const teams::Team* team = teams_->teamOf(session.stored.id);
+    const teams::Member* member = team ? team->member(session.stored.id) : nullptr;
+    if (member && member->role == teams::role::reviewer) {
         const QString policy =
-            reviewer::teamReviewerPolicy(pending->provider, team->executionPolicy);
+            reviewer::teamReviewerPolicy(change.applies->provider, team->executionPolicy);
         session.stored.executionPolicy =
             policy.isEmpty() ? StoredSession{}.executionPolicy : policy;
     }
+}
+
+void SessionHost::finishTeamProviderSwitch(Session& session, const TeamProviderSwitch& change) {
+    if (!change.applies && change.dropped.isEmpty())
+        return;
     // Codex is told the member's name once its thread starts, as for a new member.
-    if (pending->provider == QStringLiteral("codex"))
+    if (change.applies && change.applies->provider == QStringLiteral("codex"))
         session.pendingProviderTitle = session.stored.title;
-    teams_->finishProviderSwitch(session.stored.id, {});
+    teams_->finishProviderSwitch(session.stored.id, change.dropped);
 }
 
 } // namespace ketplus::daemon

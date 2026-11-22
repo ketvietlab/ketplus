@@ -88,10 +88,13 @@ class TeamProviderSwitchTest final : public QObject {
     }
 
     // A turn of the member, as the desktop sends one: no provider in the options.
-    bool turn(Fixture& fixture, const QString& sessionId, const QString& prompt) {
+    bool turn(Fixture& fixture, const QString& sessionId, const QString& prompt,
+              const QJsonObject& extra = {}) {
         const int before = fixture.count(sessionId, "turn.completed");
+        QJsonObject payload = extra;
+        payload.insert("prompt", prompt);
         const QJsonObject started = fixture.host->handleCommand(
-            request("session.start_turn", {{"prompt", prompt}}, sessionId, 1), "desktop-test");
+            request("session.start_turn", payload, sessionId, 1), "desktop-test");
         if (!started.value("ok").toBool()) {
             qWarning("%s", qPrintable(text(started)));
             return false;
@@ -148,6 +151,12 @@ class TeamProviderSwitchTest final : public QObject {
         QVERIFY(moved.model.isEmpty());
         QVERIFY(moved.effort.isEmpty());
         QCOMPARE(fixture.count(developer, "session.provider_changed"), 1);
+        // The turn reports the model it left (gpt-5 -> Claude's default) as changed.
+        const QList<QJsonObject> configured =
+            fixture.payloads(developer, "session.configuration_changed");
+        QVERIFY(!configured.isEmpty());
+        QVERIFY(configured.last().value("changed").toArray().contains(QJsonValue("model")));
+        QCOMPARE(configured.last().value("adapter").toString(), QStringLiteral("claude"));
         const QString transcript =
             QDir(fixture.directory.path())
                 .filePath(QStringLiteral("handoff/%1/transcript.md").arg(developer));
@@ -219,6 +228,16 @@ class TeamProviderSwitchTest final : public QObject {
         QCOMPARE(memberOf(switched.value("team").toObject(), developer).value("idle"),
                  QJsonValue(false));
         QCOMPARE(fixture.count(developer, "turn.interrupted"), 0);
+        // A start_turn the busy member refuses leaves the switch pending.
+        QCOMPARE(fixture.host
+                     ->handleCommand(
+                         request("session.start_turn", {{"prompt", "Too soon"}}, developer, 1),
+                         "desktop-test")
+                     .value("error_code")
+                     .toString(),
+                 QStringLiteral("session_busy"));
+        QVERIFY(memberOf(team(fixture, created), developer).contains("pending_switch"));
+        QCOMPARE(stored(fixture, developer).adapter, QStringLiteral("codex"));
         QVERIFY(fixture.host
                     ->handleCommand(request("approval.resolve",
                                             {{"approval_id", approvalId},
@@ -322,6 +341,29 @@ class TeamProviderSwitchTest final : public QObject {
         const QJsonObject after = answer.value("team").toObject();
         QVERIFY(!memberOf(after, moved).contains("pending_switch"));
         QVERIFY(memberOf(after, other).contains("pending_switch"));
+
+        // The other developer moves to a switched worktree after its switch was asked: a
+        // start_turn that is refused leaves the switch alone, the next accepted turn drops it
+        // and runs where the member is.
+        StoredSession later = stored(fixture, other);
+        later.contextRevision = 2;
+        QVERIFY(fixture.journal->upsertSession(later));
+        fixture.restart();
+        QCOMPARE(
+            fixture.host
+                ->handleCommand(request("session.start_turn",
+                                        {{"prompt", "Old tab"}, {"expected_context_revision", 2}},
+                                        other, 7),
+                                "desktop-test")
+                .value("error_code")
+                .toString(),
+            QStringLiteral("stale_generation"));
+        QVERIFY(memberOf(team(fixture, created), other).contains("pending_switch"));
+        QVERIFY(!updateKinds(fixture, created).contains("provider_switch_dropped"));
+        QVERIFY(turn(fixture, other, "Carry on", {{"expected_context_revision", 2}}));
+        QCOMPARE(stored(fixture, other).adapter, QStringLiteral("codex"));
+        QVERIFY(!memberOf(team(fixture, created), other).contains("pending_switch"));
+        QVERIFY(updateKinds(fixture, created).contains("provider_switch_dropped"));
 
         // Claude continues a conversation in a switched worktree: it takes the handoff.
         const QJsonObject claude = command(fixture, "team.provider.set",
