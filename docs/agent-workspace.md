@@ -983,15 +983,22 @@ models and modes depends on the installed daemon's Copilot adapter.
   a late response into the selected conversation's status. The header and the sidebar
   draw no user tags and offer no way to add, manage or filter by one (ADR 0117); a team
   member's role shows as a locked label that opens the team (ADR 0114).
-- Model selection uses one popover with provider tabs, searchable models,
-  a discrete effort slider, and reset-to-default. The slider follows the models
-  on the open tab, and hides when a model has no separate effort list. Claude is enabled when the
+- Model selection uses one popover with a provider select box (label above, the
+  dialog's full width), searchable models, a discrete effort slider, and
+  reset-to-default. Each provider is listed company first ("OpenAI – Codex",
+  "Anthropic – Claude", "Anysphere – Cursor", "GitHub – Copilot"), from the one
+  provider table in `modules/ai/src/agent/ProviderDisplay.h` that the team agent
+  dialog (New team, Add member) also reads; captions and banners keep the short
+  names. A provider that cannot be chosen is listed disabled with the reason as
+  its second line, and the keyboard keeps the current provider when it lands on
+  one. The slider follows the models of the chosen provider, and hides when a
+  model has no separate effort list. Claude is enabled when the
   daemon advertises Claude catalog entries (sidecar present). Cursor is enabled
   when the daemon advertises Cursor catalog entries (CLI present). KetRouter
   remains a disabled placeholder. The picker
   stays open after selecting a model, supports keyboard navigation and retrying
   catalog loads, and adapts to the window bounds using the active theme tokens.
-  Reopening restores the conversation's provider tab when Codex and Cursor share
+  Reopening restores the conversation's provider when Codex and Cursor share
   a model id (Cursor effort families such as `gpt-5.6-luna`). The composer and `/model` open the same picker. Voice input is not included.
 
 Authenticated Claude turns need the Agent SDK sidecar. Packaged KetPlus stages

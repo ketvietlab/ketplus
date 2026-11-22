@@ -1,5 +1,7 @@
 #include "teams/TeamAgentDialog.h"
 
+#include "agent/ProviderDisplay.h"
+
 #include "KetButton.h"
 #include "KetDialog.h"
 #include "KetFieldRow.h"
@@ -9,6 +11,8 @@
 #include <QLabel>
 #include <QStandardItemModel>
 #include <QVBoxLayout>
+
+#include <tuple>
 
 namespace ketplus {
 namespace {
@@ -62,15 +66,7 @@ QStringList team_agents::readyProviders(const QVariantList& models) {
 }
 
 QString team_agents::providerLabel(const QString& provider) {
-    if (provider == QStringLiteral("claude"))
-        return QStringLiteral("Claude");
-    if (provider == QStringLiteral("codex"))
-        return QStringLiteral("Codex");
-    if (provider == QStringLiteral("cursor"))
-        return QStringLiteral("Cursor");
-    if (provider == QStringLiteral("copilot"))
-        return QStringLiteral("GitHub Copilot");
-    return provider;
+    return provider_display::name(provider);
 }
 
 TeamAgent team_agents::defaultFor(const QVariantList& models, const QString& provider) {
@@ -132,7 +128,8 @@ TeamAgentChooser::TeamAgentChooser(const QVariantList& models, const TeamAgent& 
     for (const QString& provider : team_agents::readyProviders(models)) {
         if (choice != AgentChoice::member && provider != claude && provider != codex)
             continue;
-        providers_->addItem(team_agents::providerLabel(provider), provider);
+        // The company first, from the one provider table ("Anthropic – Claude").
+        providers_->addItem(provider_display::choice(provider), provider);
         // ketplus#295: listed, so the reviewer sees why it cannot be chosen.
         if (choice == AgentChoice::reviewer && provider == codex)
             if (auto* items = qobject_cast<QStandardItemModel*>(providers_->model()))
@@ -149,9 +146,15 @@ TeamAgentChooser::TeamAgentChooser(const QVariantList& models, const TeamAgent& 
         if (!hasChoice())
             help = tr("The reviewer needs Claude. Set up Claude in Settings → Agents.");
     }
-    layout->addWidget(new ket::FieldRow(tr("Agent"), providers_, help, this));
-    layout->addWidget(new ket::FieldRow(tr("Model"), models_, {}, this));
-    layout->addWidget(new ket::FieldRow(tr("Effort"), efforts_, {}, this));
+    // As Model & context: each select spans the dialog with its label above. Model and effort
+    // stay one below the other, so a long model name still fits a narrow card.
+    for (auto [label, control, hint] :
+         {std::tuple{tr("Provider"), providers_, help}, std::tuple{tr("Model"), models_, QString{}},
+          std::tuple{tr("Effort"), efforts_, QString{}}}) {
+        auto* row = new ket::FieldRow(label, control, hint, this);
+        row->setStacked(true);
+        layout->addWidget(row);
+    }
     int index = providers_->findData(current.provider);
     if (index < 0 || !providerEnabled(providers_, index))
         index = providers_->findData(claude);

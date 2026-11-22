@@ -1,6 +1,7 @@
 #pragma once
 
 #include "agent/AgentMessageModel.h"
+#include "agent/ProviderDisplay.h"
 #include "agent/ReasoningHeading.h"
 #include "agent/TranscriptFileLinks.h"
 #include "git/GitTypes.h"
@@ -95,6 +96,8 @@ class AgentWorkspaceView final : public QWidget {
     Q_PROPERTY(QVariantList models READ models NOTIFY modelsChanged)
     Q_PROPERTY(QVariantMap weeklyLimit READ weeklyLimit NOTIFY weeklyLimitChanged)
     Q_PROPERTY(QVariantMap providerRuntime READ providerRuntime NOTIFY providerRuntimeChanged)
+    // Every provider the model picker lists, in order: {id, label ("OpenAI – Codex"), name}.
+    Q_PROPERTY(QVariantList providerChoices READ providerChoices CONSTANT)
     // `provider` scopes the snapshot; `context` is conversation-scoped and `limits`
     // contains account-scoped windows.
     Q_PROPERTY(
@@ -248,6 +251,16 @@ class AgentWorkspaceView final : public QWidget {
         emit weeklyLimitChanged();
     }
     QVariantMap providerRuntime() const { return providerRuntime_; }
+    static QVariantList providerChoices() {
+        QVariantList choices;
+        for (const auto& entry : provider_display::providers()) {
+            const QString id = QString::fromLatin1(entry.id);
+            choices.append(QVariantMap{{QStringLiteral("id"), id},
+                                       {QStringLiteral("label"), provider_display::choice(id)},
+                                       {QStringLiteral("name"), provider_display::name(id)}});
+        }
+        return choices;
+    }
     // ADR 0110: the setup guide for a turn the provider ended with a coded error.
     using TurnGuide = std::function<QVariantMap(const QString& provider, const QString& code,
                                                 const QString& message, const QString& model)>;

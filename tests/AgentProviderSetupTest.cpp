@@ -1,4 +1,5 @@
 #include "AgentWorkspaceViewTest.h"
+#include "ModelProviderSelectProbe.h"
 #include "agent/AgentWorkspaceView.h"
 #include "agent/DaemonTranscriptProjection.h"
 #include "agent/ProviderRuntimeStatus.h"
@@ -276,12 +277,12 @@ void AgentWorkspaceViewTest::modelPickerOpensTheProviderSetupGuide() {
     QVERIFY(QMetaObject::invokeMethod(root, "openModelPicker"));
     auto* picker = root->property("modelPicker").value<QObject*>();
     QTRY_VERIFY(picker->property("opened").toBool());
-    // No Cursor models without the CLI, yet its tab stays open so the banner can guide.
+    // No Cursor models without the CLI, yet it can still be chosen so the banner can guide.
     QCOMPARE(picker->property("selectedProviderTab").toString(), QStringLiteral("cursor"));
-    auto* cursorTab = findVisualItem(qvariant_cast<QQuickItem*>(picker->property("contentItem")),
-                                     QStringLiteral("providerTab_cursor"));
-    QVERIFY(cursorTab);
-    QVERIFY(cursorTab->isEnabled());
+    auto* providers =
+        model_provider_select::row(qvariant_cast<QQuickItem*>(picker->property("contentItem")));
+    QVERIFY(providers);
+    QVERIFY(model_provider_select::enabled(providers, "cursor"));
     QQuickItem* banner = nullptr;
     QTRY_VERIFY((banner = picker->findChild<QQuickItem*>("modelPickerSetupBanner")) &&
                 banner->isVisible());

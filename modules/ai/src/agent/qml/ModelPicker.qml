@@ -273,8 +273,10 @@ Basic.Popup {
                 id: settingsBody
                 width: settingsScroll.availableWidth
                 spacing: 0
-        ModelProviderTabs {
+        ModelProviderSelect {
+            objectName: "providerSelectRow"
             Layout.fillWidth: true
+            providers: agentHost.providerChoices || []
             Layout.leftMargin: KetTheme.px(22, KetTheme.zoom)
             Layout.rightMargin: KetTheme.px(22, KetTheme.zoom)
             Layout.topMargin: KetTheme.px(22, KetTheme.zoom)

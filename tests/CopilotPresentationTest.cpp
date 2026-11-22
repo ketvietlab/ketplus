@@ -1,5 +1,6 @@
 #include "KetAppearance.h"
 #include "KetSelect.h"
+#include "ModelProviderSelectProbe.h"
 #include "agent/AgentSessionManager.h"
 #include "agent/AgentWorkspaceView.h"
 #include "agent/CodexAppServer.h"
@@ -156,7 +157,8 @@ class CopilotPresentationTest final : public QObject {
         QCOMPARE(defaults.developer.json().value("provider").toString(), QStringLiteral("copilot"));
         TeamAgentChooser chooser(catalog, defaults.developer);
         QCOMPARE(chooser.agent().provider, QStringLiteral("copilot"));
-        QCOMPARE(chooser.providers()->currentText(), QStringLiteral("GitHub Copilot"));
+        // T-12: the company first, from the same provider table as Model & context.
+        QCOMPARE(chooser.providers()->currentText(), QStringLiteral("GitHub \u2013 Copilot"));
     }
 
     void providerPicker_data() {
@@ -187,25 +189,23 @@ class CopilotPresentationTest final : public QObject {
         QTRY_VERIFY(picker->property("opened").toBool());
         QCOMPARE(picker->property("selectedProviderTab").toString(), QStringLiteral("copilot"));
         auto* content = qvariant_cast<QQuickItem*>(picker->property("contentItem"));
-        auto* tab = visual(content, "providerTab_copilot");
+        auto* providers = model_provider_select::row(content);
         auto* apply = visual(content, "applyModelButton");
-        QVERIFY(tab && apply);
-        QVERIFY(tab->isEnabled());
+        QVERIFY(providers && apply);
+        QVERIFY(model_provider_select::enabled(providers, "copilot"));
+        QCOMPARE(model_provider_select::choice(providers, "copilot").value("label").toString(),
+                 QStringLiteral("GitHub \u2013 Copilot"));
         QTRY_VERIFY(apply->isEnabled());
-        auto* codexTab = visual(content, "providerTab_codex");
-        QVERIFY(codexTab);
-        QVERIFY(QMetaObject::invokeMethod(codexTab, "clicked"));
+        QVERIFY(model_provider_select::choose(providers, "codex"));
         QCOMPARE(picker->property("selectedProviderTab").toString(), QStringLiteral("codex"));
-        QVERIFY(QMetaObject::invokeMethod(tab, "clicked"));
+        QVERIFY(model_provider_select::choose(providers, "copilot"));
         QCOMPARE(picker->property("selectedProviderTab").toString(), QStringLiteral("copilot"));
         QTRY_VERIFY(apply->isEnabled());
-        auto* tabs = visual(content, "providerTabs");
-        QVERIFY(tabs);
-        for (const QString id : {"codex", "claude", "cursor", "copilot", "ketrouter"}) {
-            auto* item = visual(tabs, "providerTab_" + id);
-            QVERIFY(item);
-            QTRY_VERIFY(item->mapToItem(tabs, QPointF{}).x() + item->width() <= tabs->width() + 1);
-        }
+        // One select, inside the dialog at every width, instead of a row of tabs that wraps.
+        auto* select = visual(content, "providerSelect");
+        QVERIFY(select);
+        QTRY_VERIFY(select->mapToItem(content, QPointF{}).x() + select->width() <=
+                    content->width() + 1);
         if (width == 1200) {
             const auto capture = qEnvironmentVariable("KETPLUS_COPILOT_CAPTURE");
             if (!capture.isEmpty()) {
@@ -220,9 +220,11 @@ class CopilotPresentationTest final : public QObject {
         QVERIFY(banner);
         QTRY_VERIFY(banner->isVisible());
         view.setModels({model("codex")});
-        QTRY_VERIFY(tab->isEnabled()); // Its setup guide remains reachable.
+        QTRY_VERIFY(model_provider_select::enabled(
+            providers, "copilot")); // Its setup guide remains reachable.
         view.setProviderRuntime(ProviderRuntimeStatus::stateFrom({}));
-        QTRY_VERIFY(!tab->isEnabled()); // An older daemon does not advertise Copilot.
+        QTRY_VERIFY(!model_provider_select::enabled(
+            providers, "copilot")); // An older daemon does not advertise Copilot.
         QVERIFY(!apply->isEnabled());
         QCOMPARE(root->property("selectedProvider").toString(), QStringLiteral("copilot"));
         QTRY_VERIFY(root->property("copilotUnavailable").toBool());
