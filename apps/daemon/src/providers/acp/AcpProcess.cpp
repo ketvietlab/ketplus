@@ -161,6 +161,10 @@ QJsonObject AcpAdapter::clientCapabilities() const {
 }
 
 void AcpAdapter::initialize() {
+    // stop() waits for a process that is still starting, and that wait reports the start: a
+    // process being stopped is not initialized, or its failed handshake would read as a crash.
+    if (stopping_)
+        return;
     narrowing_.reset();
     sendCall(QStringLiteral("initialize"),
              {{QStringLiteral("protocolVersion"), 1},
@@ -171,6 +175,8 @@ void AcpAdapter::initialize() {
                            {QStringLiteral("version"), QStringLiteral("0.1.0")}}}},
              [this](const QJsonObject& result, const QString& error) {
                  starting_ = false;
+                 if (!error.isEmpty() && stopping_)
+                     return; // stop() failed the handshake: nothing stopped unexpectedly.
                  narrowing_.acpInitialized(result);
                  const QString startupError = error.isEmpty() ? initializationError(result) : error;
                  if (!startupError.isEmpty()) {

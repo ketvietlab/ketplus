@@ -119,12 +119,16 @@ DaemonService::~DaemonService() {
     if (cursor_) {
         cursor_->stop();
     }
+    if (copilot_) {
+        copilot_->stop();
+    }
     ipc_.reset();
     if (host_)
         host_->setRemoteJobs(nullptr);
     remoteJobs_.reset();
     cloud_.reset();
     host_.reset();
+    copilot_.reset();
     cursor_.reset();
     claude_.reset();
     adapter_.reset();

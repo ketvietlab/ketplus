@@ -383,6 +383,10 @@ void CodexAdapter::ensureStarted() {
 }
 
 void CodexAdapter::initialize() {
+    // stop() waits for a process that is still starting, and that wait reports the start: a
+    // process being stopped is not initialized, or its failed handshake would read as a crash.
+    if (stopping_)
+        return;
     // A new process may be a different CLI build; what the old one lacked no longer applies.
     narrowing_.reset();
     sendCall(
@@ -394,6 +398,8 @@ void CodexAdapter::initialize() {
          {QStringLiteral("capabilities"), QJsonObject{{QStringLiteral("experimentalApi"), true}}}},
         [this](const QJsonObject&, const QString& error) {
             starting_ = false;
+            if (!error.isEmpty() && stopping_)
+                return; // stop() failed the handshake: nothing stopped unexpectedly.
             if (!error.isEmpty()) {
                 const QString reason = QStringLiteral("Codex initialization failed: %1").arg(error);
                 noteUnexpectedStop();
