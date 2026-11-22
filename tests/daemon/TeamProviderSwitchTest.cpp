@@ -255,7 +255,7 @@ class TeamProviderSwitchTest final : public QObject {
         QCOMPARE(stored(fixture, developer).adapter, QStringLiteral("claude"));
     }
 
-    // A Codex reviewer needs the team's Full access; it is never granted here.
+    // A Codex reviewer needs the team's Full access; it is never granted without asking.
     void aCodexReviewerNeedsFullAccess() {
         Fixture fixture;
         QVERIFY(fixture.open());
@@ -284,6 +284,84 @@ class TeamProviderSwitchTest final : public QObject {
         QVERIFY(turn(full, fullReviewer, "Ready?"));
         QCOMPARE(stored(full, fullReviewer).adapter, QStringLiteral("codex"));
         QCOMPARE(stored(full, fullReviewer).executionPolicy, QStringLiteral("full"));
+    }
+
+    // T-3: Full access comes with the switch only when the user acknowledged it, as for
+    // team.create, and never when the switch is refused. Every member but a Claude reviewer
+    // takes it at its next turn, also one whose agent does not change.
+    void fullAccessComesWithTheSwitchWhenAcknowledged() {
+        Fixture fixture;
+        QVERIFY(fixture.open());
+        const QJsonObject created = create(fixture).value("team").toObject();
+        const QString teamId = created.value("id").toString();
+        const QString leader = memberWith(created, "Lead Checkout");
+        const QString developer = memberWith(created, "Developer 1");
+        const QString reviewer = memberWith(created, "Reviewer");
+        QCOMPARE(command(fixture, "team.provider.set",
+                         {{"team_id", teamId}, {"provider", "codex"}, {"execution_policy", "full"}})
+                     .value("error_code")
+                     .toString(),
+                 QStringLiteral("execution_policy_denied"));
+        QCOMPARE(command(fixture, "team.provider.set",
+                         {{"team_id", teamId},
+                          {"provider", "codex"},
+                          {"execution_policy", "ask"},
+                          {"risk_acknowledged", true}})
+                     .value("error_code")
+                     .toString(),
+                 QStringLiteral("invalid_payload"));
+        QCOMPARE(command(fixture, "team.provider.set",
+                         {{"team_id", teamId},
+                          {"provider", "copilot"},
+                          {"execution_policy", "full"},
+                          {"risk_acknowledged", true}})
+                     .value("error_code")
+                     .toString(),
+                 QStringLiteral("provider_unavailable"));
+        QCOMPARE(team(fixture, created).value("execution_policy").toString(),
+                 QStringLiteral("ask"));
+        QVERIFY(!updateKinds(fixture, created).contains("execution_policy_changed"));
+
+        const QJsonObject switched = command(fixture, "team.provider.set",
+                                             {{"team_id", teamId},
+                                              {"provider", "codex"},
+                                              {"execution_policy", "full"},
+                                              {"risk_acknowledged", true}});
+        QVERIFY2(switched.value("ok").toBool(), qPrintable(text(switched)));
+        QCOMPARE(resultFor(switched, reviewer).value("status").toString(),
+                 QStringLiteral("pending"));
+        QCOMPARE(resultFor(switched, developer).value("status").toString(),
+                 QStringLiteral("unchanged"));
+        const QJsonObject now = team(fixture, created);
+        QCOMPARE(now.value("execution_policy").toString(), QStringLiteral("full"));
+        QCOMPARE(memberOf(now, leader).value("pending_policy").toString(), QStringLiteral("full"));
+        QCOMPARE(memberOf(now, developer).value("pending_policy").toString(),
+                 QStringLiteral("full"));
+        QVERIFY(!memberOf(now, reviewer).contains("pending_policy"));
+        const QStringList kinds = updateKinds(fixture, created);
+        QVERIFY(kinds.contains("execution_policy_changed"));
+        QVERIFY(kinds.contains("provider_set"));
+        // Nothing changes before a turn: the policy waits with the member.
+        QCOMPARE(stored(fixture, developer).executionPolicy, QStringLiteral("ask"));
+
+        // A desktop composer sends the conversation's current permission with every prompt; the
+        // team's Full access still reaches the member with that turn.
+        const QJsonObject asked{{"options", QJsonObject{{"permission", "workspace-write"}}}};
+        for (const QString& member : {leader, developer, reviewer})
+            QVERIFY(turn(fixture, member, "Ready?", asked));
+        QCOMPARE(stored(fixture, developer).executionPolicy, QStringLiteral("full"));
+        QCOMPARE(stored(fixture, developer).adapter, QStringLiteral("codex"));
+        QCOMPARE(stored(fixture, leader).executionPolicy, QStringLiteral("full"));
+        QCOMPARE(stored(fixture, leader).adapter, QStringLiteral("codex"));
+        QCOMPARE(stored(fixture, reviewer).executionPolicy, QStringLiteral("full"));
+        QCOMPARE(stored(fixture, reviewer).adapter, QStringLiteral("codex"));
+        // A member that has not taken a turn yet still waits for it.
+        const QJsonObject after = team(fixture, created);
+        for (const QString& member : {leader, developer})
+            QVERIFY(!memberOf(after, member).contains("pending_policy"));
+        QCOMPARE(
+            memberOf(after, memberWith(created, "Developer 2")).value("pending_policy").toString(),
+            QStringLiteral("full"));
     }
 
     // A provider that cannot take a turn refuses the change before anything is recorded.

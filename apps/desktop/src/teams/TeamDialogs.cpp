@@ -116,8 +116,10 @@ void setAgentLabel(ket::Button* button, const QString& text) {
     new FittedLabel(button, text);
 }
 
+} // namespace
+
 // The body scrolls and the buttons stay: the card fits a 1024 x 640 window at 125 %.
-QScrollArea* scrolling(QWidget* form, QWidget* anchor) {
+QScrollArea* team_dialogs::scrolling(QWidget* form, QWidget* anchor) {
     auto* scroll = new QScrollArea;
     scroll->setObjectName(QStringLiteral("teamDialogScroll"));
     scroll->setWidget(form);
@@ -132,8 +134,6 @@ QScrollArea* scrolling(QWidget* form, QWidget* anchor) {
     scroll->setMinimumHeight(qMin(form->sizeHint().height(), qMax(240, window - 260)));
     return scroll;
 }
-
-} // namespace
 
 NewTeamForm::NewTeamForm(TeamDirectory* teams, const QString& repository,
                          const QVariantList& models, team_goal::ConversationDirectory conversations,
@@ -569,7 +569,7 @@ ket::Dialog* NewTeamForm::present(QWidget* anchor, TeamDirectory* teams, const Q
     dialog->setObjectName(QStringLiteral("newTeamDialog"));
     dialog->setAttribute(Qt::WA_DeleteOnClose);
     auto* form = new NewTeamForm(teams, repository, models, std::move(conversations));
-    QScrollArea* scroll = scrolling(form, anchor);
+    QScrollArea* scroll = team_dialogs::scrolling(form, anchor);
     dialog->setBody(scroll);
     dialog->setCardWidth(960);
     form->follow(scroll->viewport());
@@ -815,7 +815,7 @@ ket::Dialog* AddMemberForm::present(QWidget* anchor, TeamDirectory* teams, const
     dialog->setObjectName(QStringLiteral("addMemberDialog"));
     dialog->setAttribute(Qt::WA_DeleteOnClose);
     auto* form = new AddMemberForm(teams, team, models, role);
-    QScrollArea* scroll = scrolling(form, anchor);
+    QScrollArea* scroll = team_dialogs::scrolling(form, anchor);
     dialog->setBody(scroll);
     // The help lines wrap only once the card has its width, and a role shows other rows: the
     // body grows to the form then, up to the window's limit, so nothing scrolls without need.

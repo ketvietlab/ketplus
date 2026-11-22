@@ -157,9 +157,17 @@ Linux store policy, signed upgrade prompts and platform release acceptance remai
   chosen members to another installed, signed-in provider with an optional model and
   effort (the new provider's default otherwise). Nothing is interrupted: each member keeps
   a pending switch, shown on the team, that its next turn takes through the provider
-  handoff. A Codex reviewer without the team's Full access refuses the change; members in
+  handoff. A Codex reviewer without the team's Full access refuses the change unless the
+  request gives the team Full access with the same acknowledgement as Create (T-3); each
+  member then takes it at its next turn. Members in
   a switched worktree that the provider cannot continue are reported one by one. The team
-  keeps the provider for members added later. Not yet in the desktop or phone UI.
+  keeps the provider for members added later. The desktop Team page's Change provider…
+  (T-3) sends it: a provider select of every provider (one not set up disabled), model
+  and effort side by side, every member checked by default, a note on members running a
+  turn, and each member's result once sent. On a move to Codex without the team's Full
+  access, a checkbox gives the team Full access so the reviewer moves too; left clear,
+  the reviewer stays on its provider. The member list shows each
+  member's provider and a pending switch. Not yet in the phone UI.
   Per-task review (#460): a task entering In review is queued for the team's reviewer,
   first in first out, as an ADR 0067 `review` message with its criteria and the diff of
   its branch against the integration branch; `no findings` makes it Ready, findings go

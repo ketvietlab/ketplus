@@ -187,6 +187,8 @@ target_link_libraries(ketplus_sidebar_scale_tests PRIVATE Qt6::Test ketplus_desk
 
 ketplus_add_gui_test(ketplus_team_dialogs_tests TeamDialogsTest.cpp)
 target_link_libraries(ketplus_team_dialogs_tests PRIVATE Qt6::Test ketplus_desktop_shell)
+ketplus_add_gui_test(ketplus_team_provider_dialog_tests TeamProviderDialogTest.cpp)
+target_link_libraries(ketplus_team_provider_dialog_tests PRIVATE Qt6::Test ketplus_desktop_shell)
 ketplus_add_gui_test(ketplus_team_sidebar_window_tests TeamSidebarWindowTest.cpp)
 target_link_libraries(ketplus_team_sidebar_window_tests PRIVATE Qt6::Test ketplus_desktop_shell)
 ketplus_add_gui_test(ketplus_copilot_presentation_tests CopilotPresentationTest.cpp)

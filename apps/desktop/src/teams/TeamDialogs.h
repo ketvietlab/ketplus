@@ -9,6 +9,7 @@
 #include <QWidget>
 
 class QBoxLayout;
+class QScrollArea;
 class QLabel;
 
 namespace ket {
@@ -28,6 +29,11 @@ namespace ketplus {
 
 class TeamDirectory;
 class TeamReviewFields;
+
+namespace team_dialogs {
+// The body scrolls and the buttons stay: the card fits a 1024 x 640 window at 125 %.
+[[nodiscard]] QScrollArea* scrolling(QWidget* form, QWidget* anchor);
+} // namespace team_dialogs
 
 // #465: a whole team in one dialog. One team.create; on a refusal the dialog stays open with
 // what was typed and the error at the role it names.

@@ -65,8 +65,8 @@ const QHash<QString, QSet<QString>>& allowedFields() {
         // T-2: the members are session ids, as team.member.remove names them.
         {QStringLiteral("team.provider.set"),
          {QStringLiteral("team_id"), QStringLiteral("provider"), QStringLiteral("model"),
-          QStringLiteral("effort"), QStringLiteral("members"),
-          QStringLiteral("expected_revision")}},
+          QStringLiteral("effort"), QStringLiteral("members"), QStringLiteral("execution_policy"),
+          QStringLiteral("risk_acknowledged"), QStringLiteral("expected_revision")}},
         {QStringLiteral("team.task.handover"),
          {QStringLiteral("team_id"), QStringLiteral("task_id"), QStringLiteral("owner"),
           QStringLiteral("reason"), QStringLiteral("expected_revision")}}};
