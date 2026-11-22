@@ -5,6 +5,7 @@
 #include "KetRecipes.h"
 #include "KetRichRecipes.h"
 #include "KetSyntax.h"
+#include "ModelProviderSelectProbe.h"
 #include "agent/AgentSessionManager.h"
 #include "agent/AgentWorkspaceView.h"
 #include "agent/CodexAppServer.h"
@@ -14,6 +15,7 @@
 #include <QScopeGuard>
 #include <functional>
 
+#include "ModelProviderSelectProbe.h"
 #include <QAbstractItemModelTester>
 #include <QAbstractTextDocumentLayout>
 #include <QClipboard>
@@ -36,6 +38,7 @@
 #include <QTextImageFormat>
 #include <QTextLayout>
 #include <QTextTable>
+
 #include <QtTest>
 
 #include <algorithm>
@@ -121,38 +124,43 @@ void AgentWorkspaceViewTest::selectsModelsInUnifiedPicker() {
     QCOMPARE(configuration.count(), 0);
     auto* popupContent = qvariant_cast<QQuickItem*>(popup->property("contentItem"));
     QVERIFY(popupContent);
-    for (const auto& id : {"claude", "codex", "cursor", "ketrouter"}) {
-        auto* tab =
-            findVisualItem(popupContent, QStringLiteral("providerTab_") + QString::fromLatin1(id));
-        QVERIFY(tab);
+    // T-12: a select box lists every provider, company first, from the one provider table.
+    auto* providers = model_provider_select::row(popupContent);
+    QVERIFY(providers);
+    QCOMPARE(providers->property("choices").toList().size(), 5);
+    QCOMPARE(model_provider_select::choice(providers, "codex").value("label").toString(),
+             QStringLiteral("OpenAI \u2013 Codex"));
+    QCOMPARE(model_provider_select::choice(providers, "claude").value("label").toString(),
+             QStringLiteral("Anthropic \u2013 Claude"));
+    QCOMPARE(model_provider_select::choice(providers, "cursor").value("label").toString(),
+             QStringLiteral("Anysphere \u2013 Cursor"));
+    QCOMPARE(model_provider_select::choice(providers, "copilot").value("label").toString(),
+             QStringLiteral("GitHub \u2013 Copilot"));
+    for (const auto& id : {"claude", "codex", "cursor", "copilot", "ketrouter"}) {
         const bool expectedEnabled = QString::fromLatin1(id) == QStringLiteral("codex") ||
                                      QString::fromLatin1(id) == QStringLiteral("claude") ||
                                      QString::fromLatin1(id) == QStringLiteral("cursor");
-        QCOMPARE(tab->isEnabled(), expectedEnabled);
-        QVERIFY(tab->width() < 90.0);
+        QCOMPARE(model_provider_select::enabled(providers, id), expectedEnabled);
     }
-    auto* claudeTab = findVisualItem(popupContent, QStringLiteral("providerTab_claude"));
-    auto* codexTab = findVisualItem(popupContent, QStringLiteral("providerTab_codex"));
-    auto* cursorTab = findVisualItem(popupContent, QStringLiteral("providerTab_cursor"));
-    QVERIFY(claudeTab && codexTab && cursorTab);
-    QVERIFY(QMetaObject::invokeMethod(claudeTab, "clicked"));
+    QVERIFY(!model_provider_select::choose(providers, "ketrouter"));
+    QVERIFY(model_provider_select::choose(providers, "claude"));
     QTRY_COMPARE(list->property("count").toInt(), 1);
-    QVERIFY(QMetaObject::invokeMethod(cursorTab, "clicked"));
+    QVERIFY(model_provider_select::choose(providers, "cursor"));
     QTRY_COMPARE(list->property("count").toInt(), 2);
     QTRY_VERIFY(!slider->isEnabled());
-    QVERIFY(QMetaObject::invokeMethod(codexTab, "clicked"));
+    QVERIFY(model_provider_select::choose(providers, "codex"));
     QTRY_COMPARE(list->property("count").toInt(), 3);
     // Future turn defaults stay editable while the current provider keeps running.
     view.setConversationConfiguration(QVariantMap{{"model", "astra"},
                                                   {"effort", "medium"},
                                                   {"permission", "read-only"},
                                                   {"provider", "codex"}});
-    QTRY_VERIFY(claudeTab->isEnabled());
+    QTRY_VERIFY(model_provider_select::enabled(providers, "claude"));
     view.setSessionState(QStringLiteral("Conversation"), QStringLiteral("Working…"), true);
-    QTRY_VERIFY(claudeTab->isEnabled());
-    QVERIFY(codexTab->isEnabled());
+    QTRY_VERIFY(model_provider_select::enabled(providers, "claude"));
+    QVERIFY(model_provider_select::enabled(providers, "codex"));
     view.setSessionState(QStringLiteral("Conversation"), QStringLiteral("Ready"), false);
-    QTRY_VERIFY(claudeTab->isEnabled());
+    QTRY_VERIFY(model_provider_select::enabled(providers, "claude"));
     const auto capture = [&](const QString& suffix) {
         const QString prefix = qEnvironmentVariable("KETPLUS_MODEL_PICKER_CAPTURE");
         if (prefix.isEmpty())
@@ -241,9 +249,11 @@ void AgentWorkspaceViewTest::selectsModelsInUnifiedPicker() {
     view.resize(420, 480);
     QTest::qWait(100);
     QVERIFY(assertBounds());
-    auto* tabs = root->findChild<QQuickItem*>("providerTabs");
-    QVERIFY(tabs);
-    QVERIFY(tabs->implicitWidth() < popup->property("width").toDouble());
+    // The select spans the dialog, inside its margins, at a narrow window too.
+    auto* select = root->findChild<QQuickItem*>("providerSelect");
+    QVERIFY(select);
+    QTRY_VERIFY(select->width() > popup->property("width").toDouble() / 2);
+    QVERIFY(select->mapToItem(nullptr, QPointF(select->width(), 0)).x() <= root->width() + 1);
     QVERIFY(capture(".narrow"));
     view.resize(1000, 740);
     ket::Appearance::instance().setMode(ket::Appearance::Mode::Light);

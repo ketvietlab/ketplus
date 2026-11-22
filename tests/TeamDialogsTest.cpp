@@ -342,6 +342,32 @@ class TeamDialogsTest final : public QObject {
         QCOMPARE(open.agent().model, QStringLiteral("gpt-5"));
     }
 
+    // T-12: the provider is a select with its label above, company first; the model and effort
+    // selects follow it, each the dialog's width.
+    void theProviderIsASelectAboveModelAndEffort() {
+        TeamAgentChooser chooser(bothProviders, {"claude", "opus", {}});
+        chooser.resize(420, chooser.sizeHint().height());
+        chooser.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&chooser));
+        QCOMPARE(chooser.providers()->itemText(chooser.providers()->findData("claude")),
+                 QStringLiteral("Anthropic \u2013 Claude"));
+        QCOMPARE(chooser.providers()->itemText(chooser.providers()->findData("codex")),
+                 QStringLiteral("OpenAI \u2013 Codex"));
+        const auto rows = chooser.findChildren<ket::FieldRow*>();
+        QCOMPARE(rows.size(), 3);
+        for (const ket::FieldRow* row : rows)
+            QVERIFY(row->isStacked());
+        const QRect provider(chooser.providers()->mapTo(&chooser, QPoint{}),
+                             chooser.providers()->size());
+        const QPoint model = chooser.modelSelect()->mapTo(&chooser, QPoint{});
+        const QPoint effort =
+            chooser.findChild<QWidget*>("teamAgentEffort")->mapTo(&chooser, QPoint{});
+        QVERIFY(provider.width() > chooser.width() * 0.8);
+        QVERIFY(model.y() > provider.bottom());
+        QVERIFY(effort.y() > model.y());
+        QCOMPARE(effort.x(), model.x());
+    }
+
     // At 1024 x 640 the card stays inside the window and its buttons stay reachable.
     void theDialogFitsASmallWindow() {
         QWidget window;
