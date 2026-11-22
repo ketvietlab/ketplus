@@ -220,13 +220,13 @@ class TeamFindingRoutingTest final : public QObject {
              {"integration_branch", "integration"},
              {"execution_policy", "full"},
              {"risk_acknowledged", true},
-             {"plan", QJsonObject{{"leader", QJsonObject{{"provider", "claude"}}},
-                                  {"developers",
-                                   QJsonObject{{"count", 1},
-                                               {"provider", "codex"},
-                                               {"members", QJsonArray{QJsonObject{
-                                                               {"paths", QJsonArray{"docs"}}}}}}},
-                                  {"reviewer", QJsonObject{{"provider", "codex"}}}}}});
+             {"plan",
+              QJsonObject{{"leader", QJsonObject{{"provider", "claude"}}},
+                          {"developers",
+                           QJsonObject{{"count", 1},
+                                       {"provider", "codex"},
+                                       {"members", QJsonArray{QJsonObject{{"lane", "Docs"}}}}}},
+                          {"reviewer", QJsonObject{{"provider", "codex"}}}}}});
         QVERIFY2(made.value("ok").toBool(), qPrintable(text(made)));
         const QString teamId = made.value("team").toObject().value("id").toString();
         const auto members = made.value("team").toObject().value("members").toArray();

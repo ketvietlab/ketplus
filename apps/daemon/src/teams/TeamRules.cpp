@@ -15,47 +15,6 @@ TeamError refusal(const QString& code, const QString& message) { return {code, m
 
 } // namespace
 
-std::optional<QStringList> normalisedPaths(const QStringList& paths) {
-    QStringList result;
-    for (QString path : paths) {
-        path = path.trimmed();
-        path.replace(QLatin1Char('\\'), QLatin1Char('/'));
-        while (path.endsWith(QLatin1Char('/')))
-            path.chop(1);
-        if (path.isEmpty() || path.startsWith(QLatin1Char('/')) || path.size() > 512)
-            return std::nullopt;
-        const QStringList parts = path.split(QLatin1Char('/'));
-        for (const QString& part : parts)
-            if (part.isEmpty() || part == QStringLiteral(".") || part == QStringLiteral(".."))
-                return std::nullopt;
-        if (!result.contains(path))
-            result.append(path);
-    }
-    if (result.size() > 32)
-        return std::nullopt;
-    return result;
-}
-
-bool pathUnder(const QString& path, const QString& prefix) {
-    return path == prefix || path.startsWith(prefix + QLatin1Char('/'));
-}
-
-std::optional<TeamError> laneOverlap(const Team& team, const QString& exceptSession,
-                                     const QStringList& paths) {
-    for (const Member& member : team.members) {
-        if (member.sessionId == exceptSession || member.role != role::developer)
-            continue;
-        for (const QString& mine : paths)
-            for (const QString& theirs : member.paths)
-                if (pathUnder(mine, theirs) || pathUnder(theirs, mine))
-                    return refusal(
-                        QStringLiteral("lane_overlap"),
-                        QStringLiteral("%1 is already in the lane of %2.")
-                            .arg(mine, member.name.isEmpty() ? member.lane : member.name));
-    }
-    return std::nullopt;
-}
-
 std::optional<TeamError> validGoal(const QString& goal) {
     if (goal.size() > maximumGoalCharacters)
         return refusal(QStringLiteral("invalid_payload"),
@@ -264,12 +223,6 @@ std::optional<TeamError> canAddMember(const Team& team, const Member& member,
         if (team.count(role::developer) >= maximumDevelopers)
             return refusal(QStringLiteral("team_full"),
                            QStringLiteral("The team has five developers."));
-        const auto paths = normalisedPaths(member.paths);
-        if (!paths)
-            return refusal(QStringLiteral("invalid_payload"),
-                           QStringLiteral("A lane's paths are relative to the repository root."));
-        if (auto overlap = laneOverlap(team, member.sessionId, *paths))
-            return overlap;
     }
     return std::nullopt;
 }

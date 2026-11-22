@@ -219,11 +219,6 @@ std::optional<QString> SessionHost::ownHead(const teams::Team& team,
     return team_git::ownHead(team, task);
 }
 
-std::optional<QStringList> SessionHost::changedPaths(const teams::Team& team,
-                                                     const teams::Task& task) const {
-    return team_git::changedPaths(team, task);
-}
-
 std::optional<bool> SessionHost::isMerged(const teams::Team& team, const teams::Task& task) const {
     return team_git::isMerged(team, task);
 }

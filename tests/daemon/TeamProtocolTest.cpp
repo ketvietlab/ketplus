@@ -18,13 +18,12 @@ namespace {
 
 QJsonObject plan(const QString& reviewerProvider = QStringLiteral("claude"), int developers = 2) {
     return {{"leader", QJsonObject{{"provider", "claude"}, {"model", "opus"}, {"effort", "high"}}},
-            {"developers",
-             QJsonObject{{"count", developers},
-                         {"provider", "codex"},
-                         {"model", "gpt-5"},
-                         {"effort", "medium"},
-                         {"members", QJsonArray{QJsonObject{{"paths", QJsonArray{"apps/web"}}},
-                                                QJsonObject{{"paths", QJsonArray{"apps/api"}}}}}}},
+            {"developers", QJsonObject{{"count", developers},
+                                       {"provider", "codex"},
+                                       {"model", "gpt-5"},
+                                       {"effort", "medium"},
+                                       {"members", QJsonArray{QJsonObject{{"lane", "Web"}},
+                                                              QJsonObject{{"lane", "Api"}}}}}},
             {"reviewer", QJsonObject{{"provider", reviewerProvider}, {"model", "sonnet"}}}};
 }
 
@@ -426,8 +425,8 @@ class TeamProtocolTest final : public QObject {
         QCOMPARE(members.at(0).toObject().value("effort").toString(), QStringLiteral("high"));
         QCOMPARE(members.at(1).toObject().value("name").toString(), QStringLiteral("Developer 1"));
         QCOMPARE(members.at(1).toObject().value("provider").toString(), QStringLiteral("codex"));
-        QCOMPARE(members.at(1).toObject().value("paths").toArray().first().toString(),
-                 QStringLiteral("apps/web"));
+        QCOMPARE(members.at(1).toObject().value("lane").toString(), QStringLiteral("Web"));
+        QVERIFY(!members.at(1).toObject().contains("paths"));
         QCOMPARE(members.at(2).toObject().value("name").toString(), QStringLiteral("Developer 2"));
         QCOMPARE(members.at(3).toObject().value("name").toString(), QStringLiteral("Reviewer"));
         QCOMPARE(members.at(3).toObject().value("role").toString(), QStringLiteral("reviewer"));
@@ -528,13 +527,6 @@ class TeamProtocolTest final : public QObject {
         QCOMPARE(sessions(fixture), 0);
         result = create(fixture, plan(QStringLiteral("claude"), 6));
         QCOMPARE(result.value("error_code").toString(), QStringLiteral("team_full"));
-        QJsonObject overlapping = plan();
-        QJsonObject developers = overlapping.value("developers").toObject();
-        developers.insert("members", QJsonArray{QJsonObject{{"paths", QJsonArray{"apps"}}},
-                                                QJsonObject{{"paths", QJsonArray{"apps/api"}}}});
-        overlapping.insert("developers", developers);
-        result = create(fixture, overlapping);
-        QCOMPARE(result.value("error_code").toString(), QStringLiteral("lane_overlap"));
         QCOMPARE(sessions(fixture), 0);
         QVERIFY(command(fixture, "team.list", {}).value("teams").toArray().isEmpty());
     }
@@ -620,10 +612,19 @@ class TeamProtocolTest final : public QObject {
                 .value("error_code")
                 .toString(),
             QStringLiteral("team_member"));
+        const auto laneOf = [](const QJsonObject& value, const QString& session) {
+            for (const auto& member : value.value("team").toObject().value("members").toArray())
+                if (member.toObject().value("session_id").toString() == session)
+                    return member.toObject().value("lane").toString();
+            return QString{};
+        };
+        // T-10: an older client still sends paths; they are ignored, never refused.
+        const QString laneBefore = laneOf(joined, loner);
         QJsonObject changed =
             command(fixture, "team.member.update",
                     {{"team_id", id}, {"session_id", loner}, {"paths", QJsonArray{"apps/web/x"}}});
-        QCOMPARE(changed.value("error_code").toString(), QStringLiteral("lane_overlap"));
+        QVERIFY2(changed.value("ok").toBool(), qPrintable(text(changed)));
+        QCOMPARE(laneOf(command(fixture, "team.get", {{"team_id", id}}), loner), laneBefore);
         changed = command(fixture, "team.member.update",
                           {{"team_id", id},
                            {"session_id", loner},
@@ -631,6 +632,13 @@ class TeamProtocolTest final : public QObject {
                            {"paths", QJsonArray{"web/footer", "web/header"}},
                            {"reason", "header too"}});
         QVERIFY2(changed.value("ok").toBool(), qPrintable(text(changed)));
+        QCOMPARE(laneOf(command(fixture, "team.get", {{"team_id", id}}), loner),
+                 QStringLiteral("Footer"));
+        QCOMPARE(command(fixture, "team.member.update",
+                         {{"team_id", id}, {"session_id", loner}, {"lane", " "}})
+                     .value("error_code")
+                     .toString(),
+                 QStringLiteral("invalid_payload"));
         const QString leader =
             team.value("members").toArray().first().toObject().value("session_id").toString();
         QCOMPARE(command(fixture, "team.member.remove", {{"team_id", id}, {"session_id", leader}})

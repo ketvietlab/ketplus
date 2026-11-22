@@ -227,7 +227,6 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/teams/TeamCoordinator.cpp
     src/teams/TeamCoordinator.h
     src/teams/TeamCoordinatorAssign.cpp
-    src/teams/TeamCoordinatorAllowedPaths.cpp
     src/teams/TeamCoordinatorAttribution.cpp
     src/teams/TeamCoordinatorDecisions.cpp
     src/teams/TeamCoordinatorFlow.cpp
@@ -235,7 +234,6 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/teams/TeamCoordinatorStall.cpp
     src/teams/TeamCoordinatorStorage.cpp
     src/teams/TeamCoordinatorWaits.cpp
-    src/teams/TeamCoordinatorLanes.cpp
     src/teams/TeamCoordinatorMerges.cpp
     src/teams/TeamCoordinatorProviders.cpp
     src/teams/TeamCoordinatorSettings.cpp

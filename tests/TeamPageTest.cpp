@@ -218,11 +218,13 @@ class TeamPageTest final : public QObject {
         QCOMPARE(choices.first()->property("choice").toString(), QStringLiteral("Stripe"));
         QVERIFY(choices.first()->text().contains("recommended"));
         QVERIFY(card->findChild<QLabel*>("teamDecisionAbout")->text().contains("blocks T-2"));
-        // Tasks, with the lane flag and Ready to merge.
+        // Tasks and Ready to merge. T-10: the lane flag and lane paths an older daemon still
+        // sends are not shown.
         auto* table = page.tasksTable();
         QCOMPARE(table->rowCount(), 4);
         QCOMPARE(table->item(0, 2)->text(), QStringLiteral("1/2"));
-        QVERIFY(table->item(0, 5)->text().contains("Outside its lane"));
+        QVERIFY(!table->item(0, 5)->text().contains("Outside its lane"));
+        QVERIFY(!page.findChild<QWidget*>("teamMemberPaths"));
         QCOMPARE(table->item(2, 5)->text(), QStringLiteral("Ready to merge"));
         page.setTaskFilter("blocked");
         QCOMPARE(page.tasksTable()->rowCount(), 1);

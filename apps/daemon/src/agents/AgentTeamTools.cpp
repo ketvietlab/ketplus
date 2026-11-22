@@ -59,7 +59,6 @@ const QStringList& names() {
                                    QStringLiteral("team_review_void"),
                                    QStringLiteral("team_review_accept"),
                                    QStringLiteral("team_lane_set"),
-                                   QStringLiteral("team_paths_allow"),
                                    QStringLiteral("team_repository_set"),
                                    QStringLiteral("team_decision_raise"),
                                    QStringLiteral("team_decision_withdraw")};
@@ -265,25 +264,12 @@ QJsonArray teamTools() {
               text(QStringLiteral("Bounded lowercase reason code for this leader arbitration."))}},
             {QStringLiteral("task_id"), QStringLiteral("evidence"), QStringLiteral("reason")}),
         tool(QStringLiteral("team_lane_set"),
-             QStringLiteral("Leader: change a developer's lane and path prefixes. Logged in "
-                            "Updates and in the history of the tasks it affects."),
+             QStringLiteral("Leader: rename a developer's lane. Logged in Updates and in the "
+                            "history of the tasks it affects."),
              {{QStringLiteral("developer"), member},
-              {QStringLiteral("lane"), text(QStringLiteral("The lane's name."))},
-              {QStringLiteral("paths"),
-               list(QStringLiteral("Path prefixes relative to the repository."))},
+              {QStringLiteral("lane"), text(QStringLiteral("The lane's new name."))},
               {QStringLiteral("reason"), text(QStringLiteral("Why the lane changes."))}},
-             {QStringLiteral("developer"), QStringLiteral("paths"), QStringLiteral("reason")}),
-        tool(QStringLiteral("team_paths_allow"),
-             QStringLiteral("Leader: name the paths any lane may change, such as contracts, "
-                            "snapshots, fixtures or tests: the team's shared paths, or with "
-                            "task_id that task's own. The list replaces the one before; a "
-                            "change there is never flagged outside a lane."),
-             {{QStringLiteral("task_id"), text(QStringLiteral("The task, or none for the team."))},
-              {QStringLiteral("paths"),
-               list(QStringLiteral("Paths relative to the repository root, such as contracts "
-                                   "or tests/fixtures."))},
-              {QStringLiteral("reason"), text(QStringLiteral("Why, recorded in the history."))}},
-             {QStringLiteral("paths"), QStringLiteral("reason")}),
+             {QStringLiteral("developer"), QStringLiteral("lane"), QStringLiteral("reason")}),
         tool(QStringLiteral("team_repository_set"),
              QStringLiteral("Leader: move the team to another repository (the full path of its "
                             "main checkout) and integration branch, which origin must have. "

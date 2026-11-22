@@ -27,11 +27,6 @@ namespace ketplus::daemon::team_git {
 // after its base and not yet in the integration branch. Empty otherwise; nothing when git
 // could not read the branch or its ancestry.
 [[nodiscard]] std::optional<QString> ownHead(const teams::Team& team, const teams::Task& task);
-// Tracked paths the task's branch changed against its base, and, while its worktree has the
-// branch checked out, the tracked files changed there but not committed. Never untracked or
-// ignored files.
-[[nodiscard]] std::optional<QStringList> changedPaths(const teams::Team& team,
-                                                      const teams::Task& task);
 // Whether the integration branch contains the task's branch; nothing when git failed.
 [[nodiscard]] std::optional<bool> isMerged(const teams::Team& team, const teams::Task& task);
 // The task's branch against its base on the integration branch; nothing when git failed.

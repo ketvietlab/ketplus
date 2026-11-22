@@ -85,16 +85,8 @@ Team standard(const bool leaderWrites = true) {
     team.leaderWritesRequirements = leaderWrites;
     team.planApproved = true;
     team.members = {{.sessionId = "lead", .role = role::leader, .name = "Lead"},
-                    {.sessionId = "dev1",
-                     .role = role::developer,
-                     .name = "Dev 1",
-                     .lane = "Web",
-                     .paths = {"web"}},
-                    {.sessionId = "dev2",
-                     .role = role::developer,
-                     .name = "Dev 2",
-                     .lane = "Api",
-                     .paths = {"api"}},
+                    {.sessionId = "dev1", .role = role::developer, .name = "Dev 1", .lane = "Web"},
+                    {.sessionId = "dev2", .role = role::developer, .name = "Dev 2", .lane = "Api"},
                     {.sessionId = "rev", .role = role::reviewer, .name = "Reviewer"}};
     return team;
 }

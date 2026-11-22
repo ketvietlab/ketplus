@@ -33,10 +33,7 @@ void git(const QString& directory, const QStringList& arguments) {
 
 QJsonObject plan() {
     return {{"leader", QJsonObject{{"provider", "claude"}}},
-            {"developers",
-             QJsonObject{{"count", 1},
-                         {"provider", "codex"},
-                         {"members", QJsonArray{QJsonObject{{"paths", QJsonArray{"web"}}}}}}},
+            {"developers", QJsonObject{{"count", 1}, {"provider", "codex"}}},
             {"reviewer", QJsonObject{{"provider", "claude"}}}};
 }
 

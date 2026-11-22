@@ -59,10 +59,6 @@
             <translation> lượt tự động đã dùng</translation>
         </message>
         <message>
-            <source> belongs to </source>
-            <translation> thuộc về </translation>
-        </message>
-        <message>
             <source> can join </source>
             <translation> mới có thể tham gia </translation>
         </message>
@@ -219,10 +215,6 @@
             <translation>) sẽ chưa có người phụ trách để leader giao lại.</translation>
         </message>
         <message>
-            <source>). The leader decides who makes the change.</source>
-            <translation>). Leader quyết định ai thực hiện thay đổi.</translation>
-        </message>
-        <message>
             <source>, from the next review request</source>
             <translation>, từ yêu cầu review tiếp theo</translation>
         </message>
@@ -265,6 +257,10 @@
         <message>
             <source>A fourth developer</source>
             <translation>Developer thứ tư</translation>
+        </message>
+        <message>
+            <source>A short name for this developer's part of the work.</source>
+            <translation>Tên ngắn cho phần việc của developer này.</translation>
         </message>
         <message>
             <source>A team gives several conversations one goal. A leader assigns the tasks, each developer owns a part of the code, and a reviewer checks their pull requests.</source>
@@ -387,20 +383,12 @@
             <translation>Mỗi task được giao cho một trong hai reviewer, nên hai task có thể được review cùng lúc.</translation>
         </message>
         <message>
-            <source>Edited a file outside its lane</source>
-            <translation>Đã sửa file ngoài lane phụ trách</translation>
-        </message>
-        <message>
             <source>Every criterion is met: Ready to merge</source>
             <translation>Mọi tiêu chí đã đạt: Sẵn sàng merge</translation>
         </message>
         <message>
             <source>Findings go back to the developer until pass </source>
             <translation>Finding được gửi lại developer đến lượt </translation>
-        </message>
-        <message>
-            <source>Folders separated by commas. An edit outside them is flagged on the task.</source>
-            <translation>Phân cách thư mục bằng dấu phẩy. Thay đổi ngoài các thư mục này sẽ bị đánh dấu trên task.</translation>
         </message>
         <message>
             <source>For </source>
@@ -413,10 +401,6 @@
         <message>
             <source>Gets the task's history, pull request, branch, worktree and the decisions made for it. </source>
             <translation>Nhận lịch sử task, pull request, nhánh, worktree và các quyết định liên quan. </translation>
-        </message>
-        <message>
-            <source>Give at least one folder.</source>
-            <translation>Nhập ít nhất một thư mục.</translation>
         </message>
         <message>
             <source>Hand over </source>

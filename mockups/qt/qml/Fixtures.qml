@@ -615,7 +615,7 @@ QtObject {
     // `decisions`; `updates` are task changes that woke nobody and reach the leader as one digest.
     // Members are conversations of `repositories` above, so their rows open them.
     // `teams/live`: a team as its members write it. Choices are sentences, a task carries a long
-    // Markdown description, lanes and paths are long, and an update is a paragraph. The page and
+    // Markdown description and lanes are long, and an update is a paragraph. The page and
     // its dialogs must stay inside their width with this content.
     // Synthetic long-form variant; no private repository tasks or source paths.
     readonly property var liveTeam: Object.assign({}, teams[0], {
@@ -640,8 +640,7 @@ QtObject {
             number: conversation.number,
             title: conversation.title,
             provider: conversation.provider + " · " + conversation.model,
-            lane: "",
-            paths: []
+            lane: ""
         }, assignment)
     }
 
@@ -659,11 +658,11 @@ QtObject {
                 { id: "T-2", path: "/workspace/cinder-trail-offline-notes", size: "4.2 GB" }] },
             members: [
                 releaseMember("4821", { role: "leader", state: "working", now: "Tracking release checks" }),
-                releaseMember("2035", { role: "developer", lane: "Trail picker", paths: ["src/trails/"],
+                releaseMember("2035", { role: "developer", lane: "Trail picker",
                     state: "idle", now: "T-1 · review passed" }),
-                releaseMember("8213", { role: "developer", lane: "Offline QA", paths: ["tests/"],
+                releaseMember("8213", { role: "developer", lane: "Offline QA",
                     state: "blocked", now: "T-5 · waiting for D-1" }),
-                releaseMember("8215", { role: "developer", lane: "Offline settings", paths: ["src/settings/"],
+                releaseMember("8215", { role: "developer", lane: "Offline settings",
                     state: "working", now: "T-6 · preparing review" }),
                 releaseMember("4583", { role: "reviewer", reviews: ["Trail picker", "Offline QA", "Offline settings"],
                     state: "idle", now: "T-1 · keyboard review passed" })
@@ -685,13 +684,12 @@ QtObject {
                   history: [{ when: "Yesterday, 16:20", text: "@agent/4583 verified restore and sync; #405 merged" }] },
                 { id: "T-3", title: "Verify trail picker with a large library", owner: "8213", lane: "Offline QA",
                   state: "doing", pr: "", branch: "test/large-trail-library", worktree: "cinder-trail-library", dependsOn: "",
-                  outsideLane: { path: "src/trails/TrailList.qml", lane: "Trail picker", owner: "2035" },
                   criteria: [
                       { text: "Recently opened trails appear first", done: true },
                       { text: "Filtering preserves keyboard focus", done: true },
                       { text: "The picker handles 0, 1 and 200 saved trails", done: false }],
                   criteriaNote: "The leader added the 200-trail case this morning.",
-                  history: [{ when: "Today, 11:30", text: "@agent/8213 found a picker change outside the Offline QA lane" }] },
+                  history: [{ when: "Today, 11:30", text: "@agent/8213 asked @agent/2035 for the picker change it needs" }] },
                 { id: "T-4", title: "Check the empty offline library", owner: "8213", lane: "Offline QA",
                   state: "todo", pr: "", branch: "", worktree: "", dependsOn: "T-3",
                   criteria: [{ text: "An empty library offers a way to save a trail", done: false }],
@@ -743,11 +741,11 @@ QtObject {
             turnBudget: 40, automaticTurns: 4,
             members: [
                 { number: "5904", title: "Draft release notes", role: "leader", provider: "Claude · Opus 5.5",
-                  lane: "", paths: [], state: "idle", now: "Waiting for its first task list" },
+                  lane: "", state: "idle", now: "Waiting for its first task list" },
                 { number: "5911", title: "Rewrite the build guide", role: "developer", provider: "Claude · Opus 5.5",
-                  lane: "Guides", paths: ["docs/guide/"], state: "idle", now: "No task yet" },
+                  lane: "Guides", state: "idle", now: "No task yet" },
                 { number: "5923", title: "Review the user guide", role: "reviewer", provider: "Claude · Opus 5.5",
-                  lane: "", paths: [], reviews: ["Guides"], state: "idle", now: "No review yet" }
+                  lane: "", reviews: ["Guides"], state: "idle", now: "No review yet" }
             ],
             tasks: [], decisions: [], updates: []
         }

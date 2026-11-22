@@ -198,8 +198,7 @@ RoutingEvidence::Result RoutingEvidence::produce(const Team& team, const Task& t
     const bool deferring = closure == Closure::PreferenceDeferral;
     if (!team.planApproved || task.assignmentHeld ||
         scope.integrationBranch != QStringLiteral("integration") ||
-        task.state != state::inProgress || !task.reviewBlock.isEmpty() ||
-        !task.outsideLane.isEmpty() || decisionsOpen(team, task))
+        task.state != state::inProgress || !task.reviewBlock.isEmpty() || decisionsOpen(team, task))
         return unknown(QStringLiteral("review_or_approval_required"));
     if (reviewedTask) {
         if (closure == Closure::Unsupported)
@@ -391,7 +390,6 @@ QString RoutingEvidence::semanticRevision(const Team& team, const Task& task,
                               {"turn_budget", team.turnBudget},
                               {"merge_policy", team.mergePolicy},
                               {"execution_policy", team.executionPolicy},
-                              {"shared_paths", QJsonArray::fromStringList(team.sharedPaths)},
                               {"max_rounds", team.maxRounds},
                               {"review_place", team.reviewPlace},
                               {"leader_requirements", team.leaderWritesRequirements}};

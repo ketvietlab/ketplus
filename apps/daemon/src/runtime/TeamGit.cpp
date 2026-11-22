@@ -57,53 +57,6 @@ QString taskCommit(const teams::Team& whole, const teams::Task& task) {
         .trimmed();
 }
 
-std::optional<QStringList> changedPaths(const teams::Team& whole, const teams::Task& task) {
-    // T-90: the task's repository and integration branch, when it has its own.
-    const teams::Team team = teams::taskScope(whole, task);
-    if (task.worktree.isEmpty() || !QFileInfo(task.worktree).isDir() || task.branch.isEmpty())
-        return std::nullopt;
-    // T-38: only the task's own tracked changes. Committed: the task's branch (not whatever
-    // the worktree has checked out) since it left its base. With an integration branch, the
-    // diff from where the branch left it. Without one the base is the commit the task started
-    // from, and a developer who merges the repository's main line into the branch brings in
-    // everyone else's files, so only the branch's own commits count.
-    const QString branch = QStringLiteral("refs/heads/%1").arg(task.branch);
-    const auto committed =
-        team.integrationBranch.isEmpty()
-            ? output(task.worktree, {QStringLiteral("log"), QStringLiteral("--first-parent"),
-                                     QStringLiteral("--no-merges"), QStringLiteral("--format="),
-                                     QStringLiteral("--name-only"), QStringLiteral("--no-renames"),
-                                     QStringLiteral("-z"), QStringLiteral("--end-of-options"),
-                                     QStringLiteral("%1..%2").arg(task.baseCommit, branch)})
-            : output(task.worktree,
-                     {QStringLiteral("diff"), QStringLiteral("--name-only"), QStringLiteral("-z"),
-                      QStringLiteral("--end-of-options"),
-                      QStringLiteral("%1...%2").arg(team.integrationBranch, branch)});
-    if (!committed)
-        return std::nullopt;
-    // -z: a path is spelled as it is, not quoted; --end-of-options: a branch is never an option.
-    QStringList paths = committed->split(QChar(u'\0'), Qt::SkipEmptyParts);
-    // Not committed yet: tracked files only (-uno), so build trees, captures and other
-    // untracked or ignored files are never work outside a lane; and only while the worktree
-    // has the task's branch checked out, since a worktree at another commit is not its work.
-    const auto checkedOut =
-        output(task.worktree,
-               {QStringLiteral("symbolic-ref"), QStringLiteral("--quiet"), QStringLiteral("HEAD")});
-    if (checkedOut && checkedOut->trimmed() == branch) {
-        const auto pending =
-            output(task.worktree,
-                   {QStringLiteral("status"), QStringLiteral("--porcelain=v1"),
-                    QStringLiteral("-z"), QStringLiteral("-uno"), QStringLiteral("--no-renames")});
-        if (!pending)
-            return std::nullopt;
-        for (const QString& entry : pending->split(QChar(u'\0'), Qt::SkipEmptyParts))
-            if (entry.size() > 3)
-                paths.append(entry.mid(3));
-    }
-    paths.removeDuplicates();
-    return paths;
-}
-
 // Exit 0: an ancestor; 1: not one; anything else: git could not tell.
 std::optional<bool> isAncestor(const QString& repository, const QString& commit,
                                const QString& of) {
@@ -406,13 +359,8 @@ QHash<QString, teams::TaskFacts> facts(const teams::Team& team, const QList<team
                 fetchIntegration(scope);
             }
         }
-        answers.insert(task.id, question == teams::TaskQuestion::Merge
-                                    ? teams::TaskFacts{.head = taskCommit(scope, task),
-                                                       .merged = isMerged(scope, task),
-                                                       .changed = std::nullopt}
-                                    : teams::TaskFacts{.head = {},
-                                                       .merged = std::nullopt,
-                                                       .changed = changedPaths(scope, task)});
+        answers.insert(task.id, teams::TaskFacts{.head = taskCommit(scope, task),
+                                                 .merged = isMerged(scope, task)});
     }
     return answers;
 }

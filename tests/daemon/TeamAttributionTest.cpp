@@ -1,7 +1,7 @@
-// T-38: which work is a task's. The lane check reads only tracked changes of the task's own
-// branch; a task gets a head only from a commit of its own branch after its base; git never
-// marks done a task without one; paths any lane may change are named by the leader. The
-// coordinator cases use a fake runtime, the git cases a temporary repository. No network.
+// T-38: which work is a task's. A task gets a head only from a commit of its own branch after
+// its base; git never marks done a task without one. T-10: the leader renames a lane; lanes
+// no longer own paths. The coordinator cases use a fake runtime, the git cases a temporary
+// repository. No network.
 #include "AgentTestFixture.h"
 #include "TeamFakeHost.h"
 #include "runtime/TeamGit.h"
@@ -198,60 +198,6 @@ class TeamAttributionTest final : public QObject {
         QCOMPARE(get(id).state, state::ready);
     }
 
-    // Criterion 2: the team's and one task's allowed paths are not flagged; they are
-    // validated as lane paths and the task's are sent with it.
-    void allowedPathsAreNeverOutsideALane() {
-        const QString id = task("Cart");
-        start(id);
-        host_.changed.insert(
-            id, {"web/cart.txt", "contracts/team.json", "tests/fixtures/a.json", "api/routes.txt"});
-        teams_->memberTurnEnded("dev1");
-        QCOMPARE(get(id).outsideLane,
-                 (QStringList{"api/routes.txt", "contracts/team.json", "tests/fixtures/a.json"}));
-        QVERIFY(teams_->allowPaths(team_, {}, {"contracts"}, "generated", "lead").ok());
-        QCOMPARE(teams_->team(team_)->sharedPaths, QStringList{"contracts"});
-        QCOMPARE(get(id).outsideLane, (QStringList{"api/routes.txt", "tests/fixtures/a.json"}));
-        QVERIFY(teams_->allowPaths(team_, id, {"tests/fixtures/"}, "its fixture", "lead").ok());
-        QCOMPARE(get(id).allowedPaths, QStringList{"tests/fixtures"});
-        QCOMPARE(get(id).outsideLane, QStringList{"api/routes.txt"});
-        QCOMPARE(toJson(get(id), false).value("allowed_paths").toArray(),
-                 QJsonArray{"tests/fixtures"});
-        QVERIFY(historyKinds(id).contains(QStringLiteral("allowed_paths")));
-        for (const QString& bad : {QStringLiteral("/etc"), QStringLiteral("../other")}) {
-            const TeamResult refused = teams_->allowPaths(team_, id, {bad}, "x", "lead");
-            QVERIFY2(!refused.ok(), qPrintable(bad));
-            QCOMPARE(refused.error->code, QStringLiteral("invalid_payload"));
-        }
-        QCOMPARE(teams_->allowPaths(team_, "T-99", {"tests"}, "x", "lead").error->code,
-                 QStringLiteral("task_not_found"));
-        // A task without allowed paths sends no key.
-        QVERIFY(!toJson(get(task("Other")), false).contains("allowed_paths"));
-    }
-
-    // Criterion 1: an ignored build tree and an untracked capture folder are never work, and
-    // neither is a worktree checked out at another commit.
-    void onlyTrackedChangesOfTheTasksBranchCount() {
-        Repository repository;
-        QVERIFY(repository.make());
-        write(QDir(repository.worktree).filePath("build/daemon/out.o"));
-        write(QDir(repository.worktree).filePath("captures/screen.png"));
-        auto changed = team_git::changedPaths(repository.team, repository.task);
-        QVERIFY(changed);
-        QVERIFY2(changed->isEmpty(), qPrintable(changed->join(", ")));
-        // A tracked change counts, committed or not.
-        write(QDir(repository.worktree).filePath("web/index.txt"), "changed\n");
-        changed = team_git::changedPaths(repository.team, repository.task);
-        QCOMPARE(*changed, QStringList{"web/index.txt"});
-        git(repository.worktree, {"commit", "-q", "-am", "mine"});
-        changed = team_git::changedPaths(repository.team, repository.task);
-        QCOMPARE(*changed, QStringList{"web/index.txt"});
-        // Checked out at another commit, the worktree's own edits are not the task's.
-        git(repository.worktree, {"checkout", "-q", "--detach", "integration"});
-        write(QDir(repository.worktree).filePath(".gitignore"), "other\n");
-        changed = team_git::changedPaths(repository.team, repository.task);
-        QCOMPARE(*changed, QStringList{"web/index.txt"});
-    }
-
     // Criterion 3 on git: a worktree at its base, at the integration branch or at a commit the
     // integration branch has gives no head and no diff; a commit of its own branch does.
     void ownHeadOnARealRepository() {
@@ -341,8 +287,8 @@ class TeamAttributionTest final : public QObject {
         QCOMPARE(get(id).headCommit, QStringLiteral("0123abc4567"));
     }
 
-    // Criterion 2: the leader's tool, refused to the other roles.
-    void theLeaderAllowsPathsWithATool() {
+    // T-10: the leader renames a lane with a tool, refused to the other roles.
+    void theLeaderRenamesALaneWithATool() {
         agent_test::Fixture fixture;
         QVERIFY(fixture.open());
         const QString repository = fixture.directory.filePath("shop");
@@ -367,35 +313,36 @@ class TeamAttributionTest final : public QObject {
         QVERIFY(fixture.agents(leader, "agents.team_task_create", {{"title", "Cart"}})
                     .value("ok")
                     .toBool());
+        const QString number = fixture.number(developer);
         QCOMPARE(fixture
-                     .agents(developer, "agents.team_paths_allow",
-                             {{"paths", QJsonArray{"contracts"}}, {"reason", "generated"}})
+                     .agents(developer, "agents.team_lane_set",
+                             {{"developer", number}, {"lane", "Shop"}, {"reason", "wider"}})
                      .value("error_code")
                      .toString(),
                  QStringLiteral("role_forbidden"));
-        QCOMPARE(
-            fixture.agents(leader, "agents.team_paths_allow", {{"paths", QJsonArray{"contracts"}}})
-                .value("error_code")
-                .toString(),
-            QStringLiteral("invalid_payload"));
-        QVERIFY(fixture
-                    .agents(leader, "agents.team_paths_allow",
-                            {{"paths", QJsonArray{"contracts"}}, {"reason", "generated"}})
-                    .value("ok")
-                    .toBool());
-        const QJsonObject allowed = fixture.agents(leader, "agents.team_paths_allow",
-                                                   {{"task_id", "T-1"},
-                                                    {"paths", QJsonArray{"tests/fixtures"}},
-                                                    {"reason", "its fixture"}});
-        QVERIFY2(allowed.value("ok").toBool(), qPrintable(agent_test::text(allowed)));
-        QCOMPARE(allowed.value("task").toObject().value("allowed_paths").toArray(),
-                 QJsonArray{"tests/fixtures"});
-        QCOMPARE(fixture.agents(leader, "agents.team_get")
-                     .value("team")
-                     .toObject()
-                     .value("shared_paths")
-                     .toArray(),
-                 QJsonArray{"contracts"});
+        QCOMPARE(fixture
+                     .agents(leader, "agents.team_lane_set",
+                             {{"developer", number}, {"lane", "Storefront"}})
+                     .value("error_code")
+                     .toString(),
+                 QStringLiteral("invalid_payload"));
+        const QJsonObject renamed = fixture.agents(leader, "agents.team_lane_set",
+                                                   {{"developer", number},
+                                                    {"lane", "Storefront"},
+                                                    {"paths", QJsonArray{"web"}},
+                                                    {"reason", "the cart and more"}});
+        QVERIFY2(renamed.value("ok").toBool(), qPrintable(agent_test::text(renamed)));
+        const QJsonObject team = fixture.agents(leader, "agents.team_get").value("team").toObject();
+        QCOMPARE(team.value("members").toArray().at(1).toObject().value("lane").toString(),
+                 QStringLiteral("Storefront"));
+        QVERIFY(!team.contains("shared_paths"));
+        QVERIFY(!team.value("members").toArray().at(1).toObject().contains("paths"));
+        // T-10: the tool that allowed paths is gone.
+        QVERIFY(!fixture
+                     .agents(leader, "agents.team_paths_allow",
+                             {{"paths", QJsonArray{"contracts"}}, {"reason", "generated"}})
+                     .value("ok")
+                     .toBool());
     }
 };
 

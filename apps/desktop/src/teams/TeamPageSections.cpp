@@ -256,7 +256,7 @@ void TeamPage::buildMembers(const QJsonObject& team) {
             line->addWidget(holder);
         }
 
-        // What it holds: a developer's lane and its paths, or what the role does.
+        // What it holds: a developer's lane, or what the role does.
         const bool developer = role == QStringLiteral("developer");
         const QString lane = member.value(QStringLiteral("lane")).toString();
         auto* holds =
@@ -267,33 +267,9 @@ void TeamPage::buildMembers(const QJsonObject& team) {
         holds->setObjectName(QStringLiteral("teamMemberLane"));
         holds->setTone(developer && !lane.isEmpty() ? QStringLiteral("text-main")
                                                     : QStringLiteral("text-secondary"));
-        QStringList paths;
-        for (const auto& path : member.value(QStringLiteral("paths")).toArray())
-            paths.append(path.toString());
-        Text* where = nullptr;
-        if (developer && !paths.isEmpty()) {
-            where =
-                new Text(paths.size() == 1
-                             ? paths.first()
-                             : QStringLiteral("%1  +%2").arg(paths.first()).arg(paths.size() - 1),
-                         row, Text::Fit::ElideMiddle);
-            where->setObjectName(QStringLiteral("teamMemberPaths"));
-            where->setTone(QStringLiteral("text-muted"));
-            where->setType(12, QFont::Medium, true);
-            // T-38: the paths any lane may change go with each lane.
-            QStringList shared;
-            for (const auto& path : team.value(QStringLiteral("shared_paths")).toArray())
-                shared.append(path.toString());
-            where->setToolTip(shared.isEmpty() ? paths.join(QLatin1Char('\n'))
-                                               : tr("%1\nAny lane: %2")
-                                                     .arg(paths.join(QLatin1Char('\n')),
-                                                          shared.join(QStringLiteral(", "))));
-        }
-        line->addLayout(pair(holds, where), compact_ ? 0 : 6);
+        line->addLayout(pair(holds, nullptr), compact_ ? 0 : 6);
         // The narrowest page keeps who and the actions; the lane stays one hover away.
         holds->setVisible(!compact_);
-        if (where)
-            where->setVisible(!compact_);
         if (compact_)
             row->setToolTip(holds->text());
 
@@ -412,6 +388,7 @@ void TeamPage::buildUpdates() {
     for (qsizetype index = 0; index < updates.size(); ++index) {
         const QJsonObject& update = updates.at(index);
         const QString kind = update.value(QStringLiteral("kind")).toString();
+        // T-10 removed the lane check; an Update it wrote before still shows as a warning.
         const bool warning = kind == QStringLiteral("outside_lane");
         auto* row = new team_page::Row(panel, index > 0);
         row->setObjectName(QStringLiteral("teamUpdateRow"));

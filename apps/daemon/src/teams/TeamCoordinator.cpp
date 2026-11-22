@@ -330,13 +330,8 @@ TeamResult TeamCoordinator::create(Team draft, const QString& actor) {
     QList<Candidate> candidates;
     for (Member& member : draft.members) {
         member.name = member.name.trimmed();
-        if (member.role == role::developer) {
-            if (const auto paths = rules::normalisedPaths(member.paths))
-                member.paths = *paths;
-        } else {
+        if (member.role != role::developer)
             member.lane.clear();
-            member.paths.clear();
-        }
         if (const auto found = candidate(member.sessionId))
             candidates.append(*found);
     }
@@ -344,11 +339,6 @@ TeamResult TeamCoordinator::create(Team draft, const QString& actor) {
     draft.goal = draft.goal.trimmed();
     if (auto refused = rules::validGoal(draft.goal))
         return {.error = refused};
-    if (const auto paths = rules::normalisedPaths(draft.sharedPaths))
-        draft.sharedPaths = *paths;
-    else
-        return {.error = TeamError{QStringLiteral("invalid_payload"),
-                                   QStringLiteral("Shared paths are relative to the repository.")}};
     if (auto refused = rules::canCreate(draft, candidates))
         return {.error = refused};
     draft.sidebarRepository = host_->sidebarRepositoryAtCreation(draft.repository);
@@ -516,27 +506,6 @@ TeamResult TeamCoordinator::update(const qint64 teamId, const QJsonObject& chang
                           {QStringLiteral("to"), place}}});
         team->reviewPlace = place;
     }
-    if (changes.contains(QStringLiteral("shared_paths"))) {
-        QStringList paths;
-        for (const auto& value : changes.value(QStringLiteral("shared_paths")).toArray())
-            paths.append(value.toString());
-        const auto normalised = rules::normalisedPaths(paths);
-        if (!normalised) {
-            *team = before;
-            return {.error =
-                        TeamError{QStringLiteral("invalid_payload"),
-                                  QStringLiteral("Shared paths are relative to the repository.")}};
-        }
-        if (*normalised != team->sharedPaths)
-            updates.append(
-                {.kind = QStringLiteral("shared_paths"),
-                 .text = say(team->language, QT_TRANSLATE_NOOP("Team", "Shared paths: %1."))
-                             .arg(normalised->isEmpty()
-                                      ? say(team->language, QT_TRANSLATE_NOOP("Team", "none"))
-                                      : normalised->join(QStringLiteral(", ")))});
-        team->sharedPaths = *normalised;
-        recheckLanes(*team, updates);
-    }
     if (changes.contains(QStringLiteral("turn_budget"))) {
         if (auto invalid =
                 changeTurnBudget(*team, changes.value(QStringLiteral("turn_budget")), updates)) {
@@ -607,11 +576,7 @@ void TeamCoordinator::startLeader(const qint64 teamId) {
         members << QStringLiteral("- #%1 %2, %3%4")
                        .arg(number, member.name, member.role,
                             member.role == role::developer
-                                ? QStringLiteral(", lane %1 (%2)")
-                                      .arg(member.lane,
-                                           member.paths.isEmpty()
-                                               ? QStringLiteral("no paths")
-                                               : member.paths.join(QStringLiteral(", ")))
+                                ? QStringLiteral(", lane %1").arg(member.lane)
                                 : QString{});
     }
     QStringList body{QStringLiteral("Team %1 is ready and you lead it.").arg(team->name),
@@ -695,10 +660,6 @@ TeamResult TeamCoordinator::addMember(const qint64 teamId, Member member, const 
         return {.error = TeamError{QStringLiteral("invalid_payload"),
                                    QStringLiteral("The conversation no longer exists.")}};
     member.name = member.name.trimmed();
-    if (member.role == role::developer) {
-        if (const auto paths = rules::normalisedPaths(member.paths))
-            member.paths = *paths;
-    }
     if (auto refused = rules::canAddMember(*team, member, *found))
         return {.error = refused};
     member.joinedAt = nowIso();
@@ -730,8 +691,8 @@ TeamResult TeamCoordinator::addMember(const qint64 teamId, Member member, const 
 }
 
 TeamResult TeamCoordinator::updateMember(const qint64 teamId, const QString& sessionId,
-                                         const QString& lane, const QStringList& paths,
-                                         const QString& actor, const QString& reason) {
+                                         const QString& lane, const QString& actor,
+                                         const QString& reason) {
     Team* team = mutableTeam(teamId);
     if (!team)
         return {.error = notFound()};
@@ -741,40 +702,34 @@ TeamResult TeamCoordinator::updateMember(const qint64 teamId, const QString& ses
     if (!member || member->role != role::developer)
         return {.error = TeamError{QStringLiteral("not_member"),
                                    QStringLiteral("Only a developer of the team has a lane.")}};
-    const auto normalised = rules::normalisedPaths(paths);
-    if (!normalised)
-        return {.error = TeamError{
-                    QStringLiteral("invalid_payload"),
-                    QStringLiteral("A lane's paths are relative to the repository root.")}};
-    if (auto overlap = rules::laneOverlap(*team, sessionId, *normalised))
-        return {.error = overlap};
+    // T-10: a lane is only a name, so a change names the new one.
+    const QString name = lane.trimmed();
+    if (name.isEmpty())
+        return {.error =
+                    TeamError{QStringLiteral("invalid_payload"), QStringLiteral("Name the lane.")}};
     const QString oldLane = member->lane;
-    const QStringList oldPaths = member->paths;
-    member->lane = lane.trimmed().isEmpty() ? oldLane : lane.trimmed();
-    member->paths = *normalised;
+    if (name == oldLane)
+        return {.teamId = teamId};
+    member->lane = name;
     const QString text =
-        say(team->language, QT_TRANSLATE_NOOP("Team", "Lane %1 of %2: %3 → %4.%5"))
-            .arg(member->lane, member->name,
-                 oldPaths.isEmpty() ? say(team->language, QT_TRANSLATE_NOOP("Team", "(none)"))
-                                    : oldPaths.join(QStringLiteral(", ")),
-                 normalised->isEmpty() ? say(team->language, QT_TRANSLATE_NOOP("Team", "(none)"))
-                                       : normalised->join(QStringLiteral(", ")),
+        say(team->language, QT_TRANSLATE_NOOP("Team", "Lane of %1: %2 → %3.%4"))
+            .arg(member->name,
+                 oldLane.isEmpty() ? say(team->language, QT_TRANSLATE_NOOP("Team", "(none)"))
+                                   : oldLane,
+                 name,
                  reason.isEmpty()
                      ? QString{}
                      : say(team->language, QT_TRANSLATE_NOOP("Team", " Reason: ")) + reason);
     const QJsonObject data{{QStringLiteral("session_id"), sessionId},
-                           {QStringLiteral("lane"), member->lane},
+                           {QStringLiteral("lane"), name},
                            {QStringLiteral("old_lane"), oldLane},
-                           {QStringLiteral("from"), QJsonArray::fromStringList(oldPaths)},
-                           {QStringLiteral("to"), QJsonArray::fromStringList(*normalised)},
                            {QStringLiteral("reason"), reason}};
     // ADR 0114 §4: in the history of every open task of the lanes it touches.
     for (Task& task : team->tasks)
         if (task.state != state::done &&
-            (task.owner == sessionId || task.lane == oldLane || task.lane == member->lane))
+            (task.owner == sessionId || task.lane == oldLane || task.lane == name))
             addHistory(task, actor, QStringLiteral("lane"), text, data);
     QList<Update> updates{{.kind = QStringLiteral("lane_changed"), .text = text, .data = data}};
-    recheckLanes(*team, updates);
     if (auto failed = commit(*team, before, actor, updates))
         return {.error = failed};
     return {.teamId = teamId};

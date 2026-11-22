@@ -141,9 +141,8 @@ struct Member final {
     QString sessionId;
     QString role;
     QString name;
-    // Developers only: the lane's name and its path prefixes relative to the repository root.
+    // Developers only: the lane's name. T-10: a lane is only a name; it holds no paths.
     QString lane;
-    QStringList paths;
     QString joinedAt;
     std::optional<ProviderSwitch> pendingSwitch;
 };
@@ -169,7 +168,6 @@ struct HistoryEntry final {
 // A team's whole document goes to clients in one daemon frame (1 MiB), so what a task keeps
 // grows with its work, never with the size of a diff. A list longer than the bound keeps its
 // first entries and records the full count next to it as "<key>_total".
-inline constexpr qsizetype maximumOutsidePaths = 200;
 inline constexpr qsizetype maximumHistoryText = 2000;
 inline constexpr qsizetype maximumHistoryListItems = 50;
 // T-36: the most of one entry's text the journal keeps whole beside the document.
@@ -231,10 +229,6 @@ struct Task final {
     QString reviewPlace;
     // The link of the comment its last review on the pull request left there.
     QString reviewComment;
-    QStringList outsideLane;
-    // T-38: paths this task may change whatever its owner's lane, beside the team's shared
-    // paths (such as a contract or a fixture it must update). Sent only when set.
-    QStringList allowedPaths;
     // ADR 0114, open point 5: an assignment made before the first plan is approved.
     bool assignmentHeld{false};
     // The user allowed the leader to merge this task under mergePolicy "user".
@@ -311,7 +305,6 @@ struct Team final {
     bool leaderWritesRequirements{true};
     bool paused{false};
     QString pausedReason;
-    QStringList sharedPaths;
     int maxRounds{defaultReviewRounds};
     QString reviewPlace{place::board};
     int turnBudget{defaultTurnBudget};
@@ -382,15 +375,13 @@ struct Team final {
 [[nodiscard]] Team taskScope(const Team& team, const Task& task);
 
 // ADR 0115: what clients read is bounded by the size of the team, never by how long it ran.
-// The summary lists the first outside paths of a task and the newest answered decisions;
-// the rest comes from team.task.get, team.updates and team.decision.list, page by page.
-inline constexpr qsizetype summaryOutsidePaths = 20;
+// The summary lists the newest answered decisions; the rest comes from team.task.get,
+// team.updates and team.decision.list, page by page.
 inline constexpr qsizetype summaryAnsweredDecisions = 20;
 inline constexpr int defaultPage = 50;
 inline constexpr int maximumPage = 200;
 
-// The task without history in a summary: at most summaryOutsidePaths outside paths, the
-// full count as "outside_lane_total".
+// The task without history in a summary.
 [[nodiscard]] QJsonObject summaryJson(const Task& task);
 // The task with one page of its history: the newest `limit` entries before index `before`
 // (the end when negative), oldest first, with "history_total" and "history_start".

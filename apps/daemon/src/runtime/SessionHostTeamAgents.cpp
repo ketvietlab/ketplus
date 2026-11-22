@@ -36,10 +36,8 @@ QJsonObject SessionHost::teamMembership(const QString& sessionId) const {
     QJsonObject json{{QStringLiteral("team_id"), QString::number(team->id)},
                      {QStringLiteral("name"), team->name},
                      {QStringLiteral("role"), member->role}};
-    if (member->role == teams::role::developer) {
+    if (member->role == teams::role::developer)
         json.insert(QStringLiteral("lane"), member->lane);
-        json.insert(QStringLiteral("paths"), QJsonArray::fromStringList(member->paths));
-    }
     for (const QString& role : {teams::role::leader, teams::role::reviewer})
         if (const QString number = teamRoleNumber(sessionId, role); !number.isEmpty())
             json.insert(role + QStringLiteral("_number"), number);
@@ -83,8 +81,6 @@ QString SessionHost::teamInstructionsFor(const QString& sessionId) const {
          .goal = team->goal,
          .role = member->role,
          .lane = member->lane,
-         .paths = member->paths,
-         .sharedPaths = team->sharedPaths,
          .mergePolicy = team->mergePolicy,
          .integrationBranch =
              team->integrationBranch.isEmpty() ? QStringLiteral("HEAD") : team->integrationBranch,
@@ -320,18 +316,8 @@ QJsonObject SessionHost::teamOperation(const QString& sessionId, const QString& 
                            QStringLiteral("Give the reason for the lane change."));
         return answer(teams_->updateMember(
                           teamId, developer, payload.value(QStringLiteral("lane")).toString(),
-                          strings(payload.value(QStringLiteral("paths"))), sessionId,
-                          payload.value(QStringLiteral("reason")).toString()),
+                          sessionId, payload.value(QStringLiteral("reason")).toString()),
                       {});
-    }
-    if (operation == QStringLiteral("team_paths_allow")) {
-        if (payload.value(QStringLiteral("reason")).toString().trimmed().isEmpty())
-            return refusal(QStringLiteral("invalid_payload"),
-                           QStringLiteral("Give the reason the paths are allowed."));
-        return answer(
-            teams_->allowPaths(teamId, taskId, strings(payload.value(QStringLiteral("paths"))),
-                               payload.value(QStringLiteral("reason")).toString(), sessionId),
-            taskId);
     }
     if (operation == QStringLiteral("team_repository_set")) {
         // T-90 (ADR 0123): the leader names why, as for a lane change.

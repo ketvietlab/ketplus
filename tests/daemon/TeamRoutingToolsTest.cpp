@@ -200,9 +200,6 @@ class TeamRoutingToolsTest final : public QObject {
         scope.executionPolicy = "full";
         QVERIFY(!store.lookup(scope, work, id));
         scope.executionPolicy = "ask";
-        scope.sharedPaths.append("src");
-        QVERIFY(!store.lookup(scope, work, id));
-        scope.sharedPaths.clear();
         work.title += " changed requirements";
         QVERIFY(!store.lookup(scope, work, id));
         work = originalTask;
@@ -390,18 +387,18 @@ class TeamRoutingToolsTest final : public QObject {
         QVERIFY(write(repository, "src/auth.cpp", "bool authorize() { return false; }\n"));
         QVERIFY(!commit(repository).isEmpty());
         const auto made = fixture.host->handleCommand(
-            request("team.create",
-                    {{"repository", repository},
-                     {"name", "Prose"},
-                     {"integration_branch", "integration"},
-                     {"plan",
-                      QJsonObject{{"leader", QJsonObject{{"provider", "claude"}}},
-                                  {"developers",
-                                   QJsonObject{{"count", 1},
-                                               {"provider", "codex"},
-                                               {"members", QJsonArray{QJsonObject{
-                                                               {"paths", QJsonArray{"docs"}}}}}}},
-                                  {"reviewer", QJsonObject{{"provider", "claude"}}}}}}),
+            request(
+                "team.create",
+                {{"repository", repository},
+                 {"name", "Prose"},
+                 {"integration_branch", "integration"},
+                 {"plan",
+                  QJsonObject{{"leader", QJsonObject{{"provider", "claude"}}},
+                              {"developers",
+                               QJsonObject{{"count", 1},
+                                           {"provider", "codex"},
+                                           {"members", QJsonArray{QJsonObject{{"lane", "Docs"}}}}}},
+                              {"reviewer", QJsonObject{{"provider", "claude"}}}}}}),
             "desktop-test");
         QVERIFY2(made.value("ok").toBool(), qPrintable(text(made)));
         // Exercise the normal active team: delivery, notes and result reports

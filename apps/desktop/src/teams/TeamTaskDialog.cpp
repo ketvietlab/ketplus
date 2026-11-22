@@ -248,7 +248,7 @@ void TeamTaskDialog::rebuild() {
     const QString state = task.value(QStringLiteral("state")).toString();
     ownerSession_ = task.value(QStringLiteral("owner")).toString();
 
-    // State and lane, and the flag of an edit outside the lane.
+    // State and lane.
     auto* badges = new QWidget(details_);
     auto* flow = new team_page::Flow(badges, px(8), px(6));
     auto* stateBadge = new ket::Badge(team_states::label(state), stateTone(state), badges);
@@ -257,20 +257,6 @@ void TeamTaskDialog::rebuild() {
     const QString lane = task.value(QStringLiteral("lane")).toString();
     flow->addWidget(
         new ket::Badge(lane.isEmpty() ? tr("Whole epic") : lane, ket::BadgeTone::Neutral, badges));
-    if (!task.value(QStringLiteral("outside_lane")).toArray().isEmpty())
-        flow->addWidget(new ket::Badge(tr("Outside its lane"), ket::BadgeTone::Warning, badges));
-    // T-38: paths this task may change beside its lane, named by the leader.
-    QStringList allowed;
-    for (const auto& path : task.value(QStringLiteral("allowed_paths")).toArray())
-        allowed.append(path.toString());
-    if (!allowed.isEmpty()) {
-        auto* also = new ket::Badge(allowed.size() == 1 ? tr("Also %1").arg(allowed.first())
-                                                        : tr("Also %1 paths").arg(allowed.size()),
-                                    ket::BadgeTone::Neutral, badges);
-        also->setObjectName(QStringLiteral("teamTaskAllowedPaths"));
-        also->setToolTip(allowed.join(QLatin1Char('\n')));
-        flow->addWidget(also);
-    }
     column->addWidget(badges);
 
     // The facts, two to a line: a muted label over its value.

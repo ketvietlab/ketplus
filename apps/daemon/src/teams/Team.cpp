@@ -40,7 +40,6 @@ Member memberFromJson(const QJsonObject& json) {
             .role = json.value(QStringLiteral("role")).toString(),
             .name = json.value(QStringLiteral("name")).toString(),
             .lane = json.value(QStringLiteral("lane")).toString(),
-            .paths = stringList(json.value(QStringLiteral("paths"))),
             .joinedAt = json.value(QStringLiteral("joined_at")).toString(),
             .pendingSwitch = providerSwitchFromJson(json.value(QStringLiteral("pending_switch")))};
 }
@@ -94,10 +93,7 @@ Task taskFromJson(const QJsonObject& json) {
     }
     task.reviewPlace = json.value(QStringLiteral("review_place")).toString();
     task.reviewComment = json.value(QStringLiteral("review_comment")).toString();
-    task.outsideLane = stringList(json.value(QStringLiteral("outside_lane")));
-    task.allowedPaths = stringList(json.value(QStringLiteral("allowed_paths")));
-    if (task.outsideLane.size() > maximumOutsidePaths)
-        task.outsideLane.resize(maximumOutsidePaths);
+    // T-10: "outside_lane" and "allowed_paths" of an older document are read and dropped.
     task.assignmentHeld = json.value(QStringLiteral("assignment_held")).toBool();
     task.leaderMayMerge = json.value(QStringLiteral("leader_may_merge")).toBool();
     task.mergeOffered = json.value(QStringLiteral("merge_offered")).toBool();
@@ -178,15 +174,7 @@ HistoryEntry bounded(HistoryEntry entry) {
     return entry;
 }
 
-QJsonObject summaryJson(const Task& task) {
-    QJsonObject json = toJson(task, false);
-    if (task.outsideLane.size() > summaryOutsidePaths) {
-        json.insert(QStringLiteral("outside_lane"),
-                    strings(task.outsideLane.first(summaryOutsidePaths)));
-        json.insert(QStringLiteral("outside_lane_total"), task.outsideLane.size());
-    }
-    return json;
-}
+QJsonObject summaryJson(const Task& task) { return toJson(task, false); }
 
 QJsonObject taskPageJson(const Task& task, const int limit, const qsizetype before) {
     QJsonObject json = toJson(task, false);
@@ -320,7 +308,6 @@ QJsonObject toJson(const Member& member) {
                      {QStringLiteral("joined_at"), member.joinedAt}};
     if (member.role == role::developer) {
         json.insert(QStringLiteral("lane"), member.lane);
-        json.insert(QStringLiteral("paths"), strings(member.paths));
     }
     if (member.pendingSwitch)
         json.insert(
@@ -363,7 +350,6 @@ QJsonObject toJson(const Task& task, const bool withHistory) {
                      {QStringLiteral("round_limit"), task.roundLimit},
                      {QStringLiteral("review_place"), task.reviewPlace},
                      {QStringLiteral("review_comment"), task.reviewComment},
-                     {QStringLiteral("outside_lane"), strings(task.outsideLane)},
                      {QStringLiteral("assignment_held"), task.assignmentHeld},
                      {QStringLiteral("leader_may_merge"), task.leaderMayMerge},
                      {QStringLiteral("merge_offered"), task.mergeOffered},
@@ -376,8 +362,6 @@ QJsonObject toJson(const Task& task, const bool withHistory) {
     }
     if (task.reviewFindings)
         json.insert(QStringLiteral("review_findings"), review_policy::toJson(*task.reviewFindings));
-    if (!task.allowedPaths.isEmpty())
-        json.insert(QStringLiteral("allowed_paths"), strings(task.allowedPaths));
     // T-90: sent only when the task does not work in the team's repository.
     if (!task.repository.isEmpty()) {
         json.insert(QStringLiteral("repository"), task.repository);
@@ -463,7 +447,6 @@ QJsonObject toJson(const Team& team) {
         {QStringLiteral("leader_writes_requirements"), team.leaderWritesRequirements},
         {QStringLiteral("paused"), team.paused},
         {QStringLiteral("paused_reason"), team.pausedReason},
-        {QStringLiteral("shared_paths"), strings(team.sharedPaths)},
         {QStringLiteral("max_rounds"), team.maxRounds},
         {QStringLiteral("review_place"), team.reviewPlace},
         {QStringLiteral("turn_budget"), team.turnBudget},
@@ -524,7 +507,7 @@ Team teamFromJson(const QJsonObject& json) {
         json.value(QStringLiteral("leader_writes_requirements")).toBool(true);
     team.paused = json.value(QStringLiteral("paused")).toBool();
     team.pausedReason = json.value(QStringLiteral("paused_reason")).toString();
-    team.sharedPaths = stringList(json.value(QStringLiteral("shared_paths")));
+    // T-10: "shared_paths" and each member's "paths" of an older document are dropped.
     // A saved value outside one to five is not a team's choice; it reads as the default.
     const int rounds = json.value(QStringLiteral("max_rounds")).toInt(defaultReviewRounds);
     team.maxRounds = rounds >= 1 && rounds <= maximumReviewRounds ? rounds : defaultReviewRounds;

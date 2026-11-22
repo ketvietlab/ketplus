@@ -98,11 +98,6 @@ class FakeHost final : public TeamHostPort {
         return TaskDiff{.diff = QStringLiteral("+++ b/web/%1.txt\n+change of %1").arg(task.id),
                         .files = {QStringLiteral("web/%1.txt").arg(task.id)}};
     }
-    std::optional<QStringList> changedPaths(const Team& team, const Task& task) const override {
-        (void)team;
-        const auto it = changed.constFind(task.id);
-        return it == changed.cend() ? std::nullopt : std::optional(it.value());
-    }
     std::optional<bool> isMerged(const Team& team, const Task& task) const override {
         (void)team;
         return merged.contains(task.id);
@@ -262,7 +257,6 @@ class FakeHost final : public TeamHostPort {
     // T-40: the comments posted, as {pull request, body}.
     QList<std::pair<QString, QString>> comments;
     QString commentError;
-    QHash<QString, QStringList> changed;
     QSet<QString> merged;
     bool holdAnswers = false;
     int asked = 0;
@@ -319,16 +313,8 @@ inline Team standardTeam() {
     // The first plan is approved unless a test is about it (ADR 0114, open point 5).
     team.planApproved = true;
     team.members = {{.sessionId = "lead", .role = role::leader, .name = "Lead"},
-                    {.sessionId = "dev1",
-                     .role = role::developer,
-                     .name = "Dev 1",
-                     .lane = "Web",
-                     .paths = {"web"}},
-                    {.sessionId = "dev2",
-                     .role = role::developer,
-                     .name = "Dev 2",
-                     .lane = "Api",
-                     .paths = {"api"}},
+                    {.sessionId = "dev1", .role = role::developer, .name = "Dev 1", .lane = "Web"},
+                    {.sessionId = "dev2", .role = role::developer, .name = "Dev 2", .lane = "Api"},
                     {.sessionId = "rev", .role = role::reviewer, .name = "Reviewer"}};
     return team;
 }

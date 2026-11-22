@@ -31,14 +31,8 @@ QString newReviewerPolicy(const QString& provider, const QString& teamPolicy) {
     return reviewer::teamReviewerPolicy(provider, teamPolicy);
 }
 
-QStringList strings(const QJsonValue& value) {
-    QStringList result;
-    for (const auto& item : value.toArray())
-        result.append(item.toString());
-    return result;
-}
-
-// One member to start: its role, name, agent and (for a developer) lane.
+// One member to start: its role, name, agent and (for a developer) lane. T-10: a lane is
+// only a name; `paths` from an older client is ignored.
 struct MemberPlan final {
     QString role;
     QString name;
@@ -46,7 +40,6 @@ struct MemberPlan final {
     QString model;
     QString effort;
     QString lane;
-    QStringList paths;
 };
 
 MemberPlan planOf(const QString& role, const QJsonObject& agent, const QString& fallbackName) {
@@ -56,8 +49,7 @@ MemberPlan planOf(const QString& role, const QJsonObject& agent, const QString& 
             .provider = agent.value(QStringLiteral("provider")).toString(),
             .model = agent.value(QStringLiteral("model")).toString(),
             .effort = agent.value(QStringLiteral("effort")).toString(),
-            .lane = agent.value(QStringLiteral("lane")).toString().trimmed(),
-            .paths = strings(agent.value(QStringLiteral("paths")))};
+            .lane = agent.value(QStringLiteral("lane")).toString().trimmed()};
 }
 
 // ADR 0115: one page of a team's Updates, newest first, and whether an older one follows.
@@ -283,8 +275,7 @@ QJsonObject SessionHost::teamCommand(const QString& type, const QJsonObject& req
                      : teams::Member{.sessionId = sessionId,
                                      .role = role,
                                      .name = plan.name,
-                                     .lane = plan.lane.isEmpty() ? plan.name : plan.lane,
-                                     .paths = plan.paths},
+                                     .lane = plan.lane.isEmpty() ? plan.name : plan.lane},
             QStringLiteral("user"));
         if (!result.ok())
             discardMemberConversation(sessionId);
@@ -309,8 +300,7 @@ QJsonObject SessionHost::teamCommand(const QString& type, const QJsonObject& req
             {.sessionId = sessionId,
              .role = teams::role::developer,
              .name = it->stored.title.isEmpty() ? QStringLiteral("Developer") : it->stored.title,
-             .lane = lane.isEmpty() ? it->stored.title : lane,
-             .paths = strings(payload.value(QStringLiteral("paths")))},
+             .lane = lane.isEmpty() ? it->stored.title : lane},
             QStringLiteral("user")));
     }
     if (type == QStringLiteral("team.member.update")) {
@@ -321,9 +311,6 @@ QJsonObject SessionHost::teamCommand(const QString& type, const QJsonObject& req
                                            payload.contains(QStringLiteral("lane"))
                                                ? payload.value(QStringLiteral("lane")).toString()
                                                : (member ? member->lane : QString{}),
-                                           payload.contains(QStringLiteral("paths"))
-                                               ? strings(payload.value(QStringLiteral("paths")))
-                                               : (member ? member->paths : QStringList{}),
                                            QStringLiteral("user"),
                                            payload.value(QStringLiteral("reason")).toString()));
     }
@@ -451,33 +438,18 @@ QJsonObject SessionHost::createTeam(const QJsonObject& payload) {
         if (const auto invalid = teams::rules::validReviewPlace(
                 payload.value(QStringLiteral("review_place")), &draft.reviewPlace))
             return failure(invalid->code, invalid->message);
-    draft.sharedPaths = strings(payload.value(QStringLiteral("shared_paths")));
     // T-2: a team whose members all run on one provider has that provider as its own.
     draft.provider = members.first().provider;
     for (const MemberPlan& member : std::as_const(members))
         if (member.provider != draft.provider)
             draft.provider.clear();
-    // Lanes are checked before anything starts, with placeholder ids.
+    // T-10: `shared_paths` from an older client is ignored. Placeholder ids until each
+    // member's conversation is started.
     for (int index = 0; index < members.size(); ++index)
         draft.members.append({.sessionId = QStringLiteral("planned-%1").arg(index),
                               .role = members.at(index).role,
                               .name = members.at(index).name,
-                              .lane = members.at(index).lane,
-                              .paths = members.at(index).paths});
-    for (const teams::Member& member : std::as_const(draft.members)) {
-        if (member.role != teams::role::developer)
-            continue;
-        const auto paths = teams::rules::normalisedPaths(member.paths);
-        if (!paths)
-            return failure(QStringLiteral("invalid_payload"),
-                           QStringLiteral("A lane's paths are relative to the repository root."),
-                           member.role);
-        teams::Team others = draft;
-        others.members.removeIf(
-            [&](const teams::Member& entry) { return entry.sessionId == member.sessionId; });
-        if (const auto overlap = teams::rules::laneOverlap(others, member.sessionId, *paths))
-            return failure(overlap->code, overlap->message, member.role);
-    }
+                              .lane = members.at(index).lane});
     QStringList started;
     for (int index = 0; index < members.size(); ++index) {
         const MemberPlan& member = members.at(index);

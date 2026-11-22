@@ -407,11 +407,7 @@ class TeamFlowTest final : public QObject {
 
     void aHeldMessageToAMemberThatLeftIsDropped() {
         start();
-        Member third{.sessionId = "dev3",
-                     .role = role::developer,
-                     .name = "Dev 3",
-                     .lane = "Ui",
-                     .paths = {"ui"}};
+        Member third{.sessionId = "dev3", .role = role::developer, .name = "Dev 3", .lane = "Ui"};
         host_.add("dev3");
         QVERIFY(teams_->addMember(team_, third, "user").ok());
         const QString id = task("Cart");

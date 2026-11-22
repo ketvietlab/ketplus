@@ -43,16 +43,14 @@ class TeamAgentTasksTest final : public QObject {
                     {{"repository", repository},
                      {"name", "Shop"},
                      {"integration_branch", "integration"},
-                     {"plan",
-                      QJsonObject{
-                          {"leader", QJsonObject{{"provider", "claude"}}},
-                          {"developers",
-                           QJsonObject{
-                               {"count", 2},
-                               {"provider", "codex"},
-                               {"members", QJsonArray{QJsonObject{{"paths", QJsonArray{"web"}}},
-                                                      QJsonObject{{"paths", QJsonArray{"api"}}}}}}},
-                          {"reviewer", QJsonObject{{"provider", "claude"}}}}}}),
+                     {"plan", QJsonObject{{"leader", QJsonObject{{"provider", "claude"}}},
+                                          {"developers",
+                                           QJsonObject{{"count", 2},
+                                                       {"provider", "codex"},
+                                                       {"members",
+                                                        QJsonArray{QJsonObject{{"lane", "Web"}},
+                                                                   QJsonObject{{"lane", "Api"}}}}}},
+                                          {"reviewer", QJsonObject{{"provider", "claude"}}}}}}),
             "desktop-test");
         const QJsonArray members = created.value("team").toObject().value("members").toArray();
         if (members.size() != 4)

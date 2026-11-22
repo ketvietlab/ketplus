@@ -164,10 +164,10 @@ Linux store policy, signed upgrade prompts and platform release acceptance remai
   first in first out, as an ADR 0067 `review` message with its criteria and the diff of
   its branch against the integration branch; `no findings` makes it Ready, findings go
   back to the owner with round + 1, and past `max_rounds` the task is Blocked.
-  Lanes (#461): after a developer's turn the daemon compares the files its open tasks
-  changed (committed or not) with its prefixes and the shared paths; outside paths are
-  flagged on the task, actionable in the digest, and cleared when reverted or covered
-  by a lane change.
+  Lanes (#461, T-10): a developer's lane is a name the leader renames with
+  `team_lane_set` (logged with its reason). Lane paths, shared and allowed paths, the
+  outside-lane check and `team_paths_allow` were removed (ADR 0114 §4); a team stored with
+  them still loads, and paths an older client sends are ignored.
   Decisions (#462): the leader raises a question with two to four choices
   (`team_decision_raise`, `team_decision_withdraw`); only the user answers through
   `team.decision.answer`, which reaches the leader and the blocked owner once and
@@ -214,7 +214,7 @@ Linux store policy, signed upgrade prompts and platform release acceptance remai
   change to the work), one to five developers and each role's agent (Claude leads and
   reviews, another ready provider develops; the reviewer's chooser offers Claude only).
   A refusal keeps the dialog open with the error at the role it names. Add a developer
-  sends `team.member.add` with a required name, lane, paths and agent, hints at the
+  sends `team.member.add` with a required name, an optional lane and the agent, hints at the
   reviewer queue from three developers and is disabled at five.
   Member header (#467): a member's Agent Workspace header shows its role as a locked
   label that opens the team and cannot be edited, and has no Reviewer choice (the team's
@@ -222,7 +222,7 @@ Linux store policy, signed upgrade prompts and platform release acceptance remai
   setting.
   Team page (#466): Open team shows the team in the workspace area: what waits for the
   user (decisions with the recommended choice first, answered in place through
-  `team.decision.answer`), the tasks with a state filter and the outside-lane flag, the
+  `team.decision.answer`), the tasks with a state filter, the
   members, and the updates from `team.get`, newest first. Paused and queue banners explain
   why turns wait. `team.changed` rebuilds it in place and keeps the scroll position. A
   task opens a 720 px dialog bounded by the available window: state and lane badges, the

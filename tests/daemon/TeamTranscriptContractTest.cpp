@@ -99,7 +99,6 @@ class TeamTranscriptContractTest final : public QObject {
         QVERIFY(!verdict.value("text").toString().contains("Fix them"));
 
         // The leader's digest: one block, grouped by task.
-        host_.changed.insert(id, {"web/cart.cpp", "api/routes.cpp"});
         teams_->memberTurnEnded("dev1");
         host_.messages.clear();
         teams_->memberTurnEnded("lead");

@@ -94,10 +94,8 @@ struct TaskFacts final {
     // contains the branch. Nothing where git could not tell.
     QString head;
     std::optional<bool> merged;
-    // Lane: the paths the task's worktree changed.
-    std::optional<QStringList> changed;
 };
-enum class TaskQuestion { Merge, Lane };
+enum class TaskQuestion { Merge };
 using TaskFactsDone = std::function<void(const QHash<QString, TaskFacts>&)>;
 // What git answered when a task's worktree was asked for: the worktree, or why there is none.
 struct WorktreeAnswer final {
@@ -153,13 +151,8 @@ class TeamHostPort {
                           TaskFactsDone done) {
         QHash<QString, TaskFacts> facts;
         for (const Task& task : tasks)
-            facts.insert(task.id, question == TaskQuestion::Merge
-                                      ? TaskFacts{.head = taskCommit(team, task),
-                                                  .merged = isMerged(team, task),
-                                                  .changed = std::nullopt}
-                                      : TaskFacts{.head = {},
-                                                  .merged = std::nullopt,
-                                                  .changed = changedPaths(team, task)});
+            facts.insert(task.id,
+                         TaskFacts{.head = taskCommit(team, task), .merged = isMerged(team, task)});
         done(facts);
     }
     // Reads the task's diff for its review and answers `done` on the caller's thread: before
@@ -284,13 +277,6 @@ class TeamHostPort {
     // The task's branch against its base on the integration branch; nothing when git failed.
     [[nodiscard]] virtual std::optional<TaskDiff> taskDiff(const Team& team,
                                                            const Task& task) const {
-        (void)team;
-        (void)task;
-        return std::nullopt;
-    }
-    // Paths changed in the task's worktree against its base, committed or not (ADR 0114 §4).
-    [[nodiscard]] virtual std::optional<QStringList> changedPaths(const Team& team,
-                                                                  const Task& task) const {
         (void)team;
         (void)task;
         return std::nullopt;
@@ -443,7 +429,7 @@ class TeamCoordinator : public QObject {
     // when a rule refuses it.
     TeamResult create(Team draft, const QString& actor);
     // name, goal, integration_branch, merge_policy, leader_writes_requirements, paused,
-    // shared_paths, max_rounds (1 to 5), review_place ("board" or "pull_request"),
+    // max_rounds (1 to 5), review_place ("board" or "pull_request"),
     // turn_budget, and repository with an optional reason (T-90); other keys are ignored.
     TeamResult update(qint64 teamId, const QJsonObject& changes, const QString& actor);
     std::optional<TeamError> remove(qint64 teamId);
@@ -453,9 +439,9 @@ class TeamCoordinator : public QObject {
     [[nodiscard]] int turnBudgetSetting() const;
     std::optional<TeamError> updateTeamSettings(const QJsonObject& changes);
     TeamResult addMember(qint64 teamId, Member member, const QString& actor);
+    // T-10: renames a developer's lane; a lane holds no paths.
     TeamResult updateMember(qint64 teamId, const QString& sessionId, const QString& lane,
-                            const QStringList& paths, const QString& actor,
-                            const QString& reason = {});
+                            const QString& actor, const QString& reason = {});
     TeamResult removeMember(qint64 teamId, const QString& sessionId, const QString& actor);
     // T-2 (TeamCoordinatorProviders.cpp): team.provider.set. The members of `chosen` forget an
     // earlier pending switch; those of `switching` move to `target` when their next turn starts.
@@ -494,10 +480,6 @@ class TeamCoordinator : public QObject {
                         const QString& reportedHead = {});
     TeamResult setCriteria(qint64 teamId, const QString& taskId, const QStringList& texts,
                            const QString& actor);
-    // T-38 (TeamCoordinatorAllowedPaths.cpp): the paths any lane may change, for the whole
-    // team (its shared paths) or, with `taskId`, for that task only. Validated as lane paths.
-    TeamResult allowPaths(qint64 teamId, const QString& taskId, const QStringList& paths,
-                          const QString& reason, const QString& actor);
     // TeamCoordinatorGit.cpp. An assignment and a handover make the task's worktree, and a
     // hand to review reads the worktree, through the host on the caller's thread. prepare()
     // asks the host first, where it may answer later, and then calls `then`: the command is
@@ -583,10 +565,9 @@ class TeamCoordinator : public QObject {
     // The leader closes a task by hand: `evidence` is a pull request URL or a commit.
     TeamResult closeTask(qint64 teamId, const QString& taskId, const QString& evidence,
                          const QString& note, const QString& actor);
-    // Whether a merge check, a lane check, a review's diff or a prepared command is still
-    // with git.
+    // Whether a merge check, a review's diff or a prepared command is still with git.
     [[nodiscard]] bool checksOpen() const {
-        return !mergeChecks_.isEmpty() || !pullRequestChecks_.isEmpty() || !laneChecks_.isEmpty() ||
+        return !mergeChecks_.isEmpty() || !pullRequestChecks_.isEmpty() ||
                !reviewDiffs_.isEmpty() || !reviewComments_.isEmpty() || !worktreeWaits_.isEmpty() ||
                handoffsAsked_ > 0;
     }
@@ -724,11 +705,6 @@ class TeamCoordinator : public QObject {
     [[nodiscard]] bool stillDelivers(qint64 teamId, const TeamMessage& message) const;
     void forgetRelocations(qint64 teamId, const QString& sessionId);
     void notePointError(qint64 teamId, const TeamMessage& message, const QString& error);
-    // ADR 0114 §4 (TeamCoordinatorLanes.cpp): after a developer's turn, compares the files its
-    // open tasks changed with its lane and the shared paths.
-    void checkLanes(qint64 teamId, const QString& developer);
-    void applyLaneFacts(qint64 teamId, const QString& developer, const QList<Task>& asked,
-                        const QHash<QString, TaskFacts>& facts);
     void applyMergeFacts(qint64 teamId, const QList<Task>& asked,
                          const QHash<QString, TaskFacts>& facts);
     void applyPullRequestFacts(qint64 teamId, const QHash<QString, PullRequestFact>& facts);
@@ -738,11 +714,6 @@ class TeamCoordinator : public QObject {
                     const QString& kind, const QJsonObject& data, QList<Update>& updates);
     // The goal_reached update, when every task is done.
     static void noteGoalReached(const Team& team, QList<Update>& updates);
-    // After a lane or the shared paths changed: clears the flagged paths they now cover.
-    void recheckLanes(Team& team, QList<Update>& updates, const QString& why = {});
-    // Sets a task's outside paths and records the change; false when nothing changed.
-    bool flagOutside(Team& team, Task& task, const QStringList& outside, const QString& why,
-                     QList<Update>& updates);
     // Offers each Ready task whose dependencies are done for merging, once: an actionable
     // update for the leader, and under mergePolicy "user" a "Merge T-n?" decision.
     void offerMerges(Team& team, QList<Update>& updates);
@@ -839,8 +810,6 @@ class TeamCoordinator : public QObject {
     QTimer* pullRequestTimer_{nullptr};
     int pullRequestPeriod_{defaultPullRequestPeriodMs};
     int pullRequestGap_{defaultPullRequestGapMs};
-    QSet<QString> laneChecks_;
-    QSet<QString> laneChecksAgain_;
     // Prepared commands, by "<team>/<task>": those waiting for the task's worktree, and the
     // answers that are there while the commands they were asked for run.
     QHash<QString, QList<std::function<void()>>> worktreeWaits_;

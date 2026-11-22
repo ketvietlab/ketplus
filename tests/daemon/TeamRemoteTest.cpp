@@ -119,13 +119,13 @@ class TeamRemoteTest final : public QObject {
                 {"goal", "Ship the shop"},
                 {"integration_branch", "integration"},
                 {"merge_policy", "leader"},
-                {"plan", QJsonObject{{"leader", QJsonObject{{"provider", "claude"}}},
-                                     {"developers",
-                                      QJsonObject{{"count", 1},
-                                                  {"provider", "codex"},
-                                                  {"members", QJsonArray{QJsonObject{
-                                                                  {"paths", QJsonArray{"web"}}}}}}},
-                                     {"reviewer", QJsonObject{{"provider", "claude"}}}}}};
+                {"plan",
+                 QJsonObject{{"leader", QJsonObject{{"provider", "claude"}}},
+                             {"developers",
+                              QJsonObject{{"count", 1},
+                                          {"provider", "codex"},
+                                          {"members", QJsonArray{QJsonObject{{"lane", "Web"}}}}}},
+                             {"reviewer", QJsonObject{{"provider", "claude"}}}}}};
     }
 
     Team create(Fixture& fixture) {
@@ -577,6 +577,13 @@ class TeamRemoteTest final : public QObject {
                                          {"provider", "codex"},
                                          {"expected_revision", revision(fixture, team.id)}});
         QVERIFY2(added.value("ok").toBool(), qPrintable(text(added)));
+        // T-10: a phone that still sends lane paths is answered; the paths are ignored.
+        for (const auto& member : phone(fixture, "team.get", {{"team_id", team.id}})
+                                      .value("team")
+                                      .toObject()
+                                      .value("members")
+                                      .toArray())
+            QVERIFY(!member.toObject().contains("paths"));
         metadata = fixture.host->teamMetadata();
         QCOMPARE(metadata.size(), 4);
         QVERIFY(metadata.value(team.leader).value("revision").toInteger() > before);

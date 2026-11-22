@@ -102,10 +102,9 @@ QJsonObject phoneMember(const QJsonObject& entry, const QJsonObject& team) {
                      {QStringLiteral("effort"), entry.value(QStringLiteral("effort"))}}},
         {QStringLiteral("changed_revision"),
          team.value(QStringLiteral("members_revision")).toInteger()}};
-    if (role == role::developer) {
+    // T-10: a lane is only a name; `paths` is no longer sent (it was optional for phones).
+    if (role == role::developer)
         json.insert(QStringLiteral("lane"), entry.value(QStringLiteral("lane")).toString());
-        json.insert(QStringLiteral("paths"), entry.value(QStringLiteral("paths")).toArray());
-    }
     // T-2: the agent the member moves to when its next turn starts.
     if (const QJsonObject pending = entry.value(QStringLiteral("pending_switch")).toObject();
         !pending.isEmpty())
@@ -129,7 +128,6 @@ QString openDecisionOf(const QJsonObject& team, const QString& taskId) {
 
 QJsonObject phoneTask(const QJsonObject& local, const QJsonObject& team, const Ids& ids) {
     const QString worktree = local.value(QStringLiteral("worktree")).toString();
-    const QJsonArray outside = local.value(QStringLiteral("outside_lane")).toArray();
     QJsonObject result{
         {QStringLiteral("id"), local.value(QStringLiteral("id"))},
         {QStringLiteral("title"), cut(local.value(QStringLiteral("title")).toString(), 200)},
@@ -148,8 +146,9 @@ QJsonObject phoneTask(const QJsonObject& local, const QJsonObject& team, const I
          worktree.isEmpty() || !ids.worktree ? QString{} : ids.worktree(worktree)},
         {QStringLiteral("assignment_held"),
          local.value(QStringLiteral("assignment_held")).toBool()},
-        {QStringLiteral("outside_lane_total"),
-         local.value(QStringLiteral("outside_lane_total")).toInt(int(outside.size()))},
+        // T-10: there is no check outside a lane any more. Phones that shipped before read
+        // this field as required, so it stays, always 0.
+        {QStringLiteral("outside_lane_total"), 0},
         {QStringLiteral("decision_id"),
          openDecisionOf(team, local.value(QStringLiteral("id")).toString())},
         {QStringLiteral("changed_revision"), local.value(QStringLiteral("changed_revision"))}};
@@ -209,24 +208,6 @@ QJsonObject phoneDecision(const QJsonObject& local, const QJsonObject& team) {
         {QStringLiteral("changed_revision"), local.value(QStringLiteral("changed_revision"))}};
 }
 
-// The lane a repository path belongs to, and the developer whose lane it is.
-std::pair<QString, QJsonValue> laneOf(const QString& path, const QJsonObject& team) {
-    qsizetype best = -1;
-    std::pair<QString, QJsonValue> found{QString{}, QJsonValue::Null};
-    for (const QJsonValue& value : team.value(QStringLiteral("members")).toArray()) {
-        const QJsonObject entry = value.toObject();
-        for (const QJsonValue& prefix : entry.value(QStringLiteral("paths")).toArray()) {
-            const QString lanePath = prefix.toString();
-            if (lanePath.size() > best && rules::pathUnder(path, lanePath)) {
-                best = lanePath.size();
-                found = {entry.value(QStringLiteral("lane")).toString(),
-                         entry.value(QStringLiteral("number")).toString()};
-            }
-        }
-    }
-    return found;
-}
-
 qsizetype size(const QJsonObject& json) {
     return QJsonDocument(json).toJson(QJsonDocument::Compact).size();
 }
@@ -235,9 +216,10 @@ qsizetype size(const QJsonObject& json) {
 
 bool isWarning(const QJsonObject& update) {
     static const QSet<QString> kinds{
-        QStringLiteral("blocked"),       QStringLiteral("round_limit"),
-        QStringLiteral("outside_lane"),  QStringLiteral("merged_unreviewed"),
-        QStringLiteral("stalled"),       QStringLiteral("message_failed"),
+        QStringLiteral("blocked"), QStringLiteral("round_limit"),
+        // "outside_lane": only in Updates written before T-10 removed the lane check.
+        QStringLiteral("outside_lane"), QStringLiteral("merged_unreviewed"),
+        QStringLiteral("stalled"), QStringLiteral("message_failed"),
         QStringLiteral("merge_waiting"), QStringLiteral("review_tampered")};
     const QString kind = update.value(QStringLiteral("kind")).toString();
     return kinds.contains(kind) ||
@@ -430,16 +412,8 @@ QJsonObject taskDetail(const QJsonObject& local, const QJsonObject& team, const 
                                     {QStringLiteral("met"), entry.value(QStringLiteral("met"))}});
     }
     json.insert(QStringLiteral("criteria"), criteria);
-    QJsonArray outside;
-    for (const QJsonValue& value : local.value(QStringLiteral("outside_lane")).toArray()) {
-        if (outside.size() >= summaryOutsidePaths)
-            break;
-        const auto [lane, owner] = laneOf(value.toString(), team);
-        outside.append(QJsonObject{{QStringLiteral("path"), value.toString()},
-                                   {QStringLiteral("lane"), lane},
-                                   {QStringLiteral("owner_number"), owner}});
-    }
-    json.insert(QStringLiteral("outside_lane"), outside);
+    // T-10: always empty; phones that shipped before read the field as required.
+    json.insert(QStringLiteral("outside_lane"), QJsonArray{});
     // The newest change to the criteria, from the whole history the page was read from.
     QString note;
     QJsonArray history;

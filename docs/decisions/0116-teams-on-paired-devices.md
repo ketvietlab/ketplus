@@ -190,16 +190,16 @@ describes them.
 | Automatic turns | `team.update` | `team_id`, `turn_budget` (a whole number from 5 to 200, ADR 0114 open point 2), `expected_revision` | settings | `invalid_payload` |
 | Language | `team.update` | `team_id`, `language` (`en` or `vi`, ADR 0125), `expected_revision` | settings | `invalid_payload` |
 | Delete the team (its conversations stay) | `team.delete` | `team_id`, `confirmation: "DELETE"`, `expected_revision` | settings and members | `confirmation_required` |
-| New team | `team.create` | envelope `repositoryId` and `expectedCatalogRevision`; `name`, `goal`, `integration_branch`, `merge_policy`, `leader_writes_requirements`, `execution_policy`, `risk_acknowledged`, `plan {leader, developers {count, members?}, reviewer}`, each agent being `{provider, model?, effort?}`, `turn_budget?`, `language?` (`auto`, `en` or `vi`, [T30](2026-11-18-english-ui-team-content.md); without it a new team follows the prompt) (without `turn_budget`, the team takes the global value of Settings → Teams, which the phone reads from `team.list`'s `settings`; an older phone that does not read it shows "The Mac's default (Settings → Teams)" for an empty field) | the worktree catalog | `repository_not_found`, `invalid_repository`, `team_full`, `last_developer`, `provider_unavailable`, `reviewer_unsupported`, `member_unavailable`, `lane_overlap`, `execution_policy_denied` |
-| Add a developer (a new conversation) | `team.member.add` | `team_id`, `name`, `lane?`, `paths?`, `provider`, `model?`, `effort?`, `expected_revision` | members | `team_full`, `provider_unavailable`, `member_unavailable`, `lane_overlap` |
+| New team | `team.create` | envelope `repositoryId` and `expectedCatalogRevision`; `name`, `goal`, `integration_branch`, `merge_policy`, `leader_writes_requirements`, `execution_policy`, `risk_acknowledged`, `plan {leader, developers {count, members?}, reviewer}`, each agent being `{provider, model?, effort?}`, `turn_budget?`, `language?` (`auto`, `en` or `vi`, [T30](2026-11-18-english-ui-team-content.md); without it a new team follows the prompt) (without `turn_budget`, the team takes the global value of Settings → Teams, which the phone reads from `team.list`'s `settings`; an older phone that does not read it shows "The Mac's default (Settings → Teams)" for an empty field) | the worktree catalog | `repository_not_found`, `invalid_repository`, `team_full`, `last_developer`, `provider_unavailable`, `reviewer_unsupported`, `member_unavailable`, `execution_policy_denied` |
+| Add a developer (a new conversation) | `team.member.add` | `team_id`, `name`, `lane?`, `provider`, `model?`, `effort?`, `expected_revision` (an older phone's `paths` is ignored, T-10) | members | `team_full`, `provider_unavailable`, `member_unavailable` |
 | Remove a member | `team.member.remove` | `team_id`, `session_id`, `expected_revision` | members | `not_member`, `last_developer`, `role_required` |
-| Add an existing conversation to a team | `team.member.join` | `team_id`, `session_id`, `lane?`, `paths?`, `expected_revision` | members | `session_not_found`, `already_member`, `other_repository`, `team_full`, `lane_overlap` |
+| Add an existing conversation to a team | `team.member.join` | `team_id`, `session_id`, `lane?`, `expected_revision` (an older phone's `paths` is ignored, T-10) | members | `session_not_found`, `already_member`, `other_repository`, `team_full` |
 | Change the team's agent (T-2, ADR 0114 "Protocol") | `team.provider.set` | `team_id`, `provider`, `model?`, `effort?`, `members?` (session ids; every member when absent), `expected_revision`; the answer adds `results`, one per chosen member | settings and members | `invalid_payload`, `provider_unavailable`, `provider_not_ready`, `not_member`, `reviewer_unsupported` |
 | Hand a task over | `team.task.handover` | `team_id`, `task_id`, `owner` (a developer's or the leader's `session_id`), `reason` (1 to 500 characters), `expected_revision` | that task | `task_not_found`, `not_member`, `role_forbidden`, `invalid_transition`, `worktree_unavailable` |
 
 - A phone may change only the `team.update` fields listed above. Any other field is
-  refused with `invalid_payload`. Changing the name, the goal, the branch, the shared
-  paths or the review rounds from the phone is not in the mock.
+  refused with `invalid_payload`. Changing the name, the goal, the branch or the review
+  rounds from the phone is not in the mock.
 - What a decision's answer does stays the daemon's. "Start" releases the held
   assignments, "Continue (N more turns)" resumes the team, "Pause the team" pauses it,
   and so on (ADR 0114 §3, §8 and open points 2 and 5). The phone sends the choice's text
@@ -207,8 +207,8 @@ describes them.
 
 ### 5. Security
 
-- **End to end.** These are encrypted end to end: team names, goals, branches, lanes and
-  their paths, members and their roles, tasks with criteria and history, decisions with
+- **End to end.** These are encrypted end to end: team names, goals, branches, lanes,
+  members and their roles, tasks with criteria and history, decisions with
   their answers, and Updates. Every payload and result is sealed to the Mac or to the
   requesting device, and the `team` metadata is inside the session metadata's
   ciphertext. The relay sees none of it and stores no plaintext. Encrypted results
@@ -332,7 +332,8 @@ refusal.
     `@agent/NNNN`).
   - `title`: the member's name.
   - `role`: `leader`, `developer` or `reviewer`.
-  - `lane` and `paths`, for developers only.
+  - `lane`, for developers only. Before T-10 a developer also had `paths`; the daemon no
+    longer sends them and the phone treats them as optional (ADR 0114 §4).
   - `state`: `working`, `waiting_for_review`, `blocked` or `idle`. The daemon computes it
     in that order of precedence. A running turn is `working`. Otherwise the member's own
     task decides: `blocked`, then `in_review`. Anything else is `idle`.
@@ -349,7 +350,8 @@ refusal.
   - `round` (the review round) and `pull_request` (up to 500 characters).
   - `branch` and `worktree_id` (opaque).
   - `assignment_held`, `outside_lane_total`, `decision_id` (the open decision that
-    blocks it) and `changed_revision`.
+    blocks it) and `changed_revision`. Since T-10 `outside_lane_total` is always 0: the
+    lane check is gone (ADR 0114 §4), and the field stays because shipped phones require it.
 
   A summary task carries no description, no criterion text and no history. Those come
   from `team.task.get`.
@@ -371,8 +373,8 @@ refusal.
   - `actor`: `{role, number}`, `{role: "user"}` or `{role: "daemon"}`;
   - `task_id`, `pull_request_number` (the task's pull request when the update is about
     one, or null), `text` (up to 500 characters), `actionable`;
-  - `warning`. The daemon sets it for `blocked`, `round_limit`, `outside_lane`,
-    `merged_unreviewed`, `stalled`, `message_failed` and `merge_waiting`.
+  - `warning`. The daemon sets it for `blocked`, `round_limit`, `outside_lane` (written
+    only before T-10), `merged_unreviewed`, `stalled`, `message_failed` and `merge_waiting`.
 
   The phone chooses the icon from `kind`. It draws the detail line under the text from
   `actor` (`@agent/<number>`) and `pull_request_number` (`#<n>`), for example
@@ -383,10 +385,9 @@ refusal.
 - The summary fields.
 - `description`, up to 16 KiB.
 - `criteria`: at most 20, each `{text, met}`.
-- `outside_lane`: at most 20 entries `{path, lane, owner_number}`. `path` is relative to
-  the repository. `lane` and `owner_number` name the lane the path belongs to and the
-  member whose lane it is, or `""` and null when it belongs to no lane. The phone draws
-  "<path> belongs to <lane>, the lane of @agent/<owner_number>".
+- `outside_lane`: always empty since T-10 (ADR 0114 §4). Shipped phones require the array;
+  before T-10 it held at most 20 entries `{path, lane, owner_number}`, which the phone
+  drew as "<path> belongs to <lane>, the lane of @agent/<owner_number>".
 - `criteria_note`: up to 500 characters, the daemon's text of the newest change to the
   criteria (when, what, and who was told), or `""` when they never changed.
 - `history`: one page of at most 50 entries `{at, actor, kind, text}`, each text up to
