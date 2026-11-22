@@ -300,12 +300,15 @@ void SessionHost::agentMessageFailed(const AgentMessageRecord& message, const QS
 }
 
 QString SessionHost::postTeamMessage(const teams::TeamMessage& message) {
-    // T-1: the next turn the team starts for the member reads which task it is about.
-    if (!message.taskId.isEmpty())
-        teamWakeTasks_.insert(message.toSession, message.taskId);
-    return agents_->postTeamMessage(
+    QString id;
+    const QString error = agents_->postTeamMessage(
         message.fromSession, QStringLiteral("Team %1").arg(message.teamName), message.toSession,
-        message.kind, message.body, message.expectReply, nullptr, message.id);
+        message.kind, message.body, message.expectReply, &id, message.id);
+    // T-1: the turn that delivers the message reads which task it is about. Delivery waits
+    // for the broker's timer, so the hint is kept before any turn can take the message.
+    if (error.isEmpty() && !message.taskId.isEmpty())
+        teamWakeTasks_.insert(id, {.sessionId = message.toSession, .taskId = message.taskId});
+    return error;
 }
 
 bool SessionHost::teamLimitsMessage(const AgentMessageRecord& message) const {

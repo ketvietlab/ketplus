@@ -1462,8 +1462,10 @@ QJsonObject SessionHost::startTurn(const QJsonObject& request, bool localClient,
     }
     // T-1: only a turn its team starts, never one the user types; a busy session was refused
     // above, so no turn is running. A handoff in progress already starts a fresh context.
+    // The hint belongs to the messages this turn delivers (T-1 review f1).
+    const QString wakeTask = takeTeamWakeTask(sessionId, agentOrigin);
     if (agentOrigin.value(QStringLiteral("team_wake")).toBool() && it->handoffFrom.isEmpty())
-        resetTeamContext(*it);
+        resetTeamContext(*it, wakeTask);
     if (!it->contextResetNote.isEmpty() && it->handoffFrom.isEmpty())
         input.prepend(QJsonObject{{QStringLiteral("type"), QStringLiteral("text")},
                                   {QStringLiteral("text"), it->contextResetNote}});

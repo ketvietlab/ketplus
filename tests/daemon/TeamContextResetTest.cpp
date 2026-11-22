@@ -7,6 +7,7 @@
 #include "storage/LocalJournal.h"
 
 #include <QDir>
+#include <QProcess>
 #include <QStandardPaths>
 #include <QTest>
 
@@ -20,6 +21,14 @@ std::optional<StoredSession> storedSession(const LocalJournal& journal, const QS
         if (session.id == id)
             return session;
     return std::nullopt;
+}
+
+void git(const QString& directory, const QStringList& arguments) {
+    QProcess process;
+    process.setWorkingDirectory(directory);
+    process.start("git", arguments);
+    QVERIFY(process.waitForFinished(15000));
+    QVERIFY2(process.exitCode() == 0, process.readAllStandardError().constData());
 }
 
 QJsonObject plan() {
@@ -361,6 +370,105 @@ class TeamContextResetTest final : public QObject {
         }
         QCOMPARE(fixture.count(leader, "session.context_reset"), 0);
         QCOMPARE(storedSession(*fixture.journal, leader)->threadId, thread);
+    }
+
+    // T-1 review f1: the task a team message names belongs to that message, and the turn that
+    // delivers it takes it, even one that does not reset. Here T-2's provider switch delivers
+    // T-2's assignment in a handoff, while the developer still works on T-1. Its task, left
+    // over, would mark the new thread with T-2, and the next wake about no task would start
+    // the developer fresh for a task boundary that never was.
+    void aMessageDeliveredInAHandoffLeavesNoTaskForTheNextWake() {
+        agent_test::Fixture fixture;
+        QVERIFY(fixture.open());
+        const auto command = [&](const QString& type, const QJsonObject& payload) {
+            return fixture.host->handleCommand(agent_test::request(type, payload), "desktop-test");
+        };
+        const QString repository = fixture.directory.filePath("shop");
+        QVERIFY(QDir().mkpath(repository));
+        git(repository, {"init", "-q", "-b", "integration"});
+        git(repository, {"-c", "user.email=t@example.com", "-c", "user.name=T", "commit", "-q",
+                         "--allow-empty", "-m", "start"});
+        const QJsonObject created = command("team.create", {{"repository", repository},
+                                                            {"name", "Reset"},
+                                                            {"goal", "Ship the reset"},
+                                                            {"integration_branch", "integration"},
+                                                            {"plan", plan()}});
+        QVERIFY2(created.value("ok").toBool(), qPrintable(agent_test::text(created)));
+        const QJsonValue teamId = created.value("team").toObject().value("id");
+        const QJsonArray members = created.value("team").toObject().value("members").toArray();
+        const QString leader = members.at(0).toObject().value("session_id").toString();
+        const QString developer = members.at(1).toObject().value("session_id").toString();
+        const auto ready = [&](const QString& id) {
+            const auto session = storedSession(*fixture.journal, id);
+            return session && session->state == QStringLiteral("ready");
+        };
+        const auto settle = [&] {
+            QTRY_VERIFY_WITH_TIMEOUT(ready(leader) && ready(developer), 8000);
+        };
+        const auto finished = [&](const int before) {
+            QTRY_VERIFY_WITH_TIMEOUT(fixture.count(developer, "turn.completed") > before, 8000);
+        };
+        const auto assign = [&](const QString& title) {
+            const QJsonObject task =
+                fixture.agents(leader, "agents.team_task_create",
+                               {{"title", title}, {"criteria", QJsonArray{"Works"}}});
+            QVERIFY2(task.value("ok").toBool(), qPrintable(agent_test::text(task)));
+            const QString id = task.value("task").toObject().value("id").toString();
+            const QJsonObject assigned =
+                fixture.agents(leader, "agents.team_task_assign",
+                               {{"task_id", id}, {"owner", "#" + fixture.number(developer)}});
+            QVERIFY2(assigned.value("ok").toBool(), qPrintable(agent_test::text(assigned)));
+        };
+        const auto wake = [&](const QString& text) {
+            const int turns = fixture.count(developer, "turn.completed");
+            const QJsonObject sent = fixture.agents(
+                leader, "agents.send", {{"to", fixture.number(developer)}, {"text", text}});
+            QVERIFY2(sent.value("ok").toBool(), qPrintable(agent_test::text(sent)));
+            finished(turns);
+            settle();
+        };
+        QTRY_VERIFY_WITH_TIMEOUT(fixture.count(leader, "turn.completed") >= 1, 8000);
+        settle();
+
+        // T-1 is the developer's task: the approved plan sends its assignment, and it starts.
+        int turns = fixture.count(developer, "turn.completed");
+        assign("First");
+        QString decision;
+        for (const QJsonValue& value : command("team.get", {{"team_id", teamId}})
+                                           .value("team")
+                                           .toObject()
+                                           .value("decisions")
+                                           .toArray())
+            if (value.toObject().value("kind").toString() == QStringLiteral("first_plan"))
+                decision = value.toObject().value("id").toString();
+        QVERIFY(command("team.decision.answer",
+                        {{"team_id", teamId}, {"decision_id", decision}, {"choice", "Start"}})
+                    .value("ok")
+                    .toBool());
+        finished(turns);
+        settle();
+        const QJsonObject started = fixture.agents(developer, "agents.team_task_update",
+                                                   {{"task_id", "T-1"}, {"state", "in_progress"}});
+        QVERIFY2(started.value("ok").toBool(), qPrintable(agent_test::text(started)));
+        settle();
+        wake("Keep going");
+        QCOMPARE(fixture.count(developer, "session.context_reset"), 0);
+
+        // The developer moves to Claude; T-2's assignment is the turn that takes it there.
+        const QJsonObject switched = command(
+            "team.provider.set",
+            {{"team_id", teamId}, {"provider", "claude"}, {"members", QJsonArray{developer}}});
+        QVERIFY2(switched.value("ok").toBool(), qPrintable(agent_test::text(switched)));
+        turns = fixture.count(developer, "turn.completed");
+        assign("Second");
+        finished(turns);
+        settle();
+        QCOMPARE(storedSession(*fixture.journal, developer)->adapter, QStringLiteral("claude"));
+
+        // The wakes after it are about no task: the developer keeps its new context.
+        wake("Status?");
+        wake("Status again?");
+        QCOMPARE(fixture.count(developer, "session.context_reset"), 0);
     }
 };
 

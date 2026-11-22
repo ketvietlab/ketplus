@@ -715,9 +715,18 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     // T-1: a turn its team starts may begin a fresh context of the same provider
     // (TeamCoordinator::planContextReset); sets contextResetNote when it does. A failure keeps
     // the current thread and the turn runs on it.
-    void resetTeamContext(Session& session);
-    // T-1: the task the team's last message to a member named, read by its next team turn.
-    QHash<QString, QString> teamWakeTasks_;
+    void resetTeamContext(Session& session, const QString& taskHint);
+    // T-1: the task a team message names, kept by the message's id until the turn it is
+    // delivered in starts (a team wake reads it) or it is delivered otherwise.
+    struct TeamWakeTask final {
+        QString sessionId;
+        QString taskId;
+    };
+    QHash<QString, TeamWakeTask> teamWakeTasks_;
+    // The task of the last message the turn delivers that names one; forgets the session's
+    // hints for messages already delivered (a user's turn, a steer).
+    QString takeTeamWakeTask(const QString& sessionId, const QJsonObject& agentOrigin);
+    void forgetTeamWakeTasks(const QJsonObject& agentOrigin);
     // ADR 0114 §2: the one directory a team's reviewer may write in during a review round.
     [[nodiscard]] QString reviewScratchDirectory(const QString& sessionId) const;
     QTemporaryDir attachmentDirectory_;

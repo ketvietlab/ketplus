@@ -3,6 +3,7 @@
 // kept for scoped deletion, and the next turn starts a fresh thread pointed at the transcript.
 #include "runtime/ProviderHandoff.h"
 #include "runtime/SessionHost.h"
+#include "storage/LocalJournal.h"
 
 #include <QJsonDocument>
 
@@ -45,9 +46,35 @@ void SessionHost::undoFreshContext(Session& session, const FreshContextUndo& und
         sessionsByThread_.insert(undo.threadId, session.stored.id);
 }
 
-void SessionHost::resetTeamContext(Session& session) {
+QString SessionHost::takeTeamWakeTask(const QString& sessionId, const QJsonObject& agentOrigin) {
+    QString task;
+    for (const QJsonValue& entry : agentOrigin.value(QStringLiteral("agent_messages")).toArray()) {
+        const auto hint = teamWakeTasks_.constFind(
+            entry.toObject().value(QStringLiteral("message_id")).toString());
+        if (hint == teamWakeTasks_.cend() || hint->sessionId != sessionId)
+            continue;
+        task = hint->taskId;
+        teamWakeTasks_.erase(hint);
+    }
+    // A message a user's turn took, or one that failed or expired, is not waiting any more.
+    teamWakeTasks_.removeIf([&](const auto& entry) {
+        if (entry.value().sessionId != sessionId)
+            return false;
+        const auto message = journal_->agentMessage(entry.key());
+        return !message || (message->state != QStringLiteral("queued") &&
+                            message->state != QStringLiteral("held") &&
+                            message->state != QStringLiteral("releasing"));
+    });
+    return task;
+}
+
+void SessionHost::forgetTeamWakeTasks(const QJsonObject& agentOrigin) {
+    for (const QJsonValue& entry : agentOrigin.value(QStringLiteral("agent_messages")).toArray())
+        teamWakeTasks_.remove(entry.toObject().value(QStringLiteral("message_id")).toString());
+}
+
+void SessionHost::resetTeamContext(Session& session, const QString& hint) {
     const QString sessionId = session.stored.id;
-    const QString hint = teamWakeTasks_.take(sessionId);
     if (!teams_)
         return;
     const auto plan = teams_->planContextReset(sessionId, hint, session.stored.threadId,

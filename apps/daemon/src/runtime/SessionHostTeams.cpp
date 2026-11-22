@@ -200,12 +200,19 @@ void SessionHost::startTeams() {
     teams_->setDeferSending(true);
     loadTeams();
     connect(teams_, &teams::TeamCoordinator::teamChanged, this, [this](const QJsonObject& team) {
+        // T-1: a member that left its team keeps no task for a wake.
+        teamWakeTasks_.removeIf([this](const auto& entry) {
+            return teams_->teamOf(entry.value().sessionId) == nullptr;
+        });
         emit teamEvent(QStringLiteral("team.changed"),
                        {{QStringLiteral("team"), team},
                         {QStringLiteral("revision"), team.value(QStringLiteral("revision"))}});
     });
     connect(teams_, &teams::TeamCoordinator::teamRemoved, this,
             [this](const QString& teamId, const QString& repository) {
+                teamWakeTasks_.removeIf([this](const auto& entry) {
+                    return teams_->teamOf(entry.value().sessionId) == nullptr;
+                });
                 emit teamEvent(QStringLiteral("team.removed"),
                                {{QStringLiteral("team_id"), teamId},
                                 {QStringLiteral("repository"), repository}});
