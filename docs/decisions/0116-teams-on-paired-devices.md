@@ -298,7 +298,9 @@ refusal.
     phone shows the longer goal as text.
   - Settings: `integration_branch`, `merge_policy` (who merges: `leader` or `user`),
     `leader_writes_requirements` (who writes requirements), `execution_policy`,
-    `language` ([T30](2026-11-18-english-ui-team-content.md): `auto`, `en`, `vi`; a content
+    `provider` (T-2: the team's own agent for members added later, empty for a mixed or
+    older team; each member's `agent` may carry `pending_switch {provider, model, effort}`
+    until its next turn moves it), `language` ([T30](2026-11-18-english-ui-team-content.md): `auto`, `en`, `vi`; a content
     fallback only. Application chrome and new fixed daemon templates are English. The value
     never requests translation of stored content; older persisted en/vi values remain valid).
   - State: `paused`, `paused_reason`, `plan_approved`, `held_count`.
