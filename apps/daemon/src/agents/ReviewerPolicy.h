@@ -19,6 +19,13 @@ namespace ketplus::daemon::reviewer {
     return checksBranch(provider) && executionPolicy == QStringLiteral("full");
 }
 
+// A team reviewer's own policy: a Codex one takes the team's Full access, so it may review
+// (ketplus#295); any other keeps a conversation's default (empty).
+[[nodiscard]] inline QString teamReviewerPolicy(const QString& provider,
+                                                const QString& teamPolicy) {
+    return checksBranch(provider) && teamPolicy == QStringLiteral("full") ? teamPolicy : QString{};
+}
+
 // Why a conversation cannot review, in the words the clients show.
 [[nodiscard]] inline QString unsupportedMessage(const QString& provider) {
     if (checksBranch(provider))

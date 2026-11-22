@@ -237,6 +237,7 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/teams/TeamCoordinatorWaits.cpp
     src/teams/TeamCoordinatorLanes.cpp
     src/teams/TeamCoordinatorMerges.cpp
+    src/teams/TeamCoordinatorProviders.cpp
     src/teams/TeamCoordinatorSettings.cpp
     src/teams/TeamCoordinatorDone.cpp
     src/teams/TeamCoordinatorRelocations.cpp
@@ -253,6 +254,7 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/runtime/SessionHostTeams.cpp
     src/runtime/SessionHostSchedules.cpp
     src/runtime/SessionHostScheduleRuntime.cpp
+    src/runtime/SessionHostTeamProvider.cpp
     src/runtime/SessionHostTeamsProtocol.cpp
     src/runtime/SessionHostTeamsRemote.cpp
     src/runtime/SessionHostTeamStorage.cpp

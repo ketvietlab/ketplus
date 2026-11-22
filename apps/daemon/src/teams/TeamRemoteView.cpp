@@ -106,6 +106,14 @@ QJsonObject phoneMember(const QJsonObject& entry, const QJsonObject& team) {
         json.insert(QStringLiteral("lane"), entry.value(QStringLiteral("lane")).toString());
         json.insert(QStringLiteral("paths"), entry.value(QStringLiteral("paths")).toArray());
     }
+    // T-2: the agent the member moves to when its next turn starts.
+    if (const QJsonObject pending = entry.value(QStringLiteral("pending_switch")).toObject();
+        !pending.isEmpty())
+        json.insert(
+            QStringLiteral("pending_switch"),
+            QJsonObject{{QStringLiteral("provider"), pending.value(QStringLiteral("provider"))},
+                        {QStringLiteral("model"), pending.value(QStringLiteral("model"))},
+                        {QStringLiteral("effort"), pending.value(QStringLiteral("effort"))}});
     return json;
 }
 
@@ -292,6 +300,7 @@ QJsonObject summary(const QJsonObject& team, const Ids& ids) {
     json.insert(QStringLiteral("leader_writes_requirements"),
                 team.value(QStringLiteral("leader_writes_requirements")).toBool(true));
     json.insert(QStringLiteral("execution_policy"), team.value(QStringLiteral("execution_policy")));
+    json.insert(QStringLiteral("provider"), team.value(QStringLiteral("provider")).toString());
     json.insert(QStringLiteral("language"), team.value(QStringLiteral("language")));
     json.insert(QStringLiteral("plan_approved"),
                 team.value(QStringLiteral("plan_approved")).toBool());

@@ -61,6 +61,11 @@ const QHash<QString, QSet<QString>>& allowedFields() {
         {QStringLiteral("team.member.join"),
          {QStringLiteral("team_id"), QStringLiteral("session_id"), QStringLiteral("lane"),
           QStringLiteral("paths"), QStringLiteral("expected_revision")}},
+        // T-2: the members are session ids, as team.member.remove names them.
+        {QStringLiteral("team.provider.set"),
+         {QStringLiteral("team_id"), QStringLiteral("provider"), QStringLiteral("model"),
+          QStringLiteral("effort"), QStringLiteral("members"),
+          QStringLiteral("expected_revision")}},
         {QStringLiteral("team.task.handover"),
          {QStringLiteral("team_id"), QStringLiteral("task_id"), QStringLiteral("owner"),
           QStringLiteral("reason"), QStringLiteral("expected_revision")}}};
@@ -315,6 +320,12 @@ QJsonObject SessionHost::remoteTeamAnswer(const QString& type, const QJsonObject
     } else if (type == QStringLiteral("team.delete")) {
         result = {{QStringLiteral("ok"), true},
                   {QStringLiteral("team_id"), answer.value(QStringLiteral("team_id"))}};
+    } else if (type == QStringLiteral("team.provider.set")) {
+        // What happened to each chosen member, as the local client reads it.
+        result = {{QStringLiteral("ok"), true},
+                  {QStringLiteral("team"),
+                   remote::summary(answer.value(QStringLiteral("team")).toObject(), ids)},
+                  {QStringLiteral("results"), answer.value(QStringLiteral("results"))}};
     } else {
         // A change: the team as it is after it.
         result = {{QStringLiteral("ok"), true},

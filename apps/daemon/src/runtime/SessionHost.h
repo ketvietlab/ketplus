@@ -501,6 +501,21 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     // The member a leader names by its conversation number; empty when it is not on the team.
     [[nodiscard]] QString teamMemberByNumber(const teams::Team& team, const QString& number) const;
     [[nodiscard]] QJsonObject createTeam(const QJsonObject& payload);
+    // T-2 (SessionHostTeamProvider.cpp): team.provider.set, and the two steps of startTurn that
+    // apply a member's pending switch through the provider handoff. takeTeamProviderSwitch runs
+    // before the turn picks its adapter: it points `options` at the switch, or drops a switch
+    // that cannot apply any more; it is true when one applies. finishTeamProviderSwitch runs
+    // after the handoff was recorded: the model, effort and a reviewer's policy follow it.
+    [[nodiscard]] QJsonObject setTeamProvider(const QJsonObject& payload);
+    [[nodiscard]] bool takeTeamProviderSwitch(Session& session, QJsonObject& options);
+    void finishTeamProviderSwitch(Session& session);
+    // Why `provider` cannot take a turn now, as {error_code, error_message}; empty when it can.
+    [[nodiscard]] QJsonObject providerNotReady(const QString& provider) const;
+    // Why `session` (a member with `role`) cannot move to `provider`, as {error_code, reason};
+    // empty when it can.
+    [[nodiscard]] QJsonObject providerSwitchBlocker(const Session& session, const QString& role,
+                                                    const QString& provider,
+                                                    const QString& teamPolicy) const;
     // ADR 0116, in SessionHostTeamsRemote.cpp: the local answer of a phone's team command,
     // for the phone.
     [[nodiscard]] QJsonObject remoteTeamAnswer(const QString& type, const QJsonObject& request,

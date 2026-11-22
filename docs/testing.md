@@ -10,6 +10,13 @@ cmake --build --preset dev
 ctest --preset dev
 ```
 
+Team provider switch (T-2, `team.provider.set`): run `ketplus_team_provider_switch_tests`
+with the team protocol, remote, flow and agent-tools fixtures and the provider handoff
+tests (`ketplus_daemon_claude_adapter_tests`, `ketplus_turn_acceptance_tests`). It runs
+whole-team Codex → Claude and back, a chosen part of the team, a switch held while a turn
+waits for an approval, the Codex reviewer's Full access, a provider that is not installed
+and a member in a switched worktree, against the scripted fake providers only.
+
 Team route tools (ADR 0130): run `ketplus_team_routing_tools_tests` together with
 the team risk-policy, agent-tools, agent-tasks, protocol and local/remote team
 fixtures. The positive case uses temporary real Git objects → the actual bounded

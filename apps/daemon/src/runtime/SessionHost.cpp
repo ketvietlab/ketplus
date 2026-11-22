@@ -1293,11 +1293,15 @@ QJsonObject SessionHost::startTurn(const QJsonObject& request, bool localClient,
             QStringLiteral("invalid_worktree"),
             QStringLiteral("worktree_path must identify an existing directory for a new session."));
     }
-    const QJsonObject options = payload.value(QStringLiteral("options")).toObject();
+    QJsonObject options = payload.value(QStringLiteral("options")).toObject();
+    // T-2: a team member's pending provider switch takes this turn to the new provider.
+    const bool teamSwitch = it != sessions_.end() && takeTeamProviderSwitch(*it, options);
     const QString adapter = requestedAdapter(
         options, it == sessions_.end() ? QStringLiteral("codex") : it->stored.adapter);
+    // A handoff starts a fresh native context, so it needs only a provider that runs in a
+    // switched worktree (as session.worktree.switch allows Codex and Claude).
     if (it != sessions_.end() && it->stored.contextRevision > 1 && adapter != "codex" &&
-        adapter != it->stored.adapter)
+        adapter != "claude" && adapter != it->stored.adapter)
         return error(QStringLiteral("context_switch_unsupported"),
                      QStringLiteral("This provider cannot resume a switched context yet."));
     if (!isCanonicalAdapter(adapter)) {
@@ -1468,6 +1472,8 @@ QJsonObject SessionHost::startTurn(const QJsonObject& request, bool localClient,
                         {QStringLiteral("text"),
                          provider_handoff::handoffNote(it->handoffFrom, handoffTranscript, 0)}});
     }
+    if (teamSwitch)
+        finishTeamProviderSwitch(*it);
     const StoredSession previous = it->stored;
     it->stored.state = QStringLiteral("starting");
     QJsonObject userMessage{{QStringLiteral("text"), displayText},

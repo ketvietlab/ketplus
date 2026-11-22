@@ -102,6 +102,17 @@ inline constexpr int defaultTurnBudget = 40;
 inline constexpr int minimumTurnBudget = 5;
 inline constexpr int maximumTurnBudget = 200;
 
+// T-2 (team.provider.set): the agent a member moves to when its next turn starts. A turn that
+// runs, or waits for an approval, is never interrupted for it. An empty model or effort is the
+// new provider's default: a model of one provider means nothing to another.
+struct ProviderSwitch final {
+    QString provider;
+    QString model;
+    QString effort;
+    QString requestedAt;
+    bool operator==(const ProviderSwitch&) const = default;
+};
+
 struct Member final {
     QString sessionId;
     QString role;
@@ -110,6 +121,7 @@ struct Member final {
     QString lane;
     QStringList paths;
     QString joinedAt;
+    std::optional<ProviderSwitch> pendingSwitch;
 };
 
 struct Criterion final {
@@ -267,6 +279,9 @@ struct Team final {
     // policy ("read-only", "ask" or "full"), given to every such member the team starts.
     // The reviewer is not in it: a review turn is always read-only (ADR 0067).
     QString executionPolicy{QStringLiteral("ask")};
+    // T-2: the agent ("codex", "claude", ...) a member added later starts with when its request
+    // names none; empty when the team has no single provider (a legacy or mixed team).
+    QString provider;
     // Content preference only: auto follows the prompt; legacy en/vi are fallback hints.
     QString language{QStringLiteral("auto")};
     bool leaderWritesRequirements{true};

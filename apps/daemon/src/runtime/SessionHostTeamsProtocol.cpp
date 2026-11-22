@@ -25,16 +25,10 @@ QJsonObject failure(const QString& code, const QString& message, const QString& 
 
 QJsonObject failure(const teams::TeamError& error) { return failure(error.code, error.message); }
 
-bool knownProvider(const QString& provider) {
-    return provider == QStringLiteral("codex") || provider == QStringLiteral("claude") ||
-           provider == QStringLiteral("cursor") || provider == QStringLiteral("copilot");
-}
+using teams::rules::knownProvider;
 
-// A new reviewer's own policy: a Codex one takes the team's Full access, so it may review
-// (ketplus#295); any other keeps a conversation's default.
 QString newReviewerPolicy(const QString& provider, const QString& teamPolicy) {
-    return reviewer::checksBranch(provider) && teamPolicy == QStringLiteral("full") ? teamPolicy
-                                                                                    : QString{};
+    return reviewer::teamReviewerPolicy(provider, teamPolicy);
 }
 
 QStringList strings(const QJsonValue& value) {
@@ -247,8 +241,12 @@ QJsonObject SessionHost::teamCommand(const QString& type, const QJsonObject& req
                            QStringLiteral("A member added to a team is a developer or a "
                                           "reviewer."));
         const bool reviewer = role == teams::role::reviewer;
-        const MemberPlan plan =
+        MemberPlan plan =
             planOf(role, payload, reviewer ? QStringLiteral("Reviewer 2") : QString{});
+        // T-2: a member added without an agent starts with the team's provider, at its default
+        // model; a model is not carried over from another member.
+        if (plan.provider.isEmpty())
+            plan.provider = team->provider;
         if (const auto invalid = teams::rules::validName(
                 plan.name, reviewer ? QStringLiteral("a reviewer") : QStringLiteral("a developer")))
             return failure(*invalid);
@@ -329,6 +327,8 @@ QJsonObject SessionHost::teamCommand(const QString& type, const QJsonObject& req
                                            QStringLiteral("user"),
                                            payload.value(QStringLiteral("reason")).toString()));
     }
+    if (type == QStringLiteral("team.provider.set"))
+        return setTeamProvider(payload);
     if (type == QStringLiteral("team.member.remove"))
         return answer(teams_->removeMember(teamId,
                                            payload.value(QStringLiteral("session_id")).toString(),
@@ -452,6 +452,11 @@ QJsonObject SessionHost::createTeam(const QJsonObject& payload) {
                 payload.value(QStringLiteral("review_place")), &draft.reviewPlace))
             return failure(invalid->code, invalid->message);
     draft.sharedPaths = strings(payload.value(QStringLiteral("shared_paths")));
+    // T-2: a team whose members all run on one provider has that provider as its own.
+    draft.provider = members.first().provider;
+    for (const MemberPlan& member : std::as_const(members))
+        if (member.provider != draft.provider)
+            draft.provider.clear();
     // Lanes are checked before anything starts, with placeholder ids.
     for (int index = 0; index < members.size(); ++index)
         draft.members.append({.sessionId = QStringLiteral("planned-%1").arg(index),

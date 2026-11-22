@@ -29,7 +29,7 @@ void stampChanges(Team& team, const Team& before) {
     const auto settings = [](const Team& one) {
         return QJsonArray{one.name,        one.goal,         one.integrationBranch, one.mergePolicy,
                           one.paused,      one.pausedReason, one.turnBudget,        one.maxRounds,
-                          one.reviewPlace, one.language};
+                          one.reviewPlace, one.language,     one.provider};
     };
     team.settingsRevision =
         settings(team) == settings(before) ? before.settingsRevision : team.revision;

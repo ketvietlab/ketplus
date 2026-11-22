@@ -24,13 +24,25 @@ HistoryEntry historyFromJson(const QJsonObject& json) {
                     .data = json.value(QStringLiteral("data")).toObject()});
 }
 
+std::optional<ProviderSwitch> providerSwitchFromJson(const QJsonValue& value) {
+    const QJsonObject json = value.toObject();
+    const QString provider = json.value(QStringLiteral("provider")).toString();
+    if (provider.isEmpty())
+        return std::nullopt;
+    return ProviderSwitch{.provider = provider,
+                          .model = json.value(QStringLiteral("model")).toString(),
+                          .effort = json.value(QStringLiteral("effort")).toString(),
+                          .requestedAt = json.value(QStringLiteral("requested_at")).toString()};
+}
+
 Member memberFromJson(const QJsonObject& json) {
     return {.sessionId = json.value(QStringLiteral("session_id")).toString(),
             .role = json.value(QStringLiteral("role")).toString(),
             .name = json.value(QStringLiteral("name")).toString(),
             .lane = json.value(QStringLiteral("lane")).toString(),
             .paths = stringList(json.value(QStringLiteral("paths"))),
-            .joinedAt = json.value(QStringLiteral("joined_at")).toString()};
+            .joinedAt = json.value(QStringLiteral("joined_at")).toString(),
+            .pendingSwitch = providerSwitchFromJson(json.value(QStringLiteral("pending_switch")))};
 }
 
 Task taskFromJson(const QJsonObject& json) {
@@ -310,6 +322,13 @@ QJsonObject toJson(const Member& member) {
         json.insert(QStringLiteral("lane"), member.lane);
         json.insert(QStringLiteral("paths"), strings(member.paths));
     }
+    if (member.pendingSwitch)
+        json.insert(
+            QStringLiteral("pending_switch"),
+            QJsonObject{{QStringLiteral("provider"), member.pendingSwitch->provider},
+                        {QStringLiteral("model"), member.pendingSwitch->model},
+                        {QStringLiteral("effort"), member.pendingSwitch->effort},
+                        {QStringLiteral("requested_at"), member.pendingSwitch->requestedAt}});
     return json;
 }
 
@@ -434,6 +453,7 @@ QJsonObject toJson(const Team& team) {
         {QStringLiteral("integration_branch"), team.integrationBranch},
         {QStringLiteral("merge_policy"), team.mergePolicy},
         {QStringLiteral("execution_policy"), team.executionPolicy},
+        {QStringLiteral("provider"), team.provider},
         {QStringLiteral("language"), team.language},
         {QStringLiteral("leader_writes_requirements"), team.leaderWritesRequirements},
         {QStringLiteral("paused"), team.paused},
@@ -487,6 +507,7 @@ Team teamFromJson(const QJsonObject& json) {
     team.mergePolicy = json.value(QStringLiteral("merge_policy")).toString(role::leader);
     team.executionPolicy =
         json.value(QStringLiteral("execution_policy")).toString(QStringLiteral("ask"));
+    team.provider = json.value(QStringLiteral("provider")).toString();
     // Missing content preference follows the prompt, without rewriting any saved content.
     team.language = ::ketplus::remote::team_language::orEnglish(
         json.value(QStringLiteral("language"))
