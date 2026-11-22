@@ -447,12 +447,17 @@ class TeamCoordinator : public QObject {
     // earlier pending switch; those of `switching` move to `target` when their next turn starts.
     // `skipped` lists the members that cannot, each {session_id, name, error_code, reason}, for
     // the team's Updates. With `teamDefault` the provider is also the team's own, the one a
-    // member added later starts with.
+    // member added later starts with. T-3: with `fullAccess` the team's execution policy
+    // becomes Full access in the same change, the user having acknowledged the risk; every
+    // member but a reviewer takes it when its next turn starts (a reviewer takes it with Codex).
     TeamResult setProvider(qint64 teamId, const ProviderSwitch& target, const QStringList& chosen,
                            const QStringList& switching, const QJsonArray& skipped,
-                           bool teamDefault, const QString& actor);
+                           bool teamDefault, const QString& actor, bool fullAccess = false);
     // The member's pending switch, if it has one.
     [[nodiscard]] std::optional<ProviderSwitch> pendingSwitch(const QString& sessionId) const;
+    // The member's conversation took its pending policy; it is cleared without an Update, the
+    // turn's own "Permissions changed" saying so.
+    void finishPolicy(const QString& sessionId);
     // The member's pending switch took effect (`reason` empty) or was dropped because of
     // `reason`; either way it is cleared, with an Update.
     void finishProviderSwitch(const QString& sessionId, const QString& reason);

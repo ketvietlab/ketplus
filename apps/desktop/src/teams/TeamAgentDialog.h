@@ -50,7 +50,9 @@ inline constexpr char fullAccessReviewerProvider[] = "codex";
 
 // Which providers the chooser offers: any for a leader or developer; Claude for a reviewer, and
 // Codex too when its team starts members with Full access (listed but disabled otherwise).
-enum class AgentChoice { member, reviewer, fullAccessReviewer };
+// `team` (T-3, Change provider…) lists every provider, one not set up disabled with how to
+// set it up, and sets model and effort side by side.
+enum class AgentChoice { member, reviewer, fullAccessReviewer, team };
 
 // The Model & context choice of one role, as the conversation's dialog offers it: a provider,
 // its models and their efforts. A reviewer's choice is limited and says why.

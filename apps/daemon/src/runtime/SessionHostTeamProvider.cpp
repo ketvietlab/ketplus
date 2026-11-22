@@ -82,6 +82,17 @@ QJsonObject SessionHost::setTeamProvider(const QJsonObject& payload) {
     if (!team)
         return failure(QStringLiteral("team_not_found"),
                        QStringLiteral("The team no longer exists."));
+    // T-3: the change may give the team Full access, so that a reviewer can move to Codex. It
+    // takes the acknowledgement team.create asks for, and is given only with the switch.
+    const bool fullAccess = payload.contains(QStringLiteral("execution_policy"));
+    if (fullAccess &&
+        payload.value(QStringLiteral("execution_policy")).toString() != QStringLiteral("full"))
+        return failure(QStringLiteral("invalid_payload"),
+                       QStringLiteral("Only Full access can be given with a provider change."));
+    if (fullAccess && !payload.value(QStringLiteral("risk_acknowledged")).toBool())
+        return failure(QStringLiteral("execution_policy_denied"),
+                       QStringLiteral("The requested permission was not authorized."));
+    const QString teamPolicy = fullAccess ? QStringLiteral("full") : team->executionPolicy;
     const teams::ProviderSwitch target{
         .provider = payload.value(QStringLiteral("provider")).toString(),
         .model = payload.value(QStringLiteral("model")).toString().trimmed(),
@@ -111,8 +122,8 @@ QJsonObject SessionHost::setTeamProvider(const QJsonObject& payload) {
     for (const QString& sessionId : std::as_const(chosen)) {
         const teams::Member* member = team->member(sessionId);
         if (member->role == teams::role::reviewer &&
-            !reviewer::supported(target.provider, reviewer::teamReviewerPolicy(
-                                                      target.provider, team->executionPolicy))) {
+            !reviewer::supported(target.provider,
+                                 reviewer::teamReviewerPolicy(target.provider, teamPolicy))) {
             QJsonObject refused = failure(QStringLiteral("reviewer_unsupported"),
                                           reviewer::unsupportedMessage(target.provider) +
                                               QStringLiteral(" Give the team Full access first, "
@@ -137,8 +148,7 @@ QJsonObject SessionHost::setTeamProvider(const QJsonObject& payload) {
                        {QStringLiteral("reason"),
                         QStringLiteral("The member's conversation no longer exists.")}};
         else
-            blocker = providerSwitchBlocker(*session, member->role, target.provider,
-                                            team->executionPolicy);
+            blocker = providerSwitchBlocker(*session, member->role, target.provider, teamPolicy);
         if (!blocker.isEmpty()) {
             for (auto it = blocker.constBegin(); it != blocker.constEnd(); ++it)
                 result.insert(it.key(), it.value());
@@ -167,8 +177,10 @@ QJsonObject SessionHost::setTeamProvider(const QJsonObject& payload) {
                                                      : QStringLiteral("after_current_turn"));
         results.append(result);
     }
-    const auto changed = teams_->setProvider(teamId, target, chosen, switching, skipped, everyone,
-                                             QStringLiteral("user"));
+    // Full access comes with a switch that holds for some member, never on its own.
+    const auto changed =
+        teams_->setProvider(teamId, target, chosen, switching, skipped, everyone,
+                            QStringLiteral("user"), fullAccess && skipped.size() < chosen.size());
     if (!changed.ok())
         return failure(changed.error->code, changed.error->message);
     const teams::Team* now = teams_->team(teamId);
@@ -181,11 +193,14 @@ SessionHost::TeamProviderSwitch SessionHost::takeTeamProviderSwitch(const Sessio
                                                                     QJsonObject& options) const {
     if (!teams_ || !teams_->isLoaded())
         return {};
-    const auto pending = teams_->pendingSwitch(session.stored.id);
     const teams::Team* team = teams_->teamOf(session.stored.id);
     const teams::Member* member = team ? team->member(session.stored.id) : nullptr;
-    if (!pending || !member)
+    if (!member)
         return {};
+    TeamProviderSwitch change{.policy = member->pendingPolicy};
+    const auto& pending = member->pendingSwitch;
+    if (!pending)
+        return change;
     // What held when the switch was asked may not hold now: the member may have moved to a
     // task worktree, or the provider may have signed out. It then stays where it is.
     QJsonObject blocker =
@@ -193,8 +208,10 @@ SessionHost::TeamProviderSwitch SessionHost::takeTeamProviderSwitch(const Sessio
     if (blocker.isEmpty())
         if (const QJsonObject refused = providerNotReady(pending->provider); !refused.isEmpty())
             blocker = {{QStringLiteral("reason"), refused.value(QStringLiteral("error_message"))}};
-    if (!blocker.isEmpty())
-        return {.dropped = blocker.value(QStringLiteral("reason")).toString()};
+    if (!blocker.isEmpty()) {
+        change.dropped = blocker.value(QStringLiteral("reason")).toString();
+        return change;
+    }
     options.insert(QStringLiteral("provider"), pending->provider);
     // A model or effort chosen for the previous provider does not carry over.
     for (const auto& [key, value] : {std::pair{QStringLiteral("model"), pending->model},
@@ -207,18 +224,23 @@ SessionHost::TeamProviderSwitch SessionHost::takeTeamProviderSwitch(const Sessio
     if (pending->provider != QStringLiteral("codex") &&
         pending->provider != QStringLiteral("claude"))
         options.insert(QStringLiteral("compactWindow"), QJsonValue(QJsonValue::Null));
-    return {.applies = pending};
+    change.applies = pending;
+    return change;
 }
 
 void SessionHost::applyTeamProviderSwitch(Session& session,
                                           const TeamProviderSwitch& change) const {
+    // T-3: the team's Full access reaches the member with this turn; the turn says so.
+    if (!change.policy.isEmpty())
+        session.stored.executionPolicy = change.policy;
     if (!change.applies)
         return;
     // Empty is the provider's default; startTurn applies a non-empty one from the options.
     session.stored.model = change.applies->model;
     session.stored.effort = change.applies->effort;
     // ketplus#295: a Codex reviewer takes the team's Full access (checked when taken); any
-    // other reviewer keeps a conversation's default. The team's own policy never changes here.
+    // other reviewer keeps a conversation's default. The team's own policy never changes here;
+    // team.provider.set changes it, with the user's acknowledgement (T-3).
     const teams::Team* team = teams_->teamOf(session.stored.id);
     const teams::Member* member = team ? team->member(session.stored.id) : nullptr;
     if (member && member->role == teams::role::reviewer) {
@@ -230,6 +252,8 @@ void SessionHost::applyTeamProviderSwitch(Session& session,
 }
 
 void SessionHost::finishTeamProviderSwitch(Session& session, const TeamProviderSwitch& change) {
+    if (!change.policy.isEmpty())
+        teams_->finishPolicy(session.stored.id);
     if (!change.applies && change.dropped.isEmpty())
         return;
     // Codex is told the member's name once its thread starts, as for a new member.

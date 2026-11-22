@@ -694,7 +694,8 @@ its review turns run under the verify profile whatever its conversation's policy
 refused otherwise (ketplus#295).
 
 `team.provider.set` (T-2) moves members to another agent:
-`{team_id, provider, model?, effort?, members?, expected_revision?}`, `members` being
+`{team_id, provider, model?, effort?, members?, execution_policy?, risk_acknowledged?,
+expected_revision?}`, `members` being
 session ids (every member when absent). It is fenced on the team's settings and members.
 The whole request is refused, recording nothing, when the provider is unknown
 (`invalid_payload`), not installed (`provider_unavailable`) or last reported a sign-in
@@ -702,7 +703,16 @@ failure (`provider_not_ready`: signed out, expired sign-in or rejected API key, 
 a reached limit does not refuse it), when a chosen member is not on the team
 (`not_member`), and when a chosen reviewer could not review on that provider
 (`reviewer_unsupported` with `role` and `session_id`): a Codex reviewer needs the team's
-Full access, which this request never grants; the client asks for it separately. Each
+Full access. The request gives it only when it carries `execution_policy: "full"` with
+`risk_acknowledged: true`, the acknowledgement `team.create` asks for (T-3): without it the
+request is refused with `execution_policy_denied`, and any other `execution_policy` with
+`invalid_payload`. Full access is the team's, not the reviewer's: the team's
+`execution_policy` becomes `full` in the same change as the switch, with an
+`execution_policy_changed` update, and every member but a reviewer keeps a
+`pending_policy: "full"` in the team's document that its conversation takes when its next
+turn starts (a running turn keeps its permissions; a reviewer takes Full access as a
+Codex reviewer, and a Claude reviewer keeps its read-only reviews). Nothing is granted when
+the request is refused or when every chosen member is skipped. Each
 chosen member then gets a result `{session_id, name, role, status}`: `pending` with
 `applies` (`next_turn`, or `after_current_turn` while a turn runs or waits for an
 approval), `unchanged` (already on that provider, no model or effort given), or `skipped`

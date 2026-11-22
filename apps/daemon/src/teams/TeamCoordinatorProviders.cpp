@@ -19,7 +19,7 @@ QString agentText(const ProviderSwitch& target) {
 TeamResult TeamCoordinator::setProvider(const qint64 teamId, const ProviderSwitch& target,
                                         const QStringList& chosen, const QStringList& switching,
                                         const QJsonArray& skipped, const bool teamDefault,
-                                        const QString& actor) {
+                                        const QString& actor, const bool fullAccess) {
     Team* team = mutableTeam(teamId);
     if (!team)
         return {.error = TeamError{QStringLiteral("team_not_found"),
@@ -40,6 +40,14 @@ TeamResult TeamCoordinator::setProvider(const qint64 teamId, const ProviderSwitc
     }
     if (teamDefault)
         team->provider = target.provider;
+    // T-3: Full access is the team's; a running turn keeps the policy it started with.
+    const bool granted = fullAccess && team->executionPolicy != QStringLiteral("full");
+    if (granted) {
+        team->executionPolicy = QStringLiteral("full");
+        for (Member& member : team->members)
+            if (member.role != role::reviewer)
+                member.pendingPolicy = QStringLiteral("full");
+    }
     QStringList refused;
     for (const QJsonValue& value : skipped) {
         const QJsonObject entry = value.toObject();
@@ -61,11 +69,31 @@ TeamResult TeamCoordinator::setProvider(const qint64 teamId, const ProviderSwitc
                            {QStringLiteral("members"), QJsonArray::fromStringList(switching)},
                            {QStringLiteral("skipped"), skipped},
                            {QStringLiteral("team_default"), teamDefault}};
-    if (auto failed =
-            commit(*team, before, actor,
-                   {{.kind = QStringLiteral("provider_set"), .text = text, .data = data}}))
+    QList<Update> updates;
+    if (granted)
+        updates.append(
+            {.kind = QStringLiteral("execution_policy_changed"),
+             .text = say(team->language,
+                         QT_TRANSLATE_NOOP("Team", "Permissions changed to Full access. Each "
+                                                   "member takes it when its next turn starts.")),
+             .data = QJsonObject{{QStringLiteral("execution_policy"), team->executionPolicy},
+                                 {QStringLiteral("previous"), before.executionPolicy}}});
+    updates.append({.kind = QStringLiteral("provider_set"), .text = text, .data = data});
+    if (auto failed = commit(*team, before, actor, updates))
         return {.error = failed};
     return {.teamId = teamId};
+}
+
+void TeamCoordinator::finishPolicy(const QString& sessionId) {
+    Team* team = mutableTeamOf(sessionId);
+    Member* member = team ? team->member(sessionId) : nullptr;
+    if (!member || member->pendingPolicy.isEmpty())
+        return;
+    const Team before = *team;
+    member->pendingPolicy.clear();
+    if (auto failed = commit(*team, before, QStringLiteral("daemon"), {}))
+        qWarning("Unable to record the policy of %s: %s", qUtf8Printable(sessionId),
+                 qUtf8Printable(failed->message));
 }
 
 std::optional<ProviderSwitch> TeamCoordinator::pendingSwitch(const QString& sessionId) const {

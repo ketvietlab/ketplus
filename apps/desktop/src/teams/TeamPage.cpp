@@ -491,6 +491,9 @@ void TeamPage::showMenu(QWidget* anchor, const QJsonObject& team) {
     // T-90: where the team works; started tasks keep theirs.
     auto* repository = menu.addAction(ket::Icons::icon(u"folder"), tr("Repository…"));
     repository->setObjectName(QStringLiteral("teamPageRepositorySettings"));
+    // T-3: every member, or the ones left checked, moves to another provider.
+    auto* provider = menu.addAction(ket::Icons::icon(u"sparkles"), tr("Change provider…"));
+    provider->setObjectName(QStringLiteral("teamPageChangeProvider"));
     // T-23: a second reviewer, at any team size; a team has at most two.
     auto* reviewer = menu.addAction(ket::Icons::icon(u"plus"), tr("Add a second reviewer…"));
     reviewer->setObjectName(QStringLiteral("teamPageAddReviewer"));
@@ -520,6 +523,7 @@ void TeamPage::showMenu(QWidget* anchor, const QJsonObject& team) {
     commands->bind(budget, commandKey(QStringLiteral("turn_budget")));
     commands->bind(review, commandKey(QStringLiteral("review")));
     commands->bind(repository, commandKey(QStringLiteral("repository")));
+    commands->bind(provider, commandKey(QStringLiteral("provider")));
     commands->bind(remove, commandKey(QStringLiteral("delete")));
     commands->bind(languages->menuAction(), commandKey(QStringLiteral("language")));
     QAction* chosen = menu.exec(anchor->mapToGlobal(QPoint(0, anchor->height())));
@@ -541,6 +545,8 @@ void TeamPage::showMenu(QWidget* anchor, const QJsonObject& team) {
         afterMenuCloses(this, [this, team] { (void)teamReviewSettings(this, teams_, team); });
     else if (chosen == repository)
         afterMenuCloses(this, [this, team] { (void)teamRepositorySettings(this, teams_, team); });
+    else if (chosen == provider)
+        afterMenuCloses(this, [this] { emit changeProviderRequested(teamId_); });
     else if (chosen == reviewer)
         afterMenuCloses(this, [this] { emit addReviewerRequested(teamId_); });
     else if (chosen == remove)

@@ -145,6 +145,9 @@ struct Member final {
     QString lane;
     QString joinedAt;
     std::optional<ProviderSwitch> pendingSwitch;
+    // T-3: the execution policy the member's conversation takes when its next turn starts,
+    // after team.provider.set gave the team Full access. Empty when none waits.
+    QString pendingPolicy;
 };
 
 struct Criterion final {

@@ -515,6 +515,8 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
         std::optional<teams::ProviderSwitch> applies;
         // Why a pending switch no longer applies; the member stays where it is.
         QString dropped;
+        // T-3: the execution policy the team's Full access gives this member's conversation.
+        QString policy;
     };
     [[nodiscard]] QJsonObject setTeamProvider(const QJsonObject& payload);
     [[nodiscard]] TeamProviderSwitch takeTeamProviderSwitch(const Session& session,

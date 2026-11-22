@@ -14,7 +14,8 @@ Team provider switch (T-2, `team.provider.set`): run `ketplus_team_provider_swit
 with the team protocol, remote, flow and agent-tools fixtures and the provider handoff
 tests (`ketplus_daemon_claude_adapter_tests`, `ketplus_turn_acceptance_tests`). It runs
 whole-team Codex → Claude and back, a chosen part of the team, a switch held while a turn
-waits for an approval, the Codex reviewer's Full access, a provider that is not installed
+waits for an approval, the Codex reviewer's Full access, Full access given with the switch
+only when acknowledged (T-3), a provider that is not installed
 and a member in a switched worktree, against the scripted fake providers only.
 
 Team route tools (ADR 0130): run `ketplus_team_routing_tools_tests` together with
@@ -468,6 +469,13 @@ For local PNGs and geometry logs, run `ketplus_team_dialogs_tests
 columnsReflowAndKeepTheFooterReachable` with `QT_QPA_PLATFORM=offscreen`,
 `KETPLUS_DISABLE_DAEMON_AUTOSTART=1` and `KETPLUS_T15_CAPTURE` set to a local output
 directory. Keep generated captures out of the source tree.
+
+`ketplus_team_provider_dialog_tests` (T-3) renders Change provider… against a fake
+daemon: the provider select and its company-first labels, every member checked by
+default, a member left out, a reviewer that stays without Full access or moves with the
+team's Full access acknowledged, each member's
+result from `team.provider.set` and a refusal, in light and dark at 100%, 125% and
+150% in a 1024 × 640 window. No provider or real team is started.
 
 The [layout verification record](evidence/new-team-dialog-layout.md) retains the
 full Pro matrix results, initial failures, one isolated retry and platform skips.

@@ -4,6 +4,7 @@
 #include "KetButton.h"
 #include "KetIcon.h"
 #include "KetTokens.h"
+#include "agent/ProviderDisplay.h"
 #include "teams/TeamCommands.h"
 #include "teams/TeamDirectory.h"
 #include "teams/TeamMenus.h"
@@ -234,8 +235,16 @@ void TeamPage::buildMembers(const QJsonObject& team) {
             reference->setType(12, QFont::Medium, true);
             identity->addWidget(reference);
         }
-        auto* provider =
-            new Text(member.value(QStringLiteral("provider")).toString(), row, Text::Fit::Elide);
+        // T-3: the provider's short name, and the one a pending switch moves it to.
+        QString runs = provider_display::name(member.value(QStringLiteral("provider")).toString());
+        if (const QString next = member.value(QStringLiteral("pending_switch"))
+                                     .toObject()
+                                     .value(QStringLiteral("provider"))
+                                     .toString();
+            !next.isEmpty())
+            runs = tr("%1 → %2 at its next turn").arg(runs, provider_display::name(next));
+        auto* provider = new Text(runs, row, Text::Fit::Elide);
+        provider->setObjectName(QStringLiteral("teamMemberProvider"));
         provider->setTone(QStringLiteral("text-muted"));
         provider->setType(12);
         identity->addWidget(provider, 1);

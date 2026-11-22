@@ -8,6 +8,7 @@
 #include "KetSelect.h"
 
 #include <QCoreApplication>
+#include <QHBoxLayout>
 #include <QLabel>
 #include <QStandardItemModel>
 #include <QVBoxLayout>
@@ -125,7 +126,25 @@ TeamAgentChooser::TeamAgentChooser(const QVariantList& models, const TeamAgent& 
     efforts_->setObjectName(QStringLiteral("teamAgentEffort"));
     const QLatin1String claude(team_agents::reviewerProvider);
     const QLatin1String codex(team_agents::fullAccessReviewerProvider);
-    for (const QString& provider : team_agents::readyProviders(models)) {
+    const QStringList ready = team_agents::readyProviders(models);
+    // T-3: a whole team's change lists every provider; one not set up says how to set it up.
+    if (choice == AgentChoice::team) {
+        for (const provider_display::Provider& known : provider_display::providers()) {
+            const QString provider = QString::fromLatin1(known.id);
+            if (provider == QStringLiteral("ketrouter"))
+                continue;
+            providers_->addItem(provider_display::choice(provider), provider);
+            if (ready.contains(provider))
+                continue;
+            if (auto* items = qobject_cast<QStandardItemModel*>(providers_->model())) {
+                QStandardItem* item = items->item(providers_->count() - 1);
+                item->setEnabled(false);
+                item->setToolTip(tr("Set up %1 in Settings → Agents first.")
+                                     .arg(provider_display::name(provider)));
+            }
+        }
+    }
+    for (const QString& provider : choice == AgentChoice::team ? QStringList{} : ready) {
         if (choice != AgentChoice::member && provider != claude && provider != codex)
             continue;
         // The company first, from the one provider table ("Anthropic – Claude").
@@ -136,7 +155,9 @@ TeamAgentChooser::TeamAgentChooser(const QVariantList& models, const TeamAgent& 
                 items->item(providers_->count() - 1)->setEnabled(false);
     }
     QString help;
-    if (choice != AgentChoice::member) {
+    if (choice == AgentChoice::team) {
+        help = tr("Only providers set up on this computer can be chosen.");
+    } else if (choice != AgentChoice::member) {
         providers_->setEnabled(choice == AgentChoice::fullAccessReviewer &&
                                providers_->count() > 1);
         help = choice == AgentChoice::fullAccessReviewer
@@ -146,19 +167,32 @@ TeamAgentChooser::TeamAgentChooser(const QVariantList& models, const TeamAgent& 
         if (!hasChoice())
             help = tr("The reviewer needs Claude. Set up Claude in Settings → Agents.");
     }
-    // As Model & context: each select spans the dialog with its label above. Model and effort
-    // stay one below the other, so a long model name still fits a narrow card.
+    // As Model & context: each select has its label above. A member's dialog keeps model and
+    // effort one below the other, so a long model name still fits a narrow card; a whole
+    // team's dialog is wide and sets them side by side.
+    auto* details = new QHBoxLayout;
+    details->setContentsMargins(0, 0, 0, 0);
     for (auto [label, control, hint] :
          {std::tuple{tr("Provider"), providers_, help}, std::tuple{tr("Model"), models_, QString{}},
           std::tuple{tr("Effort"), efforts_, QString{}}}) {
         auto* row = new ket::FieldRow(label, control, hint, this);
         row->setStacked(true);
-        layout->addWidget(row);
+        if (choice == AgentChoice::team && control != providers_)
+            details->addWidget(row, control == models_ ? 3 : 2);
+        else
+            layout->addWidget(row);
     }
+    if (details->isEmpty())
+        delete details;
+    else
+        layout->addLayout(details);
     int index = providers_->findData(current.provider);
     if (index < 0 || !providerEnabled(providers_, index))
         index = providers_->findData(claude);
-    providers_->setCurrentIndex(index >= 0 ? index : 0);
+    if (index < 0 || !providerEnabled(providers_, index))
+        for (index = 0; index < providers_->count() && !providerEnabled(providers_, index);)
+            ++index;
+    providers_->setCurrentIndex(index < providers_->count() ? index : 0);
     fillModels(current.model);
     fillEfforts(current.effort);
     connect(providers_, &QComboBox::currentIndexChanged, this, [this] {

@@ -41,7 +41,8 @@ Member memberFromJson(const QJsonObject& json) {
             .name = json.value(QStringLiteral("name")).toString(),
             .lane = json.value(QStringLiteral("lane")).toString(),
             .joinedAt = json.value(QStringLiteral("joined_at")).toString(),
-            .pendingSwitch = providerSwitchFromJson(json.value(QStringLiteral("pending_switch")))};
+            .pendingSwitch = providerSwitchFromJson(json.value(QStringLiteral("pending_switch"))),
+            .pendingPolicy = json.value(QStringLiteral("pending_policy")).toString()};
 }
 
 Task taskFromJson(const QJsonObject& json) {
@@ -316,6 +317,8 @@ QJsonObject toJson(const Member& member) {
                         {QStringLiteral("model"), member.pendingSwitch->model},
                         {QStringLiteral("effort"), member.pendingSwitch->effort},
                         {QStringLiteral("requested_at"), member.pendingSwitch->requestedAt}});
+    if (!member.pendingPolicy.isEmpty())
+        json.insert(QStringLiteral("pending_policy"), member.pendingPolicy);
     return json;
 }
 

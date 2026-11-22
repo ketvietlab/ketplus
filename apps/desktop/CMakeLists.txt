@@ -97,6 +97,8 @@ add_library(ketplus_desktop_support STATIC
     src/teams/TeamMenus.cpp
     src/teams/TeamMenus.h
     src/teams/TeamAgentDialog.cpp
+    src/teams/TeamProviderDialog.cpp
+    src/teams/TeamProviderDialog.h
     src/teams/TeamAgentDialog.h
     src/teams/TeamDialogs.cpp
     src/teams/TeamGoal.h

@@ -61,6 +61,8 @@ class TeamPage final : public QWidget {
     void addMemberRequested(const QString& teamId);
     // T-23: the banner's "Add a second reviewer".
     void addReviewerRequested(const QString& teamId);
+    // T-3: Change provider…, for the whole team or the members left checked.
+    void changeProviderRequested(const QString& teamId);
     void newTeamRequested(const QString& repository);
     void deleteRequested(const QString& teamId);
     void removeMemberRequested(const QString& teamId, const QString& sessionId);
