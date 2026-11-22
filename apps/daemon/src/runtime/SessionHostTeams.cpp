@@ -208,6 +208,18 @@ void SessionHost::startTeams() {
                        {{QStringLiteral("team"), team},
                         {QStringLiteral("revision"), team.value(QStringLiteral("revision"))}});
     });
+    // T-8: a member's turn that starts or ends changes what the phone's directory shows. The
+    // heartbeat these events already schedule carries the new activity.
+    connect(this, &SessionHost::eventReady, this, [this](const QJsonObject& event) {
+        const QString type = event.value(QStringLiteral("event_type")).toString();
+        if (type != QStringLiteral("turn.started") && type != QStringLiteral("turn.completed") &&
+            type != QStringLiteral("runtime.stopped"))
+            return;
+        if (const teams::Team* team =
+                teams_ ? teams_->teamOf(event.value(QStringLiteral("session_id")).toString())
+                       : nullptr)
+            ++teamActivity_[team->id];
+    });
     connect(teams_, &teams::TeamCoordinator::teamRemoved, this,
             [this](const QString& teamId, const QString& repository) {
                 teamWakeTasks_.removeIf([this](const auto& entry) {

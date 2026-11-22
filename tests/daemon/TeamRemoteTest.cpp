@@ -674,6 +674,93 @@ class TeamRemoteTest final : public QObject {
         QVERIFY(remote::pullRequestNumber("https://example.invalid/pull/71") == 71);
         QVERIFY(!remote::pullRequestNumber("draft"));
     }
+
+    // T-8: the directory says what each member does now and how many work, so Home shows a
+    // working team without its page. The fields are additive; an older phone ignores them.
+    void theDirectoryShowsWhatEachMemberDoes() {
+        const QJsonObject team{
+            {"id", "3"},
+            {"repository", "/synthetic/execution"},
+            {"members",
+             QJsonArray{QJsonObject{{"session_id", "lead"},
+                                    {"number", "1"},
+                                    {"role", "leader"},
+                                    {"idle", false},
+                                    {"current_task", ""}},
+                        QJsonObject{{"session_id", "dev1"},
+                                    {"number", "2"},
+                                    {"role", "developer"},
+                                    {"idle", true},
+                                    {"current_task", "T-1"}},
+                        QJsonObject{{"session_id", "dev2"},
+                                    {"number", "3"},
+                                    {"role", "developer"},
+                                    {"idle", false},
+                                    {"current_task", "T-2"}},
+                        QJsonObject{{"session_id", "dev3"},
+                                    {"number", "4"},
+                                    {"role", "developer"},
+                                    {"idle", true},
+                                    {"current_task", ""}},
+                        // A member the host no longer knows has no idle flag: it is not working.
+                        QJsonObject{{"session_id", "rev"}, {"number", "5"}, {"role", "reviewer"}}}},
+            {"tasks",
+             QJsonArray{QJsonObject{{"id", "T-1"}, {"owner", "dev1"}, {"state", "in_progress"}},
+                        QJsonObject{{"id", "T-3"}, {"owner", "dev1"}, {"state", "blocked"}},
+                        QJsonObject{{"id", "T-2"}, {"owner", "dev2"}, {"state", "in_progress"}},
+                        QJsonObject{{"id", "T-4"}, {"owner", "dev3"}, {"state", "in_review"}}}}};
+        const QJsonObject row = remote::directoryEntry(team, ids);
+        const QJsonArray members = row.value("members").toArray();
+        QCOMPARE(members.size(), 5);
+        const auto at = [&](const int index, const char* key) {
+            return members.at(index).toObject().value(key).toString();
+        };
+        QCOMPARE(at(0, "state"), QStringLiteral("working"));
+        QCOMPARE(at(0, "task"), QString());
+        QCOMPARE(at(1, "state"), QStringLiteral("blocked"));
+        QCOMPARE(at(1, "task"), QStringLiteral("T-1"));
+        QCOMPARE(at(2, "state"), QStringLiteral("working"));
+        QCOMPARE(at(2, "task"), QStringLiteral("T-2"));
+        QCOMPARE(at(3, "state"), QStringLiteral("waiting_for_review"));
+        QCOMPARE(at(4, "state"), QStringLiteral("idle"));
+        QCOMPARE(row.value("working").toInt(), 2);
+        // The summary's members carry their own state; it has no count of its own.
+        QVERIFY(!remote::summary(team, ids).contains("working"));
+    }
+
+    // T-8: a member's turn that starts or ends changes the team's activity in the sealed
+    // metadata, which the heartbeat after a turn's start and end already carries; the
+    // revision a phone's command is fenced on does not move for it.
+    void aMembersTurnChangesTheTeamsActivity() {
+        Fixture fixture;
+        QVERIFY(fixture.open());
+        const Team team = create(fixture);
+        QVERIFY(!team.id.isEmpty());
+        QTRY_VERIFY_WITH_TIMEOUT(fixture.count(team.leader, "turn.completed") >= 1, 8000);
+        const auto activity = [&] {
+            return fixture.host->teamMetadata().value(team.developer).value("activity").toInteger();
+        };
+        const qint64 before = activity();
+        QVERIFY(before >= 2); // the leader's first turn started and ended
+        QCOMPARE(fixture.host->teamMetadata().value(team.leader).value("activity").toInteger(),
+                 before);
+        const int turns = fixture.count(team.developer, "turn.completed");
+        QVERIFY(fixture
+                    .agents(team.leader, "agents.send",
+                            {{"to", fixture.number(team.developer)}, {"text", "Status?"}})
+                    .value("ok")
+                    .toBool());
+        QTRY_VERIFY_WITH_TIMEOUT(fixture.count(team.developer, "turn.completed") > turns, 8000);
+        QTRY_VERIFY_WITH_TIMEOUT(activity() >= before + 2, 5000);
+        // The directory reads each member's state from the team's tasks.
+        const QJsonObject list = phone(fixture, "team.list", {});
+        const QJsonObject entry = list.value("teams").toArray().first().toObject();
+        QVERIFY(entry.value("working").isDouble());
+        for (const QJsonValue& value : entry.value("members").toArray()) {
+            QVERIFY(value.toObject().value("state").isString());
+            QVERIFY(value.toObject().value("task").isString());
+        }
+    }
 };
 
 QTEST_GUILESS_MAIN(TeamRemoteTest)

@@ -255,15 +255,23 @@ std::optional<int> pullRequestNumber(const QString& pullRequest) {
 }
 
 QJsonObject directoryEntry(const QJsonObject& team, const Ids& ids) {
+    // T-8: what each member does now, so Home shows a working team without its page. A
+    // member's state reads the team's tasks; a directory form without them (ADR 0115) still
+    // tells a running turn from an idle one.
     QJsonArray members;
+    int working = 0;
     for (const QJsonValue& value : team.value(QStringLiteral("members")).toArray()) {
         if (members.size() >= maximumMembers)
             break;
         const QJsonObject entry = value.toObject();
+        const QString state = memberState(entry, team);
+        working += state == QStringLiteral("working") ? 1 : 0;
         members.append(QJsonObject{
             {QStringLiteral("session_id"), entry.value(QStringLiteral("session_id"))},
             {QStringLiteral("number"), entry.value(QStringLiteral("number")).toString()},
-            {QStringLiteral("role"), entry.value(QStringLiteral("role"))}});
+            {QStringLiteral("role"), entry.value(QStringLiteral("role"))},
+            {QStringLiteral("state"), state},
+            {QStringLiteral("task"), entry.value(QStringLiteral("current_task")).toString()}});
     }
     const QString repository = team.value(QStringLiteral("repository")).toString();
     QJsonObject json{
@@ -278,7 +286,8 @@ QJsonObject directoryEntry(const QJsonObject& team, const Ids& ids) {
          team.value(QStringLiteral("tasks_total"))
              .toInt(int(team.value(QStringLiteral("tasks")).toArray().size()))},
         {QStringLiteral("tasks_done"), team.value(QStringLiteral("tasks_done")).toInt()},
-        {QStringLiteral("members"), members}};
+        {QStringLiteral("members"), members},
+        {QStringLiteral("working"), working}};
     if (team.value(QStringLiteral("sidebar_repository")).isString()) {
         const auto placement = team.value(QStringLiteral("sidebar_repository")).toString();
         json.insert(QStringLiteral("sidebar_repository_id"),
@@ -290,6 +299,8 @@ QJsonObject directoryEntry(const QJsonObject& team, const Ids& ids) {
 QJsonObject summary(const QJsonObject& team, const Ids& ids) {
     QJsonObject json = directoryEntry(team, ids);
     json.remove(QStringLiteral("members"));
+    // The summary's members carry their state themselves.
+    json.remove(QStringLiteral("working"));
     const int budget = team.value(QStringLiteral("turn_budget")).toInt();
     const int used = team.value(QStringLiteral("automatic_turns")).toInt();
     json.insert(QStringLiteral("goal"),

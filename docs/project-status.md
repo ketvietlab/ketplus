@@ -119,6 +119,9 @@ Linux store policy, signed upgrade prompts and platform release acceptance remai
   conversations with number and title and says it may ask them, and creating the team
   messages nobody. The team page folds the goal after three lines, and a mention there
   opens its conversation. Paired devices get the goal whole (ADR 0116).
+  Team activity on the phone (T-8): `team.list` gives each member's `state` and `task` and
+  the team's `working` count, and the sealed `team` metadata carries an `activity` count that
+  a member's turn start or end changes, so a phone reads the directory again (ADR 0116 §3).
   Automatic turns (#459): only an assignment, a handover, a review and an answered
   decision start a member's turn; every other change waits in Updates for the leader's
   digest, sent once when its turn ends or after 20 s of quiet while it is idle. Pause
