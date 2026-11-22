@@ -349,6 +349,8 @@ ketplus_add_daemon_test(ketplus_team_payload_tests TeamPayloadTest.cpp)
 ketplus_add_daemon_test(ketplus_team_decision_tests TeamDecisionTest.cpp)
 # ADR 0114, open point 2: the global automatic-turn budget and each team's own.
 ketplus_add_daemon_test(ketplus_team_budget_tests TeamBudgetTest.cpp)
+# T-1: a fresh native context for turns a team starts, and the briefing it begins with.
+ketplus_add_daemon_test(ketplus_team_context_reset_tests TeamContextResetTest.cpp)
 # T-56: a team's language, its Updates, decisions and digests in it.
 ketplus_add_daemon_test(ketplus_team_language_tests TeamLanguageTest.cpp)
 ketplus_add_daemon_test(ketplus_team_merge_tests TeamMergeTest.cpp)

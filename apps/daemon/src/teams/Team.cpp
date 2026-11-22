@@ -418,6 +418,11 @@ QJsonObject toJson(const Team& team) {
     QJsonArray members;
     for (const Member& member : team.members)
         members.append(toJson(member));
+    QJsonObject contexts;
+    for (auto it = team.contexts.constBegin(); it != team.contexts.constEnd(); ++it)
+        contexts.insert(it.key(), QJsonObject{{QStringLiteral("task"), it->task},
+                                              {QStringLiteral("thread"), it->thread},
+                                              {QStringLiteral("since"), it->since}});
     QJsonArray tasks;
     int done = 0;
     for (const Task& task : team.tasks) {
@@ -463,6 +468,9 @@ QJsonObject toJson(const Team& team) {
         {QStringLiteral("review_place"), team.reviewPlace},
         {QStringLiteral("turn_budget"), team.turnBudget},
         {QStringLiteral("automatic_turns"), team.automaticTurns},
+        {QStringLiteral("context_reset"), team.contextReset},
+        {QStringLiteral("context_reset_turns"), team.contextResetTurns},
+        {QStringLiteral("contexts"), contexts},
         {QStringLiteral("plan_approved"), team.planApproved},
         {QStringLiteral("leader_started"), team.leaderStarted},
         {QStringLiteral("members"), members},
@@ -525,6 +533,24 @@ Team teamFromJson(const QJsonObject& json) {
                            : place::board;
     team.turnBudget = json.value(QStringLiteral("turn_budget")).toInt(defaultTurnBudget);
     team.automaticTurns = json.value(QStringLiteral("automatic_turns")).toInt();
+    // A saved value outside the choices or the range is not a team's choice: the default.
+    const QString reset = json.value(QStringLiteral("context_reset")).toString();
+    team.contextReset = reset == context_reset::threshold || reset == context_reset::never
+                            ? reset
+                            : context_reset::taskAndThreshold;
+    const int resetTurns =
+        json.value(QStringLiteral("context_reset_turns")).toInt(context_reset::defaultTurns);
+    team.contextResetTurns = resetTurns == 0 || (resetTurns >= context_reset::minimumTurns &&
+                                                 resetTurns <= context_reset::maximumTurns)
+                                 ? resetTurns
+                                 : context_reset::defaultTurns;
+    const QJsonObject contexts = json.value(QStringLiteral("contexts")).toObject();
+    for (auto it = contexts.constBegin(); it != contexts.constEnd(); ++it) {
+        const QJsonObject mark = it.value().toObject();
+        team.contexts.insert(it.key(), {.task = mark.value(QStringLiteral("task")).toString(),
+                                        .thread = mark.value(QStringLiteral("thread")).toString(),
+                                        .since = mark.value(QStringLiteral("since")).toInteger()});
+    }
     team.planApproved = json.value(QStringLiteral("plan_approved")).toBool();
     team.leaderStarted = json.value(QStringLiteral("leader_started")).toBool();
     for (const auto& value : json.value(QStringLiteral("members")).toArray())

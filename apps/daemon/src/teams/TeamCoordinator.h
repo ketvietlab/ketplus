@@ -406,6 +406,21 @@ class TeamCoordinator : public QObject {
     // "team_paused" or "team_budget" (the budget is used up: the team pauses and asks) when
     // the message waits for the team to continue.
     QString takeMemberTurn(const QString& sessionId);
+    // T-1 (TeamCoordinatorContextReset.cpp): a turn the team starts for `sessionId` on native
+    // thread `thread` (empty: none yet), after `turnSequence` turns of the conversation, and
+    // the task its message named, if any. A plan says the turn starts a fresh context, why,
+    // and the briefing it begins with; nothing when it continues the current one. The member's
+    // context mark is stored either way, but a reset only by noteContextReset.
+    struct ContextResetPlan final {
+        QString reason;
+        QString task;
+        QString briefing;
+    };
+    std::optional<ContextResetPlan> planContextReset(const QString& sessionId,
+                                                     const QString& taskHint, const QString& thread,
+                                                     qint64 turnSequence);
+    // The fresh context of a plan began: its turn is turn `turnSequence` + 1.
+    void noteContextReset(const QString& sessionId, const QString& task, qint64 turnSequence);
     // The repository of a worktree the team made for one of its tasks; nothing for another
     // path. Such a worktree belongs to its team's repository, so git is not asked (T-32).
     [[nodiscard]] QString taskWorktreeRepository(const QString& worktree) const;
@@ -654,6 +669,9 @@ class TeamCoordinator : public QObject {
     // new one leaves turns. The turns used stay counted.
     std::optional<TeamError> changeTurnBudget(Team& team, const QJsonValue& value,
                                               QList<Update>& updates);
+    // T-1: context_reset and context_reset_turns from team.update, each when present.
+    std::optional<TeamError> changeContextReset(Team& team, const QJsonObject& changes,
+                                                QList<Update>& updates);
     // T-90 (ADR 0123), in TeamCoordinatorRepository.cpp: moves the team to another
     // repository (and integration branch). Tasks that already have a branch keep the
     // repository they were started in; nothing on disk moves.

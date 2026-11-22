@@ -28,6 +28,7 @@
 #include <atomic>
 #include <functional>
 #include <memory>
+#include <optional>
 
 namespace ketplus::daemon {
 
@@ -208,6 +209,9 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
         // Set when the stored thread belonged to another provider (an old journal): the next
         // turn starts a fresh thread pointed at the transcript of this provider's history.
         QString handoffFrom;
+        // T-1: the note that points a fresh context of the same provider at the transcript,
+        // with the team's briefing; kept, like handoffFrom, until the provider takes a turn.
+        QString contextResetNote;
         // Set when the running turn called a KetPlus browser tool; its end closes the sessions.
         bool browserUsedThisTurn{false};
         // Last `provider.runtime` warning journaled for this session in this daemon.
@@ -693,6 +697,36 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     // Where a conversation's handoff transcript is written; readable by the providers it hands
     // over to.
     [[nodiscard]] QString handoffDirectory(const QString& sessionId) const;
+    // T-1 (SessionHostContextReset.cpp): what a fresh native context replaced, to put back
+    // when the step that follows it fails.
+    struct FreshContextUndo final {
+        QString adapter;
+        QString threadId;
+        QString providerThreads;
+        bool attachedToProvider{false};
+    };
+    // The one way a conversation leaves its native thread, for a provider handoff and a team's
+    // context reset alike: writes the transcript (its path in `transcript`), keeps the thread
+    // in providerThreads for scoped deletion and leaves the session on `adapter` with no
+    // thread. When the transcript cannot be written nothing changes: nullopt, `error` set.
+    std::optional<FreshContextUndo> startFreshContext(Session& session, const QString& adapter,
+                                                      QString* transcript, QString* error);
+    void undoFreshContext(Session& session, const FreshContextUndo& undo);
+    // T-1: a turn its team starts may begin a fresh context of the same provider
+    // (TeamCoordinator::planContextReset); sets contextResetNote when it does. A failure keeps
+    // the current thread and the turn runs on it.
+    void resetTeamContext(Session& session, const QString& taskHint);
+    // T-1: the task a team message names, kept by the message's id until the turn it is
+    // delivered in starts (a team wake reads it) or it is delivered otherwise.
+    struct TeamWakeTask final {
+        QString sessionId;
+        QString taskId;
+    };
+    QHash<QString, TeamWakeTask> teamWakeTasks_;
+    // The task of the last message the turn delivers that names one; forgets the session's
+    // hints for messages already delivered (a user's turn, a steer).
+    QString takeTeamWakeTask(const QString& sessionId, const QJsonObject& agentOrigin);
+    void forgetTeamWakeTasks(const QJsonObject& agentOrigin);
     // ADR 0114 §2: the one directory a team's reviewer may write in during a review round.
     [[nodiscard]] QString reviewScratchDirectory(const QString& sessionId) const;
     QTemporaryDir attachmentDirectory_;

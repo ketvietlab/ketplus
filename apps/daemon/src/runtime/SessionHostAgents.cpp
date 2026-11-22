@@ -224,6 +224,10 @@ QString SessionHost::steerAgentTurn(const QString& sessionId, const qint64 gener
                    {QStringLiteral("display_text"), displayText(origin)},
                    {QStringLiteral("expected_context_revision"), it->stored.contextRevision}}),
               {}, true, origin);
+    // T-1: a team message steered into a running turn was delivered there; its task is not
+    // the next wake's.
+    if (result.value(QStringLiteral("ok")).toBool())
+        forgetTeamWakeTasks(origin);
     return result.value(QStringLiteral("ok")).toBool()
                ? QString{}
                : result.value(QStringLiteral("error_message")).toString();

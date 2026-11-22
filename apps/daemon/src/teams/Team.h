@@ -4,6 +4,7 @@
 #include "teams/TeamReviewPolicy.h"
 #include "teams/TeamRiskPolicy.h"
 
+#include <QHash>
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QList>
@@ -101,6 +102,29 @@ inline constexpr int maximumReviewRounds = 5;
 inline constexpr int defaultTurnBudget = 40;
 inline constexpr int minimumTurnBudget = 5;
 inline constexpr int maximumTurnBudget = 200;
+
+// T-1: when a turn the team starts gets a fresh native context, so a member's context does
+// not grow with every wake. "task_and_threshold": a developer or reviewer woken for another
+// task than its context's, and every member past the turn threshold; "threshold": only the
+// threshold; "never". A threshold of 0 turns the threshold off.
+namespace context_reset {
+inline const QString taskAndThreshold = QStringLiteral("task_and_threshold");
+inline const QString threshold = QStringLiteral("threshold");
+inline const QString never = QStringLiteral("never");
+inline constexpr int defaultTurns = 12;
+inline constexpr int minimumTurns = 4;
+inline constexpr int maximumTurns = 100;
+} // namespace context_reset
+
+// T-1: what a member's current native context began with: the task it was for (empty: none
+// yet), the native thread it is (empty until the provider names the fresh one), and the
+// conversation's turn count before its first turn.
+struct ContextMark final {
+    QString task;
+    QString thread;
+    qint64 since{0};
+    bool operator==(const ContextMark&) const = default;
+};
 
 // T-2 (team.provider.set): the agent a member moves to when its next turn starts. A turn that
 // runs, or waits for an approval, is never interrupted for it. An empty model or effort is the
@@ -292,6 +316,10 @@ struct Team final {
     QString reviewPlace{place::board};
     int turnBudget{defaultTurnBudget};
     int automaticTurns{0};
+    QString contextReset{context_reset::taskAndThreshold};
+    int contextResetTurns{context_reset::defaultTurns};
+    // T-1: each member's current context, by session id. Bookkeeping, not a setting.
+    QHash<QString, ContextMark> contexts;
     bool planApproved{false};
     // The leader has had its first turn with the goal.
     bool leaderStarted{false};

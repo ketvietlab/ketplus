@@ -73,6 +73,11 @@ inline constexpr qsizetype maximumMentionTitleCharacters = 80;
 // T-40: a team's review rounds (1 or 2) and review place ("board" or "pull_request").
 [[nodiscard]] std::optional<TeamError> validReviewRounds(const QJsonValue& value, int* rounds);
 [[nodiscard]] std::optional<TeamError> validReviewPlace(const QJsonValue& value, QString* place);
+// T-1: a team's context reset policy (context_reset::taskAndThreshold, threshold or never),
+// and its turn threshold: 0 (off) or a whole number from context_reset::minimumTurns to
+// maximumTurns.
+[[nodiscard]] std::optional<TeamError> validContextReset(const QJsonValue& value, QString* mode);
+[[nodiscard]] std::optional<TeamError> validContextResetTurns(const QJsonValue& value, int* turns);
 // T-56: a team's language is one team_language supports.
 [[nodiscard]] std::optional<TeamError> validLanguage(const QString& language);
 // ADR 0116 §4: a change that carries `expected_revision` is refused with stale_team when the
