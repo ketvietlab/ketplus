@@ -28,6 +28,12 @@ struct Candidate final {
 // Membership rules, without side effects. Each returns the first rule the change breaks.
 namespace rules {
 
+// The agents a team member may run on (team.create, team.member.add, team.provider.set).
+[[nodiscard]] inline bool knownProvider(const QString& provider) {
+    return provider == QStringLiteral("codex") || provider == QStringLiteral("claude") ||
+           provider == QStringLiteral("cursor") || provider == QStringLiteral("copilot");
+}
+
 // A lane's prefixes, normalised: relative, '/' separated, no "." or "..", no trailing '/'.
 // Nothing when a prefix is invalid.
 [[nodiscard]] std::optional<QStringList> normalisedPaths(const QStringList& paths);

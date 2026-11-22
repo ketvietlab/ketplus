@@ -1293,11 +1293,23 @@ QJsonObject SessionHost::startTurn(const QJsonObject& request, bool localClient,
             QStringLiteral("invalid_worktree"),
             QStringLiteral("worktree_path must identify an existing directory for a new session."));
     }
-    const QJsonObject options = payload.value(QStringLiteral("options")).toObject();
+    QJsonObject options = payload.value(QStringLiteral("options")).toObject();
+    // T-2: a team member's pending provider switch takes this turn to the new provider. It is
+    // only looked at for a turn the session can take; a refused start_turn keeps it pending.
+    const TeamProviderSwitch teamSwitch =
+        it != sessions_.end() &&
+                request.value(QStringLiteral("session_generation"))
+                        .toInteger(it->stored.generation) == it->stored.generation &&
+                it->stored.worktreePath == worktree && !it->startingTurn &&
+                it->stored.state != QStringLiteral("running")
+            ? takeTeamProviderSwitch(*it, options)
+            : TeamProviderSwitch{};
     const QString adapter = requestedAdapter(
         options, it == sessions_.end() ? QStringLiteral("codex") : it->stored.adapter);
+    // A handoff starts a fresh native context, so it needs only a provider that runs in a
+    // switched worktree (as session.worktree.switch allows Codex and Claude).
     if (it != sessions_.end() && it->stored.contextRevision > 1 && adapter != "codex" &&
-        adapter != it->stored.adapter)
+        adapter != "claude" && adapter != it->stored.adapter)
         return error(QStringLiteral("context_switch_unsupported"),
                      QStringLiteral("This provider cannot resume a switched context yet."));
     if (!isCanonicalAdapter(adapter)) {
@@ -1469,6 +1481,7 @@ QJsonObject SessionHost::startTurn(const QJsonObject& request, bool localClient,
                          provider_handoff::handoffNote(it->handoffFrom, handoffTranscript, 0)}});
     }
     const StoredSession previous = it->stored;
+    applyTeamProviderSwitch(*it, teamSwitch);
     it->stored.state = QStringLiteral("starting");
     QJsonObject userMessage{{QStringLiteral("text"), displayText},
                             {QStringLiteral("command_id"), request.value("message_id")}};
@@ -1533,6 +1546,7 @@ QJsonObject SessionHost::startTurn(const QJsonObject& request, bool localClient,
         releaseTurnAttachments(*it);
         return error("journal_error", appendError);
     }
+    finishTeamProviderSwitch(*it, teamSwitch);
     if (agentOrigin.isEmpty() && !payload.contains("schedule_id"))
         resumeManagedTaskWake(sessionId, it->stored.generation);
     it->startingTurn = true;

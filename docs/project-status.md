@@ -144,6 +144,13 @@ Linux store policy, signed upgrade prompts and platform release acceptance remai
   path and size and removes one only after the user confirms, with `git worktree remove`
   without force and `git worktree prune`; dirty or unpushed worktrees, the main checkout
   and a running conversation's folder are refused in words. Agents have no way to ask.
+  Team provider switch (T-2, ADR 0114 "Protocol"): `team.provider.set` moves all or
+  chosen members to another installed, signed-in provider with an optional model and
+  effort (the new provider's default otherwise). Nothing is interrupted: each member keeps
+  a pending switch, shown on the team, that its next turn takes through the provider
+  handoff. A Codex reviewer without the team's Full access refuses the change; members in
+  a switched worktree that the provider cannot continue are reported one by one. The team
+  keeps the provider for members added later. Not yet in the desktop or phone UI.
   Per-task review (#460): a task entering In review is queued for the team's reviewer,
   first in first out, as an ADR 0067 `review` message with its criteria and the diff of
   its branch against the integration branch; `no findings` makes it Ready, findings go

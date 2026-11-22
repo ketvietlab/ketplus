@@ -636,6 +636,7 @@ trusted local clients only (`forbidden` otherwise; agents use the tools below):
 `{settings: {turn_budget, turn_budget_minimum, turn_budget_maximum, turn_budget_default}}`),
 `team.list`, `team.get`, `team.create`, `team.update`, `team.delete`,
 `team.member.add`, `team.member.join`, `team.member.update`, `team.member.remove`,
+`team.provider.set` (below),
 `team.task.list`, `team.task.get`, `team.task.create`, `team.task.update`,
 `team.task.assign`, `team.task.handover`, `team.task.move`, `team.task.criteria.set`,
 `team.decision.list`, `team.decision.answer`, `team.storage.get` (`{team_id}`; answers
@@ -653,6 +654,42 @@ later; the user changes one member in its conversation. A Claude reviewer is not
 its review turns run under the verify profile whatever its conversation's policy is (ADR
 0067). A Codex reviewer is started with `full` when the team's policy is `full`, and is
 refused otherwise (ketplus#295).
+
+`team.provider.set` (T-2) moves members to another agent:
+`{team_id, provider, model?, effort?, members?, expected_revision?}`, `members` being
+session ids (every member when absent). It is fenced on the team's settings and members.
+The whole request is refused, recording nothing, when the provider is unknown
+(`invalid_payload`), not installed (`provider_unavailable`) or last reported a sign-in
+failure (`provider_not_ready`: signed out, expired sign-in or rejected API key, ADR 0110;
+a reached limit does not refuse it), when a chosen member is not on the team
+(`not_member`), and when a chosen reviewer could not review on that provider
+(`reviewer_unsupported` with `role` and `session_id`): a Codex reviewer needs the team's
+Full access, which this request never grants; the client asks for it separately. Each
+chosen member then gets a result `{session_id, name, role, status}`: `pending` with
+`applies` (`next_turn`, or `after_current_turn` while a turn runs or waits for an
+approval), `unchanged` (already on that provider, no model or effort given), or `skipped`
+with `error_code` and `reason`; `context_switch_unsupported` marks a member whose
+conversation moved to another worktree when the provider cannot switch worktrees
+(Cursor, Copilot); Claude, like Codex, continues such a conversation in a fresh context, so
+`session.start_turn` no longer refuses that handoff to Claude. A pending switch is the member's `pending_switch {provider, model,
+effort, requested_at}` in the team's document, so `team.get` shows it and it survives a
+restart; a newer request replaces it, and choosing the member's current provider
+withdraws it. No turn is interrupted: the member's next turn, whoever starts it, runs on
+the new provider through the provider handoff (a fresh native context, pointed at the
+conversation's `transcript.md`). A model or effort not given is the new provider's
+default; the previous provider's model is never carried over. A reviewer moved to Codex
+takes the team's Full access, one moved away from Codex a conversation's default. When
+the switch can no longer apply at that turn (the member moved to a worktree, the
+provider signed out, the team lost Full access), the member stays on its agent and an
+actionable `provider_switch_dropped` update says why. The switch is looked at only for a
+turn the member can take and is recorded only once that turn is accepted: a refused
+`session.start_turn` (busy, stale generation, journal error) leaves it pending, and the
+accepted turn's `session.configuration_changed` names the model, effort or policy the
+switch changed. Without `members` the provider
+also becomes the team's `provider`, the agent a member added later without one starts
+with; `team.create` sets it when every member runs on one provider. Updates
+`provider_set` and `provider_switched` record the change and each member's move.
+The phone sends the same request (ADR 0116 §4) and reads the results.
 
 `team.create` and `team.update` take `max_rounds` (1 to 5; 2 when absent) and
 `review_place` (`board` or `pull_request`; `board` when absent), and the team's document

@@ -187,6 +187,7 @@ describes them.
 | Add a developer (a new conversation) | `team.member.add` | `team_id`, `name`, `lane?`, `paths?`, `provider`, `model?`, `effort?`, `expected_revision` | members | `team_full`, `provider_unavailable`, `member_unavailable`, `lane_overlap` |
 | Remove a member | `team.member.remove` | `team_id`, `session_id`, `expected_revision` | members | `not_member`, `last_developer`, `role_required` |
 | Add an existing conversation to a team | `team.member.join` | `team_id`, `session_id`, `lane?`, `paths?`, `expected_revision` | members | `session_not_found`, `already_member`, `other_repository`, `team_full`, `lane_overlap` |
+| Change the team's agent (T-2, ADR 0114 "Protocol") | `team.provider.set` | `team_id`, `provider`, `model?`, `effort?`, `members?` (session ids; every member when absent), `expected_revision`; the answer adds `results`, one per chosen member | settings and members | `invalid_payload`, `provider_unavailable`, `provider_not_ready`, `not_member`, `reviewer_unsupported` |
 | Hand a task over | `team.task.handover` | `team_id`, `task_id`, `owner` (a developer's or the leader's `session_id`), `reason` (1 to 500 characters), `expected_revision` | that task | `task_not_found`, `not_member`, `role_forbidden`, `invalid_transition`, `worktree_unavailable` |
 
 - A phone may change only the `team.update` fields listed above. Any other field is
@@ -297,7 +298,9 @@ refusal.
     phone shows the longer goal as text.
   - Settings: `integration_branch`, `merge_policy` (who merges: `leader` or `user`),
     `leader_writes_requirements` (who writes requirements), `execution_policy`,
-    `language` ([T30](2026-11-18-english-ui-team-content.md): `auto`, `en`, `vi`; a content
+    `provider` (T-2: the team's own agent for members added later, empty for a mixed or
+    older team; each member's `agent` may carry `pending_switch {provider, model, effort}`
+    until its next turn moves it), `language` ([T30](2026-11-18-english-ui-team-content.md): `auto`, `en`, `vi`; a content
     fallback only. Application chrome and new fixed daemon templates are English. The value
     never requests translation of stored content; older persisted en/vi values remain valid).
   - State: `paused`, `paused_reason`, `plan_approved`, `held_count`.

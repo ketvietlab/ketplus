@@ -442,6 +442,19 @@ class TeamCoordinator : public QObject {
                             const QStringList& paths, const QString& actor,
                             const QString& reason = {});
     TeamResult removeMember(qint64 teamId, const QString& sessionId, const QString& actor);
+    // T-2 (TeamCoordinatorProviders.cpp): team.provider.set. The members of `chosen` forget an
+    // earlier pending switch; those of `switching` move to `target` when their next turn starts.
+    // `skipped` lists the members that cannot, each {session_id, name, error_code, reason}, for
+    // the team's Updates. With `teamDefault` the provider is also the team's own, the one a
+    // member added later starts with.
+    TeamResult setProvider(qint64 teamId, const ProviderSwitch& target, const QStringList& chosen,
+                           const QStringList& switching, const QJsonArray& skipped,
+                           bool teamDefault, const QString& actor);
+    // The member's pending switch, if it has one.
+    [[nodiscard]] std::optional<ProviderSwitch> pendingSwitch(const QString& sessionId) const;
+    // The member's pending switch took effect (`reason` empty) or was dropped because of
+    // `reason`; either way it is cleared, with an Update.
+    void finishProviderSwitch(const QString& sessionId, const QString& reason);
 
     // Tasks (ADR 0114 §6), in TeamCoordinatorTasks.cpp. `actor` is "user", "daemon" or the
     // session id of the member that acts; the daemon refuses what its role may not do.

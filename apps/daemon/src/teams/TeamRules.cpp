@@ -283,7 +283,8 @@ std::optional<TeamError> fence(const Team& team, const QString& type, const QJso
         changed = decision ? decision->changedRevision : 0;
     } else if (type == QStringLiteral("team.update")) {
         changed = team.settingsRevision;
-    } else if (type == QStringLiteral("team.delete")) {
+    } else if (type == QStringLiteral("team.delete") ||
+               type == QStringLiteral("team.provider.set")) {
         changed = std::max(team.settingsRevision, team.membersRevision);
     } else if (type == QStringLiteral("team.member.add") ||
                type == QStringLiteral("team.member.remove") ||

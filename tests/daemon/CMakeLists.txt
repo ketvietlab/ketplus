@@ -327,6 +327,8 @@ ketplus_add_daemon_test(ketplus_team_review_policy_tests TeamReviewPolicyTest.cp
 ketplus_add_daemon_test(ketplus_team_finding_resolution_tests TeamFindingResolutionTest.cpp)
 ketplus_add_daemon_test(ketplus_team_finding_routing_tests TeamFindingRoutingTest.cpp)
 ketplus_add_daemon_test(ketplus_team_protocol_tests TeamProtocolTest.cpp)
+# T-2: team.provider.set through the provider handoff, against the fake providers.
+ketplus_add_daemon_test(ketplus_team_provider_switch_tests TeamProviderSwitchTest.cpp)
 ketplus_add_daemon_test(ketplus_team_task_tests TeamTaskTest.cpp)
 ketplus_add_daemon_test(ketplus_team_task_git_tests TeamTaskGitTest.cpp)
 ketplus_add_daemon_test(ketplus_team_agent_tools_tests TeamAgentToolsTest.cpp)
