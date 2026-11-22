@@ -59,14 +59,19 @@ struct Fixture final {
     std::unique_ptr<CursorAdapter> cursor;
     std::unique_ptr<SessionHost> host;
 
-    // Stopping an adapter fails its pending calls, and those callbacks run in the host, so the
-    // adapters go first while the host is still alive (members would otherwise be destroyed in
-    // reverse order, host first).
+    // The daemon's order (DaemonService): stopping an adapter fails its pending calls into the
+    // host, and a stop may report itself to the host, so every adapter stops while the host and
+    // the other adapters still exist. The host then goes before the adapters it points to.
     ~Fixture() {
-        codex.reset();
-        claude.reset();
-        cursor.reset();
+        for (ProviderAdapter* adapter : {static_cast<ProviderAdapter*>(codex.get()),
+                                         static_cast<ProviderAdapter*>(claude.get()),
+                                         static_cast<ProviderAdapter*>(cursor.get())})
+            if (adapter != nullptr)
+                adapter->stop();
         host.reset();
+        cursor.reset();
+        claude.reset();
+        codex.reset();
     }
 
     bool open(const bool endpoint = false) {
