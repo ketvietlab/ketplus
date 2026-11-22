@@ -137,19 +137,20 @@ class TeamProviderDialogTest final : public QObject {
         QVERIFY(summary->message().contains("The one running now switches"));
     }
 
-    // A member left out is not sent; clearing All clears everyone and nothing can be sent.
+    // A member left out is not sent. All checks everyone again from a partial choice, and a
+    // second press clears everyone, when nothing can be sent.
     void aMemberCanBeLeftOut() {
         TeamProviderForm form(teams_.get(), codexTeam(), models);
         form.member("lead")->setChecked(false);
         QVERIFY(!form.allMembers()->isChecked());
         QCOMPARE(form.payload().value("members").toArray(),
                  QJsonArray::fromStringList({"dev1", "dev2", "rev"}));
-        form.allMembers()->setChecked(false);
+        form.allMembers()->click();
+        QCOMPARE(form.chosen().size(), 4);
+        form.allMembers()->click();
         QVERIFY(form.chosen().isEmpty());
         form.submit();
         QVERIFY(daemon_.sent.isEmpty());
-        form.allMembers()->setChecked(true);
-        QCOMPARE(form.chosen().size(), 4);
     }
 
     // ketplus#295: without the team's Full access a reviewer stays where it is on a move to

@@ -304,7 +304,7 @@ void TeamProviderForm::showResults(const QJsonArray& results) {
             QStringLiteral("pending"))
             ++moving;
     auto* banner = new ket::Banner(
-        moving > 0 ? ket::BannerTone::Success : ket::BannerTone::Info,
+        ket::BannerTone::Info,
         moving == 0 ? tr("No member moves")
         : moving == 1
             ? tr("1 member moves to %1").arg(provider_display::name(provider))
@@ -378,7 +378,7 @@ ket::Dialog* TeamProviderForm::present(QWidget* anchor, TeamDirectory* teams,
     teams->commands()->bind(send, providerKey(team));
     QObject::connect(send, &QAbstractButton::clicked, dialog, [form] { form->submit(); });
     // Once sent, the dialog shows each member's result and only closes.
-    QObject::connect(form, &TeamProviderForm::resultsShown, dialog, [dialog, cancel, send, fit] {
+    QObject::connect(form, &TeamProviderForm::resultsShown, dialog, [cancel, send, fit] {
         send->hide();
         cancel->setText(tr("Done"));
         fit();
