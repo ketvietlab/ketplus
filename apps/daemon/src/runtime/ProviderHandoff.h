@@ -39,5 +39,9 @@ void rememberThread(QJsonObject& threads, const QString& provider, const QString
 [[nodiscard]] QString handoffNote(const QString& fromProvider, const QString& transcriptPath,
                                   qint64 seenCursor);
 
+// T-1: the note put in front of the first prompt after a fresh context of the same provider.
+// The transcript is there to read when needed, never to replay.
+[[nodiscard]] QString contextResetNote(const QString& transcriptPath);
+
 } // namespace provider_handoff
 } // namespace ketplus::daemon

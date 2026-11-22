@@ -164,6 +164,7 @@ QJsonObject SessionHost::teamOperation(const QString& sessionId, const QString& 
         // Members read the team, not its bookkeeping.
         json.remove(QStringLiteral("tasks"));
         json.remove(QStringLiteral("decisions"));
+        json.remove(QStringLiteral("contexts"));
         return {{QStringLiteral("ok"), true},
                 {QStringLiteral("team"), json},
                 {QStringLiteral("you"), teamMembership(sessionId)}};

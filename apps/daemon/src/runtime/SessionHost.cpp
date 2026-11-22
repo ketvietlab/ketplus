@@ -1421,48 +1421,28 @@ QJsonObject SessionHost::startTurn(const QJsonObject& request, bool localClient,
     // starting the new provider blind.
     QString handoffTranscript;
     if (it->stored.adapter != adapter) {
-        const QString previousAdapter = it->stored.adapter;
-        const QString previousThread = it->stored.threadId;
-        const QString previousThreads = it->stored.providerThreads;
-        const bool previousAttached = it->attachedToProvider;
         const auto failHandoff = [&](const QString& reason) {
             // Nothing was journaled: the conversation stays with its previous provider.
-            it->stored.adapter = previousAdapter;
-            it->stored.threadId = previousThread;
-            it->stored.providerThreads = previousThreads;
-            it->attachedToProvider = previousAttached;
-            if (!previousThread.isEmpty())
-                sessionsByThread_.insert(previousThread, sessionId);
             for (const QString& heldPath : std::exchange(it->materializedAttachments, {}))
                 QFile::remove(heldPath);
             for (const QString& id : std::exchange(it->stagedAttachmentIds, {}))
                 (void)journal_->cancelAttachment(sessionId, it->stored.generation, id, 1);
             return error(QStringLiteral("handoff_failed"), reason);
         };
-        QJsonObject threads = QJsonDocument::fromJson(it->stored.providerThreads.toUtf8()).object();
-        provider_handoff::rememberThread(threads, previousAdapter, it->stored.threadId);
         QString writeError;
-        handoffTranscript = provider_handoff::writeTranscript(
-            handoffDirectory(sessionId),
-            provider_handoff::renderTranscript(
-                provider_handoff::journalEvents(*journal_, sessionId, it->stored.generation)),
-            &writeError);
-        if (handoffTranscript.isEmpty())
+        const auto undo = startFreshContext(*it, adapter, &handoffTranscript, &writeError);
+        if (!undo)
             return failHandoff(writeError);
-        if (!it->stored.threadId.isEmpty())
-            sessionsByThread_.remove(it->stored.threadId);
-        it->stored.adapter = adapter;
-        it->stored.threadId.clear();
-        it->stored.providerThreads =
-            QString::fromUtf8(QJsonDocument(threads).toJson(QJsonDocument::Compact));
-        it->attachedToProvider = false;
         QString changeError;
-        if (!appendEvent(
-                *it, QStringLiteral("session.provider_changed"),
-                {{QStringLiteral("from"), previousAdapter}, {QStringLiteral("to"), adapter}},
-                &changeError))
+        if (!appendEvent(*it, QStringLiteral("session.provider_changed"),
+                         {{QStringLiteral("from"), undo->adapter}, {QStringLiteral("to"), adapter}},
+                         &changeError)) {
+            undoFreshContext(*it, *undo);
             return failHandoff(changeError);
-        it->handoffFrom = previousAdapter;
+        }
+        it->handoffFrom = undo->adapter;
+        // The handoff note carries the context forward; a pending reset note would repeat it.
+        it->contextResetNote.clear();
     }
     if (!it->handoffFrom.isEmpty() && it->stored.adapter == adapter) {
         if (handoffTranscript.isEmpty()) {
@@ -1480,6 +1460,13 @@ QJsonObject SessionHost::startTurn(const QJsonObject& request, bool localClient,
                         {QStringLiteral("text"),
                          provider_handoff::handoffNote(it->handoffFrom, handoffTranscript, 0)}});
     }
+    // T-1: only a turn its team starts, never one the user types; a busy session was refused
+    // above, so no turn is running. A handoff in progress already starts a fresh context.
+    if (agentOrigin.value(QStringLiteral("team_wake")).toBool() && it->handoffFrom.isEmpty())
+        resetTeamContext(*it);
+    if (!it->contextResetNote.isEmpty() && it->handoffFrom.isEmpty())
+        input.prepend(QJsonObject{{QStringLiteral("type"), QStringLiteral("text")},
+                                  {QStringLiteral("text"), it->contextResetNote}});
     const StoredSession previous = it->stored;
     applyTeamProviderSwitch(*it, teamSwitch);
     it->stored.state = QStringLiteral("starting");
@@ -1489,7 +1476,8 @@ QJsonObject SessionHost::startTurn(const QJsonObject& request, bool localClient,
         userMessage.insert(QStringLiteral("images"), messageImages);
     // ADR 0027: an agent message opens this turn; clients show it instead of user text.
     for (auto field = agentOrigin.constBegin(); field != agentOrigin.constEnd(); ++field)
-        userMessage.insert(field.key(), field.value());
+        if (field.key() != QStringLiteral("team_wake"))
+            userMessage.insert(field.key(), field.value());
     // Clients pair the prompt they already display with this echo by id instead of guessing.
     const QString clientMessageId = payload.value(QStringLiteral("client_message_id")).toString();
     if (!clientMessageId.isEmpty() && clientMessageId.size() <= 128)

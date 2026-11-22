@@ -110,6 +110,31 @@ std::optional<TeamError> validTurnBudget(const QJsonValue& value, int* budget) {
     return std::nullopt;
 }
 
+std::optional<TeamError> validContextReset(const QJsonValue& value, QString* mode) {
+    const QString text = value.toString();
+    if (!value.isString() || (text != context_reset::taskAndThreshold &&
+                              text != context_reset::threshold && text != context_reset::never))
+        return refusal(
+            QStringLiteral("invalid_payload"),
+            QStringLiteral("A context reset is task_and_threshold, threshold or never."));
+    *mode = text;
+    return std::nullopt;
+}
+
+std::optional<TeamError> validContextResetTurns(const QJsonValue& value, int* turns) {
+    const double number = value.toDouble(-1);
+    if (!value.isDouble() || number != std::floor(number) ||
+        (number != 0 &&
+         (number < context_reset::minimumTurns || number > context_reset::maximumTurns)))
+        return refusal(QStringLiteral("invalid_payload"),
+                       QStringLiteral("The context reset threshold is 0 (off) or a whole number "
+                                      "from %1 to %2 turns.")
+                           .arg(context_reset::minimumTurns)
+                           .arg(context_reset::maximumTurns));
+    *turns = static_cast<int>(number);
+    return std::nullopt;
+}
+
 std::optional<TeamError> validReviewRounds(const QJsonValue& value, int* rounds) {
     const double number = value.toDouble(-1);
     if (!value.isDouble() || number != std::floor(number) || number < 1 ||

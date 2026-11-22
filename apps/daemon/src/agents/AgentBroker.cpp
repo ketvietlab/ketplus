@@ -680,8 +680,11 @@ void AgentBroker::deliverTo(const QString& sessionId) {
     const QString text =
         takeRecordedBranches(sessionId, origin, agent_messaging::deliveryText(deliverable));
     turns_.insert(sessionId, origin);
-    const QString error =
-        host_->startAgentTurn(sessionId, receiver->generation, text, originJson(deliverable));
+    QJsonObject turnOrigin = originJson(deliverable);
+    // T-1: a turn only its team's messages start may begin a fresh context (never a user's).
+    if (teamTurn)
+        turnOrigin.insert(QStringLiteral("team_wake"), true);
+    const QString error = host_->startAgentTurn(sessionId, receiver->generation, text, turnOrigin);
     if (!error.isEmpty()) {
         turns_.remove(sessionId);
         for (AgentMessageRecord& message : deliverable) {

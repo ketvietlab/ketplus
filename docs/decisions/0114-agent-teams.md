@@ -508,6 +508,42 @@ is paused, stopped or removed on its own at any level.
   clients only, the remote team path (ADR 0116) does not carry them, and the coordinator
   refuses any actor but the user (`role_forbidden`).
 
+### 11. A member's context is reset between wakes (decided 2026-11-22, T-1)
+
+Every turn a team starts used to resume the member's native provider thread, so a long team
+grew each member's context, and its tokens, with every wake. A turn the team starts may
+now begin a fresh native thread of the same provider instead. It is decided when the turn
+starts, never while one runs, and never for a turn the user types: only a turn that the
+team's messages alone start (the broker marks it `team_wake`) is considered, and a busy
+conversation never reaches that point.
+
+- `context_reset` is a team setting: `task_and_threshold` (the default), `threshold` or
+  `never`. `context_reset_turns` is the threshold: 12 by default, 4 to 100, or 0 for none.
+  Both are in the team's document (and so in `team_get`), change through `team.update`,
+  are validated there (`invalid_payload`) and read as the defaults from a document that
+  holds anything else.
+- A developer or reviewer starts fresh when the turn is about another task than its
+  context's (`task_changed`): the task the team's message named, else the developer's task
+  in progress or the task the reviewer reviews now. The leader works across tasks and only
+  has the threshold. Every role starts fresh when its context already holds at least the
+  threshold's turns (`threshold`); user turns on that thread count too.
+- The team keeps each member's context mark (`contexts`: its task, its native thread, and
+  the conversation's turn count when it began) in the team document. Clients and `team_get`
+  do not need it; `team_get` leaves it out. A thread the team has not seen, such as one a
+  provider handoff began, is adopted as a new context, never reset.
+- The reset takes the provider handoff's path (`SessionHost::startFreshContext`): the
+  conversation's transcript is written to its handoff directory, the old thread is kept in
+  `provider_threads` for scoped deletion, and the next turn starts without `resume`. The
+  journal records `session.context_reset` `{reason, provider, task_id}`; one that cannot be
+  journaled is undone. A transcript that cannot be written keeps the current thread, and
+  the turn runs on it.
+- The first prompt of the fresh context begins with a note that points at `transcript.md`,
+  to read when needed and never to replay, and a team briefing of at most 4 KiB of UTF-8:
+  the goal, the member's role and lane, its task (state, round, criteria and the last five
+  history entries) or, for the leader, the first 20 open tasks, and `team_get` and
+  `team_tasks` to read more. Like the handoff note, it is kept until the provider accepts
+  that turn's `turn/start`; a pending provider handoff note replaces it.
+
 ## Open points, fixed here
 
 1. **A developer's working directory.** *Chosen*: a task owns its worktree. When a task
@@ -690,6 +726,10 @@ also becomes the team's `provider`, the agent a member added later without one s
 with; `team.create` sets it when every member runs on one provider. Updates
 `provider_set` and `provider_switched` record the change and each member's move.
 The phone sends the same request (ADR 0116 §4) and reads the results.
+
+`team.update` takes `context_reset` (`task_and_threshold`, `threshold` or `never`) and
+`context_reset_turns` (0 or 4 to 100), and the team's document returns both (§11). They are
+local commands; the phone's `team.update` is unchanged.
 
 `team.create` and `team.update` take `max_rounds` (1 to 5; 2 when absent) and
 `review_place` (`board` or `pull_request`; `board` when absent), and the team's document

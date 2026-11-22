@@ -164,6 +164,7 @@ QSet<QString> ActivityNormalizer::registeredProtocolEventTypes() {
             QStringLiteral("session.created"),
             QStringLiteral("session.renamed"),
             QStringLiteral("session.provider_changed"),
+            QStringLiteral("session.context_reset"),
             QStringLiteral("session.configuration_changed"),
             QStringLiteral("conversation.context_changed"),
             QStringLiteral("session.forked"),

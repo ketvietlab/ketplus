@@ -273,6 +273,7 @@ void SessionHost::beginClaudeTurn(const QString& sessionId, const qint64 generat
                 return;
             // The provider has the turn, and with it the handoff note.
             current->handoffFrom.clear();
+            current->contextResetNote.clear();
             const QString threadId = result.value(QStringLiteral("thread"))
                                          .toObject()
                                          .value(QStringLiteral("id"))
@@ -346,6 +347,7 @@ void SessionHost::beginAcpTurn(const QString& sessionId, const qint64 generation
                 return;
             // The provider has the turn, and with it the handoff note.
             current->handoffFrom.clear();
+            current->contextResetNote.clear();
             const QString threadId = result.value(QStringLiteral("thread"))
                                          .toObject()
                                          .value(QStringLiteral("id"))
@@ -400,6 +402,7 @@ void SessionHost::beginTurn(const QString& sessionId, const qint64 generation,
             }
             // The provider has the turn, and with it the handoff note.
             current->handoffFrom.clear();
+            current->contextResetNote.clear();
             // turn/completed or a provider exit can arrive before this reply. Only a turn that is
             // still starting may become running; otherwise the session would stay busy forever.
             if (current->stored.state != QStringLiteral("starting"))

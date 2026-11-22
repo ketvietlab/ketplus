@@ -45,7 +45,8 @@ QString activity(const QJsonObject& item) {
         QString line = QStringLiteral("- Ran `%1`")
                            .arg(clipped(commandText(item.value(QStringLiteral("command"))), 300));
         if (item.contains(QStringLiteral("exitCode")) && !item.value("exitCode").isNull())
-            line += QStringLiteral(" (exit %1)").arg(item.value(QStringLiteral("exitCode")).toInt());
+            line +=
+                QStringLiteral(" (exit %1)").arg(item.value(QStringLiteral("exitCode")).toInt());
         const QString output = clipped(item.value(QStringLiteral("aggregatedOutput")).toString(),
                                        maximumOutputCharacters);
         if (!output.isEmpty())
@@ -57,8 +58,9 @@ QString activity(const QJsonObject& item) {
         for (const QJsonValue& change : item.value(QStringLiteral("changes")).toArray())
             paths.append(change.toObject().value(QStringLiteral("path")).toString());
         paths.removeAll(QString{});
-        return paths.isEmpty() ? QStringLiteral("- Changed files")
-                               : QStringLiteral("- Changed %1").arg(paths.join(QStringLiteral(", ")));
+        return paths.isEmpty()
+                   ? QStringLiteral("- Changed files")
+                   : QStringLiteral("- Changed %1").arg(paths.join(QStringLiteral(", ")));
     }
     if (type == QStringLiteral("mcpToolCall")) {
         return QStringLiteral("- Used %1 / %2")
@@ -178,12 +180,11 @@ QString writeTranscript(const QString& directory, const QString& transcript, QSt
             *error = QStringLiteral("Could not create %1").arg(directory);
         return {};
     }
-    QFile::setPermissions(directory, QFileDevice::ReadOwner | QFileDevice::WriteOwner |
-                                         QFileDevice::ExeOwner);
+    QFile::setPermissions(directory,
+                          QFileDevice::ReadOwner | QFileDevice::WriteOwner | QFileDevice::ExeOwner);
     const QString path = QDir(directory).filePath(QStringLiteral("transcript.md"));
     QSaveFile file(path);
-    if (!file.open(QIODevice::WriteOnly) || file.write(transcript.toUtf8()) < 0 ||
-        !file.commit()) {
+    if (!file.open(QIODevice::WriteOnly) || file.write(transcript.toUtf8()) < 0 || !file.commit()) {
         if (error)
             *error = file.errorString();
         return {};
@@ -240,6 +241,16 @@ QString handoffNote(const QString& fromProvider, const QString& transcriptPath,
         "you need them. The worktree already contains the changes made so far. Do not mention "
         "this note; answer the user's message below.\n\n");
     return note;
+}
+
+QString contextResetNote(const QString& transcriptPath) {
+    return QStringLiteral(
+               "[KetPlus context reset] KetPlus started a fresh context for this conversation to "
+               "keep it small. The transcript of the conversation so far is at:\n%1\n"
+               "Read it only when you need something from earlier turns, starting from its end; "
+               "do not replay it. The worktree already contains the changes made so far. Do not "
+               "mention this note; answer the message below.\n\n")
+        .arg(transcriptPath);
 }
 
 } // namespace ketplus::daemon::provider_handoff

@@ -918,6 +918,10 @@ journal or by the provider, the next attempt hands off again. A switch whose `se
 journaled is rolled back, and the conversation stays with its previous provider and
 thread. The pending note is kept in memory only, so a daemon restart in between
 loses it.
+A team's context reset (ADR 0114 §11) takes the same path with the same provider:
+`startFreshContext` writes the transcript and retires the thread, `session.context_reset`
+is journaled, and the next turn starts with a note that points at the transcript and a
+team briefing.
 ### Conversation execution worktree (isolated implementation)
 
 `session.worktrees` returns a searched, touched-first page (20 default, 100 max). Local IPC may pass `repository_path` to list another repository's worktrees without switching or enrolling it; every result names the listed `repository_path` and marks the `main` worktree (ADR 0105). `session.worktree.switch` validates an idle Codex session, same Git repository and expected context revision. Remote commands/results are encrypted; the switch target opaque IDs are included in AAD. New catalog targets are published before the page response; switching requests an immediate heartbeat. Stable desktop navigation uses `conversation_navigation`, separate from execution cwd. `conversation_worktree_activity` stores new provider evidence, not inferred ownership or reconstructed history; see ADR 0015 and the execution-worktree test lane.

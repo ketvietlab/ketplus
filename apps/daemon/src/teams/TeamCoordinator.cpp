@@ -27,9 +27,11 @@ int roleOrder(const QString& role) {
 // revision, so a phone's change is refused only when the part it acts on moved.
 void stampChanges(Team& team, const Team& before) {
     const auto settings = [](const Team& one) {
-        return QJsonArray{one.name,        one.goal,         one.integrationBranch, one.mergePolicy,
-                          one.paused,      one.pausedReason, one.turnBudget,        one.maxRounds,
-                          one.reviewPlace, one.language,     one.provider};
+        return QJsonArray{one.name,         one.goal,         one.integrationBranch,
+                          one.mergePolicy,  one.paused,       one.pausedReason,
+                          one.turnBudget,   one.maxRounds,    one.reviewPlace,
+                          one.language,     one.provider,     one.contextReset,
+                          one.contextResetTurns};
     };
     team.settingsRevision =
         settings(team) == settings(before) ? before.settingsRevision : team.revision;
@@ -541,6 +543,10 @@ TeamResult TeamCoordinator::update(const qint64 teamId, const QJsonObject& chang
             *team = before;
             return {.error = invalid};
         }
+    }
+    if (auto invalid = changeContextReset(*team, changes, updates)) {
+        *team = before;
+        return {.error = invalid};
     }
     if (changes.contains(QStringLiteral("paused"))) {
         const bool paused = changes.value(QStringLiteral("paused")).toBool();

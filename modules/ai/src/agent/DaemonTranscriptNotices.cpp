@@ -155,6 +155,12 @@ QVariantMap daemonEventNotice(const QString& type, const QJsonObject& data, cons
         detail = provider.isEmpty()
                      ? QStringLiteral("Its history comes along")
                      : providerName(provider) + (model.isEmpty() ? QString{} : " · " + model);
+    } else if (type == "session.context_reset") {
+        // T-1: a turn the team started began a fresh native context with the same provider.
+        title = "Started a fresh context";
+        detail = data.value("reason").toString() == QLatin1String("task_changed")
+                     ? QStringLiteral("New task; the transcript stays readable")
+                     : QStringLiteral("Turn threshold reached; the transcript stays readable");
     } else if (type == "session.renamed") {
         title = "Conversation renamed";
         detail = data.value("title").toString();
