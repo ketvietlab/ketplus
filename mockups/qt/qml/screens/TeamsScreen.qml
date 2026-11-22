@@ -157,7 +157,7 @@ Item {
         }
         if (state === "large" || state === "two-reviewers")
             change({ members: members.concat([{ number: "9079", title: "Check this worktree", role: "developer",
-                provider: "Claude · Opus 5.5", lane: "Onboarding", paths: ["src/onboarding/"],
+                provider: "Claude · Opus 5.5", lane: "Onboarding",
                 state: "idle", now: copy("No task yet") }]) })
         // `teams/two-reviewers` (T-23): the large team with a second reviewer; each reviews one
         // task of its own, so T-1 and T-6 are reviewed at the same time.
@@ -166,7 +166,7 @@ Item {
                 members: members.map(m => m.role !== "reviewer" ? m
                     : Object.assign({}, m, { reviewing: "T-1", queue: [] }))
                 .concat([{ number: "4590", title: "Reviewer 2", role: "reviewer", provider: "Claude · Opus 5.5",
-                    lane: "", reviews: [], paths: [], state: "working", now: "Reviewing T-6",
+                    lane: "", reviews: [], state: "working", now: "Reviewing T-6",
                     reviewing: "T-6", queue: [] }]) })
         if (state === "task")
             Qt.callLater(() => screen.showTask("T-3"))
@@ -541,10 +541,10 @@ Item {
                  model: planned.model, effort: planned.effort }
     }
     // A member whose conversation starts now, in `repository`.
-    function newMember(repository, role, name, agent, lane, paths) {
+    function newMember(repository, role, name, agent, lane) {
         const conversation = window.startConversation(repository, name, agent)
         return { number: conversation.number, title: name, role: role,
-                 provider: agent.label + " · " + agent.model, lane: lane || "", paths: paths || [],
+                 provider: agent.label + " · " + agent.model, lane: lane || "",
                  reviews: [], state: "idle",
                  now: role === "leader" ? copy("Waiting for the goal") : role === "reviewer" ? copy("No review yet")
                     : lane ? copy("No task yet") : copy("No lane yet") }
@@ -579,10 +579,10 @@ Item {
         return id
     }
     // One more developer for the current team, as a new conversation.
-    function addDeveloper(name, lane, paths, agent) {
+    function addDeveloper(name, lane, agent) {
         if (!team || full)
             return ""
-        const member = newMember(team.repository, "developer", name, agent, lane, paths)
+        const member = newMember(team.repository, "developer", name, agent, lane)
         change({ members: members.concat([member]) })
         window.notify(copy("Added ") + reference(member.number) + copy(" as a developer"))
         return member.number
@@ -617,7 +617,7 @@ Item {
         next[index] = Object.assign({}, target, { members: target.members.concat([{
             number: found.number, title: found.title, role: "developer",
             provider: (found.provider || "Claude") + " · " + (found.model || "Opus 5.5"),
-            lane: "", paths: [], reviews: [], state: "idle", now: copy("No lane yet") }]) })
+            lane: "", reviews: [], state: "idle", now: copy("No lane yet") }]) })
         teams = next
         window.notify(copy("Added @agent/") + number + copy(" to ") + target.name + copy(" as a developer"))
         return true
@@ -671,7 +671,7 @@ Item {
         check(team.merges === "leader", "the leader merges a new team's tasks unless the user chose to")
         change({ merges: "user" })
         check(team.merges === "user" && team.members.length === 4, "who merges is a setting of the team")
-        const added = addDeveloper("Check lane", "Check", ["check/"], agentOf(plan.developer))
+        const added = addDeveloper("Check lane", "Check", agentOf(plan.developer))
         check(removeMember(added) && loose(added), "a removed developer stays as a conversation")
         // Ids stay unique after a deletion.
         const b = createTeam(repository, "Check B", "", "develop", true, plan)
@@ -683,7 +683,7 @@ Item {
         // One to five developers.
         showTeam(c)
         for (let i = 0; i < Fixtures.mostDevelopers + 2; ++i)
-            addDeveloper("Check " + i, "Check " + i, ["check/"], agentOf(plan.developer))
+            addDeveloper("Check " + i, "Check " + i, agentOf(plan.developer))
         check(developers === Fixtures.mostDevelopers, "a team has at most five developers")
         check(!join(c, "4822"), "a full team takes no dropped conversation")
         for (const m of members.slice())
@@ -1314,13 +1314,6 @@ Item {
                                     spacing: screen.px(10)
                                     Mono { text: taskRow.modelData.id; Layout.preferredWidth: screen.px(28) }
                                     Label { Layout.fillWidth: true; text: taskRow.modelData.title; font.pixelSize: screen.px(14) }
-                                    // Not colour alone: the icon and its label say what happened.
-                                    Row {
-                                        visible: !!taskRow.modelData.outsideLane
-                                        spacing: screen.px(5)
-                                        KetIcon { anchors.verticalCenter: parent.verticalCenter; name: "warning"; box: screen.px(13); color: KetTheme.t.warning }
-                                        Label { text: screen.copy("Outside its lane"); color: KetTheme.t.warning; font.pixelSize: screen.px(12); font.weight: Font.Medium }
-                                    }
                                 }
                                 Label {
                                     Layout.preferredWidth: screen.px(52)
@@ -1520,7 +1513,7 @@ Item {
                                         tone: screen.roles[memberRow.modelData.role].tone
                                     }
                                 }
-                                // A developer's lane and its paths; what a reviewer reviews now
+                                // A developer's lane; what a reviewer reviews now
                                 // and its queue (T-23: each of two reviewers has its own).
                                 Column {
                                     Layout.fillWidth: true
@@ -1540,14 +1533,6 @@ Item {
                                         text: screen.queueText(memberRow.modelData)
                                         color: KetTheme.t.textMuted
                                         elide: Text.ElideRight
-                                    }
-                                    Mono {
-                                        visible: memberRow.modelData.paths.length > 0
-                                        width: parent.width
-                                        text: memberRow.modelData.paths[0] + (memberRow.modelData.paths.length > 1
-                                              ? "  +" + (memberRow.modelData.paths.length - 1) : "")
-                                        color: KetTheme.t.textMuted
-                                        elide: Text.ElideMiddle
                                     }
                                 }
                                 Column {
@@ -1925,18 +1910,6 @@ Item {
                 KetBadge { text: taskDialog.task.lane || screen.copy("Whole epic") }
                 KetBadge { visible: !!taskDialog.task.decision; text: screen.copy("Waits for ") + taskDialog.task.decision; tone: KetTheme.BadgeTone.Warning }
             }
-            KetBanner {
-                visible: !!taskDialog.task.outsideLane
-                width: parent.width
-                tone: KetTheme.BannerTone.Warning
-                title: screen.copy("Edited a file outside its lane")
-                message: taskDialog.task.outsideLane
-                    ? taskDialog.task.outsideLane.path + screen.copy(" belongs to ") + taskDialog.task.outsideLane.lane
-                      + " (" + screen.reference(taskDialog.task.outsideLane.owner) + screen.copy("). The leader decides who makes the change.")
-                    : ""
-                actionText: screen.copy("Open the leader")
-                onActionTriggered: { taskDialog.accept(); screen.openConversation(screen.leader.number) }
-            }
             GridLayout {
                 width: parent.width
                 columns: 2
@@ -2144,7 +2117,6 @@ Item {
         onOpened: {
             tried = false
             laneName.text = ""
-            lanePaths.text = ""
             memberName.text = ""
         }
         onClosed: chooseRole("developer")
@@ -2181,17 +2153,9 @@ Item {
                 visible: !addMemberDialog.reviewer
                 width: parent.width
                 label: screen.copy("Lane")
-                help: screen.copy("The part of the code this developer owns.")
+                help: screen.copy("A short name for this developer's part of the work.")
                 error: addMemberDialog.tried && laneName.text.trim() === "" ? screen.copy("Name the lane.") : ""
                 KetTextField { id: laneName; width: parent.width; placeholderText: screen.copy("Onboarding"); invalid: addMemberDialog.tried && text.trim() === "" }
-            }
-            KetFieldRow {
-                visible: !addMemberDialog.reviewer
-                width: parent.width
-                label: screen.copy("Paths")
-                help: screen.copy("Folders separated by commas. An edit outside them is flagged on the task.")
-                error: addMemberDialog.tried && lanePaths.text.trim() === "" ? screen.copy("Give at least one folder.") : ""
-                KetTextField { id: lanePaths; width: parent.width; placeholderText: "apps/desktop/src/onboarding/"; invalid: addMemberDialog.tried && text.trim() === "" }
             }
             KetFieldRow {
                 width: parent.width
@@ -2242,10 +2206,10 @@ Item {
                     }
                     const name = memberName.text.trim()
                     const lane = laneName.text.trim()
-                    if (name === "" || lane === "" || lanePaths.text.trim() === "")
+                    if (name === "" || lane === "")
                         return
                     addMemberDialog.accept()
-                    screen.addDeveloper(name, lane, lanePaths.text.split(",").map(p => p.trim()).filter(p => p),
+                    screen.addDeveloper(name, lane,
                                         { id: addMemberDialog.agentProvider, label: addMemberDialog.agentLabel,
                                           model: addMemberDialog.agentModel, effort: addMemberDialog.agentEffort })
                 }

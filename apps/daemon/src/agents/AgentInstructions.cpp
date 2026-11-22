@@ -80,9 +80,8 @@ QString teamInstructions(const TeamRoleContext& context) {
                                              "text)"))
             << QStringLiteral(
                    "Task changes arrive as one digest; read it and act once instead of "
-                   "asking for status. Change a lane with team_lane_set and give the reason; "
-                   "name paths any lane may change (contracts, snapshots, fixtures, tests) "
-                   "with team_paths_allow, for the team or one task; move the team to "
+                   "asking for status. Rename a lane with team_lane_set and give the reason; "
+                   "move the team to "
                    "another repository with team_repository_set and give the reason (started "
                    "tasks keep theirs), or name a task's own repository on team_task_create; "
                    "a task's branch is <type>/<slug>-t<n>, from its title unless you give "
@@ -120,13 +119,7 @@ QString teamInstructions(const TeamRoleContext& context) {
                    .arg(context.integrationBranch);
     } else if (context.role == QStringLiteral("developer")) {
         lines
-            << QStringLiteral("Your lane is \"%1\": %2. Shared paths: %3.")
-                   .arg(context.lane,
-                        context.paths.isEmpty() ? QStringLiteral("no paths yet")
-                                                : context.paths.join(QStringLiteral(", ")),
-                        context.sharedPaths.isEmpty()
-                            ? QStringLiteral("none")
-                            : context.sharedPaths.join(QStringLiteral(", ")))
+            << QStringLiteral("Your lane is \"%1\".").arg(context.lane)
             << QStringLiteral(
                    "Work only on the task assigned to you, in its worktree. Stay inside your "
                    "lane, or say on the task why you could not. Report through the task with "

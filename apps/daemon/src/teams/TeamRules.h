@@ -34,15 +34,8 @@ namespace rules {
            provider == QStringLiteral("cursor") || provider == QStringLiteral("copilot");
 }
 
-// A lane's prefixes, normalised: relative, '/' separated, no "." or "..", no trailing '/'.
-// Nothing when a prefix is invalid.
-[[nodiscard]] std::optional<QStringList> normalisedPaths(const QStringList& paths);
-// Whether `path` is `prefix` or below it.
-[[nodiscard]] bool pathUnder(const QString& path, const QString& prefix);
-[[nodiscard]] std::optional<TeamError> laneOverlap(const Team& team, const QString& exceptSession,
-                                                   const QStringList& paths);
 // A new team: exactly one leader, one or two reviewers (T-23), one to five developers, all distinct
-// conversations of `repository` on no team, a Claude reviewer, lanes that do not overlap.
+// conversations of `repository` on no team, a Claude reviewer.
 [[nodiscard]] std::optional<TeamError> canCreate(const Team& team,
                                                  const QList<Candidate>& candidates);
 [[nodiscard]] std::optional<TeamError> canAddMember(const Team& team, const Member& member,

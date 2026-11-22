@@ -57,14 +57,13 @@ class TeamAgentToolsTest final : public QObject {
              {"goal", goal},
              {"integration_branch", "integration"},
              {"plan",
-              QJsonObject{
-                  {"leader", QJsonObject{{"provider", "claude"}}},
-                  {"developers",
-                   QJsonObject{{"count", 2},
-                               {"provider", "codex"},
-                               {"members", QJsonArray{QJsonObject{{"paths", QJsonArray{"web"}}},
-                                                      QJsonObject{{"paths", QJsonArray{"api"}}}}}}},
-                  {"reviewer", QJsonObject{{"provider", "claude"}}}}}});
+              QJsonObject{{"leader", QJsonObject{{"provider", "claude"}}},
+                          {"developers",
+                           QJsonObject{{"count", 2},
+                                       {"provider", "codex"},
+                                       {"members", QJsonArray{QJsonObject{{"lane", "Web"}},
+                                                              QJsonObject{{"lane", "Api"}}}}}},
+                          {"reviewer", QJsonObject{{"provider", "claude"}}}}}});
         lastCreated_ = created;
         const QJsonArray members = created.value("team").toObject().value("members").toArray();
         if (members.size() != 4)
@@ -122,9 +121,7 @@ class TeamAgentToolsTest final : public QObject {
                  QStringLiteral("role_forbidden"));
         QCOMPARE(fixture
                      .agents(team.developer, "agents.team_lane_set",
-                             {{"developer", developerNumber},
-                              {"paths", QJsonArray{"x"}},
-                              {"reason", "mine"}})
+                             {{"developer", developerNumber}, {"lane", "x"}, {"reason", "mine"}})
                      .value("error_code")
                      .toString(),
                  QStringLiteral("role_forbidden"));
@@ -174,12 +171,11 @@ class TeamAgentToolsTest final : public QObject {
         QCOMPARE(updated.value("task").toObject().value("state").toString(),
                  QStringLiteral("in_progress"));
         QCOMPARE(updated.value("task").toObject().value("criteria_met").toInt(), 1);
-        // The leader changes a lane with a reason.
+        // The leader renames a lane with a reason.
         QVERIFY(fixture
                     .agents(team.leader, "agents.team_lane_set",
                             {{"developer", developerNumber},
-                             {"lane", "Web"},
-                             {"paths", QJsonArray{"web", "docs"}},
+                             {"lane", "Storefront"},
                              {"reason", "docs too"}})
                     .value("ok")
                     .toBool());
@@ -335,7 +331,7 @@ class TeamAgentToolsTest final : public QObject {
              fixture.agents(loner, "agents.list").value("conversations").toArray())
             if (value.toObject().value("number").toString() == fixture.number(team.developer)) {
                 listed = value.toObject().value("role").toString() == "developer" &&
-                         value.toObject().value("lane").toString() == "Developer 1";
+                         value.toObject().value("lane").toString() == "Web";
             }
         QVERIFY(listed);
         // Leaving the team removes the role and the tools.
@@ -365,9 +361,13 @@ class TeamAgentToolsTest final : public QObject {
         QVERIFY(
             teamInstructions({.role = "leader", .mergePolicy = "user", .integrationBranch = "i"})
                 .contains("The user merges reviewed tasks"));
-        const QString developer = teamInstructions(
-            {.team = "Shop", .role = "developer", .lane = "Web", .paths = {"web"}});
-        QVERIFY(developer.contains("Your lane is \"Web\": web."));
+        const QString developer =
+            teamInstructions({.team = "Shop", .role = "developer", .lane = "Web"});
+        QVERIFY(developer.contains("Your lane is \"Web\"."));
+        QVERIFY(!developer.contains("paths"));
+        QVERIFY(!developer.contains("outside the lane"));
+        QVERIFY(!leader.contains("team_paths_allow"));
+        QVERIFY(!leader.contains("paths"));
         QVERIFY(developer.contains("Report through the task"));
         QVERIFY(developer.contains("Do not merge."));
         QVERIFY(developer.contains("submit evidence once"));

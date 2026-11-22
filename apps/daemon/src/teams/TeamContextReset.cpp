@@ -76,9 +76,6 @@ QString briefing(const Team& team, const Member& member, const QString& taskId) 
     QString you = QStringLiteral("You are the %1").arg(member.role);
     if (!member.lane.isEmpty())
         you += QStringLiteral(" of lane \"%1\"").arg(member.lane);
-    if (!member.paths.isEmpty())
-        you +=
-            QStringLiteral(" (paths: %1)").arg(line(member.paths.join(QStringLiteral(", ")), 300));
     text << you + QLatin1Char('.');
     if (const Task* task = taskId.isEmpty() ? nullptr : team.task(taskId)) {
         text << QString{}

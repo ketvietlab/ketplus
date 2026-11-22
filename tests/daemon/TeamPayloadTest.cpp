@@ -44,16 +44,12 @@ class TeamPayloadTest final : public QObject {
     qint64 team_{0};
 
     // Every task with a long description, the largest history entries the bounds allow and
-    // 200 outside paths; hundreds of decisions, held messages and Updates.
+    // the most file names a history list holds; hundreds of decisions, held messages and Updates.
     static Team heavyTeam() {
         Team team = standardTeam();
-        QStringList outside;
-        for (int index = 0; index < maximumOutsidePaths; ++index)
-            outside.append(
-                QStringLiteral("api/generated/module-%1/a-long-file-name.ts").arg(index));
-        QJsonArray paths;
+        QJsonArray files;
         for (int index = 0; index < maximumHistoryListItems; ++index)
-            paths.append(outside.at(index));
+            files.append(QStringLiteral("api/generated/module-%1/a-long-file-name.ts").arg(index));
         for (int index = 1; index <= kTasks; ++index) {
             Task task;
             task.id = QStringLiteral("T-%1").arg(index);
@@ -63,14 +59,13 @@ class TeamPayloadTest final : public QObject {
             task.owner = QStringLiteral("dev1");
             task.state = state::inProgress;
             task.criteria = {{.text = filler(200, u'c')}, {.text = filler(200, u'c'), .met = true}};
-            task.outsideLane = outside;
             for (int entry = 0; entry < kHistory; ++entry)
                 task.history.append(
                     {.at = nowIso(),
                      .actor = QStringLiteral("daemon"),
-                     .kind = QStringLiteral("outside_lane"),
+                     .kind = QStringLiteral("review"),
                      .text = filler(int(maximumHistoryText), u'h'),
-                     .data = {{QStringLiteral("paths"), paths}, {QStringLiteral("added"), paths}}});
+                     .data = {{QStringLiteral("files"), files}, {QStringLiteral("added"), files}}});
             team.tasks.append(task);
         }
         team.nextTask = kTasks + 1;
@@ -112,7 +107,7 @@ class TeamPayloadTest final : public QObject {
             QVERIFY(journal_->appendTeamUpdate({.teamId = team_,
                                                 .at = nowIso(),
                                                 .actor = QStringLiteral("daemon"),
-                                                .kind = QStringLiteral("outside_lane"),
+                                                .kind = QStringLiteral("lane_changed"),
                                                 .taskId = QStringLiteral("T-1"),
                                                 .text = filler(5000, u'u'),
                                                 .data = {}}));
@@ -147,8 +142,7 @@ class TeamPayloadTest final : public QObject {
         QCOMPARE(tasks.size(), kTasks);
         const QJsonObject first = tasks.first().toObject();
         QVERIFY(!first.contains("history"));
-        QCOMPARE(first.value("outside_lane").toArray().size(), summaryOutsidePaths);
-        QCOMPARE(first.value("outside_lane_total").toInt(), maximumOutsidePaths);
+        QVERIFY(!first.contains("outside_lane"));
         const QJsonArray decisions = summary.value("decisions").toArray();
         QCOMPARE(decisions.size(), 5 + summaryAnsweredDecisions);
         QCOMPARE(decisions.last().toObject().value("id").toString(),

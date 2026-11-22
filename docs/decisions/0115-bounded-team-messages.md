@@ -46,8 +46,8 @@ one frame, because history, Updates and decisions only grow.
      Its size depends only on the members, so the sidebar always receives every team.
    - **Summary**, used by `team.get` and by the answers to team requests that change
      state:
-     - every task without its history, listing at most 20 outside paths plus
-       `outside_lane_total`;
+     - every task without its history (before T-10 it also listed at most 20 outside
+       paths plus `outside_lane_total`; ADR 0114 §4 removed the lane check);
      - the open decisions and the 20 newest answered ones, plus `decisions_total`;
      - `held_count` instead of the held messages.
    - **Updates:** `team.get` sends the newest 50 and `updates_has_more`.
@@ -99,7 +99,7 @@ one frame, because history, Updates and decisions only grow.
 - One heavy team cannot break the connection, the sidebar or the other teams. At worst,
   a request too large to answer fails on its own and the page says so.
 - The worst case is covered by a test (`TeamPayloadTest`). The team has 200 tasks, each
-  with 40 history entries of the largest bounded size and 200 outside paths, plus 300
+  with 40 history entries of the largest bounded size, each listing 50 file names, plus 300
   decisions, 60 held messages and 400 Updates; the stored document is over 10 MB. Its
   directory form stays under 16 KB, its summary under 1 MiB, and every page under
   1 MiB.

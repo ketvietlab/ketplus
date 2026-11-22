@@ -1,7 +1,6 @@
 #include "KetAppearance.h"
 #include "KetBadge.h"
 #include "KetDialog.h"
-#include "KetIcon.h"
 #include "KetSegmentedControl.h"
 #include "KetSelect.h"
 #include "KetTokens.h"
@@ -158,11 +157,7 @@ void TeamPage::fillTasks() {
         const int criteria =
             static_cast<int>(task.value(QStringLiteral("criteria")).toArray().size());
         const QString stateId = task.value(QStringLiteral("state")).toString();
-        // #461: a flag, not a state.
-        const bool outside = !task.value(QStringLiteral("outside_lane")).toArray().isEmpty();
-        QString state = team_states::label(stateId);
-        if (outside)
-            state += tr(" · Outside its lane");
+        const QString state = team_states::label(stateId);
         const QString pullRequest = task.value(QStringLiteral("pull_request")).toString();
         const QStringList cells{task.value(QStringLiteral("id")).toString(),
                                 task.value(QStringLiteral("title")).toString(),
@@ -181,23 +176,13 @@ void TeamPage::fillTasks() {
             item->setToolTip(cells.at(column));
             tasks_->setItem(row, column, item);
         }
-        // The state as the kit's badge, over the cell whose text the delegate leaves out. Not
-        // colour alone: the flag carries an icon and its words.
+        // The state as the kit's badge, over the cell whose text the delegate leaves out.
         auto* cell = new QWidget(tasks_);
         cell->setAttribute(Qt::WA_TransparentForMouseEvents);
         auto* line = new QHBoxLayout(cell);
         line->setContentsMargins(px(8), 0, px(8), 0);
         line->setSpacing(px(6));
         line->addWidget(new ket::Badge(team_states::label(stateId), stateTone(stateId), cell));
-        if (outside) {
-            auto* glyph = new ket::Icon(QStringLiteral("warning"), 13, cell);
-            glyph->setColor(ket::Tokens::color(u"warning", ket::Appearance::instance().theme()));
-            line->addWidget(glyph);
-            auto* flag = new Text(tr("Outside its lane"), cell, Text::Fit::Elide);
-            flag->setTone(QStringLiteral("warning"));
-            flag->setType(12, QFont::Medium);
-            line->addWidget(flag);
-        }
         line->addStretch();
         stateWidth = qMax(stateWidth, cell->sizeHint().width());
         tasks_->setCellWidget(row, team_page::TaskRows::kStateColumn, cell);

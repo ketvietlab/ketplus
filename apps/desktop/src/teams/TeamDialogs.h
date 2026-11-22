@@ -137,7 +137,6 @@ class AddMemberForm final : public QWidget {
     [[nodiscard]] QString hint() const;
     [[nodiscard]] ket::TextField* nameField() const { return name_; }
     [[nodiscard]] ket::TextField* laneField() const { return lane_; }
-    [[nodiscard]] ket::TextField* pathsField() const { return paths_; }
     [[nodiscard]] QString error() const;
     void setAgent(const TeamAgent& agent);
 
@@ -162,11 +161,9 @@ class AddMemberForm final : public QWidget {
     ket::Choice* reviewerChoice_;
     ket::TextField* name_;
     ket::TextField* lane_;
-    ket::TextField* paths_;
     ket::Button* agentButton_;
     ket::FieldRow* roleRow_;
     ket::FieldRow* laneRow_;
-    ket::FieldRow* pathsRow_;
     ket::FieldRow* agentRow_;
     ket::FieldRow* nameRow_;
     QLabel* hint_;

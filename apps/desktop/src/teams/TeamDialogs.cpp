@@ -25,7 +25,6 @@
 #include <QJsonArray>
 #include <QLabel>
 #include <QPointer>
-#include <QRegularExpression>
 #include <QScrollArea>
 #include <QShortcut>
 #include <QTextEdit>
@@ -115,14 +114,6 @@ void setAgentLabel(ket::Button* button, const QString& text) {
         }
     }
     new FittedLabel(button, text);
-}
-
-QJsonArray splitPaths(const QString& text) {
-    QJsonArray paths;
-    for (const QString& path :
-         text.split(QRegularExpression(QStringLiteral("[,\\s]+")), Qt::SkipEmptyParts))
-        paths.append(path);
-    return paths;
 }
 
 // The body scrolls and the buttons stay: the card fits a 1024 x 640 window at 125 %.
@@ -622,7 +613,6 @@ AddMemberForm::AddMemberForm(TeamDirectory* teams, const QJsonObject& team,
       developerChoice_(new ket::Choice(tr("Developer"), {}, ket::ToggleKind::Radio, this)),
       reviewerChoice_(new ket::Choice(tr("Reviewer"), {}, ket::ToggleKind::Radio, this)),
       name_(new ket::TextField(this)), lane_(new ket::TextField(this)),
-      paths_(new ket::TextField(this)),
       agentButton_(new ket::Button({}, ket::ButtonVariant::Secondary, this)),
       hint_(note(this, "teamDialogHint")), error_(note(this, "teamDialogError")) {
     setObjectName(QStringLiteral("addMemberForm"));
@@ -632,7 +622,7 @@ AddMemberForm::AddMemberForm(TeamDirectory* teams, const QJsonObject& team,
     auto* layout = new QVBoxLayout(this);
     layout->setContentsMargins(0, 0, 0, 0);
 
-    // The mock's order: Role, the developer's Lane and Paths, Agent, Name.
+    // The mock's order: Role, the developer's Lane, Agent, Name.
     developerChoice_->setObjectName(QStringLiteral("addMemberDeveloper"));
     reviewerChoice_->setObjectName(QStringLiteral("addMemberReviewer"));
     auto* roles = new QButtonGroup(this);
@@ -657,14 +647,9 @@ AddMemberForm::AddMemberForm(TeamDirectory* teams, const QJsonObject& team,
 
     lane_->setObjectName(QStringLiteral("developerLaneField"));
     lane_->setPlaceholderText(tr("Web, API, …"));
-    laneRow_ =
-        new ket::FieldRow(tr("Lane"), lane_, tr("The part of the code this developer owns."), this);
+    laneRow_ = new ket::FieldRow(tr("Lane"), lane_,
+                                 tr("A short name for this developer's part of the work."), this);
     layout->addWidget(laneRow_);
-    paths_->setObjectName(QStringLiteral("developerPathsField"));
-    paths_->setPlaceholderText(tr("src/web, docs/web"));
-    pathsRow_ = new ket::FieldRow(
-        tr("Paths"), paths_, tr("Relative to the repository root, separated by commas."), this);
-    layout->addWidget(pathsRow_);
     agentRow_ = new ket::FieldRow(tr("Agent"), agentButton_, {}, this);
     layout->addWidget(agentRow_);
     connect(agentButton_, &QAbstractButton::clicked, this, [this] {
@@ -723,7 +708,6 @@ void AddMemberForm::describe() {
                                             "review goes to one of the two.")
                                        : tr("The team has two reviewers, the most a team has."));
     laneRow_->setVisible(!reviewing);
-    pathsRow_->setVisible(!reviewing);
     agentButton_->setObjectName(reviewing ? QStringLiteral("teamAgent_reviewer")
                                           : QStringLiteral("teamAgent_developer"));
     setAgentLabel(agentButton_, team_agents::label(models_, agents_.value(role_)));
@@ -775,8 +759,6 @@ QJsonObject AddMemberForm::payload() const {
     result.insert(QStringLiteral("name"), name);
     if (const QString lane = lane_->text().trimmed(); !lane.isEmpty())
         result.insert(QStringLiteral("lane"), lane);
-    if (const QJsonArray paths = splitPaths(paths_->text()); !paths.isEmpty())
-        result.insert(QStringLiteral("paths"), paths);
     return result;
 }
 

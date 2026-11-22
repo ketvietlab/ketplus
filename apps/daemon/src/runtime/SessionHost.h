@@ -438,8 +438,6 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
                                                  const teams::Task& task) const override;
     [[nodiscard]] std::optional<teams::TaskDiff> taskDiff(const teams::Team& team,
                                                           const teams::Task& task) const override;
-    [[nodiscard]] std::optional<QStringList> changedPaths(const teams::Team& team,
-                                                          const teams::Task& task) const override;
     [[nodiscard]] std::optional<bool> isMerged(const teams::Team& team,
                                                const teams::Task& task) const override;
     [[nodiscard]] std::optional<review_integrity::Scope>

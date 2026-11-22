@@ -201,11 +201,7 @@ class TeamReviewTest final : public QObject {
     }
 
     void tasksHandedInAtOnceAreReviewedOneAfterAnother() {
-        Member third{.sessionId = "dev3",
-                     .role = role::developer,
-                     .name = "Dev 3",
-                     .lane = "Ui",
-                     .paths = {"ui"}};
+        Member third{.sessionId = "dev3", .role = role::developer, .name = "Dev 3", .lane = "Ui"};
         QVERIFY(teams_->addMember(team_, third, "user").ok());
         const QString first = inReview("One", "dev1");
         const QString second = inReview("Two", "dev2");

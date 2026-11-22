@@ -51,6 +51,7 @@ const QHash<QString, QSet<QString>>& allowedFields() {
           QStringLiteral("leader_writes_requirements"), QStringLiteral("execution_policy"),
           QStringLiteral("risk_acknowledged"), QStringLiteral("plan"),
           QStringLiteral("turn_budget"), QStringLiteral("language")}},
+        // T-10: an older phone may still send a lane's `paths`; it is accepted and ignored.
         {QStringLiteral("team.member.add"),
          {QStringLiteral("team_id"), QStringLiteral("name"), QStringLiteral("lane"),
           QStringLiteral("paths"), QStringLiteral("provider"), QStringLiteral("model"),

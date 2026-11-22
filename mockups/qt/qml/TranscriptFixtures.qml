@@ -72,7 +72,7 @@ QtObject {
                     { text: "@agent/4583 marked the review passed" }] },
               { task: "T-3", title: releaseTask("T-3").title, state: "In progress", lines: [
                     { text: "Two of three criteria met" },
-                    { text: "TrailList.qml belongs to the Trail picker lane", needsYou: true }] },
+                    { text: "@agent/8213 needs a Trail picker change", needsYou: true }] },
               { task: "T-5", title: releaseTask("T-5").title, state: "Blocked", lines: [
                     { text: "@agent/8213 requested a dataset choice" },
                     { text: "D-1 waits for the user" }] },

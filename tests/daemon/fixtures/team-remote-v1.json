@@ -192,11 +192,6 @@
             "title": "Remote protocol",
             "role": "developer",
             "lane": "Remote protocol",
-            "paths": [
-              "apps/daemon",
-              "docs/decisions",
-              "contracts"
-            ],
             "state": "working",
             "now": {
               "task_id": "T-3",
@@ -216,9 +211,6 @@
             "title": "Mobile UI",
             "role": "developer",
             "lane": "Mobile UI",
-            "paths": [
-              "apps/ios"
-            ],
             "state": "waiting_for_review",
             "now": {
               "task_id": "T-4",
@@ -392,7 +384,7 @@
         "branch": "team/3/t-3",
         "worktree_id": "worktree-t-3",
         "assignment_held": false,
-        "outside_lane_total": 1,
+        "outside_lane_total": 0,
         "decision_id": "",
         "changed_revision": 11,
         "description": "Write the ADR and the contract for teams on paired devices.",
@@ -426,13 +418,7 @@
             "met": false
           }
         ],
-        "outside_lane": [
-          {
-            "path": "src/mobile/Teams.swift",
-            "lane": "Mobile UI",
-            "owner_number": "4120"
-          }
-        ],
+        "outside_lane": [],
         "criteria_note": "Changed today at 08:03: a criterion was added. @agent/3651 was told.",
         "history": [
           {
@@ -559,11 +545,6 @@
             "title": "Remote protocol",
             "role": "developer",
             "lane": "Remote protocol",
-            "paths": [
-              "apps/daemon",
-              "docs/decisions",
-              "contracts"
-            ],
             "state": "working",
             "now": {
               "task_id": "T-3",
@@ -583,9 +564,6 @@
             "title": "Mobile UI",
             "role": "developer",
             "lane": "Mobile UI",
-            "paths": [
-              "apps/ios"
-            ],
             "state": "waiting_for_review",
             "now": {
               "task_id": "T-4",
@@ -824,11 +802,6 @@
             "title": "Remote protocol",
             "role": "developer",
             "lane": "Remote protocol",
-            "paths": [
-              "apps/daemon",
-              "docs/decisions",
-              "contracts"
-            ],
             "state": "working",
             "now": {
               "task_id": "T-3",
@@ -848,9 +821,6 @@
             "title": "Mobile UI",
             "role": "developer",
             "lane": "Mobile UI",
-            "paths": [
-              "apps/ios"
-            ],
             "state": "waiting_for_review",
             "now": {
               "task_id": "T-4",

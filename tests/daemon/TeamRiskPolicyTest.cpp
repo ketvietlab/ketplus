@@ -77,11 +77,7 @@ Team draft() {
     t.integrationBranch = "integration";
     t.planApproved = true;
     t.members = {{.sessionId = "lead", .role = role::leader, .name = "Leader"},
-                 {.sessionId = "dev",
-                  .role = role::developer,
-                  .name = "Developer",
-                  .lane = "Code",
-                  .paths = {"src"}},
+                 {.sessionId = "dev", .role = role::developer, .name = "Developer", .lane = "Code"},
                  {.sessionId = "rev", .role = role::reviewer, .name = "Reviewer"}};
     return t;
 }

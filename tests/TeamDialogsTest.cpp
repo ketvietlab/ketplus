@@ -715,7 +715,7 @@ class TeamDialogsTest final : public QObject {
         QVERIFY(form.nameField()->isInvalid());
         form.nameField()->setText("Payments");
         form.laneField()->setText("API");
-        form.pathsField()->setText("src/api, docs/api");
+        QVERIFY(!form.findChild<QWidget*>("developerPathsField"));
         bool added = false;
         form.submit([&] { added = true; });
         QVERIFY(added);
@@ -724,7 +724,7 @@ class TeamDialogsTest final : public QObject {
         QCOMPARE(sent.value("team_id").toString(), QStringLiteral("7"));
         QCOMPARE(sent.value("name").toString(), QStringLiteral("Payments"));
         QCOMPARE(sent.value("lane").toString(), QStringLiteral("API"));
-        QCOMPARE(sent.value("paths").toArray(), (QJsonArray{"src/api", "docs/api"}));
+        QVERIFY(!sent.contains("paths"));
         QCOMPARE(sent.value("provider").toString(), QStringLiteral("codex"));
         // One developer: no queue hint yet.
         AddMemberForm small(teams_.get(), team(1), bothProviders);

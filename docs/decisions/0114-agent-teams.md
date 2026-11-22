@@ -28,7 +28,7 @@ and a digest instead of status messages — and leaves messaging as it is.
 
 - A **team** belongs to one repository and has a name, a goal, an integration branch,
   a merge setting (`mergePolicy`), `leaderWritesRequirements`, a `paused` switch,
-  shared paths, members, tasks, decisions and updates. The daemon stores it.
+  members, tasks, decisions and updates. The daemon stores it.
 - Exactly **one leader**, **one to five developers** and **one or two reviewers**
   (T-23).
   A conversation is on at most one team. Members belong to the team's repository.
@@ -52,7 +52,7 @@ and a digest instead of status messages — and leaves messaging as it is.
   tasks, writes their acceptance criteria (unless `leaderWritesRequirements` is off),
   assigns them, changes lanes and orders the merges. It neither writes code nor
   reviews.
-- A **developer** owns a lane: a name and path prefixes.
+- A **developer** has a lane: a name for its part of the work (§4).
 - A **reviewer** reviews each task against its criteria. It owns no task, so it never
   reviews its own work, and it never merges.
 - **No new authority**: nothing a member sends approves a permission request, answers a
@@ -202,36 +202,38 @@ goes to Updates as "D-N answered: <text>", as a choice does. The card no longer 
 "Answer in the conversation"; a decision is answered on its card. The phone sends choices only
 for now; the phone app tracks a written answer as a follow-up.
 
-### 4. Lane changes by the leader are logged (decided)
+### 4. A lane is a name; the leader renames it (decided, amended by T-10)
 
-The leader changes a lane itself with `team_lane_set` (the user can from the team page).
-The change goes to Updates with the old and new prefixes and the reason, and to the
-history of every open task of the lanes it touches. It starts no turn. The leader raises
-a decision only when a change alters what the product does. A prefix belongs to one
-lane (`lane_overlap`). After a developer's turn the daemon compares the files changed on
-the task's branch with the owner's prefixes and the shared paths, records the outside
-paths on the task (`outsideLane`, actionable in the digest) and clears the flag when they
-are reverted or covered. The files changed are the diff from where the branch left the
-integration branch; a team without one counts only the branch's own commits since the
-task's base (first parent, no merges), so merging the main line into the branch flags
-nothing. A team's document reaches clients in one 1 MiB frame, so a task keeps at most
-200 outside paths, and a history entry at most 2,000 characters of text and 50 items per
-list, with the full count as `<key>_total`; documents written before the bounds are
-bounded when read. *Rejected*: asking the user for every lane change — it is
-about who edits which file, not what the product does.
+A developer's lane is a name for its part of the work, such as "Web" or "Payments". The
+leader renames a lane with `team_lane_set {developer, lane, reason}` (the user can with
+`team.member.update {session_id, lane, reason?}`). An empty name is refused
+(`invalid_payload`), an unchanged one changes nothing, and two developers may share a name.
+The change goes to Updates (`lane_changed`, with the old and new name and the reason) and
+to the history of every open task of the lanes it touches. It starts no turn. The leader
+raises a decision only when a change alters what the product does. *Rejected*: asking
+the user for every lane change — it is about who does which part, not what the product
+does.
 
-*Amended (T-38)*: only tracked changes are compared. The committed part is read from the
-task's branch (`refs/heads/<branch>`), never from whatever the worktree has checked out; the
-uncommitted part is the tracked files changed in the worktree (`git status -uno`), and only
-while the worktree has the task's branch checked out. Untracked and ignored files, such as
-build trees and screen captures, are never outside a lane. Paths any lane may change, such
-as contracts, snapshots, fixtures and tests, are named by the leader with
-`team_paths_allow {paths, reason, task_id?}`: without `task_id` they are the team's shared
-paths, with it the task's own `allowed_paths` (sent with the task only when set). They are
-validated as lane paths (relative, inside the repository, `invalid_payload` otherwise), the
-list replaces the one before, the change goes to Updates and, for a task, to its history,
-and every flag they now cover clears. The team page shows the shared paths with each
-lane's paths and the task dialog a task's allowed paths.
+A team's document reaches clients in one 1 MiB frame, so a history entry keeps at most
+2,000 characters of text and 50 items per list, with the full count as `<key>_total`;
+documents written before the bounds are bounded when read.
+
+*Removed (T-10)*: lanes no longer own path prefixes. Before T-10 a lane was a name and
+path prefixes, a prefix belonged to one lane (`lane_overlap`), the team had shared paths
+and a task allowed paths (`team_paths_allow`), and after each developer turn the daemon
+compared the task's changed files with them and flagged the task outside its lane. In use
+the check cost more than it caught: every edit of a contract, fixture, test or generated
+file had to be allowed first, a flag raised a digest and a leader turn about files nobody
+had to act on, and the git work ran after every turn. Who changes which file is the
+leader's call through tasks and review; the reviewer reads the whole diff either way. So
+the paths, the shared and allowed paths, the outside-lane flag and `team_paths_allow` are
+gone. A team stored with them still loads: they are read and dropped, and never written
+again. A client that still sends `paths` on `team.create` (per developer),
+`team.member.add`, `team.member.join` or `team.member.update`, or `shared_paths` on
+`team.create`, is answered as if it had not; the paths are ignored, never refused. The
+phone's task summary and detail still carry `outside_lane_total` (always 0) and
+`outside_lane` (always empty), because shipped phone apps require them (ADR 0116). An
+Update written as `outside_lane` before T-10 still shows as a warning.
 
 ### 5. Who merges a reviewed task is a team setting (decided)
 
@@ -245,7 +247,7 @@ logged. Merging the integration branch onward always stays with the user.
 
 - Id `T-n` within the team, never reused. Title, description, lane, dependencies,
   ordered acceptance criteria with a met mark, at most one owner (a developer), branch,
-  worktree, pull request, review round, `outsideLane`.
+  worktree, pull request, review round.
 - States: `todo`, `in_progress`, `in_review`, `ready`, `blocked`, `done`.
 
 | Move | Who |
@@ -276,7 +278,7 @@ logged. Merging the integration branch onward always stays with the user.
 | anything else | nobody |
 
 Actionable updates: a task became `ready`, `blocked` or `done`, a review verdict, a
-review hit its round limit, a path was flagged outside a lane, a developer has no task
+review hit its round limit, a developer has no task
 left, a developer's question. When the leader's turn ends with actionable updates waiting, or after a quiet
 period of **20 s** while it is idle, the daemon sends one digest of every update since
 the last one, grouped by task. Other updates ride along in the next digest.
@@ -738,7 +740,7 @@ returns both (§2). These are local commands; the relay contract and the phone's
 phone's team summary carries `max_rounds` read-only (T-53, ADR 0116).
 
 Errors: `role_taken`, `role_required`, `team_full`, `last_developer`,
-`already_member`, `other_repository`, `reviewer_unsupported`, `lane_overlap`,
+`already_member`, `other_repository`, `reviewer_unsupported`,
 `team_member`, `not_member`, `team_not_found`, `teams_unavailable` (the journal could not be read, so no
 team request is served; ask again), `task_not_found`, `invalid_transition`,
 `not_owner`, `role_forbidden`, `dependencies_open`, `dependency_cycle`,
@@ -754,7 +756,7 @@ Agent tools in the ketplus_agents server, served only to members: `team_get`,
 `team_tasks`, `team_task_update` (developer, own task), `team_wait` (leader and
 developers), `team_task_create`,
 `team_task_assign`, `team_task_handover`, `team_task_criteria`, `team_task_close`
-(ADR 0118), `team_lane_set`, `team_paths_allow`, `team_repository_set` (ADR 0123),
+(ADR 0118), `team_lane_set`, `team_repository_set` (ADR 0123),
 `team_decision_raise` and `team_decision_withdraw` (leader). `team_task_create` takes an
 optional `repository` and `integration_branch` for a task that works in another repository
 than the team's (ADR 0123). A call by the wrong role names

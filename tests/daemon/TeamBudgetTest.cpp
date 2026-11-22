@@ -18,10 +18,9 @@ namespace {
 
 QJsonObject plan() {
     return {{"leader", QJsonObject{{"provider", "claude"}}},
-            {"developers",
-             QJsonObject{{"count", 1},
-                         {"provider", "codex"},
-                         {"members", QJsonArray{QJsonObject{{"paths", QJsonArray{"web"}}}}}}},
+            {"developers", QJsonObject{{"count", 1},
+                                       {"provider", "codex"},
+                                       {"members", QJsonArray{QJsonObject{{"lane", "Web"}}}}}},
             {"reviewer", QJsonObject{{"provider", "claude"}}}};
 }
 

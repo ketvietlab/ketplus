@@ -429,9 +429,7 @@ void TeamCoordinator::memberTurnEnded(const QString& sessionId,
     settleRelocations(teamId, sessionId, {});
     watchForStall(teamId);
     checkMerged(teamId);
-    if (memberRole == role::developer)
-        checkLanes(teamId, sessionId);
-    else if (memberRole == role::leader) {
+    if (memberRole == role::leader) {
         askFirstPlanAgain(teamId);
         sendDigest(teamId);
     }
