@@ -17,6 +17,8 @@ Signaling::Signaling(RemotePeers* peers, Keys keys, Sign sign, QObject* parent)
     : QObject(parent), peers_(peers), keys_(std::move(keys)), sign_(std::move(sign)),
       epoch_(now()) {
     connect(peers_, &RemotePeers::ended, this, [this](const QString& id, const QString& reason) {
+        if (id.startsWith("relay:"))
+            return; // Relay links have no signaling connection to end.
         attempts_.remove(id);
         emit outgoing({{"type", "signal.end"}, {"connectionId", id}, {"reason", reason}});
     });
@@ -37,6 +39,7 @@ void Signaling::configure(const QString& workspace, const QString& machine, int 
     if (!enabled || workspace_ != workspace || machine_ != machine || version_ != keyVersion) {
         peers_->closeAll();
         attempts_.clear();
+        pendingRelay_.clear();
     }
     workspace_ = workspace;
     machine_ = machine;
@@ -79,12 +82,18 @@ bool Signaling::verify(const QByteArray& bytes, const QByteArray& key,
 void Signaling::receive(const QJsonObject& message) {
     const auto type = message.value("type").toString();
     const auto id = message.value("connectionId").toString();
+    if (type == "frame" || type == "frames.dropped") {
+        if (forwardOnly_ && !workspace_.isEmpty() && !machine_.isEmpty())
+            relayFrame(message);
+        return;
+    }
     // A revocation ends the device's access whether or not peer transport is negotiated.
     if (!enabled_ && type != "device.revoked")
         return;
     if (type == "device.revoked") {
         const auto device = message.value("deviceId").toString();
         peers_->revoke(device);
+        pendingRelay_.remove(device);
         for (const auto& pending : attempts_.keys())
             if (attempts_[pending].offer.value("deviceId") == device)
                 end(pending, "device_revoked");
@@ -228,7 +237,79 @@ void Signaling::end(const QString& id, const QString& reason) {
         emit outgoing({{"type", "signal.end"}, {"connectionId", id}, {"reason", reason}});
 }
 
+void Signaling::setForwardOnly(bool enabled) {
+    if (forwardOnly_ && !enabled)
+        relayLost();
+    forwardOnly_ = enabled;
+}
+
+void Signaling::relayLost() {
+    pendingRelay_.clear();
+    peers_->closeRelay();
+}
+
+void Signaling::relayFrame(const QJsonObject& message) {
+    static const QRegularExpression pattern("^[A-Za-z0-9_.:-]{1,128}$");
+    const auto device = message.value("deviceId").toString();
+    if (!pattern.match(device).hasMatch())
+        return;
+    const auto id = RemotePeers::relayId(device);
+    if (message.value("type") == "frames.dropped") {
+        // The relay stopped passing frames to the device until it subscribes again.
+        pendingRelay_.remove(device);
+        peers_->close(id, "relay_dropped");
+        return;
+    }
+    const auto frame = message.value("frame").toObject();
+    if (auto* link = qobject_cast<RelayPeerLink*>(peers_->link(id))) {
+        if (!link->deliver(frame))
+            peers_->close(id, "unsupported_frame");
+        return;
+    }
+    auto pending = pendingRelay_.find(device);
+    if (pending != pendingRelay_.end()) {
+        if (pending->size() < 8)
+            pending->append(frame);
+        return;
+    }
+    // Only a subscription opens a link; an unsubscribe without one has nothing to end.
+    if (frame.value("type") != "subscribe" || pendingRelay_.size() >= 16)
+        return;
+    pendingRelay_.insert(device, {frame});
+    keys_(device, 0, [self = QPointer<Signaling>(this), device](const QJsonObject& keys) {
+        if (self)
+            self->finishRelay(device, keys);
+    });
+}
+
+void Signaling::finishRelay(const QString& device, const QJsonObject& keys) {
+    if (!pendingRelay_.contains(device))
+        return;
+    const auto frames = pendingRelay_.take(device);
+    const auto version = keys.value("keyVersion").toInt();
+    if (!forwardOnly_ || keys.value("id") != device || version <= 0 ||
+        (keys.contains("status") && keys.value("status") != "active"))
+        return;
+    auto* link = new RelayPeerLink(device, relaySender_);
+    if (!peers_->acceptRelay(device, version, link, ++epoch_)) {
+        delete link;
+        return;
+    }
+    for (const auto& frame : frames)
+        if (!link->deliver(frame)) {
+            peers_->close(RemotePeers::relayId(device), "unsupported_frame");
+            return;
+        }
+}
+
 void Signaling::refreshDevices(const QJsonArray& devices) {
+    QSet<QString> active;
+    for (const auto& value : devices) {
+        const auto device = value.toObject();
+        if (!device.contains("status") || device.value("status") == "active")
+            active.insert(device.value("id").toString());
+    }
+    peers_->retainRelay(active);
     for (const auto& id : attempts_.keys()) {
         const auto offer = attempts_[id].offer;
         bool active = false;

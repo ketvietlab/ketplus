@@ -314,6 +314,18 @@ not depend on Control v2 HTTP internals:
 - **`PeerLink`**: sends frames on a channel, reports buffered amounts, and signals received frames
   and closure. `WebRtcPeerLink` wraps libdatachannel's `rtc::PeerConnection`. `RelayPeerLink`
   carries the same frames over the relay socket.
+- **`RelayPeerLink`** (daemon behaviour): while the heartbeat answer lists
+  `events.forward_only/1`, a `subscribe` arriving as `{"type":"frame","deviceId",…,"frame"}` opens
+  one link per device, after the device is found active in the host's device list.
+  - The link needs no `hello` and authorizes `session.read` only, for 10 minutes after each
+    `subscribe`. It accepts `subscribe` and `unsubscribe` of at most 4 KiB; any other frame closes it.
+  - It sends only `events`, `event`, `gap` and `session.reset`, each one message of at most 64 KiB:
+    pages shrink to fit, and an event above the limit is skipped with `gap` after its cursor. No
+    transfers, pings or command results travel this way.
+  - A full 4 MiB live queue drops that subscriber's events and sends `gap` with its last cursor,
+    on either link type.
+  - `frames.dropped`, the socket closing, the capability withdrawn, `device.revoked` or a device
+    list without the device closes the link; the client subscribes again after its cursor.
 - **`RemotePeers`**: one entry per device, holding:
   - the current link, epoch, grant and subscriptions;
   - three send queues with the priority rule.
@@ -459,5 +471,5 @@ projection. The relay socket keeps wake-up handling and now exposes bounded
 Verification uses an actual in-process native WebRTC pair with signed offer and
 answer, plus deterministic grant/queue/codec tests and encrypted command retry
 across WebRTC and mailbox. Real TURN, physical iPhone Wi-Fi/LTE and native client
-failover remain unverified in phase 3. Forward-only `RelayPeerLink` and push
-without cloud-stored events must land before advertising `events.forward_only/1`.
+failover remain unverified in phase 3. `RelayPeerLink` serves forward-only event frames;
+push without cloud-stored events must land before advertising `events.forward_only/1`.

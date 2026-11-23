@@ -26,6 +26,16 @@ class RemotePeers final : public QObject {
     explicit RemotePeers(Reader reader, QObject* parent = nullptr);
     bool accept(const QString& id, const QString& device, int keyVersion, const QJsonObject& grant,
                 PeerLink* link, qint64 epoch);
+    // A device reached through the relay socket. The relay authorized the device's frame; the
+    // caller checked the device against the active device list. The link stays authorized for
+    // relayAuthorizationMs after each subscribe, carries only event frames, and needs no hello.
+    static constexpr qint64 relayAuthorizationMs = 10 * 60'000;
+    static QString relayId(const QString& device) { return "relay:" + device; }
+    bool acceptRelay(const QString& device, int keyVersion, PeerLink* link, qint64 epoch);
+    // Closes relay links whose device is not in `activeDevices`, or all of them.
+    void retainRelay(const QSet<QString>& activeDevices);
+    void closeRelay();
+    PeerLink* link(const QString& id) const;
     bool renew(const QString& id, const QJsonObject& grant);
     void revoke(const QString& device);
     void closeAll();
@@ -66,6 +76,8 @@ class RemotePeers final : public QObject {
         qint64 inputWindow{0};
         int inputFrames{0};
         bool hello{false};
+        bool relay{false};
+        qint64 relayUntil{0};
         FrameCodec codec;
         SendQueue queue;
         QHash<QString, Subscription> subscriptions;
@@ -73,6 +85,9 @@ class RemotePeers final : public QObject {
         quint64 nextTransfer{1};
     };
     void receive(const QString& id, Channel channel, const QByteArray& bytes, bool binary);
+    bool current(const QString& id, const Peer& peer) const;
+    void attach(const QString& id, const std::shared_ptr<Peer>& peer, PeerLink* link);
+    void publish(const QString& id, Peer& peer, const QString& session, Subscription& sub);
     Reader reader_;
     QHash<QString, std::shared_ptr<Peer>> peers_;
     QTimer timer_;
