@@ -13,14 +13,15 @@ qt_standard_project_setup(REQUIRES 6.8)
 
 include(FetchContent)
 
-# Match the app pin: develop includes #55 (multi-line fields/mentions) and #56
-# (toast bottom avoidance used by this mock). FETCHCONTENT_SOURCE_DIR_KETQT
+# Match the app pin: develop includes #55 (multi-line fields/mentions), #56
+# (toast bottom avoidance used by this mock) and #60 (the notched KetStepSlider of
+# the Model & context dialog). FETCHCONTENT_SOURCE_DIR_KETQT
 # points at a local checkout instead. KetQt::Widgets provides ket::printImage():
 # the image viewer uses the system widget print dialog, as in the app.
 set(KETQT_BUILD_WIDGETS ON CACHE BOOL "" FORCE)
 FetchContent_Declare(ketqt
     GIT_REPOSITORY https://github.com/ketvietlab/ket-qt.git
-    GIT_TAG 652685a8e36e95823011b93eb1f24113e41be7fa # Same revision as core/cmake/Dependencies.cmake
+    GIT_TAG 53fbe5182ef065281b26bb22e42b187cb9b6d585 # Same revision as core/cmake/Dependencies.cmake
 )
 FetchContent_MakeAvailable(ketqt)
 
