@@ -485,8 +485,6 @@ class TeamPageRefreshTest final : public QObject {
 
     // Finding A3: building the page or the dialog makes no window. Before it shows, no widget of
     // it is created; shown, a rebuild shows nothing as a window and leaves no top-level widget.
-    // ket::Banner still creates its own parts before it shows; that belongs to the kit (T-8),
-    // so its widgets are left out of the first check until the kit's pin moves.
     void buildingMakesNoWindow() {
         start();
         QJsonObject paused = fixture();
@@ -498,15 +496,10 @@ class TeamPageRefreshTest final : public QObject {
             TeamTaskDialog dialog(teams_.get(), "7", "T-1");
             QVERIFY(page.findChild<ket::Banner*>("teamPausedBanner"));
             for (QWidget* root : {static_cast<QWidget*>(&page), static_cast<QWidget*>(&dialog)})
-                for (QWidget* widget : root->findChildren<QWidget*>()) {
-                    bool banner = false;
-                    for (QWidget* up = widget; up && !banner; up = up->parentWidget())
-                        banner = qobject_cast<ket::Banner*>(up) != nullptr;
-                    if (!banner)
-                        QVERIFY2(!widget->testAttribute(Qt::WA_WState_Created),
-                                 qPrintable(QString::fromLatin1(widget->metaObject()->className()) +
-                                            u' ' + widget->objectName()));
-                }
+                for (QWidget* widget : root->findChildren<QWidget*>())
+                    QVERIFY2(!widget->testAttribute(Qt::WA_WState_Created),
+                             qPrintable(QString::fromLatin1(widget->metaObject()->className()) +
+                                        u' ' + widget->objectName()));
         }
         send(fixture()); // no banner from here on
         settle();
