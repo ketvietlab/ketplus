@@ -463,7 +463,11 @@ geometry cases cover two columns at 1280 × 900 and 1024 × 420, a single column
 and keyboard access through both columns. Existing cases resize and zoom the
 open dialog through 100%, 125% and 150%. `ketplus_team_goal_form_tests` covers
 mentions, multiline entry and submit shortcuts; `ketplus_team_page_language_tests`
-covers language behavior. No provider or real team is started.
+covers language behavior. No provider or real team is started. Add member's Number of
+developers (T-4) is covered there too: the count offered, the prefilled names and lanes,
+rows kept when the count changes, refused duplicates and the `developers` payload;
+`ketplus_team_protocol_tests` covers the daemon side (one change, refusals before any
+conversation starts, a conversation that cannot start leaving none).
 
 For local PNGs and geometry logs, run `ketplus_team_dialogs_tests
 columnsReflowAndKeepTheFooterReachable` with `QT_QPA_PLATFORM=offscreen`,

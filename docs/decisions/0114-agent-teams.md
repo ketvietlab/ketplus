@@ -683,6 +683,15 @@ path, size_bytes}]}}`, `free_bytes` and `size_bytes` null when unknown, `level` 
 `stop` or empty) and `team.worktree.remove` (`{team_id, task_id}`; answers `{team, note}`), §10.
 The two are on the desktop wire only, not on the remote team path. Events `team.changed` (the team and its
 revision) and `team.removed` go to every local client.
+T-4: a local `team.member.add` may name several developers at once with `developers:
+[{name, lane?}]` (one to the room left of five) instead of `name` and `lane`; they share the
+request's `provider`, `model` and `effort`, and a lane left empty takes the developer's name.
+Every one is checked before any conversation starts: a name the team or the request already
+has, or a developer's lane it already has, is refused with `invalid_payload`, and more than
+the room left with `team_full`. A conversation that cannot start discards the ones started
+and answers `member_unavailable` saying whose it was; none joins. Otherwise all join in one
+change: one revision of the team's members, one `member_added` update each. A paired device
+cannot send `developers` (§4 of ADR 0116 lists its fields).
 
 `team.create` takes `execution_policy` (`read-only`, `ask` or `full`; `ask` when absent):
 what the leader and the developers may do without asking. `full` needs

@@ -659,22 +659,43 @@ std::optional<TeamError> TeamCoordinator::remove(const qint64 teamId) {
 }
 
 TeamResult TeamCoordinator::addMember(const qint64 teamId, Member member, const QString& actor) {
+    return addMembers(teamId, {std::move(member)}, actor);
+}
+
+TeamResult TeamCoordinator::addMembers(const qint64 teamId, QList<Member> members,
+                                       const QString& actor) {
     Team* team = mutableTeam(teamId);
     if (!team)
         return {.error = notFound()};
+    if (members.isEmpty())
+        return {.error = TeamError{QStringLiteral("invalid_payload"),
+                                   QStringLiteral("Name a member to add.")}};
     // Before any pointer into the team: the copy shares its lists until they detach.
     const Team before = *team;
-    const auto found = candidate(member.sessionId);
-    if (!found)
-        return {.error = TeamError{QStringLiteral("invalid_payload"),
-                                   QStringLiteral("The conversation no longer exists.")}};
-    member.name = member.name.trimmed();
-    if (auto refused = rules::canAddMember(*team, member, *found))
-        return {.error = refused};
-    member.joinedAt = nowIso();
-    team->members.append(member);
-    if (member.role == role::reviewer)
-        reviewerJoined(*team, member.sessionId);
+    QList<Update> updates;
+    // T-4: each member is checked against the team as it grows; a refusal leaves it as it was.
+    for (Member& member : members) {
+        const auto found = candidate(member.sessionId);
+        std::optional<TeamError> refused;
+        if (!found)
+            refused = TeamError{QStringLiteral("invalid_payload"),
+                                QStringLiteral("The conversation no longer exists.")};
+        member.name = member.name.trimmed();
+        if (!refused)
+            refused = rules::canAddMember(*team, member, *found);
+        if (refused) {
+            *team = before;
+            return {.error = refused};
+        }
+        member.joinedAt = nowIso();
+        team->members.append(member);
+        if (member.role == role::reviewer)
+            reviewerJoined(*team, member.sessionId);
+        updates.append({.kind = QStringLiteral("member_added"),
+                        .text = say(team->language, QT_TRANSLATE_NOOP("Team", "%1 joined as %2."))
+                                    .arg(member.name, roleName(team->language, member.role)),
+                        .data = {{QStringLiteral("session_id"), member.sessionId}}});
+    }
     // An empty role filled again lifts the pause it caused (ADR 0114, point 4).
     if (team->paused && team->pausedReason == QStringLiteral("empty_role") &&
         team->count(role::leader) == 1 && team->count(role::reviewer) >= 1 &&
@@ -689,12 +710,7 @@ TeamResult TeamCoordinator::addMember(const qint64 teamId, Member member, const 
                     say(team->language, QT_TRANSLATE_NOOP("Team", "The role was filled."));
             }
     }
-    if (auto failed =
-            commit(*team, before, actor,
-                   {{.kind = QStringLiteral("member_added"),
-                     .text = say(team->language, QT_TRANSLATE_NOOP("Team", "%1 joined as %2."))
-                                 .arg(member.name, roleName(team->language, member.role)),
-                     .data = {{QStringLiteral("session_id"), member.sessionId}}}}))
+    if (auto failed = commit(*team, before, actor, updates))
         return {.error = failed};
     return {.teamId = teamId};
 }
