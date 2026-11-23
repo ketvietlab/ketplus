@@ -15,6 +15,11 @@
 namespace ketplus::daemon {
 class BrowserSignIn;
 }
+namespace ketplus::remote {
+class EventCursorStore;
+class FrameSocket;
+class RelayFrameLink;
+} // namespace ketplus::remote
 
 namespace ketplus::remote {
 // Qt backend for a paired Desktop acting as a remote client. It never resolves host paths,
@@ -24,6 +29,7 @@ class ControlV2Client final : public QObject {
   public:
     using Callback = std::function<void(const QJsonValue&, const QString&)>;
     explicit ControlV2Client(QUrl origin, QObject* parent = nullptr);
+    ~ControlV2Client() override;
     [[nodiscard]] QJsonObject identity(QString* error = nullptr);
     // The browser-auth adapter uses identity().installationId to obtain this UserSession.
     // Account replacement fences outstanding requests and drops the previous pairing.
@@ -54,6 +60,36 @@ class ControlV2Client final : public QObject {
     void listMachines(Callback done);
     void listWorktrees(Callback done);
     void events(const QJsonObject& session, qint64 afterCursor, Callback done);
+    // The key a session's events are verified with, fetched once per session. A forwarded event
+    // (one that did not come from events()) is then opened with openEvent(), which authenticates
+    // and decrypts it the way events() does, and returns it with `payload` in place of `content`;
+    // an empty object and `error` when it fails.
+    void eventKeys(const QJsonObject& session,
+                   std::function<void(const QByteArray&, const QString&)> done);
+    [[nodiscard]] QJsonObject openEvent(const QJsonObject& session, const QByteArray& signing,
+                                        QJsonObject event, QString* error = nullptr);
+    // A current access token, refreshed when needed, for a connection that is not a request.
+    void connectionToken(std::function<void(const QString&, const QString&)> done) {
+        accessToken(std::move(done));
+    }
+    [[nodiscard]] QUrl origin() const { return origin_; }
+    // Tells the relay which transport capabilities this device supports (when it pairs, and
+    // when the set changes). The set last accepted is remembered; syncCapabilities() sends
+    // again only when it differs.
+    void updateCapabilities(const QStringList& capabilities, Callback done);
+    void syncCapabilities(const QStringList& capabilities, Callback done);
+    // What a Desktop supports: forwarded event frames on the relay path. It has no peer
+    // connection, so it never lists transport.webrtc/1.
+    [[nodiscard]] static QStringList desktopCapabilities();
+    // The device's one socket to the relay, which carries event frames of every machine of this
+    // account, created on first use and stopped when the credential is revoked. The caller
+    // starts it.
+    [[nodiscard]] RelayFrameLink* frameLink();
+    // The durable event cursors of this account's conversations (encrypted credential store).
+    [[nodiscard]] EventCursorStore* eventCursors();
+    // Replaces the socket the frame link opens, before frameLink() is first used (tests).
+    void setFrameSocketFactory(std::function<FrameSocket*(QObject*)> factory);
+    void setFrameLinkBackoff(int initialMilliseconds, int maximumMilliseconds);
     // The paired hosts' repositories/worktrees and conversations, as
     // {repositories, conversations, rejected}. Conversation title, state, updated time and
     // branch come from the host-signed session metadata; a row whose metadata, host pin or
@@ -168,6 +204,11 @@ class ControlV2Client final : public QObject {
     [[nodiscard]] int pinnedVersion(const QString& machineId) const;
     bool validatePairing(const QJsonObject& ticket, QString* error);
     QUrl origin_;
+    std::function<FrameSocket*(QObject*)> frameSocketFactory_;
+    RelayFrameLink* frameLink_{nullptr};
+    int frameBackoffInitial_{1000};
+    int frameBackoffMaximum_{60000};
+    std::unique_ptr<EventCursorStore> eventCursors_;
     daemon::CredentialStore credentials_;
     daemon::CloudCrypto crypto_{&credentials_};
     QNetworkAccessManager network_;

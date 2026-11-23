@@ -84,6 +84,19 @@ QByteArray RelayEventFeed::follow(const QString& sessionId, const qint64 generat
     return connected_ && !state.held() ? subscribe(sessionId, state) : QByteArray{};
 }
 
+QByteArray RelayEventFeed::followFrom(const QString& sessionId, const qint64 generation,
+                                      const qint64 cursor) {
+    if (cursor < 0)
+        return {};
+    Followed state;
+    state.generation = generation;
+    state.cursor = cursor;
+    state.unsaved = 1;
+    followed_.insert(sessionId, state);
+    flush();
+    return connected_ ? subscribe(sessionId, state) : QByteArray{};
+}
+
 QByteArray RelayEventFeed::unfollow(const QString& sessionId) {
     if (!followed_.contains(sessionId))
         return {};
@@ -194,6 +207,14 @@ qint64 RelayEventFeed::cursor(const QString& sessionId) const {
 
 bool RelayEventFeed::reloading(const QString& sessionId) const {
     return followed_.value(sessionId).reloading;
+}
+
+bool RelayEventFeed::requestReload(const QString& sessionId) {
+    const auto found = followed_.find(sessionId);
+    if (found == followed_.end() || found->reloading)
+        return false;
+    found->reloading = true;
+    return true;
 }
 
 bool RelayEventFeed::awaitingStore(const QString& sessionId) const {

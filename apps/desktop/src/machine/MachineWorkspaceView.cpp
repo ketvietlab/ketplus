@@ -347,6 +347,8 @@ void MachineWorkspaceView::render() {
         reason = session_->writeStatus();
     else if (!connected)
         reason = status;
+    else if (!newConversation && !session_->hostStatus().isEmpty())
+        reason = session_->hostStatus();
     else if (newConversation && !worktrees_->currentData().isValid())
         reason = tr("Choose a worktree on this machine.");
     else if (newConversation)

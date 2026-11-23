@@ -1,5 +1,6 @@
 #include "control/RelayMachineBackend.h"
 #include "control/ControlV2Client.h"
+#include "control/RelayEventStream.h"
 #include <QDateTime>
 #include <QTimer>
 #include <climits>
@@ -32,6 +33,9 @@ RelayMachineBackend::RelayMachineBackend(ControlV2Client* client, QString relayM
     : MachineBackend(parent), client_(client), relayMachineId_(std::move(relayMachineId)),
       options_(std::move(options)), outbox_(options_.outboxFile), retry_(new QTimer(this)),
       events_(new QTimer(this)) {
+    capabilityRetry_ = new QTimer(this);
+    capabilityRetry_->setSingleShot(true);
+    connect(capabilityRetry_, &QTimer::timeout, this, &RelayMachineBackend::listCapabilities);
     retry_->setSingleShot(true);
     connect(retry_, &QTimer::timeout, this, &RelayMachineBackend::probe);
     events_->setInterval(options_.eventPollMilliseconds);
@@ -95,9 +99,12 @@ void RelayMachineBackend::disconnectFromRelay() {
 
 void RelayMachineBackend::fence(const QString& reason) {
     ++generation_;
+    if (stream_)
+        stream_->flush();
     ++eventsRound_;
     pollingEvents_ = false;
     retry_->stop();
+    capabilityRetry_->stop();
     events_->stop();
     delivering_.clear();
     recoveringPreparations_.clear();
@@ -145,19 +152,23 @@ void RelayMachineBackend::probe() {
                 guarded([this, generation](const QJsonValue& machines, const QString& failure) {
                     if (generation != generation_)
                         return;
+                    bool forwardOnly = false;
                     if (failure.isEmpty() && machines.isArray())
                         for (const auto& entry : machines.toArray()) {
                             const auto row = entry.toObject();
-                            if (row.value("id").toString() == relayMachineId_)
+                            if (row.value("id").toString() == relayMachineId_) {
+                                const auto capabilities = row.value("capabilities").toArray();
                                 preparationSupported_ =
-                                    row.value("capabilities")
-                                        .toArray()
-                                        .contains(QStringLiteral("session.prepare/1"));
+                                    capabilities.contains(QStringLiteral("session.prepare/1"));
+                                forwardOnly =
+                                    capabilities.contains(QStringLiteral("events.forward_only/1"));
+                            }
                         }
+                    listCapabilities();
                     attempts_ = 0;
                     everConnected_ = true;
                     setState(ConnectionState::Connected, {});
-                    events_->start();
+                    applyForwardOnly(forwardOnly);
                     resume();
                     releaseWaiters();
                 }));
@@ -380,9 +391,8 @@ void RelayMachineBackend::transcriptWindow(const QString& sessionId, qint64 gene
                                   const auto page = value.toObject();
                                   // Follow the conversation's events from the snapshot the window
                                   // was read at.
-                                  if (error.isEmpty() && !watched_.contains(sessionId))
-                                      watched_.insert(sessionId,
-                                                      page.value("snapshot_cursor").toInteger());
+                                  if (error.isEmpty())
+                                      watch(sessionId, page.value("snapshot_cursor").toInteger());
                                   done(page, error);
                               }));
 }
@@ -391,6 +401,9 @@ void RelayMachineBackend::conversationClosed(const QString& sessionId) {
     // Events are polled only for open conversations; opening it again follows it from the
     // cursor of that read.
     watched_.remove(sessionId);
+    reloadFailures_.remove(sessionId);
+    if (stream_)
+        stream_->unfollow(sessionId);
 }
 
 void RelayMachineBackend::transcriptPage(const QString& sessionId, qint64 generation,

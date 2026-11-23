@@ -46,6 +46,10 @@ class MachineBackend : public QObject {
     [[nodiscard]] virtual ConnectionState connectionState() const = 0;
     // Why the machine is not Connected, for the UI to show; empty while Connected.
     [[nodiscard]] virtual QString connectionReason() const = 0;
+    // False while the route cannot reach the machine's host to read new events (a relay route
+    // that reads forwarded frames while the host is offline or the socket is down). What the
+    // UI then shows is the encrypted cache; nothing is fetched in its place.
+    [[nodiscard]] virtual bool hostReachable() const { return true; }
 
     // Repositories, for the sidebar, in a neutral shape no route has to fake:
     // {"repositories": [{"id", "label", "path" (only where the host path may be shown),
@@ -137,6 +141,12 @@ class MachineBackend : public QObject {
     void eventReceived(const QJsonObject& event);
     // The repositories or worktrees the route can verify changed: list them again.
     void catalogChanged();
+    // hostReachable() changed.
+    void hostReachabilityChanged(bool reachable);
+    // A conversation's event stream restarted (a reset, an unreadable event, or a route that
+    // changed how it reads): `window` is its newest transcript window, the same shape as
+    // transcriptWindow(); show it in place of what was loaded. Events after it follow as usual.
+    void conversationReloaded(const QString& sessionId, const QJsonObject& window);
     // A write whose callback answered {"status": "queued", "command_id"} finished on the host:
     // its verified result or error, once. Commands resumed after a restart have no callback, so
     // this is how their outcome reaches the UI. Routes that answer every write directly (local,

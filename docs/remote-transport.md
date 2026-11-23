@@ -344,6 +344,45 @@ side of the event frames. They own no socket: the caller sends what they return.
   cursor; the feed then subscribes after it. A reset of an older generation is ignored, and frames
   of another generation than the one followed are dropped.
 
+## Desktop on the relay path
+
+A Desktop paired as a remote client has no peer connection, so it never lists
+`transport.webrtc/1`; it reads events through the relay path. It lists `events.forward_only/1`
+(`ControlV2Client::desktopCapabilities()`).
+
+- **Capabilities.** Right after it pairs, and at each connection where the set it last had
+  accepted differs from what it supports now, the device sends its set (`updateCapabilities`,
+  `syncCapabilities`). An unchanged set sends nothing. A send that fails is tried again after a
+  wait that doubles (5 s up to 5 min) while the connection stays up.
+- **Reading mode.** `RelayMachineBackend` chooses per connection from the machine's own
+  capabilities. Without `events.forward_only/1` it polls stored events as before. With it, it
+  never reads stored events: `RelayFrameLink` holds the device's `/v2/relay` socket, and
+  `RelayEventStream` follows each open conversation from the frames of that machine. When a
+  later connection finds the name withdrawn, the stream closes, polling resumes, and each open
+  conversation reloads its newest window, because the host stores events again only from the
+  moment it was withdrawn.
+- **The socket.** It opens with the device's access token, reopens with a doubling wait
+  (1 s up to 60 s, starting over after a connection that stayed open 30 s), and is stopped for
+  good when the device is no longer paired or its credential is revoked. Each reopen subscribes
+  again after each conversation's cursor. A frame is wrapped for its machine and stays under
+  4 KiB when sent; one received over 66 KiB is ignored.
+- **Following.** A conversation is followed after the cursor of the newest window the desktop
+  read (or the last cursor it knows when a command opens it), not from its stored cursor. The stream waits
+  before subscribing again after a drop (250 ms, doubling to 60 s while drops repeat, starting
+  over when events arrive), so a host that is offline or a refused subscription never loops.
+- **Verification.** A forwarded event is the host's sealed event: the desktop authenticates and
+  decrypts it with the same session key and checks as a stored event (`openEvent`). One that
+  fails, or one that arrives without its conversation's key, is not shown; only the reason is
+  logged, never the event. The conversation then reloads its newest window, like after
+  `session.reset`, and `conversationReloaded` carries that window. A failed reload is tried again
+  after a wait that doubles (up to 60 s) for as long as the conversation stays open.
+- **Offline.** `hostReachable()` is false while the socket is down or the host is reported
+  offline, and true again once frames of that machine arrive.
+  `hostReachabilityChanged` reports each change. While it is false the desktop shows only what
+  its encrypted cache and the last window hold; it fetches nothing in their place, and commands
+  keep their own retry path. The conversation view says so in the composer's reason line, and a
+  reloaded window replaces the transcript rows shown.
+
 ## Relay path
 
 Commands, wake-ups and restore requests keep the existing Control v2 API. Clients without

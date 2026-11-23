@@ -1,4 +1,5 @@
 #include "control/ControlV2Client.h"
+#include "control/RelayEventFeed.h"
 #include "cloud/ControlEndpoint.h"
 #include <QCryptographicHash>
 #include <QDateTime>

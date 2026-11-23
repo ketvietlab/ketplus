@@ -41,6 +41,9 @@ class MachineConversationSession final : public QObject {
     // Whether the composer and approval buttons may act, and if not, why.
     [[nodiscard]] bool canAct() const;
     [[nodiscard]] QString blockedReason() const;
+    // Non-empty while the route cannot reach the host to read new events; the transcript shown
+    // is then what was last received (and the encrypted cache), nothing else.
+    [[nodiscard]] QString hostStatus() const;
     [[nodiscard]] QString lastError() const { return lastError_; }
     // What happened to the last writes: held until the machine reconnects, sending, or queued
     // on the Relay until the host confirms. Empty when nothing is outstanding.
@@ -81,6 +84,10 @@ class MachineConversationSession final : public QObject {
     void pumpLive();
     void applyLive(const QJsonObject& event);
     void finishWindow();
+    // The window's large events are reassembled, then it replaces the transcript, if `load` is
+    // still the newest.
+    void acceptWindow(quint64 load, const QJsonObject& window);
+    void applyReloaded(const QString& sessionId, const QJsonObject& window);
     void markExpired(const QString& approvalId, const QString& error);
     // The callback of one write; `approvalId` names the card it answers, if any.
     [[nodiscard]] remote::MachineBackend::Callback write(const QString& approvalId);
