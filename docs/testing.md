@@ -2386,12 +2386,27 @@ counts require real provider usage records.
 
 ### Offline reset briefing measurement
 
-A local audit covered 19 existing Markdown handoffs. The export records
-conversation turns and selected tool activity. It omits provider request
-boundaries, structured reset markers, and per-request context telemetry.
-The baseline discovery requests per reset session and context at requests
-#10 and #20 were therefore unavailable from this sample. Conversation turns
-and tool activity counts cannot substitute for those values.
+The offline baseline comes from 17 existing local Claude JSONL transcripts.
+Each user record containing the KetPlus reset marker starts a segment that
+ends at the next marker or end of file. Of 21 segments, 20 had a recorded
+assistant response with usage. Count one request per distinct Claude
+message ID in transcript order, retaining its last usage record.
+
+| Baseline metric | Reset segments with data | Median | Range |
+| --- | ---: | ---: | ---: |
+| Discovery requests among the first 20 observed requests | 20 | 1 | 0–4 |
+| Input context tokens at request #10 | 13 | 75,201 | 47,230–364,331 |
+| Input context tokens at request #20 | 7 | 78,636 | 63,420–427,815 |
+
+The 20 segments recorded 24 qualifying discovery requests. This conservative
+count includes only requests whose tool calls all read or search files, list
+paths, or inspect team/task state. Shell commands must begin with `rg`, `cat`,
+`sed -n`, `head`, `tail`, or `ls` and contain no shell chaining, pipelines,
+output redirection, or command substitution. Segments with fewer than 20
+requests contribute only their observed requests. Context tokens sum
+`input_tokens`, `cache_creation_input_tokens`, and `cache_read_input_tokens`.
+Each context sample includes only segments that reached the stated
+request number. The two milestones therefore use different samples.
 
 On Linux with Qt 6.11.1, calling the production briefing renderer for a
 synthetic developer task produced **502 UTF-8 bytes** and **four file hints**.

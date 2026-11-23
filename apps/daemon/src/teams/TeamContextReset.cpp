@@ -29,7 +29,9 @@ QString withinBytes(const QString& text, const qsizetype bytes) {
 QStringList readingList(const Task& task) {
     // Inline-code paths in task requirements are explicit hints supplied by the team.
     static const QRegularExpression path(QStringLiteral(
-        R"(`((?:[A-Za-z0-9_-][A-Za-z0-9_.-]*/)*[A-Za-z0-9_-][A-Za-z0-9_.-]*\.[A-Za-z0-9]+)`)"));
+        R"(`((?:[A-Za-z0-9_-][A-Za-z0-9_.-]*/)+[A-Za-z0-9_-][A-Za-z0-9_.-]*|)"
+        R"([A-Za-z0-9_-][A-Za-z0-9_.-]*\.(?:md|rst|txt|cpp|cc|cxx|h|hpp|cmake|py|sh|json|)"
+        R"(ya?ml|toml|js|ts|tsx|jsx|css|html|qml|swift|rs|go))`)"));
     QStringList sources{task.description};
     for (const Criterion& criterion : task.criteria)
         sources << criterion.text;
@@ -38,7 +40,7 @@ QStringList readingList(const Task& task) {
         auto matches = path.globalMatch(source);
         while (matches.hasNext()) {
             const QString file = matches.next().captured(1);
-            if (file.size() <= 120 && !files.contains(file))
+            if (file.size() <= 120 && file != QStringLiteral("node.js") && !files.contains(file))
                 files << file;
             if (files.size() == 8)
                 return files;

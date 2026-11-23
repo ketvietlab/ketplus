@@ -356,7 +356,8 @@ class TeamContextResetTest final : public QObject {
         Team project = team();
         Task* task = project.task(first_);
         task->description = QStringLiteral("Read `docs/design.md` and `src/main.cpp`. "
-                                           "Skip `/tmp/secret.txt` and `../other.md`.");
+                                           "Skip `/tmp/secret.txt`, `../other.md`, `0.1.53`, "
+                                           "`team.name`, and `node.js`.");
         task->criteria = {{QStringLiteral("Verify `src/main.cpp` with `tests/reset.cpp`."), true},
                           {QStringLiteral("Document the limit. ") + QString(600, 'a'), false}};
         const QString brief = context_reset::briefing(project, *project.member("dev1"), first_);
@@ -364,6 +365,9 @@ class TeamContextResetTest final : public QObject {
                                "- docs/design.md\n- src/main.cpp\n- tests/reset.cpp\n"));
         QVERIFY(!brief.contains("\n- /tmp/secret.txt"));
         QVERIFY(!brief.contains("\n- ../other.md"));
+        QVERIFY(!brief.contains("\n- 0.1.53"));
+        QVERIFY(!brief.contains("\n- team.name"));
+        QVERIFY(!brief.contains("\n- node.js"));
         QVERIFY(brief.contains("Acceptance criteria (summary):"));
         QVERIFY(brief.contains("- [x] Verify"));
         QVERIFY(brief.contains("- [ ] Document the limit."));
