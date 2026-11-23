@@ -251,8 +251,16 @@ class TeamCommandsTest final : public QObject {
         before->click();
         QJsonObject next = fixture(5);
         next.insert("name", "Shop 2");
+        // T-6: the decision's card is built again only when its decision changed, once the
+        // event loop has handled the change.
+        QJsonArray decisions = next.value("decisions").toArray();
+        QJsonObject decision = decisions.at(0).toObject();
+        decision.insert("context", "Asked again.");
+        decisions.replace(0, decision);
+        next.insert("decisions", decisions);
         teams_->applyEvent("team.changed", {{"team", next}});
-        QVERIFY(!before); // the content was rebuilt
+        QCoreApplication::processEvents();
+        QVERIFY(!before); // the card was rebuilt
         const auto rebuilt = choices(page);
         QCOMPARE(rebuilt.at(1)->property("choice").toString(), QStringLiteral("PayPal"));
         QVERIFY(pressed(rebuilt.at(1)));

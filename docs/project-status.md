@@ -343,6 +343,13 @@ Linux store policy, signed upgrade prompts and platform release acceptance remai
   offscreen review captures (`docs/design-system.md`). Settings opens as a page of
   the window, shared with Pro through `core/src/app/SettingsWorkspace` (#155).
 
+- Explorer and Source Control rows (T-19): a file leaves the folder's chevron slot free, so its
+  icon and its name start where a folder's do at every depth; in Source Control a file's icon
+  sits under its group's title. Both columns open at one width (288 logical px, at the
+  interface zoom) in Lite and Pro, and the width the user drags either of them to is the one
+  both open at for the rest of the session; it is not saved across launches. The row columns
+  come from the kit's recipes (`core/src/workspace/TreeRowColumns.h`).
+
 - Két UI stack: Lite and Pro use KÉT Sans as the primary interface face, with
   Inter/platform fallback; fresh editor settings use KÉT Sans Mono Medium at
   14 px without rewriting saved choices. Interface zoom (90–125%) is a setting

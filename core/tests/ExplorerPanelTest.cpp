@@ -1,14 +1,20 @@
 #include "workspace/ExplorerPanel.h"
+#include "KetAppearance.h"
+#include "KetSurfaceRecipes.h"
+#include "workspace/TreeRowColumns.h"
 
 #include <QDir>
 #include <QFile>
 #include <QFileSystemModel>
+#include <QImage>
 #include <QLineEdit>
 #include <QMetaObject>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTreeView>
 #include <QtTest>
+
+#include <utility>
 
 class ExplorerPanelTest final : public QObject {
     Q_OBJECT
@@ -20,6 +26,7 @@ class ExplorerPanelTest final : public QObject {
     void revealsAnOpenFile();
     void reportsInlineRenames();
     void createsInlineWithoutOverwritingExistingFiles();
+    void filesAndFoldersShareTheIconAndNameColumns();
 };
 
 void ExplorerPanelTest::createsInlineWithoutOverwritingExistingFiles() {
@@ -53,6 +60,92 @@ void ExplorerPanelTest::createsInlineWithoutOverwritingExistingFiles() {
     QCOMPARE(file.readAll(), QByteArray("keep me"));
     QTest::keyClick(field, Qt::Key_Escape);
     QTRY_VERIFY(!field->isVisible());
+}
+
+namespace {
+
+// Whether any pixel of `image` in columns [from, to) of the `row` differs from `background`.
+// The outer two pixels of the row are left out: the keyboard focus ring runs along them.
+bool hasInk(const QImage& image, const QRect& row, const int from, const int to,
+            const QColor& background) {
+    for (int y = row.top() + 2; y <= row.bottom() - 2 && y < image.height(); ++y)
+        for (int x = qMax(2, from); x < to && x < image.width(); ++x)
+            if (image.pixelColor(x, y) != background)
+                return true;
+    return false;
+}
+
+} // namespace
+
+// A file keeps the folder's chevron slot free, so its icon and its name start where a folder's
+// do, at every depth and interface zoom.
+void ExplorerPanelTest::filesAndFoldersShareTheIconAndNameColumns() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    QVERIFY(QDir(directory.path()).mkpath(QStringLiteral("docs/guides")));
+    for (const QString& name : {QStringLiteral("a.txt"), QStringLiteral("docs/b.txt")}) {
+        QFile file(directory.filePath(name));
+        QVERIFY(file.open(QIODevice::WriteOnly));
+    }
+    ketplus::ExplorerPanel panel;
+    panel.resize(420, 400);
+    panel.setRootPath(directory.path());
+    panel.show();
+    auto* tree = panel.findChild<QTreeView*>(QStringLiteral("explorerTree"));
+    QVERIFY(tree != nullptr);
+    auto* model = qobject_cast<QFileSystemModel*>(tree->model());
+    QVERIFY(model != nullptr);
+    tree->expand(model->index(directory.filePath(QStringLiteral("docs"))));
+    // The row showing `name`, found where the tree draws it.
+    const auto rowOf = [tree](const QString& name) {
+        for (int y = 1; y < tree->viewport()->height(); y += 4) {
+            const QModelIndex index = tree->indexAt(QPoint(60, y));
+            if (index.isValid() && index.data().toString() == name)
+                return std::pair{index, tree->visualRect(index)};
+        }
+        return std::pair{QModelIndex(), QRect()};
+    };
+    QTRY_VERIFY_WITH_TIMEOUT(rowOf(QStringLiteral("b.txt")).first.isValid(), 3000);
+
+    auto& appearance = ket::Appearance::instance();
+    const qreal zoom = appearance.zoom();
+    for (const qreal step : {1.0, 1.25, 1.5}) {
+        appearance.setZoom(step);
+        QTest::qWait(50);
+        const QImage image = tree->viewport()->grab().toImage();
+        const auto px = [&appearance](qreal v) { return qRound(appearance.scaled(v)); };
+        const auto recipe = ket::fileRowRecipe(false, {}, appearance.theme());
+        // Entries of the open folder are depth 1; the ones inside `docs` are depth 2.
+        const struct {
+            QString name;
+            bool isFolder;
+            int depth;
+        } rows[] = {{QStringLiteral("docs"), true, 1},
+                    {QStringLiteral("a.txt"), false, 1},
+                    {QStringLiteral("b.txt"), false, 2}};
+        for (const auto& row : rows) {
+            QTRY_VERIFY_WITH_TIMEOUT(!rowOf(row.name).second.isEmpty(), 3000);
+            const QRect rect = rowOf(row.name).second;
+            const QColor background = image.pixelColor(image.width() - 8, rect.center().y());
+            const auto columns = ketplus::tree_rows::explorerColumns(recipe, row.depth, px);
+            const QString label = QStringLiteral("zoom %1, depth %2, %3")
+                                      .arg(step)
+                                      .arg(row.depth)
+                                      .arg(row.isFolder ? "folder" : "file");
+            // Nothing but a folder's chevron is left of the icon column.
+            QVERIFY2(hasInk(image, rect, columns.chevron, columns.icon, background) == row.isFolder,
+                     qPrintable(label));
+            QVERIFY2(!hasInk(image, rect, 0, columns.chevron, background), qPrintable(label));
+            // The icon is in the shared column, and nothing is drawn between it and the name.
+            QVERIFY2(
+                hasInk(image, rect, columns.icon, columns.icon + px(recipe.iconSize), background),
+                qPrintable(label));
+            QVERIFY2(
+                !hasInk(image, rect, columns.icon + px(recipe.iconSize), columns.text, background),
+                qPrintable(label));
+        }
+    }
+    appearance.setZoom(zoom);
 }
 
 void ExplorerPanelTest::reportsInlineRenames() {

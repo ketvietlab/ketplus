@@ -3,6 +3,7 @@
 set(KETPLUS_DAEMON_CORE_SOURCES
     src/agents/AgentMutationOrigin.cpp
     src/cloud/CloudControlTransport.cpp
+    src/transport/PushSignals.cpp
     src/transport/RelayPeerLink.cpp
     src/transport/RemotePeers.cpp
     src/transport/Signaling.cpp
@@ -185,6 +186,8 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/runtime/ProviderErrorCode.cpp
     src/runtime/ProviderReadiness.cpp
     src/runtime/ProviderCatalogCache.h
+    src/runtime/WorktreePathCache.cpp
+    src/runtime/WorktreePathCache.h
     src/agents/AgentBroker.cpp
     src/agents/AgentBrokerRelease.cpp
     src/agents/AgentBrokerReviews.cpp

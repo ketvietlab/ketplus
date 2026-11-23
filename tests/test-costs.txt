@@ -15,6 +15,7 @@ ketplus_team_routing_tools_tests 55
 ketplus_provider_stderr_flood_tests 54
 ketplus_remote_ssh_tunnel_tests 54
 ketplus_daemon_cloud_privacy_tests 52
+ketplus_daemon_forward_only_upload_tests 66
 ketplus_team_review_tests 50
 ketplus_turn_acceptance_tests 50
 ketplus_daemon_protocol_tests 46

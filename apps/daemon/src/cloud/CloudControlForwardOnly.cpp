@@ -28,6 +28,43 @@ void CloudControlClient::followEventsForwardOnly(const bool forwardOnly) {
     if (!advanceUploadCursorsToHead())
         return;
     eventsForwardOnly_ = false;
+    forwardOnlyReleased_.clear();
+}
+
+// Moves the cloud client's acknowledgement of one session up to the cursor a peer can no longer
+// need. Monotonic: a client still behind keeps its own, lower cursor as the retention fence.
+bool CloudControlClient::releaseSessionRetention(const QString& sessionId, qint64 generation,
+                                                 qint64 head) {
+    const qint64 fence = head - peerEventWindow;
+    const QString key = QStringLiteral("%1:%2").arg(sessionId).arg(generation);
+    if (fence <= 0 || fence - forwardOnlyReleased_.value(key, 0) < forwardOnlyReleaseStep)
+        return true;
+    if (!journal_->acknowledgeCursor(QStringLiteral("cloud-control-v2"), sessionId, generation,
+                                     fence)) {
+        lastError_ = journal_->errorString();
+        return false;
+    }
+    forwardOnlyReleased_.insert(key, fence);
+    return true;
+}
+
+void CloudControlClient::noteForwardOnlyEvent(const QString& sessionId, const qint64 generation,
+                                              const qint64 cursor) {
+    if (eventsForwardOnly())
+        releaseSessionRetention(sessionId, generation, cursor);
+}
+
+void CloudControlClient::releaseForwardOnlyRetention() {
+    const QList<StoredSession> sessions = journal_->sessions();
+    QSet<QString> current;
+    for (const StoredSession& session : sessions) {
+        current.insert(QStringLiteral("%1:%2").arg(session.id).arg(session.generation));
+        if (!releaseSessionRetention(session.id, session.generation, session.lastCursor))
+            return;
+    }
+    forwardOnlyReleased_.removeIf([&current](const QHash<QString, qint64>::iterator entry) {
+        return !current.contains(entry.key());
+    });
 }
 
 // Only the upload cursor moves: acknowledging the head for journal retention here would delete

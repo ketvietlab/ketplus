@@ -644,6 +644,10 @@ class TeamCoordinator : public QObject {
         QString taskId;
         bool actionable{false};
         QJsonObject data;
+        // Who the update comes from. Empty is whoever's command is committed; an update the
+        // daemon works out from a command (a task freed, a goal reached, a merge to offer) names
+        // the daemon, so the digest does not take it for the caller's own action (T-9).
+        QString actor;
     };
 
     // The team's Updates from the journal, within the bounds of Team.h.

@@ -87,11 +87,17 @@ void TeamDirectory::store(const QJsonObject& received) {
                 if (known->contains(key))
                     team.insert(key, known->value(key));
     // Events and answers can arrive in either order; the higher revision wins.
-    // An answer that repeats what is known changes nothing (a page re-reads on every change).
+    // An answer that repeats what is known changes nothing (a page re-reads on every change),
+    // nor does the directory's form of it: that only marks itself and counts the tasks (T-6).
+    const auto content = [](QJsonObject json) {
+        json.remove(QStringLiteral("directory"));
+        json.remove(QStringLiteral("tasks_total"));
+        return json;
+    };
     if (const auto it = teams_.constFind(id);
         it != teams_.cend() &&
-        (*it == team || it->value(QStringLiteral("revision")).toInteger() >
-                            team.value(QStringLiteral("revision")).toInteger()))
+        (content(*it) == content(team) || it->value(QStringLiteral("revision")).toInteger() >
+                                              team.value(QStringLiteral("revision")).toInteger()))
         return;
     teams_.insert(id, team);
     emit changed();

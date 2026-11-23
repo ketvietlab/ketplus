@@ -82,6 +82,9 @@ bool Signaling::verify(const QByteArray& bytes, const QByteArray& key,
 void Signaling::receive(const QJsonObject& message) {
     const auto type = message.value("type").toString();
     const auto id = message.value("connectionId").toString();
+    // The answer to a push.signal needs no action.
+    if (type == "push.signal.result")
+        return;
     if (type == "frame" || type == "frames.dropped") {
         if (forwardOnly_ && !workspace_.isEmpty() && !machine_.isEmpty())
             relayFrame(message);

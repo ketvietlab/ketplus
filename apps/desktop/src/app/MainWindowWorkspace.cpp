@@ -149,7 +149,7 @@ void MainWindow::setExplorerVisible(const bool visible) {
         workspaceSplit_->show();
         mainSplit_->show();
         QList<int> sizes(workspaceSplit_->count(), 0);
-        constexpr int navigationWidth = 224;
+        const int navigationWidth = navigationWidth_.shown();
         sizes[workspaceSplit_->indexOf(explorer)] = navigationWidth;
         sizes[workspaceSplit_->indexOf(editorSplit_)] =
             qMax(420, workspaceSplit_->width() - navigationWidth);
@@ -220,7 +220,7 @@ void MainWindow::setSourceControlVisible(const bool visible) {
         workspaceSplit_->show();
         mainSplit_->show();
         QList<int> sizes(workspaceSplit_->count(), 0);
-        constexpr int navigationWidth = 246;
+        const int navigationWidth = navigationWidth_.shown();
         sizes[workspaceSplit_->indexOf(changes)] = navigationWidth;
         sizes[workspaceSplit_->indexOf(editorSplit_)] =
             qMax(420, workspaceSplit_->width() - navigationWidth);

@@ -16,6 +16,9 @@ class CloudPrivacyTestAccess {
         client.workspaceId_ = workspace;
     }
     static transport::RemotePeers& peers(CloudControlClient& client) { return *client.peers_; }
+    static transport::PushSignals& pushSignals(CloudControlClient& client) {
+        return *client.pushSignals_;
+    }
     static transport::EventPage peerEvents(CloudControlClient& client, const QString& id,
                                            qint64 gen, qint64 cursor) {
         return client.peerEvents(id, gen, cursor);
@@ -174,6 +177,11 @@ class CloudPrivacyTestAccess {
         client.negotiatePeerTransport(answer);
     }
     static bool eventsForwardOnly(CloudControlClient& client) { return client.eventsForwardOnly(); }
+    // A journaled event announced by the host: releases retention for its own session only.
+    static void noteEvent(CloudControlClient& client, qint64 cursor,
+                          const QString& session = "session-synthetic", qint64 generation = 1) {
+        client.noteForwardOnlyEvent(session, generation, cursor);
+    }
     static void forgetForwardOnly(CloudControlClient& client) { client.eventsForwardOnly_.reset(); }
     static qint64 uploadedCursor(CloudControlClient& client,
                                  const QString& session = "session-synthetic",

@@ -5,6 +5,7 @@
 #include "editor/EditorViewOptions.h"
 #include "git/GitTypes.h"
 #include "workspace/ActivityBar.h"
+#include "workspace/NavigationPanelWidth.h"
 #include "workspace/WorkspaceFileIndex.h"
 #include "workspace/WorkspaceSearch.h"
 
@@ -470,6 +471,8 @@ class MainWindow final : public QMainWindow {
     NavigationLocation lastLocation_;
     bool restoringNavigation_{false};
     ExplorerPanel* explorer_{nullptr};
+    // Shared by the Explorer and Source Control columns.
+    NavigationPanelWidth navigationWidth_;
     GitChangesPanel* gitChanges_{nullptr};
     MarkdownPreviewPane* markdownPreview_{nullptr};
     TerminalPanel* terminal_{nullptr};

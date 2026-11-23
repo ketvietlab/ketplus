@@ -13,6 +13,9 @@ using namespace ketplus::daemon;
 using Access = CloudPrivacyTestAccess;
 namespace {
 const QString eventsPath = QStringLiteral("/v2/events:append");
+// The window a peer may page, the release step and one cleanup pass.
+constexpr qint64 bound =
+    CloudControlClient::peerEventWindow + CloudControlClient::forwardOnlyReleaseStep + 128;
 
 struct Context {
     LocalJournal journal;
@@ -81,6 +84,31 @@ struct Context {
                 cursors.append(event.toObject().value("cursor").toInteger());
         }
         return cursors;
+    }
+    // Events still journaled after `cursor`, counted page by page (a read returns at most 500).
+    qint64 journaledAfter(qint64 cursor = 0, const QString& session = "session-synthetic") {
+        qint64 count = 0;
+        for (;;) {
+            const QJsonArray page = journal.eventsAfter(session, 1, cursor);
+            if (page.isEmpty())
+                return count;
+            count += page.size();
+            cursor = page.last().toObject().value("cursor").toInteger();
+        }
+    }
+    qint64 journaled() { return journaledAfter(0); }
+    // Appends `count` events, announcing each as the host does, and runs the upload pass after
+    // every batch.
+    qint64 appendRunning(int count, int batch = 25) {
+        qint64 head = 0;
+        for (int done = 0; done < count; done += batch) {
+            for (int i = 0; i < qMin(batch, count - done); ++i) {
+                head = append();
+                Access::noteEvent(*client, head);
+            }
+            Access::uploadAll(*client);
+        }
+        return head;
     }
     int requestsTo(const QString& path) const {
         return int(std::count_if(transport.requests.cbegin(), transport.requests.cend(),
@@ -265,6 +293,130 @@ class ForwardOnlyUploadTest final : public QObject {
         QTRY_VERIFY(Access::idle(*c.client));
         QCOMPARE(c.uploaded().last(), head + 1);
         QCOMPARE(c.journal.eventsAfter("session-synthetic", 1, 2).size(), 0);
+    }
+
+    // The cloud client no longer pins the journal while uploads are off, so a long run stays
+    // within the window a peer can page plus the release step and one cleanup pass.
+    void aLongForwardOnlyRunKeepsTheJournalBounded() {
+        QTemporaryDir dir;
+        Context c(dir.filePath("long.sqlite"));
+        c.start();
+        c.answer(true);
+        const qint64 head = c.appendRunning(2400);
+        QCOMPARE(c.requestsTo(eventsPath), 0);
+        QVERIFY2(c.journaled() <= bound, qPrintable(QString::number(c.journaled())));
+        // Everything a peer may still page is there.
+        QCOMPARE(c.journaledAfter(head - CloudControlClient::peerEventWindow),
+                 CloudControlClient::peerEventWindow);
+    }
+
+    // Another client that has not acknowledged keeps the events it needs, however far behind;
+    // once it catches up, they go.
+    void aClientBehindKeepsItsEventsAndReleasesThemWhenItCatchesUp() {
+        QTemporaryDir dir;
+        Context c(dir.filePath("slow.sqlite"));
+        c.start();
+        c.append(10);
+        QVERIFY(c.journal.acknowledgeCursor("desktop", "session-synthetic", 1, 10));
+        QVERIFY(c.journal.acknowledgeCursor("phone", "session-synthetic", 1, 10));
+        c.answer(true);
+        const qint64 head = c.appendRunning(2400);
+        // Both are behind, so nothing they have not acknowledged is gone, whatever the window.
+        QCOMPARE(c.journaledAfter(10), head - 10);
+        // One catches up; the other still holds the fence at its own cursor.
+        QVERIFY(c.journal.acknowledgeCursor("desktop", "session-synthetic", 1, 1500));
+        QVERIFY(c.journal.pruneAcknowledgedEvents());
+        QCOMPARE(c.journaledAfter(10), head - 10);
+        // It moves part of the way: only what it acknowledged becomes eligible.
+        QVERIFY(c.journal.acknowledgeCursor("phone", "session-synthetic", 1, 1000));
+        QVERIFY(c.journal.pruneAcknowledgedEvents());
+        QCOMPARE(c.journaledAfter(1000), head - 1000);
+        QVERIFY(c.journal.acknowledgeCursor("phone", "session-synthetic", 1, head));
+        QVERIFY(c.journal.acknowledgeCursor("desktop", "session-synthetic", 1, head));
+        for (int pass = 0; pass < 40 && c.journaled() > bound; ++pass)
+            QVERIFY(c.journal.pruneAcknowledgedEvents());
+        QVERIFY2(c.journaled() <= bound, qPrintable(QString::number(c.journaled())));
+        QCOMPARE(c.journaledAfter(head - CloudControlClient::peerEventWindow),
+                 CloudControlClient::peerEventWindow);
+    }
+
+    // Withdrawing after a long run still resumes after the head, uploads nothing old, and a
+    // further on and off keeps the journal bounded.
+    void withdrawingAfterALongRunKeepsTheResumeAndTheBound() {
+        QTemporaryDir dir;
+        Context c(dir.filePath("longwithdraw.sqlite"));
+        c.start();
+        c.answer(true);
+        const qint64 head = c.appendRunning(2300);
+        c.answer(false);
+        QCOMPARE(Access::uploadedCursor(*c.client), head);
+        Access::uploadAll(*c.client);
+        QCoreApplication::processEvents();
+        QCOMPARE(c.requestsTo(eventsPath), 0);
+        const qint64 next = c.append();
+        c.acceptThrough(next);
+        Access::uploadAll(*c.client);
+        QTRY_VERIFY(Access::idle(*c.client));
+        QCOMPARE(c.uploaded(), (QList<qint64>{next}));
+        for (int round = 0; round < 2; ++round) {
+            c.answer(true);
+            c.appendRunning(300);
+            c.answer(false);
+            const qint64 last = c.append();
+            c.acceptThrough(last);
+            Access::uploadAll(*c.client);
+            QTRY_VERIFY(Access::idle(*c.client));
+            QCOMPARE(c.uploaded().last(), last);
+        }
+        QCOMPARE(c.uploaded().size(), 3);
+        // Journal growth stays bounded across the toggles: what is left is the window, the
+        // release step, a cleanup pass and the events since the last acknowledged upload.
+        // (Each cleanup pass removes at most 128 rows; the idle timer repeats it in the daemon.)
+        for (int pass = 0; pass < 60 && c.journaled() > bound + 1; ++pass)
+            QVERIFY(c.journal.pruneAcknowledgedEvents());
+        QVERIFY2(c.journaled() <= bound + 1, qPrintable(QString::number(c.journaled())));
+    }
+
+    // A journaled event releases retention for its own session only, from the cursor it carries:
+    // no credential is read or written, and other sessions are left to the heartbeat answer's pass.
+    void anEventReleasesOnlyItsOwnSessionAndTouchesNoCredentials() {
+        QTemporaryDir dir;
+        Context c(dir.filePath("light.sqlite"));
+        QVERIFY(c.journal.upsertSession({"session-second",
+                                         "synthetic-worktree",
+                                         "codex",
+                                         "thread-second",
+                                         {},
+                                         "ready",
+                                         1,
+                                         0,
+                                         1}));
+        c.start();
+        c.answer(true);
+        // A second session holds a long backlog; its events are not announced, as if idle.
+        QString error;
+        for (int i = 0; i < 2400; ++i)
+            QVERIFY2(c.journal.appendEvent("session-second", 1, "user.message", {{"text", "x"}},
+                                           &error) > 0,
+                     qPrintable(error));
+        QVERIFY(c.journal.acknowledgeCursor("cloud-control-v2", "session-second", 1, 0));
+        r03::reads.clear();
+        const int rewrites = r03::rewrites;
+        c.appendRunning(2400);
+        QCOMPARE(r03::rewrites, rewrites);
+        for (const QString& account : std::as_const(r03::reads))
+            QVERIFY2(!account.startsWith("uploaded-cursor-"), qPrintable(account));
+        QVERIFY(c.journaled() <= bound);
+        // The other session was not scanned by those events: every one of its events is still
+        // there until a heartbeat answer runs the pass over every session.
+        QCOMPARE(c.journaledAfter(0, "session-second"), 2400);
+        c.answer(true);
+        for (int pass = 0; pass < 40 && c.journaledAfter(0, "session-second") > bound; ++pass)
+            QVERIFY(c.journal.pruneAcknowledgedEvents());
+        QVERIFY2(c.journaledAfter(0, "session-second") <= bound,
+                 qPrintable(QString::number(c.journaledAfter(0, "session-second"))));
+        QCOMPARE(c.journaledAfter(2400 - CloudControlClient::peerEventWindow, "session-second"),
+                 CloudControlClient::peerEventWindow);
     }
 
     void aChunkDoesNotReadTheCredentialStore() {

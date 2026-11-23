@@ -33,6 +33,7 @@
 #include <QVBoxLayout>
 
 #include <algorithm>
+#include <utility>
 
 namespace ketplus {
 namespace team_language = remote::team_language;
@@ -71,11 +72,15 @@ TeamPage::TeamPage(TeamDirectory* teams, const QString& teamId, const QString& r
     // The page fits its width; nothing is reached by scrolling sideways.
     scroll_->setHorizontalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
     outer->addWidget(scroll_);
+    // The directory reports every team, often several times while one frame of the daemon is
+    // read: the page follows once those are handled, and only a change of its own team.
     connect(teams_, &TeamDirectory::changed, this, [this] {
-        // The directory reports every team: only a change of this one rebuilds the page.
-        if (teams_->team(teamId_).value_or(QJsonObject{}) != shown_)
-            rebuild();
-        readUpdates();
+        if (std::exchange(followPending_, true))
+            return;
+        QTimer::singleShot(0, this, [this] {
+            followPending_ = false;
+            followTeam();
+        });
     });
     // Sizes follow the zoom and the task table's colours the theme.
     connect(&ket::Appearance::instance(), &ket::Appearance::themeChanged, this,
@@ -102,6 +107,7 @@ void TeamPage::send(const QString& what, const QString& source, const QString& t
 }
 
 void TeamPage::readUpdates() {
+    readFor_ = teams_->team(teamId_).value_or(QJsonObject{});
     // Measuring walks the worktrees: with the team, only when its done tasks changed.
     if (const QString done = TeamPage::doneTasks(teams_->team(teamId_).value_or(QJsonObject{}));
         done != storageTasks_) {
@@ -121,6 +127,9 @@ void TeamPage::readUpdates() {
                             if (!alive)
                                 return;
                             alive->readPending_ = false;
+                            // The team this answer stored is read: it asks for no other read.
+                            alive->readFor_ =
+                                alive->teams_->team(alive->teamId_).value_or(QJsonObject{});
                             if (!error.isEmpty())
                                 return;
                             QJsonArray updates = result.value(QStringLiteral("updates")).toArray();
@@ -130,7 +139,7 @@ void TeamPage::readUpdates() {
                                 return;
                             alive->updates_ = updates;
                             alive->newestHaveMore_ = more;
-                            alive->rebuild();
+                            alive->rebuildSections({Section::Updates});
                         });
     });
 }
@@ -161,7 +170,7 @@ void TeamPage::readOlderUpdates() {
                         for (const auto& value : result.value(QStringLiteral("updates")).toArray())
                             alive->olderUpdates_.append(value);
                         alive->olderHaveMore_ = result.value(QStringLiteral("has_more")).toBool();
-                        alive->rebuild();
+                        alive->rebuildSections({Section::Updates});
                     });
 }
 
@@ -312,17 +321,12 @@ void TeamPage::rebuild() {
     layout_->setSpacing(px(14));
     const auto team = teams_->team(teamId_);
     shown_ = team.value_or(QJsonObject{});
-    if (!team) {
+    sections_.fill(nullptr);
+    if (!team)
         buildEmpty();
-    } else {
-        buildHeading(*team);
-        buildBanners(*team);
-        buildDecisions(*team);
-        buildTasks(*team);
-        buildDoneWorktrees(*team);
-        buildMembers(*team);
-        buildUpdates();
-    }
+    else
+        for (int section = 0; section < kSections; ++section)
+            buildSection(static_cast<Section>(section), *team, section);
     layout_->addStretch();
     scroll_->setWidget(content_); // deletes the previous content
     // An update keeps the reader where it was.

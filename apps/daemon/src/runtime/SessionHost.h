@@ -6,6 +6,7 @@
 #include "runtime/JournalStorageJobs.h"
 #include "runtime/ProviderCatalogCache.h"
 #include "runtime/ProviderReadiness.h"
+#include "runtime/WorktreePathCache.h"
 #include "storage/LocalJournal.h"
 #include "storage/McpMediaStore.h"
 #include "teams/TeamCoordinator.h"
@@ -335,6 +336,9 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
                                   CommandCallback done);
     // Set only while handleCommand answers a deferred session.worktrees that read it.
     const WorktreeListing* prefetchedWorktreeListing_{nullptr};
+    // The checkouts recordWorktreeActivity matches a tool call's paths against, read from
+    // Git's files so a provider event never waits for a git process.
+    WorktreePathCache worktreePaths_;
     [[nodiscard]] QJsonObject switchWorktree(const QJsonObject& request);
     // What git says about a switch's target; read on any thread.
     struct WorktreeFacts final {

@@ -20,6 +20,7 @@ set(KETPLUS_WINDOWS_SCRIPT_FIXTURE_TESTS
     ketplus_context_harness_tests
     ketplus_provider_deletion_tests
     ketplus_daemon_worktree_context_tests
+    ketplus_daemon_worktree_activity_tests
     ketplus_daemon_claude_worktree_tests
     ketplus_daemon_lifecycle_tests
     ketplus_turn_acceptance_tests
@@ -98,6 +99,9 @@ target_sources(ketplus_atlas_access_tests PRIVATE cloud-privacy/MemoryCredential
 ketplus_add_daemon_test(ketplus_remote_control_client_tests RemoteControlClientTest.cpp)
 target_sources(ketplus_remote_control_client_tests PRIVATE cloud-privacy/MemoryCredentials.cpp)
 target_link_libraries(ketplus_remote_control_client_tests PRIVATE ketplus_remote_control)
+ketplus_add_daemon_test(ketplus_remote_event_feed_tests RelayEventFeedTest.cpp)
+target_sources(ketplus_remote_event_feed_tests PRIVATE cloud-privacy/MemoryCredentials.cpp)
+target_link_libraries(ketplus_remote_event_feed_tests PRIVATE ketplus_remote_control)
 ketplus_add_daemon_test(ketplus_remote_control_projection_tests RemoteControlProjectionTest.cpp)
 target_sources(ketplus_remote_control_projection_tests PRIVATE cloud-privacy/MemoryCredentials.cpp)
 target_link_libraries(ketplus_remote_control_projection_tests PRIVATE ketplus_remote_control)
@@ -160,6 +164,7 @@ ketplus_add_daemon_test(ketplus_daemon_media_preview_tests McpMediaPreviewTest.c
 ketplus_add_daemon_test(ketplus_context_harness_tests ContextHarnessTest.cpp)
 ketplus_add_daemon_test(ketplus_provider_deletion_tests ProviderDeletionTest.cpp)
 ketplus_add_daemon_test(ketplus_daemon_worktree_context_tests DaemonWorktreeContextTest.cpp)
+ketplus_add_daemon_test(ketplus_daemon_worktree_activity_tests DaemonWorktreeActivityTest.cpp)
 ketplus_add_daemon_test(ketplus_daemon_claude_worktree_tests ClaudeWorktreeTest.cpp)
 ketplus_add_daemon_test(ketplus_daemon_context_relay_tests WorktreeContextRelayTest.cpp)
 # Link in-memory credential symbols before the static core; never use the OS key store.
@@ -342,6 +347,7 @@ ketplus_add_daemon_test(ketplus_team_title_tests TeamTitleTest.cpp)
 ketplus_add_daemon_test(ketplus_team_reply_tests TeamReplyTest.cpp)
 ketplus_add_daemon_test(ketplus_team_stall_tests TeamStallTest.cpp)
 ketplus_add_daemon_test(ketplus_team_wait_tests TeamWaitTest.cpp)
+ketplus_add_daemon_test(ketplus_team_digest_actor_tests TeamDigestActorTest.cpp)
 ketplus_add_daemon_test(ketplus_team_review_tests TeamReviewTest.cpp)
 ketplus_add_daemon_test(ketplus_team_review_place_tests TeamReviewPlaceTest.cpp)
 ketplus_add_daemon_test(ketplus_team_verdict_tests TeamVerdictTest.cpp)
@@ -542,6 +548,7 @@ ketplus_add_daemon_test(ketplus_daemon_peer_transport_tests PeerTransportTest.cp
 target_sources(ketplus_daemon_peer_transport_tests PRIVATE cloud-privacy/MemoryCredentials.cpp)
 set_tests_properties(ketplus_daemon_peer_transport_tests PROPERTIES TIMEOUT 45)
 ketplus_add_daemon_test(ketplus_daemon_relay_peer_link_tests RelayPeerLinkTest.cpp)
+ketplus_add_daemon_test(ketplus_daemon_push_signal_tests PushSignalsTest.cpp)
 # ketplus_peer_link alone, without the session host: offerer against answerer over loopback.
 qt_add_executable(ketplus_peer_link_tests PeerLinkTest.cpp)
 ketplus_enable_warnings(ketplus_peer_link_tests)

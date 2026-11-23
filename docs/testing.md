@@ -283,7 +283,7 @@ and local/archive includes with cycles, escapes and the 16-level boundary.
 | Transcript safety | `ketplus_transcript_safety_tests` | model rich text (inline/reference images, raw `<img>`, `<style>`, `<link>`) makes no network connection, every word stays visible, links re-colour on theme change, a 4000×3000 inline image is kept at thumbnail size, the layout trace records no message text |
 | Chat Mermaid | `ketplus_chat_mermaid_tests` | Markdown and Mermaid integration |
 | Long-lived provider stderr | `ketplus_provider_stderr_flood_tests` | Codex/Claude/Cursor fake processes each emit two 32-MiB floods with eight mandatory stdout round trips per flood; drain and 1-MiB newest-tail bounds are observed directly, then a normal call succeeds on the same process |
-| Workspace boundary | `ketplus_workspace_tests` | Pro shell with CM explorer behavior |
+| Workspace boundary | `ketplus_workspace_tests` | Pro shell with CM explorer behavior; the Lite `ExplorerPanelTest` and `GitChangesPanelTest` paint the rows and check, at zoom 1, 1.25 and 1.5, that a file and a folder share the icon and name columns and that a changed file's icon sits under its group's title; `ketplus_lite_window_tests` checks that Explorer and Source Control open at one width and keep the width either was dragged to |
 | Async question lifetime | `ketplus_async_question_lifetime_tests` | turn expiry, session/generation isolation, late items and stale answers |
 | Local turn acceptance | `ketplus_turn_acceptance_tests` | Raw/projection/state/configuration abort and ignored writes, deferred-FK commit failure, no rejected prompt publication, independent-reader visibility, repair/retry/reopen, duplicate result replay, counter/revision exhaustion, bounded oversized-payload refusal (ADR 0076); Stop pressed while a turn is starting does not reach the next turn after that start fails; a late or repeated Codex `turn/completed` or a late `turn/started` does not end or restart the active turn; a delta after its item completed is dropped until the item restarts or the provider stops; two clients on one session (Desktop and the relay's `cloud-control-v2`): one prompt accepted and the other `session_busy`, one approval answer and the other `already_resolved`, read markers only move forward; a prompt rejected after a provider switch, by the journal or by the provider, keeps the handoff note for the retry, and a switch that cannot be journaled stays with the previous provider and thread; approvals pending when a Codex or Claude turn ends expire before the completion is published and a late answer is refused, except while a Claude background task runs; a final Codex `error` for the running turn expires them too, before the error is published, and declines later requests for that turn, while a retried error or one naming an earlier turn does not and the next turn is not fenced; a Codex request naming an ended turn is declined as `stale_turn` while the running turn's own request is offered |
 | Session/provider deletion | `ketplus_provider_deletion_tests` | Failed commit releases the transaction; ignored tombstone/work/history mutations roll back; retry/reopen preserves history, conversation number, cleanup work and unrelated sessions; shared provider threads and unsupported providers remain protected; query/mid-fetch ownership failures prevent fake-provider deletion, preserve pending work/history and recover after repair/restart; malformed/unknown ownership JSON blocks queued and local deletion for both source and retained sessions |
@@ -306,7 +306,8 @@ and local/archive includes with cycles, escapes and the 16-level boundary.
 | Journal usage retention (#128) | `ketplus_daemon_usage_retention_tests` | final usage samples, unchanged content/order, replay/page agreement, revision fencing, latest 20 actual turns including sequence gaps, raw-event acknowledgment, active/open/recent/question/approval/generation guards, bounded scan progress, transactional rollback and nonblocking writer contention with timeout restoration; legacy inline generated-image pixels removed one large payload per pass with prompt and path kept, only after acknowledgement and outside the latest 20 turns (ADR 0098), and with a session host, a 512 px JPEG preview of a real PNG kept as a media reference (ADR 0101); inline tool-result images replaced by `history_retention` placeholders in place, including rows trimmed by an earlier text pass and chunked payloads that contain an image, while text-only oversize payloads stay and probing a backlog of them is charged to the per-pass budget (ADR 0099) |
 | Acknowledged delivery cleanup (ADR 0049) | `ketplus_daemon_ack_retention_tests` | Qt backlog ACK, row/byte budgets and actual prepared plans; slowest/new client and generation fences; queue fairness/reopen; NUL/oversized/binary values; capability deferral; atomic ACK/queue writes and rollback/retry |
 | Cloud cache retention (ADR 0053) | `ketplus_daemon_cloud_cache_retention_tests`, `ketplus_daemon_cloud_privacy_tests` | ACK row/byte/reopen bounds; exact ciphertext receipts, pending resets, stale cursor/account callbacks and legacy migration; isolated invalidation; unsupported rows; actual prepared plans; ignored/aborted/commit rollback and busy restoration; atomic scoped recovery cursor, receipt failure through retry/reopen and credential failure through restart; transport fails closed on failed policy/turn invalidation |
-| Forward-only events | `ketplus_daemon_forward_only_upload_tests` | `events.forward_only/1` in a heartbeat answer stops event uploads while heartbeats go on and the daemon heartbeat does not list it; withdrawing moves every session's upload cursor to the journal head in one credential commit (none on failure), keeps the journal and uploads only later events; a restart after withdrawing keeps the events journaled meanwhile until the next acknowledged upload; an upload chunk does not read the cursor from the credential store; repeated toggles upload each event once; a restart stays forward-only until the next answer; an upload in flight across the change never moves the cursor back |
+| Forward-only events | `ketplus_daemon_forward_only_upload_tests` | `events.forward_only/1` in a heartbeat answer stops event uploads while heartbeats go on and the daemon heartbeat does not list it; withdrawing moves every session's upload cursor to the journal head in one credential commit (none on failure), keeps the journal and uploads only later events; a restart after withdrawing keeps the events journaled meanwhile until the next acknowledged upload; an upload chunk does not read the cursor from the credential store; repeated toggles upload each event once; a restart stays forward-only until the next answer; an upload in flight across the change never moves the cursor back; a long run of events while forward-only keeps the journal within the last 2,000 events plus one release step and one cleanup pass and sends nothing; a client that has not acknowledged keeps every event after its cursor, a lower second client holds the fence lower, and both letting go frees them; withdrawing after a long run still resumes after the head and uploads only later events, and repeated on/off keeps the journal bounded |
+| Desktop event feed | `ketplus_remote_event_feed_tests` | Scripted frames and an in-memory cursor store, no socket: subscribe/unsubscribe under 4 KiB; oversize, unknown, malformed, non-increasing, over-100-event and mixed-generation frames refused with no content in the error and no cursor change; subscribing after each stored cursor on every connection; each event delivered once and in order, late and repeated events dropped, cursor never lowered; `gap` and `frames.dropped` subscribe again after the cursor; `session.reset` ignores events until the window is adopted, then subscribes after its snapshot; generation changes; restart persistence, saves per page and per 50 live events, a failed save keeping the cursor dirty; numbers beyond 2^53 or not finite refused; redelivery after a lost save deduplicated by cursor; a failed or damaged read never overwritten and never subscribing from 0, retried on reconnect; credential cursors in one record, read once and written once per save for 1 or 40 conversations, without conversation ids |
 | Journal metadata retention (ADR 0050/0052) | `ketplus_daemon_metadata_retention_tests` | completed deletion work GC, exact indexed round-robin pending pages, malformed targets and ignored completion writes; actual 256th command/audit backlog path and clock rollback; shared age/cap row/byte bounds; cursor reopen, malformed-row fairness and orphan generation guards; actual prepared query plans; abort/ignored-write/commit rollback, busy writer and missing byte-length capability |
 | Staged attachment expiry/cancellation (ADR 0051/0054) | `ketplus_daemon_attachment_retention_tests` | actual upload-begin and explicit cancellation backlog paths, bounded candidates across 100k other-revision chunks, invalid-input side effects, manifest/chunk row and byte budgets, retirement/reopen/ID reuse, current/unknown parent protection, revision/generation isolation, actual prepared query plans, ignored/aborted writes, commit rollback and busy/capability deferral |
 | Global payload GC (ADR 0048) | `ketplus_daemon_garbage_collection_tests` | Qt reopen/256th-command raw-backlog regression; actual indexed query plans and same-item replay backlog; metadata/chunk work and byte budgets; shared/generation fences, cursor restart/wrap, unsupported rows; abort/ignored-write/commit rollback; busy writer and WAL reader |
@@ -486,6 +487,19 @@ unready provider's tooltip names it. No provider or real team is started.
 The [layout verification record](evidence/new-team-dialog-layout.md) retains the
 full Pro matrix results, initial failures, one isolated retry and platform skips.
 
+## Team page live updates
+
+`ketplus_team_page_refresh_tests` drives the team page and the task dialog with
+`team.changed` from a fake daemon. It counts how often each page section and the
+dialog's details are built and how many `team.get` and `team.task.get` requests
+go out: a change of another team, another task or a member's activity builds
+nothing in the dialog, a burst of changes builds each section once, and a section
+is built again only for its own data. It also checks the scroll position, focus,
+current task and an open task dialog across changes, the theme and every zoom step,
+that building makes no top-level window, and that the directory form of a team
+already read changes nothing. Run it with `ketplus_team_page_tests` after changing
+`apps/desktop/src/teams`.
+
 ## Minimum verification
 
 Linux Pro packaging changes run `tests/packaging/test_linux_desktop_packages.py`,
@@ -598,6 +612,10 @@ No network, account or provider is used.
 
 The worktree-context lane is isolated: `ketplus_daemon_worktree_context_tests`
 uses temporary repositories/journals and a fake Codex process;
+`ketplus_daemon_worktree_activity_tests` uses the same kind of fixture with a git wrapper
+first on `PATH` to show that a tool call's worktree activity runs no git process, that
+adding or removing a linked worktree is seen on the next tool call, and that a local
+`session.worktrees` waits for its git off the daemon thread (POSIX only);
 `ketplus_daemon_context_relay_tests` uses production relay encryption/serialization
 against in-memory and private loopback relay fixtures, with in-memory credentials. It never
 attaches to the user's running daemon or relay. Do not install/restart the app or
@@ -1696,7 +1714,7 @@ running daemon.
 
 ### WebRTC host phase 3
 
-Build `ketplus_daemon_peer_transport_tests`, `ketplus_daemon_relay_peer_link_tests`, `ketplus_peer_link_tests`, `ketplus_daemon_relay_wakeups_tests`,
+Build `ketplus_daemon_peer_transport_tests`, `ketplus_daemon_push_signal_tests`, `ketplus_daemon_relay_peer_link_tests`, `ketplus_peer_link_tests`, `ketplus_daemon_relay_wakeups_tests`,
 `ketplus_daemon_cloud_privacy_tests`, `ketplus_cloud_trust_lifecycle_tests`,
 `ketplus_sender_key_cache_tests` and
 `ketplus_daemon_context_relay_tests` in a
@@ -1705,6 +1723,7 @@ SDP, in-memory credentials, temporary SQLite and a fake provider that is never
 started. It covers transfer caps/order/expiry, strict send priority, grants,
 revocation, supersede/epochs, subscriptions, cloud-safe encryption and the same
 command retried over both paths. No user daemon or provider account is accessed.
+`ketplus_daemon_push_signal_tests` covers the notices without a network.
 `ketplus_daemon_relay_peer_link_tests` needs no network: the relay frame envelope, the 4 KiB
 client and 64 KiB host caps, page trimming, `gap` on a full live queue and for an oversized event,
 `session.reset`, links closed by refused frames, drops, socket loss and revocation, and expiry

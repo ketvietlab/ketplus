@@ -63,8 +63,19 @@ the name in its own heartbeat yet:
   state for its enrollment, so a restart does not upload the backlog before the next answer.
 - When an answer no longer lists it, the daemon moves each session's upload cursor to the journal
   head at that moment and uploads only events journaled afterwards. Events journaled while
-  forward-only are never uploaded and stay in the journal; retention resumes with the next
-  acknowledged upload. A late answer to an earlier upload never moves the cursor back.
+  forward-only are never uploaded. Those still within the paging window stay in the journal
+  (below); the upload acknowledgement moves no further until the next acknowledged upload. A late
+  answer to an earlier upload never moves the cursor back.
+- Without uploads there is nothing to wait for, so the journal does not grow without bound while
+  the name stays listed. The daemon treats each session's events older than the last 2,000 as
+  delivered, in steps of 64 events, because a client further behind than that receives
+  `session.reset` and loads the newest window (see Resume and retry), so none needs them. A
+  journaled event settles only its own session, from the cursor it carries and without reading the
+  journal; each heartbeat answer settles every session once. They then go through ordinary
+  acknowledged-event retention, which removes them in bounded passes.
+  A client that has not acknowledged an event keeps it: retention still stops at the slowest
+  client, however far behind. Listing the name, withdrawing it and listing it again does not make
+  the journal larger than that window plus what the clients have not acknowledged.
 
 The desktop offers first-turn attachments only when the target daemon and relay both
 advertise `session.prepare/1`. Preparation and its cancellation use the encrypted
@@ -301,6 +312,38 @@ carries no marker; the phone hides that call by its tool name once it fetches th
   - Each result is sealed for its delivery: `attempt` is 0 on WebRTC, and the lease attempt through
     the mailbox, as today.
 
+## Desktop event feed
+
+`RelayEventFeed` and `frames::decode`/`encode*` (`modules/remote/src/control`) are the desktop's
+side of the event frames. They own no socket: the caller sends what they return.
+
+- Outgoing `subscribe` and `unsubscribe` frames stay under 4 KiB. A received frame over 64 KiB, with
+  an unknown type, a missing, fractional or out-of-range number (cursors and generations stay within
+  2^53, the exact range of a JSON number), cursors that do not increase, more than 100
+  events or events of two generations is refused whole; the error names the reason, never event
+  content, and no cursor changes.
+- Cursors persist through `EventCursorStore`, which a local encrypted cache can implement; the
+  desktop has no such event cache yet, so `CredentialEventCursors` keeps them in the encrypted credential store, in one record keyed by a
+  digest of the conversation id and generation, so the store lists no conversation ids. Store use
+  is batched: the record is read once when the feed opens, whatever the number of followed
+  conversations, and each save is one write for every cursor that changed. A cursor is saved after
+  each `events` page and after every 50 live `event` frames; closing the feed saves the rest.
+  A new connection subscribes after each stored cursor.
+  When the record cannot be read (a failed read, or a damaged record), nothing is written over it
+  and a conversation without a readable cursor is followed in memory but not subscribed, because
+  subscribing from 0 would replay its history; the next connection or `retryStored()` reads the
+  store again.
+- Quitting between two saves can redeliver up to 49 live events. The integrator keeps events by
+  cursor and drops one it already has, so a redelivered event changes nothing.
+- Each event is delivered once and in order. An event at or below the cursor (late or repeated) is
+  dropped, and the cursor never moves back, except when a reload adopts a window.
+- `gap` and `frames.dropped` subscribe again after the cursor reached so far (`frames.dropped`
+  for every followed conversation, or only the one it names).
+- `session.reset` starts a reload: events, gaps and drops of that conversation are ignored, and a
+  reconnect does not subscribe it, until the caller reads the newest window and adopts its snapshot
+  cursor; the feed then subscribes after it. A reset of an older generation is ignored, and frames
+  of another generation than the one followed are dropped.
+
 ## Relay path
 
 Commands, wake-ups and restore requests keep the existing Control v2 API. Clients without
@@ -323,6 +366,9 @@ socket.
 The names are proposals for phases 3 and 4. The host gets `apps/daemon/src/transport/`, which does
 not depend on Control v2 HTTP internals:
 
+- **`PushSignals`**: with `events.forward_only/1`, the host sends a content-free notice for each
+  event that warrants a phone notification, keeps only a small number waiting, and drops them
+  when the socket stays down.
 - **`PeerLink`**: sends frames on a channel, reports buffered amounts, and signals received frames
   and closure. `WebRtcPeerLink` wraps libdatachannel's `rtc::PeerConnection`. `RelayPeerLink`
   carries the same frames over the relay socket.

@@ -63,11 +63,16 @@ void CloudControlClient::initializePeerTransport() {
             return;
         signaling_->receive(message);
     });
+    pushSignals_ = new transport::PushSignals(
+        [this](const QJsonObject& message) { return wakeups_.send(message); },
+        [this] { return signaling_->forwardOnlyActive(); }, this);
     signaling_->setRelaySender(
         [this](const QJsonObject& message) { return wakeups_.send(message); });
     connect(&wakeups_, &RelayWakeups::openChanged, this, [this](bool open) {
         if (!open)
             signaling_->relayLost();
+        if (open)
+            pushSignals_->flush();
         if (open && relayOpened_)
             relayOpened_();
     });
@@ -112,6 +117,9 @@ void CloudControlClient::negotiatePeerTransport(const QJsonValue& heartbeat) {
     signaling_->setForwardOnly(capabilities.contains("events.forward_only/1"));
     runnerRelayAvailable_ = capabilities.contains("runner.relay/1");
     followEventsForwardOnly(capabilities.contains("events.forward_only/1"));
+    // Whole pass over every session, once per answer; each journaled event releases its own.
+    if (eventsForwardOnly())
+        releaseForwardOnlyRetention();
 }
 
 QJsonObject CloudControlClient::sealEvent(const QJsonObject& event, const QString& sessionId,
@@ -151,7 +159,7 @@ transport::EventPage CloudControlClient::peerEvents(const QString& sessionId, qi
     const auto selected = journal_->sessionHead(sessionId);
     if (selected.generation == 0 || selected.generation != generation ||
         refusedSessions_.contains(sessionId) || cursor > selected.cursor ||
-        selected.cursor - cursor > 2000) {
+        selected.cursor - cursor > peerEventWindow) {
         page.reset = true;
         page.generation = selected.generation == 0 ? generation : selected.generation;
         return page;
