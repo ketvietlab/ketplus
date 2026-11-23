@@ -139,6 +139,9 @@ CloudControlClient::CloudControlClient(LocalJournal* journal, SessionHost* host,
     connect(host_, &SessionHost::eventReady, this, [this](const QJsonObject& event) {
         peers_->eventsChanged(event.value("session_id").toString());
         pushSignals_->note(event);
+        noteForwardOnlyEvent(event.value("session_id").toString(),
+                             event.value("session_generation").toInteger(),
+                             event.value("cursor").toInteger());
         QTimer::singleShot(0, this, &CloudControlClient::uploadEvents);
         // Phones read a conversation's state from the heartbeat. A turn that starts or ends
         // must not wait up to 15s for the next one, or they keep showing it as it was.

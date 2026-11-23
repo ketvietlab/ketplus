@@ -69,8 +69,10 @@ the name in its own heartbeat yet:
 - Without uploads there is nothing to wait for, so the journal does not grow without bound while
   the name stays listed. The daemon treats each session's events older than the last 2,000 as
   delivered, in steps of 64 events, because a client further behind than that receives
-  `session.reset` and loads the newest window (see Resume and retry), so none needs them. They then
-  go through ordinary acknowledged-event retention, which removes them in bounded passes.
+  `session.reset` and loads the newest window (see Resume and retry), so none needs them. A
+  journaled event settles only its own session, from the cursor it carries and without reading the
+  journal; each heartbeat answer settles every session once. They then go through ordinary
+  acknowledged-event retention, which removes them in bounded passes.
   A client that has not acknowledged an event keeps it: retention still stops at the slowest
   client, however far behind. Listing the name, withdrawing it and listing it again does not make
   the journal larger than that window plus what the clients have not acknowledged.

@@ -162,8 +162,12 @@ class CloudControlClient final : public QObject {
     bool advanceUploadCursorsToHead();
     // While forward-only, nothing is acknowledged by uploads, so the events journaled beyond what
     // a peer can still page (peerEventWindow) are released for retention. Clients that have not
-    // acknowledged them keep them: retention still stops at the slowest client.
+    // acknowledged them keep them: retention still stops at the slowest client. A journaled event
+    // releases only its own session, from the cursor the event carries and without reading the
+    // journal; a whole pass over every session runs only with each heartbeat answer.
+    void noteForwardOnlyEvent(const QString& sessionId, qint64 generation, qint64 cursor);
     void releaseForwardOnlyRetention();
+    bool releaseSessionRetention(const QString& sessionId, qint64 generation, qint64 head);
     void uploadSessionEvents(const QString& sessionId, qint64 generation, qint64 afterCursor);
     // A deleted generation's history awaits purge but must never leave the machine (ADR 0093).
     [[nodiscard]] bool isLiveGeneration(const QString& sessionId, qint64 generation) const;

@@ -86,10 +86,10 @@ struct Context {
         return cursors;
     }
     // Events still journaled after `cursor`, counted page by page (a read returns at most 500).
-    qint64 journaledAfter(qint64 cursor = 0) {
+    qint64 journaledAfter(qint64 cursor = 0, const QString& session = "session-synthetic") {
         qint64 count = 0;
         for (;;) {
-            const QJsonArray page = journal.eventsAfter("session-synthetic", 1, cursor);
+            const QJsonArray page = journal.eventsAfter(session, 1, cursor);
             if (page.isEmpty())
                 return count;
             count += page.size();
@@ -97,12 +97,15 @@ struct Context {
         }
     }
     qint64 journaled() { return journaledAfter(0); }
-    // Appends `count` events in batches, running the upload pass after each as every journaled
-    // event does.
+    // Appends `count` events, announcing each as the host does, and runs the upload pass after
+    // every batch.
     qint64 appendRunning(int count, int batch = 25) {
         qint64 head = 0;
         for (int done = 0; done < count; done += batch) {
-            head = append(qMin(batch, count - done));
+            for (int i = 0; i < qMin(batch, count - done); ++i) {
+                head = append();
+                Access::noteEvent(*client, head);
+            }
             Access::uploadAll(*client);
         }
         return head;
@@ -374,32 +377,46 @@ class ForwardOnlyUploadTest final : public QObject {
         QVERIFY2(c.journaled() <= bound + 1, qPrintable(QString::number(c.journaled())));
     }
 
-    // Releasing retention touches neither the credential store nor idle sessions: only a session
-    // that moved a whole step gets one journal acknowledgement, and the pass reads nothing.
-    void releasingRetentionIsLightOnTheMainThread() {
+    // A journaled event releases retention for its own session only, from the cursor it carries:
+    // no credential is read or written, and other sessions are left to the heartbeat answer's pass.
+    void anEventReleasesOnlyItsOwnSessionAndTouchesNoCredentials() {
         QTemporaryDir dir;
         Context c(dir.filePath("light.sqlite"));
-        for (const QString id : {"session-second", "session-third"})
-            QVERIFY(c.journal.upsertSession(
-                {id, "synthetic-worktree", "codex", "thread-" + id, {}, "ready", 1, 0, 1}));
+        QVERIFY(c.journal.upsertSession({"session-second",
+                                         "synthetic-worktree",
+                                         "codex",
+                                         "thread-second",
+                                         {},
+                                         "ready",
+                                         1,
+                                         0,
+                                         1}));
         c.start();
         c.answer(true);
-        for (const QString id : {"session-second", "session-third"}) {
-            QString error;
-            for (int i = 0; i < 3; ++i)
-                QVERIFY2(c.journal.appendEvent(id, 1, "user.message", {{"text", id}}, &error) > 0,
-                         qPrintable(error));
-        }
+        // A second session holds a long backlog; its events are not announced, as if idle.
+        QString error;
+        for (int i = 0; i < 2400; ++i)
+            QVERIFY2(c.journal.appendEvent("session-second", 1, "user.message", {{"text", "x"}},
+                                           &error) > 0,
+                     qPrintable(error));
+        QVERIFY(c.journal.acknowledgeCursor("cloud-control-v2", "session-second", 1, 0));
         r03::reads.clear();
         const int rewrites = r03::rewrites;
         c.appendRunning(2400);
         QCOMPARE(r03::rewrites, rewrites);
         for (const QString& account : std::as_const(r03::reads))
             QVERIFY2(!account.startsWith("uploaded-cursor-"), qPrintable(account));
-        // Idle sessions are never acknowledged: their cursors are still only what they hold.
-        QCOMPARE(c.journal.eventsAfter("session-second", 1, 0).size(), 3);
-        QCOMPARE(c.journal.eventsAfter("session-third", 1, 0).size(), 3);
         QVERIFY(c.journaled() <= bound);
+        // The other session was not scanned by those events: every one of its events is still
+        // there until a heartbeat answer runs the pass over every session.
+        QCOMPARE(c.journaledAfter(0, "session-second"), 2400);
+        c.answer(true);
+        for (int pass = 0; pass < 40 && c.journaledAfter(0, "session-second") > bound; ++pass)
+            QVERIFY(c.journal.pruneAcknowledgedEvents());
+        QVERIFY2(c.journaledAfter(0, "session-second") <= bound,
+                 qPrintable(QString::number(c.journaledAfter(0, "session-second"))));
+        QCOMPARE(c.journaledAfter(2400 - CloudControlClient::peerEventWindow, "session-second"),
+                 CloudControlClient::peerEventWindow);
     }
 
     void aChunkDoesNotReadTheCredentialStore() {
