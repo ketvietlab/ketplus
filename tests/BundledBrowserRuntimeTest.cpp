@@ -307,7 +307,7 @@ class BundledBrowserRuntimeTest final : public QObject {
         QVERIFY(!text.contains(QStringLiteral("/other/")));
     }
 
-    void bundledSkillInstructionsFollowClaudeTeamRole() {
+    void bundledSkillInstructionsFollowTeamRole() {
         using ketplus::agent_skills::BundledSkill;
         using ketplus::agent_skills::defaultSkillInstructions;
         const QList<BundledSkill> skills{
@@ -318,8 +318,9 @@ class BundledBrowserRuntimeTest final : public QObject {
         for (const QStringView role : {QStringView{}, QStringView(u"leader"),
                                        QStringView(u"developer"), QStringView(u"reviewer")}) {
             const QString instructions = defaultSkillInstructions(skills, role);
-            QVERIFY(instructions.contains(QStringLiteral("/fixture/atlas/SKILL.md")));
             const bool expectUi = role.isEmpty() || role == u"leader";
+            QCOMPARE(instructions.contains(QStringLiteral("/fixture/atlas/SKILL.md")), expectUi);
+            QCOMPARE(instructions.isEmpty(), !expectUi);
             QCOMPARE(instructions.contains(QStringLiteral("enterprise-grade")), expectUi);
             QCOMPARE(instructions.contains(QStringLiteral("ket-design-system")), expectUi);
             QCOMPARE(instructions.contains(QStringLiteral("/fixture/enterprise/SKILL.md")),

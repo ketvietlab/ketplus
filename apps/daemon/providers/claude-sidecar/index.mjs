@@ -24,11 +24,10 @@ const skippedSkillDirectories = new Set([
 ]);
 const maxSkillScanDepth = 8;
 const maxSkillScanDirectories = 4096;
+const projectSkillCache = new Map();
 
-async function teamSkillNames(cwd, role) {
-  const names = new Set(["ketplusdev", "ketvietdev", "ketplus-browser"]);
-  if (role === "leader") for (const name of leaderSkills) names.add(name);
-  // The SDK accepts names only, so reserved names must also be filtered at discovery.
+async function scanProjectSkillNames(cwd) {
+  const names = new Set();
   const pending = [{ directory: cwd, depth: 0 }];
   for (let index = 0; index < pending.length; index++) {
     const { directory, depth } = pending[index];
@@ -38,7 +37,6 @@ async function teamSkillNames(cwd, role) {
       const skills = path.join(directory, ".claude", "skills");
       const candidates = await readdir(skills).catch(() => []);
       for (const name of candidates.sort()) {
-        if (role !== "leader" && leaderSkills.includes(name)) continue;
         const skill = await stat(path.join(skills, name, "SKILL.md")).catch(() => undefined);
         if (skill?.isFile()) names.add(name);
       }
@@ -53,6 +51,18 @@ async function teamSkillNames(cwd, role) {
     }
   }
   return [...names];
+}
+
+async function teamSkillNames(cwd, role) {
+  if (!projectSkillCache.has(cwd)) projectSkillCache.set(cwd, scanProjectSkillNames(cwd));
+  const projectNames = await projectSkillCache.get(cwd);
+  const names = ["ketplusdev", "ketvietdev", "ketplus-browser"];
+  if (role === "leader") names.push(...leaderSkills);
+  // The SDK accepts names only, so project names must obey the same role policy.
+  for (const name of projectNames) {
+    if (role === "leader" || !leaderSkills.includes(name)) names.push(name);
+  }
+  return [...new Set(names)];
 }
 
 function permissionMode(profile) {

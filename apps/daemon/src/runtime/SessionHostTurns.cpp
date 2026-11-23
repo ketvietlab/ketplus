@@ -89,6 +89,10 @@ QJsonArray SessionHost::imagePaths(const QJsonArray& input) {
 // ADR 0027: Codex receives the agent tools as per-thread config beside the compact window, with
 // its routing in developerInstructions (the browser policy is appended after it).
 void SessionHost::addCodexAgentTools(Session& session, QJsonObject& params, QJsonObject config) {
+    const QString teamRole =
+        teamMembership(session.stored.id).value(QStringLiteral("role")).toString();
+    if (!teamRole.isEmpty())
+        params.insert(QStringLiteral("teamRole"), teamRole);
     if (const auto launch = agentLaunch(session.stored.id, session.stored.generation)) {
         if (!launch->transportEpoch.isEmpty()) {
             params.insert("managedSessionId", session.stored.id);
@@ -341,6 +345,9 @@ void SessionHost::beginAcpTurn(const QString& sessionId, const qint64 generation
         params.insert(QStringLiteral("managedTransportEpoch"), launch->transportEpoch);
         params.insert(QStringLiteral("agentInstructions"), agentInstructions(*it));
     }
+    const QString teamRole = teamMembership(sessionId).value(QStringLiteral("role")).toString();
+    if (!teamRole.isEmpty())
+        params.insert(QStringLiteral("teamRole"), teamRole);
     target->call(
         QStringLiteral("turn/start"), params,
         [this, sessionId, generation, epoch = params.value("managedTransportEpoch").toString()](

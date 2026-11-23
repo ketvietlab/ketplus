@@ -33,6 +33,16 @@ test("sidecar supplies host MCP servers on resume and scopes auto-approval to in
   // Preserve T-4 discovery for a workspace that links its Claude settings.
   await fs.rename(path.join(root, ".claude"), path.join(root, ".linked-claude"));
   await fs.symlink(path.join(root, ".linked-claude"), path.join(root, ".claude"), "junction");
+  // Fill the directory budget with shallow entries before a nested candidate.
+  const budgetRoot = path.join(root, "budget");
+  await fs.mkdir(budgetRoot);
+  for (let offset = 0; offset < 4095; offset += 128) {
+    await Promise.all(Array.from({ length: Math.min(128, 4095 - offset) }, (_, index) =>
+      fs.mkdir(path.join(budgetRoot, String(offset + index).padStart(4, "0")))));
+  }
+  const beyondBudget = path.join(budgetRoot, "zz-over-budget", ".claude", "skills", "ignored-budget");
+  await fs.mkdir(beyondBudget, { recursive: true });
+  await fs.writeFile(path.join(beyondBudget, "SKILL.md"), "---\nname: ignored-budget\n---\n");
   const sdk = path.join(root, "node_modules/@anthropic-ai/claude-agent-sdk");
   await fs.mkdir(sdk, { recursive: true });
   await fs.writeFile(path.join(sdk, "package.json"), JSON.stringify({ type: "module", exports: "./index.mjs" }));
@@ -74,15 +84,16 @@ test("sidecar supplies host MCP servers on resume and scopes auto-approval to in
     { id: 2, browser: false, computer: false, teamRole: "leader" },
     { id: 3, browser: false, computer: true, teamRole: "reviewer" },
     { id: 4, browser: false, computer: false, teamRole: "developer" },
+    { id: 5, browser: false, computer: false, teamRole: "leader", cwd: budgetRoot },
   ];
-  for (const { id, browser: enabled, computer, teamRole } of cases) {
+  for (const { id, browser: enabled, computer, teamRole, cwd = root } of cases) {
     const mcpServers = {
       ...(enabled ? { ketplus_browser: server } : {}),
       ...(computer ? { ketplus_computer: computerServer } : {}),
     };
     send({ id, method: "turn/start", params: {
       sessionId: "session-1", prompt: "Inspect", resume: "thread-1", permission: "workspace-write",
-      mcpServers, teamRole, cwd: root,
+      mcpServers, teamRole, cwd,
       browserInstructions: enabled ? "Use ketplus_browser." : "KetPlus browser is unavailable; do not fall back.",
     } });
     const approvals = [];
@@ -109,7 +120,7 @@ test("sidecar supplies host MCP servers on resume and scopes auto-approval to in
     assert.deepEqual(answer.skills, teamRole ? [
       ...teamSkills,
       ...(teamRole === "leader" ? ["enterprise-grade", "ket-design-system"] : []),
-      "project-build", "browser-project",
+      ...(cwd === root ? ["project-build", "browser-project"] : []),
     ] : undefined);
     assert.equal(answer.settingSources, undefined);
     assert.equal(answer.plugins, undefined);
@@ -121,6 +132,11 @@ test("sidecar supplies host MCP servers on resume and scopes auto-approval to in
     assert.equal(answer.similar.behavior, "deny");
     assert.equal(answer.computer.behavior, computer ? "allow" : "deny");
     assert.equal(approvals.length, 2 + (enabled ? 0 : 1) + (computer ? 0 : 1));
+    if (id === 2) {
+      const uncached = path.join(root, ".linked-claude", "skills", "added-after-scan");
+      await fs.mkdir(uncached);
+      await fs.writeFile(path.join(uncached, "SKILL.md"), "---\nname: added-after-scan\n---\n");
+    }
   }
   assert.equal(stderr, "");
 });

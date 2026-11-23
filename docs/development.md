@@ -324,11 +324,15 @@ trees named `node_modules`, output directories named `build` or starting with
 `DerivedData`, or `venv`. It visits directories breadth-first up to eight levels
 below the root and checks at most 4,096 workspace directories, including the
 root. It skips symlinked subdirectories and supports a linked `.claude` at the
-workspace root. Only Claude Team leaders receive `enterprise-grade` and
-`ket-design-system` in either the SDK allowlist or bundled skill instructions.
-Atlas guidance remains available to all roles.
-Atlas guidance and the bundled browser instructions are also available
-through the KetPlus instructions, which reference their skill files directly.
+workspace root. The sidecar caches project skill names by working directory
+for the life of the process. A new sidecar process picks up changes to the
+workspace's skill directories.
+
+Only Claude Team leaders receive `enterprise-grade` and `ket-design-system`
+in the SDK allowlist. Across providers, the host includes bundled default skill
+instructions for leaders and ordinary conversations.
+The bundled browser instructions remain available and reference the browser
+skill file directly.
 Ordinary conversations retain default discovery.
 
 The SDK may still advertise filtered skills in its slash-command inventory.
