@@ -631,14 +631,25 @@ class PeerTransportTest final : public QObject {
         Access::heartbeatAnswer(
             cloud, {{"compatibility",
                      QJsonObject{{"capabilities", QJsonArray{"events.forward_only/1"}}}}});
+        QVERIFY(Access::eventsForwardOnly(cloud));
+        // The answer reconfigures signaling from the enrollment, which the test has none of.
+        signaling.configure("workspace-synthetic", "machine-synthetic", 1, true);
+        signaling.setForwardOnly(true);
         QVERIFY(signaling.forwardOnlyActive());
-        signaling.receive({{"type", "frame"},
-                           {"deviceId", "device"},
-                           {"frame", QJsonObject{{"type", "subscribe"},
-                                                 {"sessionId", "session"},
-                                                 {"sessionGeneration", 1},
-                                                 {"afterCursor", 0}}}});
-        QTRY_VERIFY_WITH_TIMEOUT(peers.size() == 1, 3000);
+        const QJsonObject subscribe{{"type", "frame"},
+                                    {"deviceId", "device"},
+                                    {"frame", QJsonObject{{"type", "subscribe"},
+                                                          {"sessionId", "session"},
+                                                          {"sessionGeneration", 1},
+                                                          {"afterCursor", 0}}}};
+        network.statusForPath.insert("/v2/devices", 200);
+        network.responseForPath.insert(
+            "/v2/devices",
+            QJsonDocument(
+                QJsonArray{QJsonObject{
+                    {"id", "device"}, {"keyVersion", 1}, {"status", "active"}, {"keys", keys}}})
+                .toJson());
+        QTRY_VERIFY_WITH_TIMEOUT((signaling.receive(subscribe), peers.size() == 1), 3000);
         frames = QJsonArray{};
 
         QString error;
@@ -658,11 +669,21 @@ class PeerTransportTest final : public QObject {
             return count;
         };
         QCOMPARE(appends(), 0);
-        QVERIFY(!frames.isEmpty()); // the event reached the subscriber as a frame
+        // The event reaches the subscriber as a frame (live, or in a page).
+        QTRY_VERIFY_WITH_TIMEOUT(
+            std::any_of(
+                frames.cbegin(), frames.cend(),
+                [](const QJsonValue& value) {
+                    const auto inner = value.toObject().value("frame").toObject();
+                    return inner.value("type") == "events" &&
+                           !inner.value("page").toObject().value("events").toArray().isEmpty();
+                }),
+            3000);
         QCOMPARE(Access::pushSignals(cloud).pending(), 1); // and a content-free notice waits
 
         Access::heartbeatAnswer(cloud,
                                 {{"compatibility", QJsonObject{{"capabilities", QJsonArray{}}}}});
+        QVERIFY(!Access::eventsForwardOnly(cloud));
         QVERIFY(!signaling.forwardOnlyActive());
         const qint64 second =
             journal.appendEvent("session", 1, "turn.completed", {{"text", "synthetic"}}, &error);
