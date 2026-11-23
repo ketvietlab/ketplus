@@ -311,6 +311,14 @@ socket.
 The names are proposals for phases 3 and 4. The host gets `apps/daemon/src/transport/`, which does
 not depend on Control v2 HTTP internals:
 
+- **`PushSignals`** (daemon behaviour): while events are forwarded instead of uploaded, the host
+  sends a content-free notice when an event of kind `turn.completed`, `runtime.error`,
+  `turn.failed`, `approval.requested` or `question.requested` is appended. The notice is one JSON
+  message with exactly five keys: `type` (`push.signal`), `sessionId`, `routingId` (the session's
+  `processInstanceId`, which equals its id), `kind` and an integer `cursor`. It has no text,
+  ciphertext, title or tool name. Delivery is best effort: at most 64 notices wait for the socket
+  (a new one replaces the oldest), a notice older than 10 minutes is dropped, nothing waits on the
+  daemon thread, and the answer to a notice is ignored. Nothing is sent while events are uploaded.
 - **`PeerLink`**: sends frames on a channel, reports buffered amounts, and signals received frames
   and closure. `WebRtcPeerLink` wraps libdatachannel's `rtc::PeerConnection`. `RelayPeerLink`
   carries the same frames over the relay socket.

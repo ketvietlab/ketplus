@@ -3,6 +3,7 @@
 set(KETPLUS_DAEMON_CORE_SOURCES
     src/agents/AgentMutationOrigin.cpp
     src/cloud/CloudControlTransport.cpp
+    src/transport/PushSignals.cpp
     src/transport/RelayPeerLink.cpp
     src/transport/RemotePeers.cpp
     src/transport/Signaling.cpp
