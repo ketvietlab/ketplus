@@ -315,6 +315,26 @@ The sidecar pins Claude Agent SDK 0.3.322 in both package metadata and the lockf
 The model picker uses the SDK's live model catalog, including Sonnet 5.5; changing
 only a UI label does not upgrade the provider runtime.
 
+Claude Team queries pass a names-only `skills` allowlist to the SDK. It includes
+the workspace's `.claude/skills/<name>/SKILL.md` directories, the repository
+development skills, `ketplus-browser`, and the UI design and review skills.
+Atlas guidance and the bundled browser instructions are also available
+through the KetPlus instructions, which reference their skill files directly.
+Ordinary conversations retain default discovery.
+
+The SDK may still advertise filtered skills in its slash-command inventory.
+According to the pinned SDK contract, the model-facing Skill tool rejects
+unlisted skills. Reading a skill file directly is governed by normal permissions.
+Project skills outside the workspace's `.claude/skills` directory need an
+explicit allowlisted name to appear if Claude discovers them.
+
+Keep `settingSources` at the SDK default (user, project and local) to preserve
+filesystem permission settings and memory. The `plugins` option adds local
+plugins to the launch and does not serve as a filter for discovered skills.
+Plugin hooks and other plugin capabilities remain under Claude Code settings.
+The skill allowlist is a context filter. Treat filesystem and tool permissions
+as the security boundary.
+
 ### In-app updates (macOS)
 
 Builds do not check for updates by default. Use the

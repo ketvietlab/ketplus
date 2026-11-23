@@ -9,13 +9,25 @@ import { BackgroundTasks } from "./tasks.mjs";
 import { ensureResumable } from "./resume.mjs";
 import { reviewDecision, reviewOptions, reviewProfile } from "./review-guard.mjs";
 import { backgroundDecision, backgroundOptions, teamDisallowedTools } from "./background-policy.mjs";
-import { open, readFile } from "node:fs/promises";
+import { open, readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { createInterface } from "node:readline";
 import { stdin as input, stdout, stderr } from "node:process";
 
 function emit(value) {
   stdout.write(`${JSON.stringify(redact(value))}\n`);
+}
+
+async function teamSkillNames(cwd) {
+  const builtInNames = ["ketplusdev", "ketvietdev", "ketplus-browser", "enterprise-grade", "ket-design-system"];
+  // The SDK accepts skill names, with no source selector for project skills.
+  const directory = path.join(cwd, ".claude", "skills");
+  const entries = await readdir(directory).catch(() => []);
+  const projectNames = await Promise.all(entries.sort().map(async (name) => {
+    const skill = await stat(path.join(directory, name, "SKILL.md")).catch(() => undefined);
+    return skill?.isFile() ? name : undefined;
+  }));
+  return [...new Set([...builtInNames, ...projectNames.filter(Boolean)])];
 }
 
 function permissionMode(profile) {
@@ -629,6 +641,8 @@ async function startRun(messageId, params, prompt, images) {
     run.input = new TurnInput(firstPrompt, Boolean(epoch));
     if (params.resume) await ensureResumable(params.resume, run.cwd).catch(() => false);
     const authentication = authenticationOptions(params.authentication);
+    const skills = ["leader", "developer", "reviewer"].includes(params.teamRole)
+      ? await teamSkillNames(run.cwd) : undefined;
     const teamRestrictions = teamDisallowedTools("claude", params.teamRole);
     const appended = [typeof params.browserInstructions === "string" ? params.browserInstructions : "",
       review?.instructions || ""].filter(Boolean).join("\n\n");
@@ -648,6 +662,7 @@ async function startRun(messageId, params, prompt, images) {
         // The daemon derives this from the same launch as mcpServers on every query,
         // including resume. Preserve Claude Code's system prompt and the user's input.
         ...(appended ? { systemPrompt: { type: "preset", preset: "claude_code", append: appended } } : {}),
+        ...(skills ? { skills } : {}),
         allowedTools: hostTools,
         model: params.model || "sonnet",
         // Per-launch CLI flag: do not replace the SDK's environment or model capacity.
