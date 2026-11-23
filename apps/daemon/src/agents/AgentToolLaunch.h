@@ -14,6 +14,8 @@ inline constexpr auto tokenVariable = "KETPLUS_AGENT_TOKEN";
 inline constexpr auto mutationVariable = "KETPLUS_AGENT_MUTATION_TOKEN";
 inline constexpr auto epochVariable = "KETPLUS_AGENT_TRANSPORT_EPOCH";
 
+inline constexpr auto preloadVariable = "KETPLUS_AGENT_PRELOAD_DEVELOPER_TOOLS";
+
 struct Launch final {
     QString command;
     QString socket;
@@ -23,7 +25,7 @@ struct Launch final {
 };
 
 // Claude SDK `mcpServers` entry.
-[[nodiscard]] QJsonObject claudeServer(const Launch& launch);
+[[nodiscard]] QJsonObject claudeServer(const Launch& launch, bool preloadDeveloperTools = false);
 // ACP `mcpServers` element.
 [[nodiscard]] QJsonObject acpServer(const Launch& launch);
 // Codex per-thread `config` entries. Dotted keys add this server beside the process-level ones;

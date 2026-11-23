@@ -580,6 +580,33 @@ class TeamAgentToolsTest final : public QObject {
         QVERIFY(refused.value("error_message").toString().contains("bytes"));
     }
 
+    void claudeDeveloperEagerToolsPreserveTheAdvertisedToolList() {
+        const auto list = [](bool preload) {
+            const auto response = agent_mcp::handleMessage(
+                {{"jsonrpc", "2.0"}, {"id", 1}, {"method", "tools/list"}},
+                [](const QString&, const QJsonObject&) {
+                    return QJsonObject{{"team", QJsonObject{{"role", "developer"}}}};
+                },
+                false, preload);
+            return response.value("result").toObject().value("tools").toArray();
+        };
+        const auto regular = list(false);
+        const auto eager = list(true);
+        QCOMPARE(eager.size(), regular.size());
+        QStringList eagerNames;
+        for (qsizetype i = 0; i < eager.size(); ++i) {
+            auto tool = eager.at(i).toObject();
+            const auto metadata = tool.take("_meta").toObject();
+            QVERIFY(metadata.value("anthropic/alwaysLoad").isBool());
+            if (metadata.value("anthropic/alwaysLoad").toBool())
+                eagerNames.append(tool.value("name").toString());
+            QCOMPARE(tool, regular.at(i).toObject());
+        }
+        eagerNames.sort();
+        QCOMPARE(eagerNames, (QStringList{"agents_inbox", "agents_send", "team_task_update",
+                                          "team_tasks", "team_wait", "work_report"}));
+    }
+
     void toolsAreListedOnlyForAMember() {
         const auto listWith = [](const QJsonObject& whoami) {
             const QJsonObject answer = agent_mcp::handleMessage(

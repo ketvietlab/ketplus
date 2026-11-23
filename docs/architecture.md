@@ -258,6 +258,12 @@ exemptions default to denied: only a concrete adapter can interpret its own
 trusted tool identity. Provider-specific client capability metadata and session
 mode identifiers are opt-in hooks.
 
+The daemon supplies the team role to the Claude sidecar on each turn. The
+sidecar excludes redundant native tools by role. The Claude developer launch
+includes the six frequently used agent MCP tools in the initial context through
+per-tool loading metadata. The remaining tools can still be discovered, and
+tool calls continue through the same daemon authorization checks.
+
 Managed background tools use the daemon registry (ADR 0127). The injected agent
 MCP read credential does not authorize start/stop: those operations require a
 separate, immutable per-turn capability bound to owner, generation, effective

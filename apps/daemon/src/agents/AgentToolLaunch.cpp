@@ -6,15 +6,20 @@
 
 namespace ketplus::daemon::agent_tools {
 
-QJsonObject claudeServer(const Launch& launch) {
-    return {{QStringLiteral("type"), QStringLiteral("stdio")},
-            {QStringLiteral("command"), launch.command},
-            {QStringLiteral("args"), QJsonArray{QLatin1String(mcpArgument)}},
-            {QStringLiteral("env"),
-             QJsonObject{{QLatin1String(socketVariable), launch.socket},
-                         {QLatin1String(tokenVariable), launch.token},
-                         {QLatin1String(mutationVariable), launch.mutationCredential},
-                         {QLatin1String(epochVariable), launch.transportEpoch}}}};
+QJsonObject claudeServer(const Launch& launch, bool preloadDeveloperTools) {
+    QJsonObject env{{QLatin1String(socketVariable), launch.socket},
+                    {QLatin1String(tokenVariable), launch.token},
+                    {QLatin1String(mutationVariable), launch.mutationCredential},
+                    {QLatin1String(epochVariable), launch.transportEpoch}};
+    QJsonObject server{{QStringLiteral("type"), QStringLiteral("stdio")},
+                       {QStringLiteral("command"), launch.command},
+                       {QStringLiteral("args"), QJsonArray{QLatin1String(mcpArgument)}}};
+    if (preloadDeveloperTools) {
+        server.insert(QStringLiteral("alwaysLoad"), true);
+        env.insert(QLatin1String(preloadVariable), QStringLiteral("1"));
+    }
+    server.insert(QStringLiteral("env"), env);
+    return server;
 }
 
 QJsonObject acpServer(const Launch& launch) {
