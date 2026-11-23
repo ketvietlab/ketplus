@@ -729,6 +729,41 @@ conversation never reaches that point.
    the question is raised again when the leader's turn ends, until it is "Start". Later re-plans are logged only, because
    only the first plan fans out to every developer at once.
 
+## Prompt-prefix reuse across providers
+
+Keep the KetPlus-controlled prefix stable within each **(provider, role)** pair.
+Put stable policy and tool definitions first, in a deterministic order. Put
+conversation identity, team name and goal, lane, worktree, task and delivery
+state after the shared material. Keep role permissions and instruction
+precedence intact. Group measurements further by model, tool configuration,
+client version and account or endpoint. Treat reuse across members as possible
+only where their rendered prefixes and provider cache scopes match. Apply the
+provider-specific evidence and measurement rules in
+[ADR 0021](0021-economic-compact-window.md#agent-cli-cache-evidence).
+
+On the audited Codex path, [`SessionHostTurns.cpp`](../../apps/daemon/src/runtime/SessionHostTurns.cpp)
+sets `developerInstructions` on `thread/start` and `thread/resume`.
+[`CodexAdapter.cpp`](../../apps/daemon/src/providers/CodexAdapter.cpp)
+adds applicable browser and response guidance before forwarding those parameters.
+This is KetPlus host guidance. Codex's repository `AGENTS.md` discovery is
+independent. Turn input carries dynamic deliveries and handoff material.
+[`SessionHostAgents.cpp`](../../apps/daemon/src/runtime/SessionHostAgents.cpp)
+and [`AgentInstructions.cpp`](../../apps/daemon/src/agents/AgentInstructions.cpp)
+show why the audited version cannot assume even two developers share the full
+host prefix. The conversation number appears near the start of the routing
+instructions, followed by team and member-specific text. Worktree instructions,
+tool definitions and provider context may introduce additional differences.
+
+A member switch uses the fresh native context and transcript handoff of
+`session.start_turn`, including on a switch back. A whole-team switch
+(`ee7db064`) schedules that same handoff for each eligible member's next turn.
+Budget for cold destination input or a cache write for each changed member,
+plus handoff processing and output. For a whole-team change, sum those costs
+over the members that actually switch. Include any destination request that
+reads the handoff transcript and use the destination payer's rates when known.
+A matching destination prefix may already be warm, so the cold estimate is a
+planning assumption. Members that keep their provider have no switch cost.
+
 ## Protocol
 
 Features `teams/1`, `teams.tasks/1`, `teams.settings/1`, `teams.storage/1` and
