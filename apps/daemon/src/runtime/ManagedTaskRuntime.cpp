@@ -353,6 +353,7 @@ void ManagedTaskRuntime::pump() {
                        live->record.value("timeout_ms").toInteger())
             stopTask(id, "timed_out");
     }
+    // Bounds the work of one pump; claims that remain eligible start on the next one.
     for (int admitted = 0; admitted < 16; ++admitted) {
         const auto reply = ledger_.claimNext();
         const auto record = reply.value("task").toObject();

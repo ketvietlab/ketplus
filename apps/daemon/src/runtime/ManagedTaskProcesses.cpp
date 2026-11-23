@@ -177,6 +177,30 @@ void ManagedTaskRuntime::observeProcess(const QString& id, const QJsonObject& ev
     live->pendingExecutorEvent = event;
     auto state = event.value("state").toString();
     auto previous = live->record.value("state").toString();
+#ifndef Q_OS_LINUX
+    if (event.value("cleanup_issue").toString() == "executor_never_started") {
+        // The client sends start only after the handshake is durably committed, so a job
+        // without that commit never launched a workload, even if it already waits for a user.
+        BackgroundTaskChange change;
+        if (!live->record.value("handshake_committed").toBool()) {
+            change.state = "failed";
+            change.reason = "handshake_failed";
+            change.errorCode = "executor_never_started";
+            change.neverLaunched = true;
+            change.cleanupStatus = "not_required";
+            change.summary = "Background task " + id + " ended with state failed.";
+        } else {
+            // A committed handshake whose receipt vanished is not evidence of anything.
+            change.state = "needs_attention";
+            change.executorStopped = false;
+            change.errorCode = "executor_receipt_unavailable";
+        }
+        if (apply(id, change))
+            live->pendingExecutorEvent = {};
+        pump();
+        return;
+    }
+#endif
     if (state == "needs_attention" || previous == "needs_attention") {
         BackgroundTaskChange attention;
 #ifdef Q_OS_LINUX

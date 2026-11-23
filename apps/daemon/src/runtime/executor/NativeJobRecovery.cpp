@@ -3,8 +3,10 @@
 #if !defined(Q_OS_WIN)
 #include "runtime/executor/LinuxJobContainment.h"
 #include "runtime/executor/NativeJobClient.h"
+#include "runtime/executor/NativeJobControlAddress.h"
 #include "runtime/executor/NativeProcessIdentity.h"
 
+#include <QFileInfo>
 #include <QJsonArray>
 #include <cerrno>
 #include <csignal>
@@ -83,6 +85,15 @@ void NativeJobClient::recoverLostSupervisor() {
         });
 #else
     const auto persisted = receipt();
+    if (persisted.isEmpty() && !QFileInfo::exists(directory_ + "/executor.json") &&
+        !QFileInfo::exists(controlAddress(directory_, lease_))) {
+        // The supervisor persists its receipt before anything else and only then listens. A
+        // workload starts only on a command over that socket, sent after the daemon committed
+        // the handshake. With neither file present the supervisor never got that far, so no
+        // workload exists. The runtime still checks the handshake before ending the job.
+        reportNeverStarted();
+        return;
+    }
     if (!persisted.isEmpty())
         lastReceipt_ = persisted;
     const auto state = lastReceipt_.value("state").toString();
@@ -125,6 +136,28 @@ void NativeJobClient::recoverLostSupervisor() {
     reportLost(knownStopped, lastReceipt_.isEmpty() ? "executor_receipt_unavailable"
                                                     : "executor_connection_lost");
 #endif
+}
+
+void NativeJobClient::reportNeverStarted() {
+    if (recoveryReported_ && recoveryIssue_ == "executor_never_started")
+        return;
+    recoveryReported_ = true;
+    recoveryStopped_ = true;
+    recoveryIssue_ = "executor_never_started";
+    lastReceipt_ = {{"task_id", taskId_},
+                    {"executor_lease_identity", lease_},
+                    {"event", "done"},
+                    {"state", "failed"},
+                    {"error", "handshake_failed"},
+                    {"cleanup_issue", recoveryIssue_},
+                    {"cleanup_status", "not_required"},
+                    {"containment_mode", "native_best_effort"},
+                    {"root_started", false},
+                    {"executor_stopped", true},
+                    {"known_processes", QJsonArray{}}};
+    finished_ = true;
+    if (event_)
+        event_(lastReceipt_);
 }
 
 void NativeJobClient::reportLost(bool stopped, const QString& issue) {
