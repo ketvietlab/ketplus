@@ -372,6 +372,11 @@ Rectangle {
                     maximumLineCount: 6
                     elide: Text.ElideRight
                 }
+                BackgroundTaskFacts {
+                    Layout.fillWidth: true
+                    task: outputPane.task
+                    taskBar: bar
+                }
                 ScrollView {
                     id: outputScroll
                     visible: outputPane.task !== undefined && (outputPane.task.kind !== "agent" || outputPane.task.schema_version !== undefined)

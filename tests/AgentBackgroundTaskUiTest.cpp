@@ -2,8 +2,10 @@
 #include "KetAppearance.h"
 #include "agent/AgentWorkspaceView.h"
 
+#include <QDateTime>
 #include <QDir>
 #include <QFont>
+#include <QQuickItem>
 #include <QQuickView>
 #include <QSignalSpy>
 #include <QtTest>
@@ -107,6 +109,70 @@ void AgentWorkspaceViewTest::managedTaskCleanupRequiresUserConfirmation() {
     QTRY_VERIFY(!retry->isEnabled());
     view.stopBackgroundTask("attention");
     QCOMPARE(stopped.count(), 1);
+}
+
+// ADR 0127: a turn that ended on a live job says so in its header, and the opened job says
+// when it was created, its timeout and that the agent continues with its result.
+void AgentWorkspaceViewTest::managedTaskWaitIsShown() {
+    ketplus::AgentWorkspaceView view;
+    view.applyTheme(testPalette());
+    view.setAgentAvailable(true);
+    view.setBackgroundTaskState(access());
+    const auto conversation = [](int attention) {
+        return QVariantMap{{"id", "owner"},
+                           {"title", "Picker check"},
+                           {"active", true},
+                           {"started", true},
+                           {"status", "Completed"},
+                           {"liveJobs", 1},
+                           {"queuedJobs", 0},
+                           {"attentionJobs", attention},
+                           {"jobTitle", "Build and verify the background worker"}};
+    };
+    view.setConversations({conversation(0)});
+    auto running = task("job", "running");
+    running.insert("created_at", QDateTime::currentMSecsSinceEpoch() - 194000);
+    running.insert("timeout_ms", 30 * 60 * 1000);
+    view.setBackgroundTasks({running});
+    auto* root = view.quickView()->rootObject();
+    auto* badge = root->findChild<QObject*>("conversationStatusBadge");
+    QVERIFY(badge);
+    QCOMPARE(badge->property("label").toString(), QStringLiteral("Waiting on job"));
+
+    view.requestBackgroundTaskOutput("job");
+    auto* facts = root->findChild<QQuickItem*>("backgroundTaskFacts");
+    QVERIFY(facts);
+    QTRY_VERIFY(facts->isVisible());
+    const auto rows = facts->property("rows").toList();
+    QStringList names;
+    for (const auto& row : rows)
+        names << row.toList().value(0).toString();
+    QCOMPARE(names, (QStringList{"Created", "Timeout", "When it ends"}));
+    QVERIFY(rows.at(0).toList().value(1).toString().startsWith(QStringLiteral("3m 1")));
+    QCOMPARE(rows.at(1).toList().value(1).toString(), QStringLiteral("30m"));
+    // KETPLUS_JOB_WAIT_CAPTURE_DIR saves the header and the opened job, to set beside
+    // KetPlusMock --screen=workspace/job-running --open=job (and job-attention).
+    const auto captures = qEnvironmentVariable("KETPLUS_JOB_WAIT_CAPTURE_DIR");
+    const auto capture = [&](const QString& name) {
+        if (captures.isEmpty())
+            return;
+        if (!view.isVisible()) {
+            view.setProductSidebarVisible(false);
+            view.resize(760, 820);
+            view.show();
+            QVERIFY(QTest::qWaitForWindowExposed(view.quickView()));
+        }
+        QTest::qWait(100);
+        QVERIFY(QDir().mkpath(captures));
+        QVERIFY(view.quickView()->grabWindow().save(captures + "/" + name + ".png"));
+    };
+    capture("job-waiting");
+
+    view.setConversations({conversation(1)});
+    view.setBackgroundTasks({task("job", "needs_attention")});
+    QCOMPARE(badge->property("label").toString(), QStringLiteral("Needs attention"));
+    QTRY_VERIFY(facts->property("rows").toList().last().toList().value(0).toString() == "Next");
+    capture("job-attention");
 }
 
 void AgentWorkspaceViewTest::managedTaskOutputFencesRequestsAndKeepsCursors() {

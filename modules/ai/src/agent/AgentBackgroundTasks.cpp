@@ -14,6 +14,11 @@ namespace {
 QString state(const QVariantMap& task) {
     return task.value("state", task.value("status")).toString();
 }
+bool live(const QVariantMap& task) {
+    static const QSet<QString> states{"queued", "starting", "running", "stopping",
+                                      "needs_attention"};
+    return states.contains(state(task));
+}
 bool terminal(const QVariantMap& task) {
     static const QSet<QString> states{"completed", "failed",    "cancelled",
                                       "stopped",   "timed_out", "interrupted"};
@@ -45,6 +50,28 @@ QVariantList merge(const QVariantList& base, const QVariantList& incoming) {
     return tasks;
 }
 } // namespace
+
+QVariantMap backgroundJobSummary(const QVariantList& tasks) {
+    int count = 0, queued = 0, attention = 0;
+    QString title;
+    for (const auto& value : tasks) {
+        const auto task = value.toMap();
+        if (!live(task))
+            continue;
+        ++count;
+        queued += state(task) == "queued";
+        const bool needsUser = state(task) == "needs_attention";
+        if (title.isEmpty() || (needsUser && attention == 0))
+            title = task.value("title").toString();
+        attention += needsUser;
+    }
+    if (count == 0)
+        return {};
+    return {{"liveJobs", count},
+            {"queuedJobs", queued},
+            {"attentionJobs", attention},
+            {"jobTitle", title}};
+}
 
 QVariantMap AgentSessionManager::backgroundTaskState(const QString& worktreePath) const {
     const auto session = sessions_.value(normalizedPath(worktreePath));

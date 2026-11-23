@@ -21,7 +21,7 @@ Loader {
         day: day, user: host.block.from ? incoming : user, steer: host.block.from ? incoming : user, queued: queued, commentary: commentary,
         answer: answer, activity: activity, changes: changes, question: question,
         approval: approval, agent: agent, event: event, reconnect: reconnect, error: error,
-        working: working, turn: turn, trimmed: note, team: team
+        working: working, turn: turn, wait: wait, trimmed: note, team: team
     })[host.block.type] || null
 
     // Both message directions use the same four-line, selectable preview.
@@ -478,6 +478,37 @@ Loader {
             iconColor: status === "failed" ? KetTheme.t.danger : status === "interrupted" ? KetTheme.t.textMuted : KetTheme.t.success
             label: status === "failed" ? "Failed" : status === "interrupted" ? "Stopped" : "Completed"
             message: host.block.text
+        }
+    }
+
+    // turn.completed while the conversation still owns a live managed job (ADR 0127 §7a):
+    // not Completed, but what the turn waits on. Show job opens the task bar's row.
+    Component {
+        id: wait
+        Row {
+            spacing: host.px(8)
+            KetIcon {
+                anchors.verticalCenter: parent.verticalCenter
+                name: host.block.mark
+                box: host.px(14)
+                color: host.block.mark === "warning" ? KetTheme.t.warning : KetTheme.t.accentText
+            }
+            Text {
+                anchors.verticalCenter: parent.verticalCenter
+                text: "<b>Turn finished</b>&nbsp;&nbsp;" + host.block.text
+                textFormat: Text.StyledText
+                color: KetTheme.t.textSecondary
+                font.family: KetTheme.fontFamily
+                font.pixelSize: host.px(13)
+            }
+            KetButton {
+                visible: !!host.block.action
+                anchors.verticalCenter: parent.verticalCenter
+                text: host.block.action || ""
+                controlSize: KetTheme.ControlSize.Small
+                variant: KetTheme.ButtonVariant.Ghost
+                onClicked: host.window.showJob()
+            }
         }
     }
 

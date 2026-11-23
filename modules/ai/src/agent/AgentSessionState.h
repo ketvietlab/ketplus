@@ -71,6 +71,9 @@ struct AgentSessionManager::Session final {
     bool backgroundTaskLoading{false};
     bool backgroundTaskRefreshAgain{false};
     int backgroundTaskCursorRetries{0};
+    // What the sidebar last heard of these jobs (backgroundJobSummary), so a change to the
+    // jobs republishes the conversation list only when its row would change.
+    QVariantMap backgroundJobSummary;
     QString pendingPrompt;
     // Pairs the locally shown prompt with its journaled user.message echo.
     QString pendingClientMessageId;
@@ -193,6 +196,11 @@ struct AgentSessionManager::Session final {
     QSet<QString> copyTurns;
     QSet<QString> copyCursors;
 };
+
+// The jobs a conversation still waits on, as its sidebar row and header word them:
+// liveJobs (queued through stopping, attention included), queuedJobs, attentionJobs and
+// jobTitle, the job the row names (one needing attention first). Empty when none is live.
+QVariantMap backgroundJobSummary(const QVariantList& tasks);
 
 // A daemon journal timestamp (UTC ISO 8601 with milliseconds) as ms since epoch, 0 if invalid.
 inline qint64 daemonTimestamp(const QString& value) {

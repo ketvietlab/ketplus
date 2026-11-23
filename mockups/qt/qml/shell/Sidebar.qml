@@ -454,6 +454,7 @@ Rectangle {
                                         text: modelData.title
                                         number: modelData.number
                                         status: sidebar.window.planStatus ? sidebar.window.planStatus(modelData.number, modelData.status) : modelData.status
+                                        job: sidebar.window.jobFor ? sidebar.window.jobFor(modelData.number) : null
                                         checked: sidebar.window.screen === "workspace"
                                                  && sidebar.window.conversation.number === modelData.number
                                         worktree: modelData.worktree

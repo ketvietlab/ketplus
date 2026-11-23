@@ -4,6 +4,7 @@
 #include "app/WaitingBadge.h"
 #include "ui/Theme.h"
 #include "workspace/ActivityBar.h"
+#include "workspace/SidebarRepositoryListDetail.h"
 #include "workspace/SymbolIcons.h"
 
 #include <QApplication>
@@ -206,6 +207,100 @@ for line in sys.stdin:
         QVERIFY(!row().value("awaitingReply").toBool());
         badge.report(&first, path, WaitingBadge::countWaiting(manager.conversations(path)));
         QCOMPARE(badge.total(), 0);
+    }
+
+    // ADR 0127: a turn that ends on a live managed job waits on it, so its row is neither
+    // done nor unread; a job whose cleanup needs the user makes the row wait on the user.
+    void waitingOnJob() {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString executable = directory.filePath("fake-codex");
+        QFile file(executable);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        file.write(R"PY(#!/usr/bin/python3
+import json, sys
+def send(value): print(json.dumps(value), flush=True)
+for line in sys.stdin:
+    request = json.loads(line)
+    method, rid = request.get("method"), request.get("id")
+    if method == "initialize": send({"id":rid,"result":{}})
+    elif method == "thread/start":
+        send({"id":rid,"result":{"thread":{"id":"job-thread","turns":[]}}})
+    elif method == "turn/start":
+        send({"id":rid,"result":{"turn":{"id":"job-turn"}}})
+        send({"method":"turn/started","params":{"threadId":"job-thread","turn":{"id":"job-turn"}}})
+        item = {"id":"note","type":"agentMessage","phase":"commentary","text":"Started a job"}
+        send({"method":"item/completed","params":{"threadId":"job-thread","turnId":"job-turn","item":item}})
+)PY");
+        file.close();
+        QVERIFY(file.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner |
+                                    QFileDevice::ExeOwner));
+        CodexAppServer server(executable);
+        AgentSessionManager manager(&server);
+        ActivityBar bar;
+        const QString path = QFileInfo(directory.path()).canonicalFilePath();
+        connect(&manager, &AgentSessionManager::conversationsChanged, &bar,
+                [&](const QString& changedPath, const QVariantList& conversations) {
+                    if (changedPath == path)
+                        bar.setRepositories({{path, "Repository", true, conversations}});
+                });
+        manager.submitPrompt(path, "Synthetic job test");
+        QTRY_COMPARE(manager.messages(path).size(), 2);
+        server.notificationReceived(
+            "turn/completed", {{"threadId", "job-thread"},
+                               {"turn", QJsonObject{{"id", "job-turn"}, {"status", "completed"}}}});
+        QTRY_VERIFY(!manager.isRunning(path));
+        const auto job = [&](const QString& state, int revision) {
+            server.notificationReceived(
+                "thread/backgroundTasks/updated",
+                {{"threadId", "job-thread"},
+                 {"tasks", QJsonArray{QJsonObject{{"task_id", "job-1"},
+                                                  {"schema_version", 1},
+                                                  {"kind", "shell"},
+                                                  {"title", "Large library check"},
+                                                  {"state", state},
+                                                  {"revision", revision}}}}});
+        };
+        const auto row = [&] { return manager.conversations(path).first().toMap(); };
+        ket::SidebarRow* icon = nullptr;
+        QTRY_VERIFY((icon = bar.findChild<ket::SidebarRow*>("productConversationButton")));
+        QCOMPARE(icon->status(), ket::ConversationStatus::Completed);
+
+        QSignalSpy changed(&manager, &AgentSessionManager::conversationsChanged);
+        job("queued", 1);
+        QCOMPARE(changed.size(), 1);
+        QCOMPARE(row().value("liveJobs").toInt(), 1);
+        QCOMPARE(row().value("queuedJobs").toInt(), 1);
+        QTRY_COMPARE(
+            (icon = bar.findChild<ket::SidebarRow*>("productConversationButton"))->status(),
+            ket::ConversationStatus::WaitingOnTask);
+        QVERIFY(icon->stateText().contains(QStringLiteral("Queued · Large library check")));
+        QVERIFY(!icon->isUnread());
+        QVERIFY(!sidebar_list::waitsForUser(row(), false));
+
+        // A projection that leaves the row as it was does not republish the list.
+        job("queued", 1);
+        QCOMPARE(changed.size(), 1);
+
+        job("running", 2);
+        QTRY_VERIFY(!(icon = bar.findChild<ket::SidebarRow*>("productConversationButton"))
+                         ->stateText()
+                         .contains(QStringLiteral("Queued")));
+        QVERIFY(icon->stateText().contains(QStringLiteral("Large library check")));
+        QCOMPARE(icon->status(), ket::ConversationStatus::WaitingOnTask);
+
+        job("needs_attention", 3);
+        QCOMPARE(row().value("attentionJobs").toInt(), 1);
+        QTRY_COMPARE(
+            (icon = bar.findChild<ket::SidebarRow*>("productConversationButton"))->status(),
+            ket::ConversationStatus::TaskNeedsAttention);
+        QVERIFY(sidebar_list::waitsForUser(row(), true));
+
+        job("completed", 4);
+        QVERIFY(!row().contains("liveJobs"));
+        QTRY_COMPARE(
+            (icon = bar.findChild<ket::SidebarRow*>("productConversationButton"))->status(),
+            ket::ConversationStatus::Completed);
     }
 
     void nativeStatusMarks() {

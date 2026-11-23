@@ -21,7 +21,7 @@ include(FetchContent)
 set(KETQT_BUILD_WIDGETS ON CACHE BOOL "" FORCE)
 FetchContent_Declare(ketqt
     GIT_REPOSITORY https://github.com/ketvietlab/ket-qt.git
-    GIT_TAG 53fbe5182ef065281b26bb22e42b187cb9b6d585 # Same revision as core/cmake/Dependencies.cmake
+    GIT_TAG 956febaaf740888cce03f9603980e66c99c25b9d # Same revision as core/cmake/Dependencies.cmake
 )
 FetchContent_MakeAvailable(ketqt)
 

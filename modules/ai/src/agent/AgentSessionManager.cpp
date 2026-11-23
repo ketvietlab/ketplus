@@ -359,7 +359,7 @@ QVariantList AgentSessionManager::conversations(const QString& worktreePath) con
         if (session->archived) {
             continue;
         }
-        const QVariantMap conversation{
+        QVariantMap conversation{
             {QStringLiteral("id"), session->id},
             {QStringLiteral("executionPath"),
              session->executionPath.isEmpty() ? session->path : session->executionPath},
@@ -389,6 +389,7 @@ QVariantList AgentSessionManager::conversations(const QString& worktreePath) con
             {QStringLiteral("listed"), session->listed || session->ownsWorktree},
             {QStringLiteral("forkable"), isForkable(session)},
             {QStringLiteral("active"), session == active}};
+        conversation.insert(session->backgroundJobSummary);
         result.append(conversation);
     }
     return result;

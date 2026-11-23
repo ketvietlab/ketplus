@@ -21,9 +21,16 @@ ket::ConversationStatus conversationStatus(const QVariantMap& conversation) {
         return Status::AwaitingReply;
     if (conversation.value(QStringLiteral("running")).toBool())
         return Status::Working;
+    // The turn ended but a job it started is live: the job needs the user, else it wakes the
+    // conversation when it ends, so the row is neither done nor the user's to answer.
+    if (conversation.value(QStringLiteral("attentionJobs")).toInt() > 0)
+        return Status::TaskNeedsAttention;
+    const bool waitsOnJob = conversation.value(QStringLiteral("liveJobs")).toInt() > 0;
     if (status.contains("fail") || status.contains("error") || status.contains("disconnect") ||
         status.contains("missing") || status.contains("not found"))
         return Status::Error;
+    if (waitsOnJob)
+        return Status::WaitingOnTask;
     if (status.contains("stop"))
         return Status::Stopped;
     return conversation.value(QStringLiteral("started")).toBool() ? Status::Completed
@@ -40,7 +47,8 @@ bool waitsForUser(const QVariantMap& conversation, const bool seen) {
     using Status = ket::ConversationStatus;
     const Status status = conversationStatus(conversation);
     return status == Status::NeedsInput || status == Status::AwaitingReply ||
-           status == Status::Error || (status == Status::Completed && !seen);
+           status == Status::Error || status == Status::TaskNeedsAttention ||
+           (status == Status::Completed && !seen);
 }
 
 } // namespace sidebar_list
@@ -57,11 +65,27 @@ QString roleOf(const QVariantMap& conversation) {
     return {};
 }
 
-// What started the running turn: "Message from #12 · Title", or a reply.
+// The job a resting turn waits on: "Queued · Title", "Title", or "Title and 2 more".
+QString jobOf(const QVariantMap& conversation) {
+    const int live = conversation.value(QStringLiteral("liveJobs")).toInt();
+    if (live == 0 || conversation.value(QStringLiteral("running")).toBool())
+        return {};
+    QString title = conversation.value(QStringLiteral("jobTitle")).toString();
+    if (title.isEmpty())
+        title = QObject::tr("Background job");
+    if (live > 1)
+        return QObject::tr("%1 and %n more", nullptr, live - 1).arg(title);
+    if (conversation.value(QStringLiteral("queuedJobs")).toInt() == 1)
+        return QObject::tr("Queued · %1").arg(title);
+    return title;
+}
+
+// What started the running turn: "Message from #12 · Title", or a reply; else the job a
+// resting turn waits on.
 QString originOf(const QVariantMap& conversation) {
     const QString sender = sidebar_list::runningAgentSender(conversation);
     if (sender.isEmpty())
-        return {};
+        return jobOf(conversation);
     const QString title = conversation.value(QStringLiteral("agentTurnTitle")).toString();
     return (conversation.value(QStringLiteral("agentTurnReply")).toBool()
                 ? QObject::tr("Reply from #%1")

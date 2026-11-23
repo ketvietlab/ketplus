@@ -20,6 +20,8 @@ Rectangle {
     property bool detailsOpen: false
     property var planRun: null
     property int status: conversation.status
+    // A live managed job the conversation owns words the badge (Main.jobFor, ADR 0127 §7a).
+    readonly property var job: window && window.jobFor ? window.jobFor(conversation.number) : null
 
     // The agent that reviews each finished turn and replies here, by conversation number.
     // A reviewer never merges. The running conversation starts with one, for the mock.
@@ -167,8 +169,8 @@ Rectangle {
         KetBadge {
             id: statusBadge
             anchors.verticalCenter: parent.verticalCenter
-            text: KetTheme.conversationStatusLabel(header.status)
-            tone: header.tone(header.status)
+            text: header.job ? header.job.label : KetTheme.conversationStatusLabel(header.status)
+            tone: header.job ? header.job.tone : header.tone(header.status)
         }
 
         KetButton {

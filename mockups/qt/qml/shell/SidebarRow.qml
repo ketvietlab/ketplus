@@ -23,11 +23,16 @@ Basic.AbstractButton {
     property string worktree
     readonly property var recipe: KetTheme.conversationRowRecipe(
         KetTheme.dark, KetTheme.zoom, checked, hovered, enabled, visualFocus)
-    readonly property var statusRecipe: KetTheme.conversationStatusRecipe(KetTheme.dark, status)
-    readonly property bool finished: status === KetTheme.ConversationStatus.Completed
-    readonly property string statusLabel: (finished && unread ? "Completed, unread"
-                                           : KetTheme.conversationStatusLabel(status))
-                                          + (detail ? " · " + detail : "")
+    // A live managed job the conversation still owns (Main.jobFor, ADR 0127 §7a): its status
+    // and words replace Completed until the job ends.
+    property var job: null
+    readonly property int shownStatus: job ? job.status : status
+    readonly property var statusRecipe: KetTheme.conversationStatusRecipe(KetTheme.dark, shownStatus)
+    readonly property bool finished: shownStatus === KetTheme.ConversationStatus.Completed
+    readonly property string statusLabel: job ? job.hint
+                                          : (finished && unread ? "Completed, unread"
+                                             : KetTheme.conversationStatusLabel(status))
+                                            + (detail ? " · " + detail : "")
     // Everything the row does not draw, one fact a line.
     readonly property string hint: [role, statusLabel, worktree]
                                    .filter(line => line !== "").join("\n")

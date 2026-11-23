@@ -49,6 +49,27 @@ QtObject {
     readonly property var releaseTeam: Fixtures.teams[0]
     function releaseTask(id) { return releaseTeam.tasks.find(task => task.id === id) }
 
+    // ADR 0127 §7a: a turn that ends on a managed job its conversation still owns
+    // (Fixtures.jobStates). Its last line says what it waits on instead of Completed.
+    function jobTurn(state) {
+        const job = Fixtures.jobStates[state]
+        const blocks = [
+            { type: "day", text: "Today" },
+            { type: "user", text: "Rebase T-3 on release/1.4, run the 200-trail picker check again and open the PR when it passes." },
+            { type: "activity", summary: "Ran 2 commands", expanded: false, steps: [
+                  { kind: "command", title: "Rebased", detail: "git rebase origin/release/1.4",
+                    command: "git rebase origin/release/1.4", output: "Successfully rebased and updated refs/heads/test/large-trail-library." },
+                  { kind: "command", title: "Started a background job", detail: Fixtures.jobTitle,
+                    command: "ctest --test-dir build -R trail_picker_large", output: "Managed job queued" }] },
+            { type: "answer", status: "", markdown: "The branch is rebased on `release/1.4`. The **200-trail picker check** runs as a background job; I will open the PR when it ends." },
+            { type: "wait", mark: job.label === "Needs attention" ? "warning" : "clock", text: job.line, action: job.action }]
+        if (state === "job-woke")
+            blocks.push({ type: "user", from: { number: "", title: "Background task · " + Fixtures.jobTitle, provider: "" },
+                          text: "Completed in 6m 40s · exit code 0" },
+                        { type: "working", text: "opening the pull request" })
+        return blocks
+    }
+
     readonly property var teamAssignment: [
         { type: "day", text: "Today" },
         { type: "team", kind: "assignment", team: releaseTeam.name, task: "T-3",
