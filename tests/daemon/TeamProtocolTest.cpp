@@ -10,6 +10,7 @@
 #include <QSet>
 #include <QSignalSpy>
 #include <QStandardPaths>
+#include <QTemporaryDir>
 #include <QTest>
 
 using namespace agent_test;
@@ -555,6 +556,117 @@ class TeamProtocolTest final : public QObject {
                 names.append(member.toObject().value("name").toString());
         QCOMPARE(names, (QStringList{"Reviewer 1", "Reviewer 2"}));
         QCOMPARE(team.value("reviews").toArray().size(), 2);
+    }
+
+    // T-4: several developers on one agent join in one change, or none does.
+    void severalDevelopersJoinInOneChange() {
+        Fixture fixture;
+        QVERIFY(fixture.open());
+        const QJsonObject team = create(fixture).value("team").toObject();
+        const QString id = team.value("id").toString();
+        const qint64 revision = team.value("revision").toInteger();
+        const int before = sessions(fixture);
+        const auto add = [&](const QJsonArray& developers, const QJsonObject& extra = {}) {
+            QJsonObject payload{{"team_id", id},
+                                {"provider", "codex"},
+                                {"model", "gpt-5"},
+                                {"effort", "high"},
+                                {"developers", developers}};
+            for (auto it = extra.constBegin(); it != extra.constEnd(); ++it)
+                payload.insert(it.key(), it.value());
+            return command(fixture, "team.member.add", payload);
+        };
+        const auto row = [](const QString& name, const QString& lane = {}) {
+            return QJsonObject{{"name", name}, {"lane", lane}};
+        };
+        // Refused before any conversation starts: a name or a lane the team has, twice the same
+        // name, more than the room left, a reviewer, or no developer at all.
+        const QList<std::pair<QJsonObject, QString>> refused{
+            {add({row("Developer 1")}), "invalid_payload"},
+            {add({row("Docs", "web")}), "invalid_payload"},
+            {add({row("Docs"), row("docs")}), "invalid_payload"},
+            {add({row("A"), row("B"), row("C"), row("D")}), "team_full"},
+            {add({row("Docs")}, {{"role", "reviewer"}}), "invalid_payload"},
+            {add({}), "invalid_payload"},
+        };
+        for (const auto& [reply, code] : refused)
+            QCOMPARE(reply.value("error_code").toString(), code);
+        QCOMPARE(refused.first().first.value("error_message").toString(),
+                 QStringLiteral("The team already has a member named Developer 1."));
+        QCOMPARE(refused.first().first.value("role").toString(), QStringLiteral("developer"));
+        QCOMPARE(add({row("A"), row("B"), row("C"), row("D")}).value("error_message").toString(),
+                 QStringLiteral("The team has room for 3 more developers."));
+        QCOMPARE(sessions(fixture), before);
+        const QJsonObject teamNow =
+            command(fixture, "team.get", {{"team_id", id}}).value("team").toObject();
+        QCOMPARE(teamNow.value("revision").toInteger(), revision);
+
+        const QJsonObject added = add({row("Developer 3", "Docs"), row("Developer 4")});
+        QVERIFY2(added.value("ok").toBool(), qPrintable(text(added)));
+        const QJsonObject changed = added.value("team").toObject();
+        QCOMPARE(changed.value("revision").toInteger(), revision + 1);
+        QCOMPARE(sessions(fixture), before + 2);
+        QHash<QString, QString> lanes;
+        for (const auto& value : changed.value("members").toArray())
+            if (value.toObject().value("role").toString() == "developer")
+                lanes.insert(value.toObject().value("name").toString(),
+                             value.toObject().value("lane").toString());
+        QCOMPARE(lanes.size(), 4);
+        QCOMPARE(lanes.value("Developer 3"), QStringLiteral("Docs"));
+        QCOMPARE(lanes.value("Developer 4"), QStringLiteral("Developer 4"));
+        for (const StoredSession& stored : fixture.journal->sessions())
+            if (stored.title == "Developer 3" || stored.title == "Developer 4") {
+                QCOMPARE(stored.adapter, QStringLiteral("codex"));
+                QCOMPARE(stored.model, QStringLiteral("gpt-5"));
+                QCOMPARE(stored.effort, QStringLiteral("high"));
+            }
+        // One update for each, in the one change.
+        const QJsonArray updates =
+            command(fixture, "team.get", {{"team_id", id}}).value("updates").toArray();
+        int joined = 0;
+        for (const auto& value : updates)
+            joined += value.toObject().value("kind").toString() == "member_added" ? 1 : 0;
+        QCOMPARE(joined, 2);
+    }
+
+    // T-4: a developer whose conversation cannot start leaves none of the others behind.
+    void developersThatCannotStartLeaveNothing() {
+        Fixture fixture;
+        QVERIFY(fixture.open());
+        // The team's repository, apart from the fixture's directory that holds the journal.
+        QTemporaryDir repository;
+        QVERIFY(repository.isValid());
+        const QJsonObject created = command(fixture, "team.create",
+                                            {{"repository", repository.path()},
+                                             {"name", "Checkout"},
+                                             {"goal", "Ship the checkout"},
+                                             {"integration_branch", "integration"},
+                                             {"merge_policy", "leader"},
+                                             {"plan", plan()}});
+        QVERIFY2(created.value("ok").toBool(), qPrintable(text(created)));
+        const QString id = created.value("team").toObject().value("id").toString();
+        const qsizetype before = fixture.journal->sessions().size();
+        QVERIFY(repository.remove());
+        const QJsonObject reply =
+            command(fixture, "team.member.add",
+                    {{"team_id", id},
+                     {"provider", "codex"},
+                     {"developers", QJsonArray{QJsonObject{{"name", "Developer 3"}},
+                                               QJsonObject{{"name", "Developer 4"}}}}});
+        QCOMPARE(reply.value("error_code").toString(), QStringLiteral("member_unavailable"));
+        QVERIFY2(reply.value("error_message")
+                     .toString()
+                     .startsWith(QStringLiteral("No developer was added: Developer 3 could not "
+                                                "start.")),
+                 qPrintable(text(reply)));
+        QCOMPARE(fixture.journal->sessions().size(), before);
+        QCOMPARE(command(fixture, "team.get", {{"team_id", id}})
+                     .value("team")
+                     .toObject()
+                     .value("members")
+                     .toArray()
+                     .size(),
+                 4);
     }
 
     void membersAreAddedJoinedChangedAndRemoved() {

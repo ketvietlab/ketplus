@@ -439,6 +439,8 @@ class TeamCoordinator : public QObject {
     [[nodiscard]] int turnBudgetSetting() const;
     std::optional<TeamError> updateTeamSettings(const QJsonObject& changes);
     TeamResult addMember(qint64 teamId, Member member, const QString& actor);
+    // T-4: several members in one change, one revision and one update each; all or none.
+    TeamResult addMembers(qint64 teamId, QList<Member> members, const QString& actor);
     // T-10: renames a developer's lane; a lane holds no paths.
     TeamResult updateMember(qint64 teamId, const QString& sessionId, const QString& lane,
                             const QString& actor, const QString& reason = {});

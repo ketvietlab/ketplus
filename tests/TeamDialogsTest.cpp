@@ -17,6 +17,7 @@
 #include "TeamLanguage.h"
 #include "app/AgentWorktreeDialog.h"
 #include "teams/TeamAgentDialog.h"
+#include "teams/TeamDeveloperRows.h"
 #include "teams/TeamDirectory.h"
 #include "teams/TeamMenus.h"
 #include "teams/TeamTurnBudget.h"
@@ -743,6 +744,89 @@ class TeamDialogsTest final : public QObject {
         QVERIFY(!dialog->findChild<ket::Button*>("addMemberButton")->isEnabled());
         QVERIFY(form5->hint().contains("five"));
         dialog->reject();
+    }
+
+    // T-4: Add member adds up to the room left at once: one agent, a name and a lane each, named
+    // after the team's developers and editable; a name or lane the team has is refused here.
+    void severalDevelopersAreAddedAtOnce() {
+        QJsonObject named = team(2);
+        QJsonArray members = named.value("members").toArray();
+        for (qsizetype index = 1; index <= 2; ++index) {
+            QJsonObject member = members.at(index).toObject();
+            member.insert("name", QStringLiteral("Developer %1").arg(index));
+            member.insert("lane",
+                          index == 1 ? QStringLiteral("Web") : QStringLiteral("Developer 4"));
+            members[index] = member;
+        }
+        named.insert("members", members);
+        QCOMPARE(team_developers::nextNames(named, 2), (QStringList{"Developer 3", "Developer 5"}));
+
+        QWidget window;
+        window.resize(1024, 640);
+        window.show();
+        auto* dialog = AddMemberForm::present(&window, teams_.get(), named, bothProviders);
+        auto* form = dialog->findChild<AddMemberForm*>();
+        auto* add = dialog->findChild<ket::Button*>("addMemberButton");
+        ket::Select* count = form->countSelect();
+        QVERIFY(count && count->isVisibleTo(form));
+        QCOMPARE(count->count(), 3); // five developers at most, two there
+        QCOMPARE(add->text(), QStringLiteral("Add"));
+        // The first row keeps what the single fields held.
+        form->nameField()->setText("Payments");
+        count->setCurrentIndex(2);
+        QCOMPARE(form->developerCount(), 3);
+        QCOMPARE(add->text(), QStringLiteral("Add 3 developers"));
+        QVERIFY(!form->nameField()->isVisibleTo(form));
+        QVERIFY(!form->laneField()->isVisibleTo(form));
+        TeamDeveloperRows* rows = form->developerRows();
+        QVERIFY(rows->isVisibleTo(form));
+        QCOMPARE(rows->count(), 3);
+        QCOMPARE(rows->nameField(0)->text(), QStringLiteral("Payments"));
+        QCOMPARE(rows->nameField(1)->text(), QStringLiteral("Developer 3"));
+        QCOMPARE(rows->laneField(1)->text(), QStringLiteral("Developer 3"));
+        QCOMPARE(rows->nameField(2)->text(), QStringLiteral("Developer 5"));
+        QVERIFY(form->hint().contains("5 developers"));
+
+        // A lane the team has, and a name twice, are marked and nothing is sent.
+        rows->laneField(1)->setText("web");
+        form->submit({});
+        QVERIFY(daemon_.sent.isEmpty());
+        QVERIFY(rows->laneField(1)->isInvalid());
+        rows->laneField(1)->setText("Docs");
+        rows->nameField(2)->setText("payments");
+        form->submit({});
+        QVERIFY(daemon_.sent.isEmpty());
+        QVERIFY(rows->nameField(2)->isInvalid());
+        rows->nameField(2)->setText("Billing");
+        rows->laneField(2)->clear();
+
+        // Fewer rows keep the ones edited.
+        count->setCurrentIndex(1);
+        QCOMPARE(rows->count(), 2);
+        count->setCurrentIndex(2);
+        QCOMPARE(rows->nameField(1)->text(), QStringLiteral("Developer 3"));
+        QCOMPARE(rows->nameField(2)->text(), QStringLiteral("Developer 5"));
+        rows->nameField(2)->setText("Billing");
+        rows->laneField(2)->clear();
+
+        add->click();
+        QCOMPARE(daemon_.sent.size(), 1);
+        QCOMPARE(daemon_.sent.first().first, QStringLiteral("team.member.add"));
+        const QJsonObject sent = daemon_.sent.first().second;
+        QCOMPARE(sent.value("team_id").toString(), QStringLiteral("7"));
+        QCOMPARE(sent.value("provider").toString(), QStringLiteral("codex"));
+        QVERIFY(!sent.contains("name") && !sent.contains("lane") && !sent.contains("paths"));
+        QCOMPARE(sent.value("developers").toArray(),
+                 (QJsonArray{QJsonObject{{"name", "Payments"}, {"lane", "Payments"}},
+                             QJsonObject{{"name", "Developer 3"}, {"lane", "Docs"}},
+                             QJsonObject{{"name", "Billing"}, {"lane", "Billing"}}}));
+        dialog->reject();
+
+        // A reviewer is added alone; four developers leave room for one, so no count shows.
+        AddMemberForm reviewer(teams_.get(), team(3), bothProviders, QStringLiteral("reviewer"));
+        QVERIFY(!reviewer.countSelect()->isVisibleTo(&reviewer));
+        AddMemberForm last(teams_.get(), team(4), bothProviders);
+        QCOMPARE(last.countSelect()->count(), 1);
     }
 
     // T-89: the window lets one Add member dialog open at a time; closing it lets the next open.

@@ -27,6 +27,7 @@ class TextField;
 
 namespace ketplus {
 
+class TeamDeveloperRows;
 class TeamDirectory;
 class TeamReviewFields;
 
@@ -143,6 +144,11 @@ class AddMemberForm final : public QWidget {
     [[nodiscard]] QString hint() const;
     [[nodiscard]] ket::TextField* nameField() const { return name_; }
     [[nodiscard]] ket::TextField* laneField() const { return lane_; }
+    // T-4: how many developers one Add adds (1 to the room left), and their rows past one.
+    [[nodiscard]] ket::Select* countSelect() const { return count_; }
+    [[nodiscard]] int developerCount() const;
+    void setDeveloperCount(int count);
+    [[nodiscard]] TeamDeveloperRows* developerRows() const { return rows_; }
     [[nodiscard]] QString error() const;
     void setAgent(const TeamAgent& agent);
 
@@ -153,6 +159,7 @@ class AddMemberForm final : public QWidget {
 
   signals:
     void roleChanged(const QString& role);
+    void developerCountChanged(int count);
 
   private:
     void describe();
@@ -172,6 +179,10 @@ class AddMemberForm final : public QWidget {
     ket::FieldRow* laneRow_;
     ket::FieldRow* agentRow_;
     ket::FieldRow* nameRow_;
+    ket::Select* count_;
+    ket::FieldRow* countRow_;
+    TeamDeveloperRows* rows_;
+    ket::FieldRow* rowsRow_;
     QLabel* hint_;
     QLabel* error_;
 };

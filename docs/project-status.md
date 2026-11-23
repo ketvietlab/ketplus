@@ -223,7 +223,10 @@ Linux store policy, signed upgrade prompts and platform release acceptance remai
   reviews, another ready provider develops; the reviewer's chooser offers Claude only).
   A refusal keeps the dialog open with the error at the role it names. Add a developer
   sends `team.member.add` with a required name, an optional lane and the agent, hints at the
-  reviewer queue from three developers and is disabled at five.
+  reviewer queue from three developers and is disabled at five. Number of developers
+  (T-4) adds up to the room left at once on one agent: a row each names a developer and
+  its lane, prefilled with the next free "Developer N" and editable; names and lanes the
+  team has are refused before anything is sent, and all of them join in one change or none.
   Member header (#467): a member's Agent Workspace header shows its role as a locked
   label that opens the team and cannot be edited, and has no Reviewer choice (the team's
   reviewer reviews its tasks). Leaving the team brings the Reviewer choice back with its

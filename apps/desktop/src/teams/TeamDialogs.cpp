@@ -12,6 +12,7 @@
 #include "KetToggle.h"
 #include "TeamLanguage.h"
 #include "teams/TeamCommands.h"
+#include "teams/TeamDeveloperRows.h"
 #include "teams/TeamDirectory.h"
 #include "teams/TeamMenus.h"
 #include "teams/TeamReviewSettings.h"
@@ -614,6 +615,7 @@ AddMemberForm::AddMemberForm(TeamDirectory* teams, const QJsonObject& team,
       reviewerChoice_(new ket::Choice(tr("Reviewer"), {}, ket::ToggleKind::Radio, this)),
       name_(new ket::TextField(this)), lane_(new ket::TextField(this)),
       agentButton_(new ket::Button({}, ket::ButtonVariant::Secondary, this)),
+      count_(new ket::Select(this)), rows_(new TeamDeveloperRows(team, this)),
       hint_(note(this, "teamDialogHint")), error_(note(this, "teamDialogError")) {
     setObjectName(QStringLiteral("addMemberForm"));
     const team_agents::Defaults defaults = team_agents::defaults(models);
@@ -645,6 +647,16 @@ AddMemberForm::AddMemberForm(TeamDirectory* teams, const QJsonObject& team,
             setRole(reviewer);
     });
 
+    // T-4: several developers at once, on one agent; past one, a row each names them.
+    count_->setObjectName(QStringLiteral("addMemberDeveloperCount"));
+    const int room = team_roles::maximumDevelopers - TeamDirectory::count(team_, developer);
+    for (int value = 1; value <= qMax(1, room); ++value)
+        count_->addItem(value == 1 ? tr("1 developer") : tr("%1 developers").arg(value), value);
+    countRow_ = new ket::FieldRow(tr("Number of developers"), count_, {}, this);
+    layout->addWidget(countRow_);
+    connect(count_, &QComboBox::currentIndexChanged, this,
+            [this] { setDeveloperCount(count_->currentData().toInt()); });
+
     lane_->setObjectName(QStringLiteral("developerLaneField"));
     lane_->setPlaceholderText(tr("Web, API, …"));
     laneRow_ = new ket::FieldRow(tr("Lane"), lane_,
@@ -668,6 +680,10 @@ AddMemberForm::AddMemberForm(TeamDirectory* teams, const QJsonObject& team,
         tr("Name"), name_,
         tr("How the conversation shows in the team's folder. Its role is a tag beside it."), this);
     layout->addWidget(nameRow_);
+    rowsRow_ = new ket::FieldRow(tr("Developers"), rows_,
+                                 tr("A name and a lane for each. Edit them before you add."), this);
+    rowsRow_->setObjectName(QStringLiteral("addMemberDeveloperRows"));
+    layout->addWidget(rowsRow_);
     layout->addWidget(hint_);
     layout->addWidget(error_);
     layout->addStretch();
@@ -707,7 +723,12 @@ void AddMemberForm::describe() {
     roleRow_->setHelp(canAdd(reviewer) ? tr("A second reviewer shortens the queue: each task in "
                                             "review goes to one of the two.")
                                        : tr("The team has two reviewers, the most a team has."));
-    laneRow_->setVisible(!reviewing);
+    const bool several = !reviewing && developerCount() > 1;
+    countRow_->setVisible(!reviewing && canAdd(developer));
+    countRow_->setHelp(tr("They share the agent below; each gets its own conversation."));
+    laneRow_->setVisible(!reviewing && !several);
+    nameRow_->setVisible(!several);
+    rowsRow_->setVisible(several);
     agentButton_->setObjectName(reviewing ? QStringLiteral("teamAgent_reviewer")
                                           : QStringLiteral("teamAgent_developer"));
     setAgentLabel(agentButton_, team_agents::label(models_, agents_.value(role_)));
@@ -720,6 +741,7 @@ void AddMemberForm::describe() {
                                  : tr("The new conversation's provider, model and effort."));
     agentRow_->setError({});
     nameRow_->setError({});
+    rowsRow_->setError({});
     name_->setPlaceholderText(
         reviewing ? tr("Reviewer %1").arg(TeamDirectory::count(team_, reviewer) + 1) : QString{});
     showNote(error_, {});
@@ -727,13 +749,42 @@ void AddMemberForm::describe() {
     if (isFull())
         showNote(hint_, reviewing ? tr("The team has two reviewers, the most a team has.")
                                   : tr("A team has at most five developers."));
-    else if (!reviewing && developers + 1 >= kQueueHintDevelopers &&
+    else if (!reviewing && developers + developerCount() >= kQueueHintDevelopers &&
              TeamDirectory::count(team_, reviewer) < team_roles::maximumReviewers)
         showNote(hint_, tr("With %1 developers the single reviewer becomes the queue: tasks "
                            "wait their turn for review. A second reviewer shortens it.")
-                            .arg(developers + 1));
+                            .arg(developers + developerCount()));
     else
         showNote(hint_, {});
+}
+
+int AddMemberForm::developerCount() const { return qMax(1, count_->currentData().toInt()); }
+
+void AddMemberForm::setDeveloperCount(const int count) {
+    const int index = count_->findData(count);
+    if (index < 0)
+        return;
+    if (count_->currentIndex() != index) {
+        count_->setCurrentIndex(index); // comes back here through currentIndexChanged
+        return;
+    }
+    // The first row takes what the single fields held, before the next rows are named, and
+    // gives it back when one developer is left.
+    const QString name = name_->text().trimmed();
+    const QString lane = lane_->text().trimmed();
+    if (count > 1 && rows_->count() == 0) {
+        rows_->setCount(1);
+        if (!name.isEmpty())
+            rows_->nameField(0)->setText(name);
+        if (!name.isEmpty() || !lane.isEmpty())
+            rows_->laneField(0)->setText(lane.isEmpty() ? name : lane);
+    } else if (count == 1 && rows_->count() > 0) {
+        name_->setText(rows_->nameField(0)->text());
+        lane_->setText(rows_->laneField(0)->text());
+    }
+    rows_->setCount(count > 1 ? count : 0);
+    describe();
+    emit developerCountChanged(count);
 }
 
 QString AddMemberForm::hint() const { return hint_->isHidden() ? QString{} : hint_->text(); }
@@ -756,6 +807,10 @@ QJsonObject AddMemberForm::payload() const {
             result.insert(QStringLiteral("name"), name);
         return result;
     }
+    if (developerCount() > 1) {
+        result.insert(QStringLiteral("developers"), rows_->developers());
+        return result;
+    }
     result.insert(QStringLiteral("name"), name);
     if (const QString lane = lane_->text().trimmed(); !lane.isEmpty())
         result.insert(QStringLiteral("lane"), lane);
@@ -765,9 +820,13 @@ QJsonObject AddMemberForm::payload() const {
 bool AddMemberForm::validate() {
     showNote(error_, {});
     const bool reviewing = role_ == reviewer;
-    const bool named = reviewing || !name_->text().trimmed().isEmpty();
-    nameRow_->setError(named ? QString{} : tr("Name the developer."));
-    if (!named)
+    const bool several = !reviewing && developerCount() > 1;
+    const QString rowsProblem = several ? rows_->validate() : QString{};
+    rowsRow_->setError(rowsProblem);
+    const bool named =
+        reviewing || (several ? rowsProblem.isEmpty() : !name_->text().trimmed().isEmpty());
+    nameRow_->setError(named || several ? QString{} : tr("Name the developer."));
+    if (!named && !several)
         name_->setFocus();
     bool chosen = !agents_.value(role_).isEmpty();
     // ketplus#295: a member chosen before the team lost Full access.
@@ -825,14 +884,22 @@ ket::Dialog* AddMemberForm::present(QWidget* anchor, TeamDirectory* teams, const
         });
     };
     QObject::connect(form, &AddMemberForm::roleChanged, scroll, fit);
+    QObject::connect(form, &AddMemberForm::developerCountChanged, scroll, fit);
     dialog->setCardWidth(480);
     auto* cancel = dialog->addButton(tr("Cancel"));
     QObject::connect(cancel, &QAbstractButton::clicked, dialog, &ket::Dialog::reject);
     auto* add = dialog->addButton(tr("Add"), ket::ButtonVariant::Primary);
     add->setObjectName(QStringLiteral("addMemberButton"));
     add->setEnabled(!form->isFull());
-    QObject::connect(form, &AddMemberForm::roleChanged, add,
-                     [add, form] { add->setEnabled(!form->isFull()); });
+    // T-4: the button says how many it adds.
+    const auto relabel = [add, form] {
+        add->setEnabled(!form->isFull());
+        const int count = form->role() == QStringLiteral("developer") ? form->developerCount() : 1;
+        add->setText(count > 1 ? AddMemberForm::tr("Add %1 developers").arg(count)
+                               : AddMemberForm::tr("Add"));
+    };
+    QObject::connect(form, &AddMemberForm::roleChanged, add, relabel);
+    QObject::connect(form, &AddMemberForm::developerCountChanged, add, relabel);
     teams->commands()->bind(add, addKey(team));
     QObject::connect(add, &QAbstractButton::clicked, dialog,
                      [dialog, form] { form->submit([dialog] { dialog->accept(); }); });

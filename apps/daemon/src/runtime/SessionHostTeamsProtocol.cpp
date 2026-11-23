@@ -221,66 +221,8 @@ QJsonObject SessionHost::teamCommand(const QString& type, const QJsonObject& req
             return failure(*refused);
         return {{QStringLiteral("ok"), true}, {QStringLiteral("team_id"), QString::number(teamId)}};
     }
-    if (type == QStringLiteral("team.member.add")) {
-        const teams::Team* team = teams_->team(teamId);
-        if (!team)
-            return failure(QStringLiteral("team_not_found"),
-                           QStringLiteral("The team no longer exists."));
-        // T-23: "role" adds a developer (the default) or a team's second reviewer.
-        const QString role = payload.value(QStringLiteral("role")).toString(teams::role::developer);
-        if (role != teams::role::developer && role != teams::role::reviewer)
-            return failure(QStringLiteral("invalid_payload"),
-                           QStringLiteral("A member added to a team is a developer or a "
-                                          "reviewer."));
-        const bool reviewer = role == teams::role::reviewer;
-        MemberPlan plan =
-            planOf(role, payload, reviewer ? QStringLiteral("Reviewer 2") : QString{});
-        // T-2: a member added without an agent starts with the team's provider, at its default
-        // model; a model is not carried over from another member.
-        if (plan.provider.isEmpty())
-            plan.provider = team->provider;
-        if (const auto invalid = teams::rules::validName(
-                plan.name, reviewer ? QStringLiteral("a reviewer") : QStringLiteral("a developer")))
-            return failure(*invalid);
-        if (!reviewer && team->count(teams::role::developer) >= teams::maximumDevelopers)
-            return failure(QStringLiteral("team_full"),
-                           QStringLiteral("The team has five developers."));
-        if (reviewer && team->count(teams::role::reviewer) >= teams::maximumReviewers)
-            return failure(QStringLiteral("role_taken"),
-                           QStringLiteral("The team has two reviewers, the most a team has."),
-                           plan.role);
-        if (!knownProvider(plan.provider))
-            return failure(QStringLiteral("provider_unavailable"),
-                           reviewer ? QStringLiteral("Choose the reviewer's agent.")
-                                    : QStringLiteral("Choose the developer's agent."),
-                           plan.role);
-        // ketplus#295: a new Codex reviewer takes the team's Full access; Claude keeps its own.
-        const QString reviewerPolicy = newReviewerPolicy(plan.provider, team->executionPolicy);
-        if (reviewer && !reviewer::supported(plan.provider, reviewerPolicy))
-            return failure(QStringLiteral("reviewer_unsupported"),
-                           reviewer::unsupportedMessage(plan.provider), plan.role);
-        if (plan.provider != QStringLiteral("codex") && !availableProvider(plan.provider))
-            return failure(QStringLiteral("provider_unavailable"),
-                           missingProviderMessage(plan.provider), plan.role);
-        QString problem;
-        // A Claude reviewer keeps its own mode; its review turns are read-only (ADR 0114 §2).
-        const QString sessionId = createMemberConversation(
-            team->repository, plan.provider, plan.model, plan.effort, plan.name, &problem,
-            reviewer ? reviewerPolicy : team->executionPolicy);
-        if (sessionId.isEmpty())
-            return failure(QStringLiteral("member_unavailable"), problem, plan.role);
-        const auto result = teams_->addMember(
-            teamId,
-            reviewer ? teams::Member{.sessionId = sessionId, .role = role, .name = plan.name}
-                     : teams::Member{.sessionId = sessionId,
-                                     .role = role,
-                                     .name = plan.name,
-                                     .lane = plan.lane.isEmpty() ? plan.name : plan.lane},
-            QStringLiteral("user"));
-        if (!result.ok())
-            discardMemberConversation(sessionId);
-        return answer(result);
-    }
+    if (type == QStringLiteral("team.member.add"))
+        return addTeamMembers(teamId, payload);
     if (type == QStringLiteral("team.member.join")) {
         const QString sessionId = payload.value(QStringLiteral("session_id")).toString();
         const auto it = sessions_.constFind(sessionId);
