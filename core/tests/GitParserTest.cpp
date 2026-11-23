@@ -1,5 +1,6 @@
 #include "git/GitParser.h"
 #include "TestSymlink.h"
+#include "git/GitRevisionContent.h"
 #include "git/GitService.h"
 
 #include <QDir>
@@ -7,9 +8,12 @@
 #include <QHash>
 #include <QPointer>
 #include <QProcess>
+#include <QScopeGuard>
+#include <QSemaphore>
 #include <QSignalSpy>
 #include <QStandardPaths>
 #include <QTemporaryDir>
+#include <QThreadPool>
 #include <QtTest>
 
 #include <initializer_list>
@@ -51,6 +55,15 @@ class GitParserTest final : public QObject {
     void answersOnlyTheNewestDiffRequest();
     void refreshesWhenGitRunsOutsideKetPlus();
     void diffsFilesBeforeTheFirstCommit();
+    void stagesEditedRenameWithoutStagingRecreatedSource();
+    void separatesStagedDeletionFromUntrackedReplacement();
+    void fencesMutationsToTheSelectedRepository();
+    void rejectsMutationWhenNestedRepositoryDisappears();
+    void rejectsConfiguredWorktreeOutsideWorkspace();
+    void clearsPreviousWorktreesBeforeDiscoveringNewRoot();
+    void reportsGitDiscoveryFailure();
+    void diffsDirtySubmoduleAsAGitlink();
+    void previewReadsOnlyTheLatestRegularWorkingFile();
 };
 
 void GitParserTest::parsesPorcelainV2Status() {
@@ -137,7 +150,13 @@ void GitParserTest::discoversWorktreesAndProducesDiffs() {
     QTemporaryDir temporary;
     QVERIFY(temporary.isValid());
     const QString root = temporary.filePath(QStringLiteral("main"));
-    const QString linkedRoot = temporary.filePath(QStringLiteral("feature"));
+    // Git prints checkout and metadata paths verbatim. A POSIX checkout can
+    // end in whitespace, including a line feed.
+#ifdef Q_OS_WIN
+    const QString linkedRoot = temporary.filePath(QStringLiteral("feature branch"));
+#else
+    const QString linkedRoot = temporary.filePath(QStringLiteral("feature branch \n "));
+#endif
     QVERIFY(QDir().mkpath(root));
     QVERIFY(runGit(git, root, {QStringLiteral("init")}));
 
@@ -247,6 +266,16 @@ void GitParserTest::discoversWorktreesAndProducesDiffs() {
     QTRY_VERIFY_WITH_TIMEOUT(untrackedFinished, 5000);
     QVERIFY2(untrackedError.isEmpty(), qPrintable(untrackedError));
     QVERIFY2(untrackedDiff.contains(QStringLiteral("+new")), qPrintable(untrackedDiff));
+
+    QVERIFY(QFileInfo(QDir(linkedRoot).filePath(".git")).isFile());
+    QVERIFY(runGit(git, linkedRoot, {"switch", "--detach"}));
+    service.setWorkspacePath(linkedRoot);
+    QTRY_VERIFY_WITH_TIMEOUT(service.snapshot().isRepository(), 5000);
+    QCOMPARE(service.snapshot().repositoryRoot, QFileInfo(linkedRoot).canonicalFilePath());
+    QVERIFY(service.snapshot().branch.isEmpty());
+    QTRY_COMPARE_WITH_TIMEOUT(service.worktrees().size(), 2, 5000);
+    QVERIFY(service.worktrees().at(1).current);
+    QVERIFY(service.worktrees().at(1).detached);
 }
 
 void GitParserTest::diffsSymlinksAsLinks() {
@@ -585,4 +614,320 @@ void GitParserTest::stagesLiteralPathsAndCommitsOnlyTheIndex() {
     QTRY_COMPARE_WITH_TIMEOUT(service.snapshot().files.size(), 1, 5000);
     QCOMPARE(service.snapshot().files.first().path, QStringLiteral("kept.txt"));
     QVERIFY(service.snapshot().files.first().untracked);
+}
+
+namespace {
+
+bool writeGitFixture(const QString& path, const QByteArray& content) {
+    QFile file(path);
+    return file.open(QIODevice::WriteOnly) && file.write(content) == content.size();
+}
+
+bool commitGitFixture(const QString& git, const QDir& root) {
+    return runGit(git, root.path(),
+                  {"-c", "user.name=KetPlus Test", "-c", "user.email=test@ketplus.invalid", "-c",
+                   "commit.gpgsign=false", "commit", "-qm", "Initial"});
+}
+
+} // namespace
+
+void GitParserTest::stagesEditedRenameWithoutStagingRecreatedSource() {
+    const QString git = QStandardPaths::findExecutable("git");
+    if (git.isEmpty())
+        QSKIP("Git is not installed.");
+    QTemporaryDir temp;
+    QVERIFY(temp.isValid());
+    const QDir root(QFileInfo(temp.path()).canonicalFilePath());
+    const QString oldName = QString::fromUtf8("cũ file.txt");
+    const QString newName = QString::fromUtf8("mới file.txt");
+    const QString oldPath = root.filePath(oldName);
+    const QString newPath = root.filePath(newName);
+    QVERIFY(runGit(git, root.path(), {"init", "-q"}));
+    QVERIFY(runGit(git, root.path(), {"config", "core.precomposeUnicode", "true"}));
+    QVERIFY(writeGitFixture(oldPath, "one\ntwo\nthree\nfour\nfive\n"));
+    QVERIFY(runGit(git, root.path(), {"add", "--", oldName}));
+    QVERIFY(commitGitFixture(git, root));
+    QVERIFY(runGit(git, root.path(), {"mv", "--", oldName, newName}));
+    QVERIFY(writeGitFixture(newPath, "one\ntwo\nthree\nfour\nfive\nnew line\n"));
+
+    ketplus::GitService service;
+    QSignalSpy diff(&service, &ketplus::GitService::diffReady);
+    QSignalSpy mutations(&service, &ketplus::GitService::mutationFinished);
+    service.setWorkspacePath(root.path());
+    QTRY_COMPARE(service.snapshot().files.size(), 1);
+    QCOMPARE(service.snapshot().files.first().originalPath, oldName);
+    QCOMPARE(service.snapshot().files.first().path, newName);
+    service.requestDiff(newPath, ketplus::GitDiffMode::Staged);
+    QTRY_COMPARE(diff.size(), 1);
+    QVERIFY(diff.first().at(2).toString().contains("similarity index 100%"));
+    QVERIFY(diff.first().at(3).toString().isEmpty());
+
+    service.stageFile(newPath);
+    QTRY_COMPARE(mutations.size(), 1);
+    auto result = mutations.takeFirst();
+    QVERIFY2(result.at(1).toBool(), qPrintable(result.at(2).toString()));
+    QTRY_VERIFY(!service.snapshot().files.first().hasUnstagedChange());
+    QVERIFY(writeGitFixture(newPath, "one\ntwo\nthree\nfour\nfive\nnew line\nnext edit\n"));
+    QVERIFY(writeGitFixture(oldPath, "untracked replacement\n"));
+    service.refresh();
+    QTRY_COMPARE(service.snapshot().files.size(), 2);
+    service.stageFile(newPath);
+    QTRY_COMPARE(mutations.size(), 1);
+    result = mutations.takeFirst();
+    QVERIFY2(result.at(1).toBool(), qPrintable(result.at(2).toString()));
+    QTRY_VERIFY(service.snapshot().files.last().untracked);
+    QCOMPARE(service.snapshot().files.last().path, oldName);
+    QTRY_VERIFY(!service.snapshot().files.first().hasUnstagedChange());
+
+    service.unstageFile(newPath);
+    QTRY_COMPARE(mutations.size(), 1);
+    result = mutations.takeFirst();
+    QVERIFY2(result.at(1).toBool(), qPrintable(result.at(2).toString()));
+    QTRY_VERIFY(!service.snapshot().files.first().hasStagedChange());
+    QFile oldFile(oldPath);
+    QVERIFY(oldFile.open(QIODevice::ReadOnly));
+    QCOMPARE(oldFile.readAll(), QByteArray("untracked replacement\n"));
+}
+
+void GitParserTest::separatesStagedDeletionFromUntrackedReplacement() {
+    const QString git = QStandardPaths::findExecutable("git");
+    if (git.isEmpty())
+        QSKIP("Git is not installed.");
+    QTemporaryDir temp;
+    QVERIFY(temp.isValid());
+    const QDir root(temp.path());
+    const QString name = QStringLiteral("replacement file.txt");
+    const QString path = root.filePath(name);
+    QVERIFY(runGit(git, root.path(), {"init", "-q"}));
+    QVERIFY(writeGitFixture(path, "original\n"));
+    QVERIFY(runGit(git, root.path(), {"add", "--", name}));
+    QVERIFY(commitGitFixture(git, root));
+    QVERIFY(runGit(git, root.path(), {"rm", "--", name}));
+    QVERIFY(writeGitFixture(path, "replacement\n"));
+
+    ketplus::GitService service;
+    QSignalSpy diff(&service, &ketplus::GitService::diffReady);
+    service.setWorkspacePath(root.path());
+    QTRY_COMPARE(service.snapshot().files.size(), 2);
+    service.requestDiff(path, ketplus::GitDiffMode::Staged);
+    QTRY_COMPARE(diff.size(), 1);
+    auto result = diff.takeFirst();
+    QVERIFY(result.at(3).toString().isEmpty());
+    QVERIFY(result.at(2).toString().contains("-original"));
+    QVERIFY(!result.at(2).toString().contains("+replacement"));
+
+    service.requestDiff(path, ketplus::GitDiffMode::Unstaged);
+    QTRY_COMPARE(diff.size(), 1);
+    result = diff.takeFirst();
+    QVERIFY(result.at(3).toString().isEmpty());
+    QVERIFY(result.at(2).toString().contains("+replacement"));
+    QVERIFY(!result.at(2).toString().contains("-original"));
+}
+
+void GitParserTest::fencesMutationsToTheSelectedRepository() {
+    const QString git = QStandardPaths::findExecutable("git");
+    if (git.isEmpty())
+        QSKIP("Git is not installed.");
+    QTemporaryDir temp;
+    QVERIFY(temp.isValid());
+    const QDir root(temp.path());
+    const QString selected = root.filePath("selected");
+    const QString neighbor = root.filePath("neighbor");
+    QVERIFY(QDir().mkpath(selected));
+    QVERIFY(QDir().mkpath(neighbor));
+    for (const auto& repo : {selected, neighbor}) {
+        QVERIFY(runGit(git, repo, {"init", "-q"}));
+        QVERIFY(writeGitFixture(QDir(repo).filePath("selected.txt"), "content\n"));
+    }
+    ketplus::GitService service;
+    QSignalSpy mutations(&service, &ketplus::GitService::mutationFinished);
+    service.setWorkspacePath(selected);
+    QTRY_COMPARE(service.snapshot().files.size(), 1);
+
+    const QByteArray gitDir = qgetenv("GIT_DIR");
+    const QByteArray gitWorkTree = qgetenv("GIT_WORK_TREE");
+    const auto restoreEnvironment = qScopeGuard([&] {
+        if (gitDir.isNull())
+            qunsetenv("GIT_DIR");
+        else
+            qputenv("GIT_DIR", gitDir);
+        if (gitWorkTree.isNull())
+            qunsetenv("GIT_WORK_TREE");
+        else
+            qputenv("GIT_WORK_TREE", gitWorkTree);
+    });
+    qputenv("GIT_DIR", QFile::encodeName(QDir(neighbor).filePath(".git")));
+    qputenv("GIT_WORK_TREE", QFile::encodeName(neighbor));
+    service.stageFile(QDir(selected).filePath("selected.txt"));
+    QTRY_COMPARE(mutations.size(), 1);
+    auto result = mutations.takeFirst();
+    QVERIFY2(result.at(1).toBool(), qPrintable(result.at(2).toString()));
+    QVERIFY(!QFile::exists(QDir(neighbor).filePath(".git/index")));
+    QTRY_VERIFY(service.snapshot().files.first().hasStagedChange());
+
+    // A reentrant workspace switch must not retarget a mutation already accepted.
+    connect(&service, &ketplus::GitService::mutationRunningChanged, &service, [&](bool running) {
+        if (running)
+            service.setWorkspacePath(neighbor);
+    });
+    service.unstageFile(QDir(selected).filePath("selected.txt"));
+    QTRY_COMPARE(service.snapshot().repositoryRoot, QFileInfo(neighbor).canonicalFilePath());
+    QTRY_VERIFY(!service.mutationRunning());
+    QCOMPARE(mutations.size(), 0);
+    QVERIFY(service.snapshot().files.first().untracked);
+}
+
+void GitParserTest::rejectsMutationWhenNestedRepositoryDisappears() {
+    const QString git = QStandardPaths::findExecutable("git");
+    if (git.isEmpty())
+        QSKIP("Git is not installed.");
+    QTemporaryDir temp;
+    QVERIFY(temp.isValid());
+    QDir parent(temp.path());
+    const QDir child(parent.filePath("child"));
+    QVERIFY(parent.mkdir("child"));
+    QVERIFY(runGit(git, parent.path(), {"init", "-q"}));
+    QVERIFY(runGit(git, child.path(), {"init", "-q"}));
+    const QString file = child.filePath("changed.txt");
+    QVERIFY(writeGitFixture(file, "nested worktree change\n"));
+    ketplus::GitService service;
+    QSignalSpy mutations(&service, &ketplus::GitService::mutationFinished);
+    service.setWorkspacePath(child.path());
+    QTRY_COMPARE(service.snapshot().files.size(), 1);
+    QVERIFY(parent.rename("child/.git", "moved-git"));
+
+    service.stageFile(file);
+    QTRY_COMPARE(mutations.size(), 1);
+    QVERIFY(!mutations.first().at(1).toBool());
+    QVERIFY(!mutations.first().at(2).toString().isEmpty());
+    QVERIFY(!QFile::exists(parent.filePath(".git/index")));
+}
+
+void GitParserTest::rejectsConfiguredWorktreeOutsideWorkspace() {
+    const QString git = QStandardPaths::findExecutable("git");
+    if (git.isEmpty())
+        QSKIP("Git is not installed.");
+    QTemporaryDir selected;
+    QTemporaryDir other;
+    QVERIFY(selected.isValid() && other.isValid());
+    QVERIFY(runGit(git, selected.path(), {"init", "-q"}));
+    QVERIFY(runGit(git, other.path(), {"init", "-q"}));
+    QVERIFY(runGit(git, selected.path(), {"config", "core.worktree", other.path()}));
+    ketplus::GitService service;
+    QSignalSpy errors(&service, &ketplus::GitService::errorOccurred);
+    service.setWorkspacePath(selected.path());
+    QTRY_COMPARE(errors.size(), 1);
+    QVERIFY(!service.snapshot().isRepository());
+    QVERIFY(service.worktrees().isEmpty());
+}
+
+void GitParserTest::clearsPreviousWorktreesBeforeDiscoveringNewRoot() {
+    const QString git = QStandardPaths::findExecutable("git");
+    if (git.isEmpty())
+        QSKIP("Git is not installed.");
+    QTemporaryDir first;
+    QTemporaryDir second;
+    QVERIFY(first.isValid() && second.isValid());
+    QVERIFY(runGit(git, first.path(), {"init", "-q"}));
+    QVERIFY(runGit(git, second.path(), {"init", "-q"}));
+    ketplus::GitService service;
+    service.setWorkspacePath(first.path());
+    QTRY_COMPARE(service.worktrees().size(), 1);
+    QSignalSpy changed(&service, &ketplus::GitService::worktreesChanged);
+    service.setWorkspacePath(second.path());
+    QCOMPARE(changed.size(), 1);
+    QVERIFY(changed.first().first().value<QVector<ketplus::GitWorktree>>().isEmpty());
+    QTRY_COMPARE(service.worktrees().size(), 1);
+    QCOMPARE(service.worktrees().first().path, QFileInfo(second.path()).canonicalFilePath());
+}
+
+void GitParserTest::reportsGitDiscoveryFailure() {
+    ketplus::GitService service;
+    if (!service.isAvailable())
+        QSKIP("Git is not installed.");
+    QTemporaryDir temp;
+    QVERIFY(temp.isValid());
+    const QString absent = temp.filePath("missing");
+    QSignalSpy errors(&service, &ketplus::GitService::errorOccurred);
+    service.setWorkspacePath(absent);
+    QTRY_COMPARE(errors.size(), 1);
+    QVERIFY(!errors.first().first().toString().isEmpty());
+    QVERIFY(!service.snapshot().isRepository());
+}
+
+void GitParserTest::diffsDirtySubmoduleAsAGitlink() {
+    const QString git = QStandardPaths::findExecutable("git");
+    if (git.isEmpty())
+        QSKIP("Git is not installed.");
+    QTemporaryDir temp;
+    QVERIFY(temp.isValid());
+    const QDir checkout(temp.filePath("checkout"));
+    const QDir source(temp.filePath("module source"));
+    QVERIFY(QDir().mkpath(checkout.path()));
+    QVERIFY(QDir().mkpath(source.path()));
+    QVERIFY(runGit(git, checkout.path(), {"init", "-q"}));
+    QVERIFY(runGit(git, source.path(), {"init", "-q"}));
+    QVERIFY(writeGitFixture(source.filePath("tracked.txt"), "original\n"));
+    QVERIFY(runGit(git, source.path(), {"add", "--", "tracked.txt"}));
+    QVERIFY(commitGitFixture(git, source));
+    const QString module = QStringLiteral("module with space");
+    QVERIFY(runGit(
+        git, checkout.path(),
+        {"-c", "protocol.file.allow=always", "submodule", "add", "--", source.path(), module}));
+    QVERIFY(commitGitFixture(git, checkout));
+    QVERIFY(runGit(git, checkout.path(), {"config", "diff.submodule", "diff"}));
+    QVERIFY(writeGitFixture(checkout.filePath(module + "/tracked.txt"), "edited\n"));
+
+    ketplus::GitService service;
+    QSignalSpy diff(&service, &ketplus::GitService::diffReady);
+    service.setWorkspacePath(checkout.path());
+    QTRY_COMPARE(service.snapshot().files.size(), 1);
+    const auto status = service.snapshot().files.first();
+    QCOMPARE(status.path, module);
+    QVERIFY(status.hasUnstagedChange());
+    QVERIFY(!status.hasStagedChange());
+    service.requestDiff(checkout.filePath(module), ketplus::GitDiffMode::Unstaged);
+    QTRY_COMPARE(diff.size(), 1);
+    QVERIFY(diff.first().at(3).toString().isEmpty());
+    QVERIFY(diff.first().at(2).toString().contains("Subproject commit"));
+    QVERIFY(diff.first().at(2).toString().contains("-dirty"));
+}
+
+void GitParserTest::previewReadsOnlyTheLatestRegularWorkingFile() {
+    QTemporaryDir temp;
+    QVERIFY(temp.isValid());
+    const QString path = temp.filePath("latest.md");
+    QVERIFY(writeGitFixture(path, "# New working file\n"));
+    ketplus::GitRevisionContent revision;
+    QSignalSpy results(&revision, &ketplus::GitRevisionContent::ready);
+    QSemaphore started;
+    QSemaphore release;
+    auto* pool = QThreadPool::globalInstance();
+    const int originalThreadCount = pool->maxThreadCount();
+    pool->setMaxThreadCount(1);
+    pool->start([&] {
+        started.release();
+        release.acquire();
+    });
+    const auto restorePool = qScopeGuard([&] {
+        release.release();
+        pool->setMaxThreadCount(originalThreadCount);
+        pool->waitForDone();
+    });
+    QVERIFY(started.tryAcquire(1, 5000));
+    revision.load(temp.filePath("deleted.md"), ketplus::GitDiffMode::Unstaged);
+    revision.load(path, ketplus::GitDiffMode::Unstaged);
+    QCoreApplication::processEvents();
+    QVERIFY(results.isEmpty()); // The UI can process events while the read is still queued.
+    release.release();
+    QTRY_COMPARE(results.size(), 1);
+    auto result = results.takeFirst();
+    QCOMPARE(result.at(0).toString(), QStringLiteral("# New working file\n"));
+    QVERIFY(result.at(1).toString().isEmpty());
+
+    revision.load(temp.path(), ketplus::GitDiffMode::Combined);
+    QTRY_COMPARE(results.size(), 1);
+    result = results.takeFirst();
+    QVERIFY(result.at(0).toString().isEmpty());
+    QVERIFY(!result.at(1).toString().isEmpty());
 }

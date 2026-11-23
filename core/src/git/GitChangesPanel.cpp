@@ -327,19 +327,23 @@ void GitChangesPanel::showContextMenu(const QPoint& position) {
     tree_->setCurrentItem(item);
 
     const QString path = item->data(0, pathRole).toString();
-    QMenu menu(this);
+    const auto mode = static_cast<GitDiffMode>(item->data(0, diffModeRole).toInt());
+    // The nested menu event loop can deliver a refresh that deletes the item.
+    QMenu menu;
     auto* diffAction = menu.addAction(QStringLiteral("View Diff"));
-    connect(diffAction, &QAction::triggered, this, [this, item] { requestItemDiff(item); });
+    connect(diffAction, &QAction::triggered, this,
+            [this, path, mode] { emit diffRequested(path, mode); });
     auto* openAction = menu.addAction(QStringLiteral("Open File"));
     openAction->setEnabled(QFileInfo::exists(path));
-    connect(openAction, &QAction::triggered, this, [this, item] { openItem(item); });
-    auto* stageAction = menu.addAction(
-        item->data(0, diffModeRole).toInt() == int(GitDiffMode::Staged) ? tr("Unstage File")
-                                                                        : tr("Stage File"));
+    connect(openAction, &QAction::triggered, this, [this, path] {
+        if (QFileInfo::exists(path))
+            emit fileOpenRequested(path);
+    });
+    auto* stageAction =
+        menu.addAction(mode == GitDiffMode::Staged ? tr("Unstage File") : tr("Stage File"));
     stageAction->setEnabled(!mutationRunning_);
-    const bool staged = item->data(0, diffModeRole).toInt() == int(GitDiffMode::Staged);
-    connect(stageAction, &QAction::triggered, this, [this, path, staged] {
-        if (staged)
+    connect(stageAction, &QAction::triggered, this, [this, path, mode] {
+        if (mode == GitDiffMode::Staged)
             emit unstageRequested(path);
         else
             emit stageRequested(path);

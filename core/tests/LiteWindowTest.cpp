@@ -1,9 +1,11 @@
 // The ketPlus (Lite) window against the Lite mock (mockups/qt, --edition=lite).
 #include "KetCommandPalette.h"
+#include "TestSymlink.h"
 #include "app/MainWindow.h"
 #include "app/ReviewCapture.h"
 #include "git/GitChangesPanel.h"
 #include "git/GitDiffView.h"
+#include "git/GitService.h"
 #include "terminal/TerminalPanel.h"
 #include "ui/Theme.h"
 #include "workspace/ExplorerPanel.h"
@@ -410,6 +412,54 @@ class LiteWindowTest final : public QObject {
         window.openFile(repository.filePath(QStringLiteral("clean.txt")));
         QVERIFY(viewDiff() != nullptr);
         QTRY_VERIFY(!viewDiff()->isVisibleTo(tabs));
+    }
+
+    void sourceControlKeepsSymlinkDiffTabsDistinct() {
+        QTemporaryDir temp;
+        QVERIFY(temp.isValid());
+        const QDir root(QFileInfo(temp.path()).canonicalFilePath());
+        QVERIFY(root.mkdir("checkout"));
+        const QDir checkout(root.filePath("checkout"));
+        const QString external = root.filePath("target.txt");
+        write(external, "target outside the checkout\n");
+        const QString first = checkout.filePath("link-one.txt");
+        const QString second = checkout.filePath("link-two.txt");
+        for (const auto& path : {first, second}) {
+            const auto error = ketplus::test::createSymlink(external, path);
+            QVERIFY2(error.isEmpty(), qPrintable(error));
+        }
+
+        for (const QStringList& command :
+             {QStringList{"init", "-q"}, QStringList{"config", "core.symlinks", "true"}}) {
+            QProcess git;
+            git.setWorkingDirectory(checkout.path());
+            git.start(QStringLiteral("git"), command);
+            QVERIFY(git.waitForFinished(10000) && git.exitCode() == 0);
+        }
+
+        ketplus::ThemeManager theme(*qApp);
+        ketplus::MainWindow window(theme);
+        window.openFolder(checkout.path());
+        auto* git = window.findChild<ketplus::GitService*>();
+        QVERIFY(git);
+        QTRY_COMPARE(git->snapshot().files.size(), 2);
+        auto* sourceControl = viewAction(window, QStringLiteral("Source Control"));
+        QVERIFY(sourceControl && sourceControl->isEnabled());
+        sourceControl->trigger();
+        auto* panel = window.findChild<ketplus::GitChangesPanel*>();
+        QVERIFY(panel);
+        auto* tabs = window.findChild<QTabWidget*>();
+        QVERIFY(tabs);
+        for (const auto& path : {first, second}) {
+            emit panel->diffRequested(path, ketplus::GitDiffMode::Unstaged);
+            QTRY_VERIFY(qobject_cast<ketplus::GitDiffView*>(tabs->currentWidget()));
+            QTRY_COMPARE(qobject_cast<ketplus::GitDiffView*>(tabs->currentWidget())->filePath(),
+                         path);
+        }
+        QCOMPARE(tabs->findChildren<ketplus::GitDiffView*>().size(), 2);
+        auto* diff = qobject_cast<ketplus::GitDiffView*>(tabs->currentWidget());
+        emit diff->refreshRequested(diff->filePath(), diff->mode());
+        QTRY_COMPARE(window.statusBar()->currentMessage(), QStringLiteral("Updated Git diff"));
     }
 
     void settingsIsAPageOfTheWindow() {

@@ -1,12 +1,10 @@
 # Git integration
 
-KetPlus keeps the shared Git service read-only. It shows repository status,
-separates staged changes from working-tree changes, opens a diff scoped to the
-selected group, and switches the active workspace between linked worktrees.
-The Agent Workspace has narrowly scoped worktree mutations: its add button creates a
-new branch and linked worktree, and its context menu safely removes a linked
-worktree without deleting the branch. Staging, commits, rebases, and remote operations
-stay in the terminal.
+The shared Git service shows repository status, separates staged and working-tree
+changes, and opens a diff scoped to the selected group. Source Control can stage
+and unstage individual files and commit the existing index. The Agent Workspace
+can create and remove linked worktrees. Use the terminal for branch checkout,
+discarding working-tree changes, rebases, and remote operations.
 
 ## Commands
 
@@ -17,7 +15,11 @@ stay in the terminal.
   added/removed line colors, and change counts instead of exposing raw patch
   metadata. Activating the Source Control row opens files that still exist.
 - `View Current File Diff` is available from the Git menu and Explorer context
-  menu; it shows the complete on-disk change against `HEAD`.
+  menu. It compares tracked files against `HEAD` and shows untracked files as
+  additions.
+- A Source Control row's context menu offers `Stage File` in Changes and
+  `Unstage File` in Staged Changes. `Commit Staged` uses the message and the
+  existing index. Git action failures appear in Source Control.
 - `Refresh Status` asks Git for a fresh snapshot.
 - `Switch Worktree` lists linked worktrees and opens the selected directory as
   the current workspace.
@@ -55,8 +57,10 @@ The integration uses the installed `git` executable rather than embedding a Git
 library. Commands run asynchronously with shell expansion disabled, pagination
 disabled, and optional repository locks disabled. Status uses porcelain v2 with
 NUL-separated records, and worktree discovery uses the porcelain worktree format.
-Command output and execution time are bounded so a slow repository cannot grow
-memory indefinitely or leave a process running forever.
+Status, diff, staging, and commit commands pin the selected checkout's worktree
+and Git directory. Inherited Git environment overrides cannot redirect these
+commands to another checkout or its index. Command output and execution time
+are bounded. Submodule diffs use Git's short gitlink format.
 
 Status refreshes on its own when Git runs outside KetPlus, for example in the
 integrated terminal or in an agent. The service watches the repository's git
