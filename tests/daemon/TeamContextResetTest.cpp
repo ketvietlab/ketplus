@@ -202,6 +202,22 @@ class TeamContextResetTest final : public QObject {
         QCOMPARE(read.contextResetTurns, 12);
     }
 
+    void sizeThresholdUsesTheLastReportedRequest() {
+        QCOMPARE(coldReason("lead", first_, "size-thread", 1, activity(0, 150000)), QString{});
+        QCOMPARE(coldReason("lead", first_, "size-thread", 2, activity(0, 149999)), QString{});
+        QCOMPARE(coldReason("lead", first_, "size-thread", 2, activity(0, 150000)),
+                 QStringLiteral("context_size"));
+        QVERIFY(!teams_->update(team_, {{"context_reset_tokens", 5.5}}, "user").ok());
+        QVERIFY(teams_->update(team_, {{"context_reset_tokens", 200000}}, "user").ok());
+        QCOMPARE(coldReason("lead", first_, "size-thread", 2, activity(0, 150000)), QString{});
+        QCOMPARE(coldReason("lead", first_, "size-thread", 2, activity(0, 200000)),
+                 QStringLiteral("context_size"));
+        load();
+        QCOMPARE(team().contextResetTokens, 200000);
+        QVERIFY(teams_->update(team_, {{"context_reset_tokens", 0}}, "user").ok());
+        QCOMPARE(coldReason("lead", first_, "size-thread", 2, activity(0, 200000)), QString{});
+    }
+
     // T-10: a member woken after its thread rested an hour, with a large context, starts fresh
     // for any role. The first sight of a thread only records it.
     void aColdCacheStartsEveryRoleFresh() {

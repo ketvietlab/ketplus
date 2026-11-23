@@ -678,8 +678,8 @@ class TeamCoordinator : public QObject {
     // new one leaves turns. The turns used stay counted.
     std::optional<TeamError> changeTurnBudget(Team& team, const QJsonValue& value,
                                               QList<Update>& updates);
-    // T-1: context_reset, context_reset_turns and context_reset_idle_minutes from team.update,
-    // each when present.
+    // Applies context_reset, context_reset_turns, context_reset_idle_minutes and
+    // context_reset_tokens from team.update when present.
     std::optional<TeamError> changeContextReset(Team& team, const QJsonObject& changes,
                                                 QList<Update>& updates);
     // T-90 (ADR 0123), in TeamCoordinatorRepository.cpp: moves the team to another

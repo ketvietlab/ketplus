@@ -113,6 +113,8 @@ namespace context_reset {
 inline const QString taskAndThreshold = QStringLiteral("task_and_threshold");
 inline const QString threshold = QStringLiteral("threshold");
 inline const QString never = QStringLiteral("never");
+inline constexpr int defaultContextTokens = 150000;
+inline constexpr int maximumContextTokens = 10000000;
 inline constexpr int defaultTurns = 12;
 inline constexpr int minimumTurns = 4;
 inline constexpr int maximumTurns = 100;
@@ -331,6 +333,7 @@ struct Team final {
     int automaticTurns{0};
     QString contextReset{context_reset::taskAndThreshold};
     int contextResetTurns{context_reset::defaultTurns};
+    int contextResetTokens{context_reset::defaultContextTokens};
     int contextResetIdleMinutes{context_reset::defaultIdleMinutes};
     // T-1: each member's current context, by session id. Bookkeeping, not a setting.
     QHash<QString, ContextMark> contexts;

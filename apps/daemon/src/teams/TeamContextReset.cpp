@@ -76,6 +76,8 @@ QString decide(const Team& team, const Member& member, std::optional<ContextMark
     }
     if (team.contextResetTurns > 0 && turnSequence - mark->since >= team.contextResetTurns)
         return thresholdReached;
+    if (team.contextResetTokens > 0 && activity.contextTokens >= team.contextResetTokens)
+        return contextSize;
     if (cacheWentCold(team, activity))
         return cacheCold;
     return {};

@@ -8,6 +8,7 @@ namespace ketplus::daemon::teams::context_reset {
 
 inline const QString taskChanged = QStringLiteral("task_changed");
 inline const QString thresholdReached = QStringLiteral("threshold");
+inline const QString contextSize = QStringLiteral("context_size");
 inline const QString cacheCold = QStringLiteral("cache_cold");
 // A context this large (input, cache read and cache write of the last request) is dearer to
 // write back into a cold cache than the briefing that replaces it. Measured over three days of
@@ -25,11 +26,11 @@ inline constexpr qsizetype briefingHistory = 5;
 // reviewer reviews now. Empty for the leader, who works across tasks.
 [[nodiscard]] QString memberTask(const Team& team, const Member& member, const QString& hint);
 
-// Whether that turn starts a fresh context: the reason (taskChanged, thresholdReached or
-// cacheCold, the first that holds in that order), or empty. `mark` is the member's current context,
-// or nullopt when the team has none; it is updated to what the team keeps when no reset happens: a
-// context the team has not seen yet (a new member, a provider handoff) is adopted as it is, never
-// reset.
+// Whether that turn starts a fresh context: the reason (taskChanged, thresholdReached,
+// contextSize, cacheCold, the first that holds in that order), or empty. `mark` is the member's
+// current context, or nullopt when the team has none; it is updated to what the team keeps when no
+// reset happens: a context the team has not seen yet (a new member, a provider handoff) is adopted
+// as it is, never reset.
 [[nodiscard]] QString decide(const Team& team, const Member& member,
                              std::optional<ContextMark>& mark, const QString& task,
                              const QString& thread, qint64 turnSequence,
