@@ -564,6 +564,36 @@ class PeerTransportTest final : public QObject {
         QTRY_VERIFY_WITH_TIMEOUT((signaling.receive(frame), lookups() > after + 1), 3000);
         QCOMPARE(peers.size(), 0);
     }
+    // The host's appended events raise a content-free notice only while events are forwarded.
+    void pushSignalsFollowTheForwardOnlyCapability() {
+        QTemporaryDir dir;
+        LocalJournal journal(dir.filePath("journal.sqlite"));
+        CodexAdapter provider(dir.filePath("never-run-provider"));
+        SessionHost host(&journal, &provider);
+        r03::Transport network;
+        CloudControlClient cloud(&journal, &host);
+        Access::configure(cloud, network);
+        auto& signaling = Access::signaling(cloud);
+        auto& notices = Access::pushSignals(cloud);
+        const QJsonObject event{{"session_id", "session"},
+                                {"cursor", 7},
+                                {"event_type", "turn.completed"},
+                                {"payload", QJsonObject{{"text", "never sent"}}}};
+        signaling.configure("workspace-synthetic", "machine-synthetic", 1, true);
+        emit host.eventReady(event); // uploading: no notice
+        QCOMPARE(notices.pending(), 0);
+        signaling.setForwardOnly(true);
+        emit host.eventReady(event); // the relay socket is closed: held, bounded
+        QCOMPARE(notices.pending(), 1);
+        signaling.setForwardOnly(false);
+        emit host.eventReady(event);
+        QCOMPARE(notices.pending(), 0);
+        signaling.setForwardOnly(true);
+        emit host.eventReady(event);
+        signaling.configure({}, {}, 1, false); // sign-out drops what waits
+        emit host.eventReady(event);
+        QCOMPARE(notices.pending(), 0);
+    }
     void largeItemsReachThePeerWithTheirChunks() {
         QTemporaryDir dir;
         LocalJournal journal(dir.filePath("journal.sqlite"));

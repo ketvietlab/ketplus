@@ -16,6 +16,9 @@ class CloudPrivacyTestAccess {
         client.workspaceId_ = workspace;
     }
     static transport::RemotePeers& peers(CloudControlClient& client) { return *client.peers_; }
+    static transport::PushSignals& pushSignals(CloudControlClient& client) {
+        return *client.pushSignals_;
+    }
     static transport::EventPage peerEvents(CloudControlClient& client, const QString& id,
                                            qint64 gen, qint64 cursor) {
         return client.peerEvents(id, gen, cursor);

@@ -6,6 +6,7 @@
 #include "cloud/RemoteWorktreeQuota.h"
 #include "cloud/SessionCredentials.h"
 #include "cloud/WorktreeRevisionCache.h"
+#include "transport/PushSignals.h"
 #include "transport/RemotePeers.h"
 #include "transport/Signaling.h"
 
@@ -275,6 +276,7 @@ class CloudControlClient final : public QObject {
     RelayWakeups wakeups_;
     transport::RemotePeers* peers_{nullptr};
     transport::Signaling* signaling_{nullptr};
+    transport::PushSignals* pushSignals_{nullptr};
     QString machineId_;
     QString workspaceId_;
     // Who signed this Mac in, from the user session that enrolled it (ADR 0109).

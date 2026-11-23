@@ -323,6 +323,9 @@ socket.
 The names are proposals for phases 3 and 4. The host gets `apps/daemon/src/transport/`, which does
 not depend on Control v2 HTTP internals:
 
+- **`PushSignals`**: with `events.forward_only/1`, the host sends a content-free notice for each
+  event that warrants a phone notification, keeps only a small number waiting, and drops them
+  when the socket stays down.
 - **`PeerLink`**: sends frames on a channel, reports buffered amounts, and signals received frames
   and closure. `WebRtcPeerLink` wraps libdatachannel's `rtc::PeerConnection`. `RelayPeerLink`
   carries the same frames over the relay socket.

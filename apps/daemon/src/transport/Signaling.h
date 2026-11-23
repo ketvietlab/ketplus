@@ -18,6 +18,8 @@ class Signaling final : public QObject {
     // Enabled while the relay grants events.forward_only/1; `sender` writes to the socket.
     void setRelaySender(RelayPeerLink::Sender sender) { relaySender_ = std::move(sender); }
     void setForwardOnly(bool enabled);
+    // Events are forwarded rather than uploaded, and this host has a relay scope to forward in.
+    bool forwardOnlyActive() const { return forwardOnly_ && enabled_; }
     // The socket closed: every relay link ends, and devices subscribe again on the next one.
     void relayLost();
     // The device's pin was removed or replaced: its relay link closes now, and a later
