@@ -80,11 +80,20 @@ ket::Dialog* teamWorktreeRemovalAll(QWidget* anchor, TeamDirectory* teams, const
     consequence->setObjectName(QStringLiteral("teamWorktreeAllConsequence"));
     consequence->setTone(QStringLiteral("text-secondary"));
     layout->addWidget(consequence);
-    auto* how = new Text(tr("Each one goes through the same checks as Remove…, one after another: "
-                            "a worktree with uncommitted or untracked changes, with commits on no "
-                            "remote branch, or the folder of a conversation that is running or "
-                            "waits for you is kept with the reason, and the others are still "
-                            "removed."),
+    const QString checks =
+        tr("a worktree with uncommitted or untracked changes, with commits on no "
+           "remote branch, or the folder of a conversation that is running or "
+           "waits for you is kept with the reason, and the others are still "
+           "removed.");
+    auto* how = new Text(teams->cleanupAvailable()
+                             ? tr("They are removed in the background, one after another, each "
+                                  "through the same checks as Remove…: ") +
+                                   checks +
+                                   tr(" The page locks them meanwhile and shows a summary when "
+                                      "the last one ends.")
+                             : tr("Each one goes through the same checks as Remove…, one after "
+                                  "another: ") +
+                                   checks,
                          body);
     how->setTone(QStringLiteral("text-muted"));
     how->setType(12);
@@ -162,6 +171,33 @@ ket::Dialog* teamWorktreeRemovalAll(QWidget* anchor, TeamDirectory* teams, const
         // Sent once; the dialog closes only when every removal answered.
         remove->setEnabled(false);
         cancel->setEnabled(false);
+        if (teams->cleanupAvailable()) {
+            // T-23: one request, answered at once; the daemon removes them in the background.
+            QJsonArray taskIds;
+            for (const auto& value : run->entries)
+                taskIds.append(value.toObject().value(QStringLiteral("task_id")).toString());
+            teams->request(
+                QStringLiteral("team.worktree.cleanup"),
+                {{QStringLiteral("team_id"), run->teamId}, {QStringLiteral("task_ids"), taskIds}},
+                [alive, result, remove, cancel, started](const QJsonObject&, const QString& error) {
+                    if (!alive)
+                        return;
+                    if (error.isEmpty()) {
+                        if (started)
+                            started();
+                        alive->accept();
+                        return;
+                    }
+                    result->setTone(ket::BannerTone::Danger);
+                    result->setTitle(tr("Not removed"));
+                    result->setMessage(error);
+                    result->show();
+                    remove->hide();
+                    cancel->setText(tr("Close"));
+                    cancel->setEnabled(true);
+                });
+            return;
+        }
         if (started)
             started();
         (*step)();

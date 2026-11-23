@@ -113,6 +113,7 @@ add_library(ketplus_desktop_support STATIC
     src/teams/TeamPageSections.cpp
     src/teams/TeamDecisionOther.cpp
     src/teams/TeamPageTasks.cpp
+    src/teams/TeamPageCleanup.cpp
     src/teams/TeamPageStorage.cpp
     src/teams/TeamPageRefresh.cpp
     src/teams/TeamWorktreeDialog.cpp

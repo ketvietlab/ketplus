@@ -512,13 +512,43 @@ is paused, stopped or removed on its own at any level.
   size ("at least" when a size is unknown); nothing is removed before it. The page then
   sends `team.worktree.remove` for each listed worktree, one after the other answered, in
   the list's order, so each goes through the same guards and the same git order as a
-  single Remove; there is no bulk request in the daemon. A refusal or a failure keeps that
+  single Remove; there is no bulk request in the daemon (a daemon with `teams.cleanup/1`
+  takes them as one, below). A refusal or a failure keeps that
   worktree listed with its reason in the daemon's or git's words, and the others are still
   removed. The dialog and the page show a summary (removed N, kept M with their reasons),
   each removal adds `worktree_removed` to its task's history as before, and "Remove all…"
   and every Remove… are disabled while the run lasts. The page's summary stays when the
   run removed every worktree (the section then says none is left on disk), and goes once
   a worktree it names as kept is no longer listed, such as after removing it by hand.
+- **Background cleanup (T-23, 2026-11-23).** Removing a worktree is slow when its folder
+  holds a build tree of several gigabytes, and the confirmation dialog stayed open over the
+  whole window until every removal answered. Neither event loop was blocked (the desktop's
+  requests are asynchronous and the daemon runs git on worker threads); what held the user
+  was that dialog, a page state that lived only in the page, and a removal that shared the
+  team's single git thread with every other team's git work. The daemon now has
+  `team.worktree.cleanup` (`{team_id, task_ids}`, one to 200 done tasks; feature
+  `teams.cleanup/1`). It answers at once with `{cleanup}` and removes the worktrees one
+  after another on a thread of their own (`teamWorktreeRemovals_`), each through the same
+  `removeWorktree` as a single Remove, so every refusal above still applies, again when the
+  worktree's turn comes, and nothing is forced. A task asked for twice is queued once; one
+  asked for while a run is going joins it. `cleanup` is `{run, active: [{task_id, state:
+  queued|removing}], last}`, where `last` is `null` or `{run, removed: [{task_id,
+  size_bytes}], kept: [{task_id, reason}], notes: [{task_id, note}], freed_bytes,
+  freed_exact, finished_at}`; the next run replaces it. It is in `team.storage.get`'s
+  `storage.cleanup`, and each of its `worktrees` the run holds has `removal`: `queued` or
+  `removing`. A run's state is in memory only, so a restarted daemon has none that could stay
+  "running". The daemon sends the notice `team.storage.changed` (`{team_id}`) to the local
+  clients each time a run moves; it is not a team event and the phone's heartbeat does not
+  carry it. The page asks for the storage again on it. The page closes the dialog once the
+  daemon took the request, locks each held worktree (Remove… disabled, "Queued" with a clock
+  or "Removing…" with the trash icon, static), disables Remove all…, shows "Removing N
+  worktrees in the background", and at the end a summary (removed, freed, kept with each
+  reason, notes) that stays until the user dismisses it or the next run. All of it is read
+  from the daemon, so it is the same on a page opened again or for another team and back.
+  `team.worktree.remove` is unchanged and answers when the removal ends, for older
+  clients; a desktop whose daemon lacks `teams.cleanup/1` keeps the one-request-at-a-time
+  behavior above. The phone and the relay do not carry either request (ADR 0116's
+  allowlist has neither `team.worktree.*` nor `team.storage.get`).
 - **Only the user.** There is no agent tool for either request. Agent connections reach
   only `agents.*` operations, the requests are `team.*` and served to trusted local
   clients only, the remote team path (ADR 0116) does not carry them, and the coordinator
@@ -699,7 +729,8 @@ conversation never reaches that point.
 
 ## Protocol
 
-Features `teams/1`, `teams.tasks/1`, `teams.settings/1` and `teams.storage/1` in
+Features `teams/1`, `teams.tasks/1`, `teams.settings/1`, `teams.storage/1` and
+`teams.cleanup/1` (T-23) in
 `daemon.hello`. Requests, for
 trusted local clients only (`forbidden` otherwise; agents use the tools below):
 `team.settings.get`, `team.settings.update` (`{turn_budget}`; both answer
@@ -712,8 +743,11 @@ trusted local clients only (`forbidden` otherwise; agents use the tools below):
 `team.decision.list`, `team.decision.answer`, `team.storage.get` (`{team_id}`; answers
 `{storage: {free_bytes, level, warn_bytes, stop_bytes, worktrees: [{task_id, title, branch,
 path, size_bytes}]}}`, `free_bytes` and `size_bytes` null when unknown, `level` `low`,
-`stop` or empty) and `team.worktree.remove` (`{team_id, task_id}`; answers `{team, note}`), §10.
-The two are on the desktop wire only, not on the remote team path. Events `team.changed` (the team and its
+`stop` or empty), `team.worktree.remove` (`{team_id, task_id}`; answers `{team, note}`) and
+`team.worktree.cleanup` (`{team_id, task_ids}`; answers `{cleanup}` at once, T-23), §10. The
+storage answer also carries `cleanup` and, on a worktree a run holds, `removal`; clients that
+do not know them ignore them, and the notice `team.storage.changed` (`{team_id}`).
+These are on the desktop wire only, not on the remote team path. Events `team.changed` (the team and its
 revision) and `team.removed` go to every local client.
 T-4: a local `team.member.add` may name several developers at once with `developers:
 [{name, lane?}]` (one to the room left of five) instead of `name` and `lane`; they share the

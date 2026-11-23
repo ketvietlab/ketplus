@@ -7,6 +7,7 @@
 
 #include <QDir>
 #include <QFileInfo>
+#include <QJsonArray>
 #include <QPointer>
 #include <QStorageInfo>
 
@@ -38,16 +39,13 @@ void SessionHost::askStorage(const QString& volumePath, const QStringList& workt
     });
 }
 
-// In the order of the team's other git questions, so no command reads a half-removed worktree.
+// T-23: on its own thread, in the order the removals were asked. A done task's worktree is read
+// by no other team command, so it need not wait in the team's git queue, and a removal of
+// several gigabytes holds nothing of any team behind it.
 void SessionHost::askRemoveWorktree(const QString& repository, const QString& worktree,
                                     teams::RemovalDone done) {
-    teamGit_.start([guard = QPointer<SessionHost>(this), repository, worktree,
-                    done = std::move(done)]() mutable {
-        QString error = team_git::removeWorktree(repository, worktree);
-        QMetaObject::invokeMethod(
-            guard, [done = std::move(done), error = std::move(error)] { done(error); },
-            Qt::QueuedConnection);
-    });
+    team_git::removeInBackground(teamWorktreeRemovals_, this, repository, worktree,
+                                 [done = std::move(done)](const QString& error) { done(error); });
 }
 
 QString SessionHost::conversationRunningIn(const QString& path) const {
@@ -99,6 +97,21 @@ void SessionHost::teamStorageCommand(const QJsonObject& request, CommandCallback
                                        : QJsonObject{{QStringLiteral("ok"), true},
                                                      {QStringLiteral("storage"), storage}});
                         });
+        return;
+    }
+    if (type == QStringLiteral("team.worktree.cleanup")) {
+        // T-23: answers at once with the cleanup's state; the removals run in the background.
+        QStringList taskIds;
+        for (const QJsonValue& value : payload.value(QStringLiteral("task_ids")).toArray())
+            taskIds.append(value.toString());
+        teams_->cleanupWorktrees(
+            teamId, taskIds, QStringLiteral("user"),
+            [done = std::move(done)](const std::optional<teams::TeamError>& error,
+                                     const QJsonObject& cleanup) {
+                done(error ? refusedAnswer(*error)
+                           : QJsonObject{{QStringLiteral("ok"), true},
+                                         {QStringLiteral("cleanup"), cleanup}});
+            });
         return;
     }
     teams_->removeWorktree(

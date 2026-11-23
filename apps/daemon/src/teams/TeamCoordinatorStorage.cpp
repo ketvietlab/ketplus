@@ -84,15 +84,24 @@ void TeamCoordinator::storage(const qint64 teamId, StorageAnswer done) {
                 return;
             }
             QJsonArray worktrees;
+            const auto cleanup = guard->cleanups_.constFind(teamId);
             for (const Task* task : doneWorktrees(*now)) {
                 const auto size = guard->worktreeSizes_.constFind(task->worktree);
-                worktrees.append(QJsonObject{
+                QJsonObject entry{
                     {QStringLiteral("task_id"), task->id},
                     {QStringLiteral("title"), task->title},
                     {QStringLiteral("branch"), task->branch},
                     {QStringLiteral("path"), task->worktree},
                     {QStringLiteral("size_bytes"),
-                     size == guard->worktreeSizes_.cend() ? QJsonValue() : QJsonValue(*size)}});
+                     size == guard->worktreeSizes_.cend() ? QJsonValue() : QJsonValue(*size)}};
+                // T-23: the row of a worktree a cleanup holds; clients without it ignore this.
+                if (cleanup != guard->cleanups_.cend()) {
+                    if (cleanup->removing == task->id)
+                        entry.insert(QStringLiteral("removal"), QStringLiteral("removing"));
+                    else if (cleanup->waiting.contains(task->id))
+                        entry.insert(QStringLiteral("removal"), QStringLiteral("queued"));
+                }
+                worktrees.append(entry);
             }
             done(std::nullopt,
                  QJsonObject{{QStringLiteral("free_bytes"),
@@ -100,45 +109,58 @@ void TeamCoordinator::storage(const qint64 teamId, StorageAnswer done) {
                              {QStringLiteral("level"), storage::level(facts.freeBytes)},
                              {QStringLiteral("warn_bytes"), storage::warnBytes},
                              {QStringLiteral("stop_bytes"), storage::stopBytes},
-                             {QStringLiteral("worktrees"), worktrees}});
+                             {QStringLiteral("worktrees"), worktrees},
+                             {QStringLiteral("cleanup"), guard->cleanupJson(teamId)}});
         });
 }
 
-void TeamCoordinator::removeWorktree(const qint64 teamId, const QString& taskId,
-                                     const QString& actor, RemovalAnswer done) {
-    const auto refuse = [&](const TeamError& error) {
-        done({.error = error, .teamId = teamId}, {});
-    };
+// Why a done task's worktree is not removed now, or nothing when it may be. Run again when a
+// queued removal comes to its turn, as the state it saw may have changed since.
+std::optional<TeamError> TeamCoordinator::removalRefusal(const qint64 teamId, const QString& taskId,
+                                                         const QString& actor) const {
     const Team* team = this->team(teamId);
     if (!team)
-        return refuse(
-            {QStringLiteral("team_not_found"), QStringLiteral("The team no longer exists.")});
+        return TeamError{QStringLiteral("team_not_found"),
+                         QStringLiteral("The team no longer exists.")};
     // Agents have no tool for it, and the daemon serves team.* only to the desktop; this
     // keeps any other caller out as well.
     if (actor != QStringLiteral("user"))
-        return refuse({QStringLiteral("role_forbidden"),
-                       QStringLiteral("Only you remove a worktree, from the team page.")});
+        return TeamError{QStringLiteral("role_forbidden"),
+                         QStringLiteral("Only you remove a worktree, from the team page.")};
     const Task* task = team->task(taskId);
     if (!task)
-        return refuse(
-            {QStringLiteral("task_not_found"), QStringLiteral("There is no task %1.").arg(taskId)});
+        return TeamError{QStringLiteral("task_not_found"),
+                         QStringLiteral("There is no task %1.").arg(taskId)};
     if (task->state != state::done)
-        return refuse(notRemoved(
-            QStringLiteral("%1 is not done; only a done task's worktree is removed.").arg(taskId)));
+        return notRemoved(
+            QStringLiteral("%1 is not done; only a done task's worktree is removed.").arg(taskId));
     const QString path = task->worktree;
     // T-90: the worktree belongs to the repository the task worked in.
     const QString repository = taskScope(*team, *task).repository;
     if (path.isEmpty() || !QFileInfo(path).isDir())
-        return refuse(notRemoved(QStringLiteral("%1 has no worktree on disk.").arg(taskId)));
+        return notRemoved(QStringLiteral("%1 has no worktree on disk.").arg(taskId));
     if (canonical(path) == canonical(repository))
-        return refuse(notRemoved(QStringLiteral("%1 is the repository's main checkout, which is "
-                                                "never removed.")
-                                     .arg(path)));
+        return notRemoved(QStringLiteral("%1 is the repository's main checkout, which is "
+                                         "never removed.")
+                              .arg(path));
     if (const QString busy = host_->conversationRunningIn(path); !busy.isEmpty())
-        return refuse(notRemoved(
-            QStringLiteral("%1 in %2. Remove the worktree once it is idle.").arg(busy, path)));
+        return notRemoved(
+            QStringLiteral("%1 in %2. Remove the worktree once it is idle.").arg(busy, path));
     if (worktreeRemovals_.contains(path))
-        return refuse(notRemoved(QStringLiteral("%1 is being removed already.").arg(path)));
+        return notRemoved(QStringLiteral("%1 is being removed already.").arg(path));
+    return std::nullopt;
+}
+
+void TeamCoordinator::removeWorktree(const qint64 teamId, const QString& taskId,
+                                     const QString& actor, RemovalAnswer done) {
+    if (const auto refused = removalRefusal(teamId, taskId, actor)) {
+        done({.error = *refused, .teamId = teamId}, {});
+        return;
+    }
+    const Team* team = this->team(teamId);
+    const Task* task = team->task(taskId);
+    const QString path = task->worktree;
+    const QString repository = taskScope(*team, *task).repository;
     worktreeRemovals_.insert(path);
     host_->askRemoveWorktree(repository, path,
                              [guard = QPointer<TeamCoordinator>(this), teamId, taskId, path,

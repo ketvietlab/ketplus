@@ -87,6 +87,11 @@ TeamPage::TeamPage(TeamDirectory* teams, const QString& teamId, const QString& r
             [this] { rebuild(); });
     connect(&ket::Appearance::instance(), &ket::Appearance::zoomChanged, this,
             [this] { rebuild(); });
+    // T-23: the daemon's cleanup of worktrees moved on: its rows and summary are read again.
+    connect(teams_, &TeamDirectory::storageChanged, this, [this](const QString& teamId) {
+        if (teamId == teamId_)
+            readStorage();
+    });
     // The free space changes without the team: it is read again every minute. The daemon
     // walks a worktree only the first time it lists it, so this reads the volume alone.
     auto* storageTimer = new QTimer(this);

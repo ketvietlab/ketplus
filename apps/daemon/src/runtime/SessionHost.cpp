@@ -332,6 +332,7 @@ SessionHost::SessionHost(LocalJournal* journal, CodexAdapter* adapter,
       readiness_(ProviderReadiness::pathForJournal(journal->databasePath())) {
     mediaReads_.setMaxThreadCount(mediaReadThreads);
     teamGit_.setMaxThreadCount(1);
+    teamWorktreeRemovals_.setMaxThreadCount(1);
     teamBranchNames_.setMaxThreadCount(1);
     worktreeListingReads_.setMaxThreadCount(worktreeListingThreads);
     teamRemote_.setMaxThreadCount(1);
@@ -1952,7 +1953,8 @@ void SessionHost::handleCommandDeferred(const QJsonObject& incoming, const QStri
     if (localClient(clientId)) {
         const QString type = request.value(QStringLiteral("message_type")).toString();
         if (type == QStringLiteral("team.storage.get") ||
-            type == QStringLiteral("team.worktree.remove")) {
+            type == QStringLiteral("team.worktree.remove") ||
+            type == QStringLiteral("team.worktree.cleanup")) {
             teamStorageCommand(request, std::move(done));
             return;
         }

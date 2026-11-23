@@ -624,6 +624,19 @@ class TeamCoordinator : public QObject {
     void storage(qint64 teamId, StorageAnswer done);
     void removeWorktree(qint64 teamId, const QString& taskId, const QString& actor,
                         RemovalAnswer done);
+    // T-23 (TeamCoordinatorCleanup.cpp): a background cleanup of done worktrees. It answers at
+    // once with the team's cleanup state (cleanupJson) and removes them one after another, each
+    // through removeWorktree and its checks, while the host works off its event loop. A
+    // worktree a check refuses is kept with its reason, and the others are still removed; asked
+    // again while a cleanup runs, the worktrees join its queue.
+    using CleanupAnswer =
+        std::function<void(const std::optional<TeamError>&, const QJsonObject& cleanup)>;
+    void cleanupWorktrees(qint64 teamId, const QStringList& taskIds, const QString& actor,
+                          CleanupAnswer done);
+    // {run, active: [{task_id, state: queued|removing}], last: {run, removed, kept, notes,
+    // freed_bytes, freed_exact, finished_at} or null}. Kept in memory only, so a restarted
+    // daemon has no cleanup that "runs".
+    [[nodiscard]] QJsonObject cleanupJson(qint64 teamId) const;
     // The done tasks whose worktree is a folder on disk other than the main checkout.
     [[nodiscard]] static QList<const Task*> doneWorktrees(const Team& team);
 
@@ -634,6 +647,8 @@ class TeamCoordinator : public QObject {
 
   signals:
     void teamChanged(const QJsonObject& team);
+    // T-23: the team's cleanup of worktrees moved on; storage is read again.
+    void storageChanged(qint64 teamId);
     void teamRemoved(const QString& teamId, const QString& repository);
 
   protected:
@@ -829,6 +844,26 @@ class TeamCoordinator : public QObject {
     QHash<QString, QList<std::function<void()>>> worktreeWaits_;
     // ADR 0114 §10: the worktrees the host is removing now, so one is removed once.
     QSet<QString> worktreeRemovals_;
+    [[nodiscard]] std::optional<TeamError> removalRefusal(qint64 teamId, const QString& taskId,
+                                                          const QString& actor) const;
+    // T-23: a team's cleanup run. `last` is the finished run's summary, until the next starts.
+    struct CleanupItem final {
+        QString taskId;
+        QString text; // a kept worktree's reason, or the note of a removed one
+        qint64 bytes{-1};
+    };
+    struct Cleanup final {
+        qint64 run{0};
+        QStringList waiting;
+        QString removing;
+        QList<CleanupItem> removed;
+        QList<CleanupItem> kept;
+        QJsonObject last;
+    };
+    QHash<qint64, Cleanup> cleanups_;
+    qint64 cleanupRuns_{0};
+    void pumpCleanup(qint64 teamId);
+    void finishCleanup(qint64 teamId);
     void worktreeRemoved(qint64 teamId, const QString& taskId, const QString& path,
                          RemovalAnswer done);
     // ADR 0114 §10: the size of each done worktree, measured once when it is first listed, so

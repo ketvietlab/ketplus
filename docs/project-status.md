@@ -153,6 +153,11 @@ Linux store policy, signed upgrade prompts and platform release acceptance remai
   path and size and removes one only after the user confirms, with `git worktree remove`
   without force and `git worktree prune`; dirty or unpushed worktrees, the main checkout
   and a running conversation's folder are refused in words. Agents have no way to ask.
+  Background cleanup (T-23, `teams.cleanup/1`): Remove… and Remove all… close their dialog at
+  once; the daemon removes the worktrees one after another on a thread of its own, each
+  through the same checks, and the page locks the rows it holds ("Queued", "Removing…"),
+  disables Remove all… and shows a summary (removed, freed, kept with reasons) until it is
+  dismissed. The state is the daemon's, so it is there when the page is opened again.
   Team provider switch (T-2, ADR 0114 "Protocol"): `team.provider.set` moves all or
   chosen members to another installed, signed-in provider with an optional model and
   effort (the new provider's default otherwise). Nothing is interrupted: each member keeps

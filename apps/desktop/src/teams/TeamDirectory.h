@@ -31,6 +31,17 @@ class TeamDirectory final : public QObject {
     // Only a daemon that advertises teams/1 has teams. Turning it off forgets them.
     void setAvailable(bool available);
     [[nodiscard]] bool isAvailable() const noexcept { return available_; }
+    // T-23: a daemon that advertises teams.cleanup/1 removes worktrees in the background
+    // (team.worktree.cleanup); without it the page removes them one request at a time.
+    void setCleanupAvailable(bool available) { cleanupAvailable_ = available; }
+    [[nodiscard]] bool cleanupAvailable() const noexcept { return cleanupAvailable_; }
+    // The cleanup run of a team whose summary the user closed; a later run shows its own.
+    [[nodiscard]] qint64 dismissedCleanup(const QString& teamId) const {
+        return dismissedCleanups_.value(teamId, 0);
+    }
+    void dismissCleanup(const QString& teamId, qint64 run) {
+        dismissedCleanups_.insert(teamId, run);
+    }
     // ADR 0115: the daemon went away. The teams last read stay, marked stale, so the sidebar
     // keeps each team's members together until the daemon is back and the list is read again.
     // Requests fail meanwhile.
@@ -66,6 +77,8 @@ class TeamDirectory final : public QObject {
 
   signals:
     void changed();
+    // T-23: the daemon says a team's cleanup of worktrees moved on; its storage is read again.
+    void storageChanged(const QString& teamId);
 
   private:
     void store(const QJsonObject& received);
@@ -74,6 +87,8 @@ class TeamDirectory final : public QObject {
     TeamCommands* commands_{nullptr};
     bool available_{false};
     bool stale_{false};
+    bool cleanupAvailable_{false};
+    QHash<QString, qint64> dismissedCleanups_;
     // A list that failed is asked for again, later each time: the daemon may still be
     // starting, and without the list the sidebar would show a team's members as loose
     // conversations until something else changed.

@@ -112,6 +112,8 @@ void TeamDirectory::applyEvent(const QString& type, const QJsonObject& payload) 
             refresh();
         else
             store(payload.value(QStringLiteral("team")).toObject());
+    } else if (type == QStringLiteral("team.storage.changed")) {
+        emit storageChanged(payload.value(QStringLiteral("team_id")).toString());
     } else if (type == QStringLiteral("team.removed")) {
         if (teams_.remove(payload.value(QStringLiteral("team_id")).toString()) > 0)
             emit changed();

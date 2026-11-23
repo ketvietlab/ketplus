@@ -19,6 +19,7 @@ class QTableWidget;
 class QVBoxLayout;
 
 namespace ket {
+class Button;
 class Dialog;
 } // namespace ket
 
@@ -123,6 +124,12 @@ class TeamPage final : public QWidget {
     [[nodiscard]] static QString doneTasks(const QJsonObject& team);
     void buildDiskBanner();
     void buildDoneWorktrees(const QJsonObject& team);
+    // T-23 (TeamPageCleanup.cpp): the daemon's background cleanup of done worktrees. Its state
+    // is the daemon's, read with the storage, so it is there when the page is opened again.
+    [[nodiscard]] bool cleanupRuns() const;
+    [[nodiscard]] bool hasCleanupSummary() const;
+    void buildCleanupSummary();
+    void lockRemoval(ket::Button* remove, const QString& taskId, const QString& removal);
     void buildRemovalSummary();
     void forgetStaleRemoval();
     void buildUpdates();
@@ -195,6 +202,8 @@ class TeamPage final : public QWidget {
     // team.storage.get's last answer; empty when the daemon has none.
     QJsonObject storage_;
     bool storagePending_{false};
+    // An event said the storage moved while an answer was on its way: read it again after.
+    bool storageStale_{false};
     // T-62: "Remove all…" is running, and what its last run did (kept until the next one).
     bool removingAll_{false};
     std::optional<team_storage::Outcome> removalOutcome_;

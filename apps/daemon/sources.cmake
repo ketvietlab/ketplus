@@ -237,6 +237,7 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/teams/TeamCoordinatorFlow.cpp
     src/teams/TeamCoordinatorGit.cpp
     src/teams/TeamCoordinatorStall.cpp
+    src/teams/TeamCoordinatorCleanup.cpp
     src/teams/TeamCoordinatorStorage.cpp
     src/teams/TeamCoordinatorWaits.cpp
     src/teams/TeamCoordinatorMerges.cpp
