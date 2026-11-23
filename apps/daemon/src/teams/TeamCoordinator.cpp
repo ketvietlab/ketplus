@@ -267,7 +267,7 @@ std::optional<TeamError> TeamCoordinator::commit(Team& team, const Team& before,
         actionable = actionable || update.actionable;
         (void)journal_->appendTeamUpdate({.teamId = team.id,
                                           .at = team.changedAt,
-                                          .actor = actor,
+                                          .actor = update.actor.isEmpty() ? actor : update.actor,
                                           .kind = update.kind,
                                           .taskId = update.taskId,
                                           .text = boundedText(update.text),

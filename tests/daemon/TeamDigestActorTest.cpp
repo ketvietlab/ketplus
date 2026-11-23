@@ -74,7 +74,10 @@ class TeamDigestActorTest final : public QObject {
     // What the leader does by itself: change criteria, create and assign a task, and close the
     // blocked task of dev1 by hand, which is the actionable "→ done" update of ADR 0114 §7.
     // The next digest without a real reason must still be silent.
+    // dev1 keeps another task and dev2 gets one, so closing leaves nobody idle and the goal open:
+    // those consequences are the daemon's, and are tested apart.
     void leaderWorks(const QString& id) {
+        QVERIFY(!newTask("Search", "dev1").isEmpty());
         QVERIFY(teams_->moveTask(team_, id, state::inProgress, "dev1").ok());
         QVERIFY(teams_->moveTask(team_, id, state::blocked, "dev1", "Which endpoint?").ok());
         settle();
@@ -156,7 +159,7 @@ class TeamDigestActorTest final : public QObject {
     // a digest and still carry [needs you], also right after something the leader did.
     void everyOtherActorStillNeedsTheLeader_data() {
         QTest::addColumn<QString>("actor");
-        for (const char* actor : {"developer", "user", "daemon", "reviewer"})
+        for (const char* actor : {"developer", "user", "reviewer"})
             QTest::newRow(actor) << QString::fromLatin1(actor);
     }
     void everyOtherActorStillNeedsTheLeader() {
@@ -177,10 +180,6 @@ class TeamDigestActorTest final : public QObject {
         } else if (actor == "user") {
             QVERIFY(teams_->moveTask(team_, id, state::blocked, "user", "Waiting for design").ok());
             needle = "Waiting for design";
-        } else if (actor == "daemon") {
-            // "has no task left" is the daemon's note on a developer whose work left its hands.
-            QVERIFY(teams_->moveTask(team_, id, state::inReview, "dev1").ok());
-            needle = "has no task left";
         } else {
             // A review verdict: findings go back to the developer and the leader reads a line.
             QVERIFY(teams_->moveTask(team_, id, state::inReview, "dev1").ok());
@@ -194,6 +193,51 @@ class TeamDigestActorTest final : public QObject {
         const QStringList lines = linesWith(body, needle);
         QVERIFY2(!lines.isEmpty(), qPrintable(body));
         QVERIFY2(lines.first().contains("[needs you]"), qPrintable(body));
+    }
+
+    // What the daemon works out inside the leader's own command is the daemon's update, not the
+    // leader's: closing a developer's last task leaves it idle, closing the last task of the team
+    // reaches the goal, and closing a dependency makes a reviewed task ready to merge. The
+    // digest still goes out and still marks them.
+    void whatTheDaemonDerivesFromTheLeadersCommandStillNeedsTheLeader_data() {
+        QTest::addColumn<QString>("what");
+        QTest::addColumn<QString>("needle");
+        QTest::newRow("idle developer") << "idle" << "has no task left";
+        QTest::newRow("goal reached") << "goal" << "Every task is done";
+        QTest::newRow("merge offer") << "merge" << "can be merged";
+    }
+    void whatTheDaemonDerivesFromTheLeadersCommandStillNeedsTheLeader() {
+        QFETCH(QString, what);
+        QFETCH(QString, needle);
+        const QString first = newTask("Cart", "dev1");
+        QVERIFY(teams_->moveTask(team_, first, state::inProgress, "dev1").ok());
+        if (what == "idle") {
+            // dev2 keeps a task, so only dev1 runs out of work.
+            const QString other = newTask("Billing", "dev2");
+            QVERIFY(teams_->moveTask(team_, other, state::inProgress, "dev2").ok());
+        } else if (what == "merge") {
+            // dev1 keeps a task; Billing waits for Cart, reviewed and ready.
+            QVERIFY(!newTask("Search", "dev1").isEmpty());
+            const QString second = newTask("Billing", "dev2");
+            QVERIFY(teams_->moveTask(team_, second, state::inProgress, "dev2").ok());
+            QVERIFY(teams_->updateTask(team_, second, {{"depends_on", QJsonArray{first}}}, "lead")
+                        .ok());
+            QVERIFY(teams_->moveTask(team_, second, state::inReview, "dev2").ok());
+            finishReview(*teams_, "rev", "Verdict: no findings", true);
+            QCOMPARE(team().task(second)->state, state::ready);
+        }
+        settle();
+        QVERIFY(teams_->closeTask(team_, first, "abcdef1234567", "Merged by hand.", "lead").ok());
+        leaderTurnEnds();
+        const QString body = digestTo("lead");
+        QVERIFY2(!body.isEmpty(), "The daemon's consequence of a leader command starts a digest.");
+        const QStringList lines = linesWith(body, needle);
+        QVERIFY2(!lines.isEmpty(), qPrintable(body));
+        QVERIFY2(lines.first().contains("[needs you]"), qPrintable(body));
+        // The leader's own closing stays an ordinary line.
+        const QStringList closed = linesWith(body, "closed by");
+        QCOMPARE(closed.size(), 1);
+        QVERIFY2(!closed.first().contains("[needs you]"), qPrintable(body));
     }
 
     // Criterion 3, a merge seen outside the app is the daemon's.

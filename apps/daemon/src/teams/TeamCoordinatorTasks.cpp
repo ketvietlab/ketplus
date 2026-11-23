@@ -367,7 +367,8 @@ bool TeamCoordinator::blockAtLoweredLimit(Team& team, Task& task, QList<Update>&
                      .arg(task.round)
                      .arg(limit),
          .taskId = task.id,
-         .actionable = true});
+         .actionable = true,
+         .actor = QStringLiteral("daemon")});
     return true;
 }
 
@@ -390,7 +391,8 @@ void TeamCoordinator::applyMove(Team& team, Task& task, const QString& to, const
                           reason.isEmpty() ? QString{} : QStringLiteral(": ") + reason),
          .taskId = task.id,
          .actionable = actionable,
-         .data = {{QStringLiteral("from"), from}, {QStringLiteral("to"), to}}});
+         .data = {{QStringLiteral("from"), from}, {QStringLiteral("to"), to}},
+         .actor = actor});
     // T-19: a task handed to review again starts its replies without a verdict from zero.
     if (to == state::inReview)
         task.missingVerdicts = 0;
@@ -413,7 +415,8 @@ void TeamCoordinator::applyMove(Team& team, Task& task, const QString& to, const
                              .arg(actorName(team, task.owner)),
                  .taskId = task.id,
                  .actionable = true,
-                 .data = {{QStringLiteral("session_id"), task.owner}}});
+                 .data = {{QStringLiteral("session_id"), task.owner}},
+                 .actor = QStringLiteral("daemon")});
     }
 }
 
