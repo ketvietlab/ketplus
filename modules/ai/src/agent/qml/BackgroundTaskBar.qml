@@ -65,10 +65,12 @@ Rectangle {
                 timed_out: KetTheme.TaskStatus.Failed
             })[state(task)] ?? KetTheme.TaskStatus.Stopped;
     }
+    // Native macOS cleanup assurance belongs to the machine, not to one task: the strip states
+    // it once under the rows instead of repeating it under every card.
+    readonly property bool bestEffort: tasks.some(task => task.containment_mode === "native_best_effort")
+    // Only what a reader must act on or know about this task sits under its card.
     function details(task) {
         const lines = [];
-        if (task.containment_mode === "native_best_effort")
-            lines.push(task.cleanup_status === "best_effort_complete" ? "Native macOS · best effort complete. Unobserved descendants may remain." : "Native macOS · best effort. Cleanup is not guaranteed.");
         if (attention(task)) {
             lines.push("Cleanup unverified. " + (task.manual_guidance || "Check the command and its descendants, then retry cleanup or acknowledge your manual check."));
             if (task.exit_code !== undefined && task.exit_code !== null)
@@ -82,9 +84,16 @@ Rectangle {
                     delivered: "Agent follow-up delivered",
                     suppressed: "Agent follow-up suppressed"
                 })[completion.status] + (completion.reason ? " · " + completion.reason : ""));
-        if (task.schema_version !== undefined)
-            lines.push("Task " + task.task_id);
         return lines.join("\n");
+    }
+    // The opened output names its task and the cleanup assurance of that task.
+    function outputFooter(task) {
+        const parts = [];
+        if (task.schema_version !== undefined)
+            parts.push("Task " + task.task_id);
+        if (task.containment_mode === "native_best_effort")
+            parts.push(task.cleanup_status === "best_effort_complete" ? "Best effort cleanup complete" : "Best effort cleanup");
+        return parts.join(" · ");
     }
     function confirmCleanup(task) {
         cleanupDialog.taskId = task.task_id;
@@ -277,12 +286,26 @@ Rectangle {
             }
         }
         Text {
+            objectName: "backgroundTaskAssurance"
+            Layout.fillWidth: true
+            visible: !bar.collapsed && bar.bestEffort
+            leftPadding: bar.barRecipe.paddingInline
+            rightPadding: bar.barRecipe.paddingInline
+            text: "Native macOS · cleanup is best effort. Unobserved descendant processes may remain."
+            color: KetTheme.t.textMuted
+            font.family: KetTheme.fontFamily
+            font.pixelSize: bar.barRecipe.fontPixels
+            wrapMode: Text.Wrap
+        }
+        Text {
             Layout.fillWidth: true
             visible: !bar.collapsed && !!bar.registry.nextCursor
+            leftPadding: bar.barRecipe.paddingInline
+            rightPadding: bar.barRecipe.paddingInline
             text: (bar.registry.activeCount !== undefined ? plural(bar.registry.activeCount, "active task") + " · " : "") + plural(bar.tasks.length, "task") + " shown · more available"
             color: KetTheme.t.textMuted
             font.family: KetTheme.fontFamily
-            font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
+            font.pixelSize: bar.barRecipe.fontPixels
             wrapMode: Text.Wrap
         }
         Flow {
@@ -417,6 +440,19 @@ Rectangle {
                         font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
                         onClicked: agentHost.copyText(bar.pane.output || "")
                     }
+                }
+                TextEdit {
+                    objectName: "backgroundTaskOutputFooter"
+                    Layout.fillWidth: true
+                    visible: text.length > 0
+                    readOnly: true
+                    selectByMouse: true // the task id is for support and logs
+                    textFormat: TextEdit.PlainText
+                    wrapMode: TextEdit.WrapAnywhere // a task id has no break points
+                    text: outputPane.task ? bar.outputFooter(outputPane.task) : ""
+                    color: KetTheme.t.textMuted
+                    font.family: KetTheme.fontFamily
+                    font.pixelSize: bar.barRecipe.fontPixels
                 }
             }
         }
