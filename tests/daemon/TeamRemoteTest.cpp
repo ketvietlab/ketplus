@@ -658,6 +658,10 @@ class TeamRemoteTest final : public QObject {
                 "invalid_payload");
         refused({{"developers", QJsonArray{two}}, {"name", "Developer 3"}}, "invalid_payload");
         refused({{"developers", QJsonArray{two}}, {"lane", "Docs"}}, "invalid_payload");
+        refused({{"developers", QJsonArray{two}}, {"paths", QJsonArray{"docs"}}},
+                "invalid_payload");
+        refused({{"developers", QJsonArray{QJsonObject{{"name", QString(121, 'x')}}}}},
+                "invalid_payload");
         // The checks of the local path: a name given twice, a lane the team has, no room.
         refused({{"developers", QJsonArray{two, two}}}, "invalid_payload");
         refused({{"developers", QJsonArray{QJsonObject{{"name", "Developer 2"}, {"lane", "Web"}}}}},

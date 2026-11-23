@@ -76,12 +76,13 @@ const QHash<QString, QSet<QString>>& allowedFields() {
 }
 
 // T-18: the shape of `developers` the contract allows: one to five {name, lane?}, and never
-// beside a single `name` or `lane`. The names, lanes and room are checked as for a local
+// beside a single `name`, `lane` or `paths`. Names, lanes and room are checked as for a local
 // client, before any conversation starts.
 std::optional<QJsonObject> developersRefusal(const QJsonObject& payload) {
     if (!payload.contains(QStringLiteral("developers")))
         return std::nullopt;
-    if (payload.contains(QStringLiteral("name")) || payload.contains(QStringLiteral("lane")))
+    if (payload.contains(QStringLiteral("name")) || payload.contains(QStringLiteral("lane")) ||
+        payload.contains(QStringLiteral("paths")))
         return invalid(QStringLiteral("Name the developers to add in developers, or one "
                                       "developer with name."));
     const QJsonValue value = payload.value(QStringLiteral("developers"));
