@@ -155,7 +155,8 @@ void CloudControlClient::heartbeat() {
 
 void CloudControlClient::sendHeartbeatBatches(const QList<QJsonArray>& batches,
                                               const qsizetype index,
-                                              const AccountFence& requestAccount) {
+                                              const AccountFence& requestAccount,
+                                              const std::optional<QJsonArray>& catalog) {
     const auto& machineId = requestAccount.machine;
     if (!accountCurrent(requestAccount)) {
         heartbeatInFlight_ = false;
@@ -173,6 +174,8 @@ void CloudControlClient::sendHeartbeatBatches(const QList<QJsonArray>& batches,
         distributeKeys();
         return;
     }
+    // Reuse the first batch's catalog for every later batch in this heartbeat.
+    const QJsonArray worktrees = catalog ? *catalog : worktreeSnapshots();
     QJsonObject body{
         {QStringLiteral("machineId"), machineId},
         {QStringLiteral("controlProtocolVersion"), 2},
@@ -183,7 +186,7 @@ void CloudControlClient::sendHeartbeatBatches(const QList<QJsonArray>& batches,
         {QStringLiteral("daemonVersion"), QStringLiteral(KETPLUS_PRODUCT_VERSION)},
         {QStringLiteral("observedAt"), QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs)},
         {QStringLiteral("sessions"), batches.at(index)},
-        {QStringLiteral("worktrees"), worktreeSnapshots()}};
+        {QStringLiteral("worktrees"), worktrees}};
     QJsonArray deletions;
     for (const auto& value : journal_->deletionWork(64, true)) {
         const auto work = value.toObject();
@@ -194,8 +197,8 @@ void CloudControlClient::sendHeartbeatBatches(const QList<QJsonArray>& batches,
         body.insert("deletions", deletions);
     request("POST", QStringLiteral("/v2/daemon/heartbeat"), body, daemonToken_,
             {{QByteArray("X-KetPlus-Daemon-Version"), QByteArray(KETPLUS_PRODUCT_VERSION)}},
-            [this, batches, index, requestAccount](const int status, const QJsonValue& value,
-                                                   const QString& transportError) {
+            [this, batches, index, requestAccount,
+             worktrees](const int status, const QJsonValue& value, const QString& transportError) {
                 if (!accountCurrent(requestAccount)) {
                     heartbeatInFlight_ = false;
                     return;
@@ -223,7 +226,7 @@ void CloudControlClient::sendHeartbeatBatches(const QList<QJsonArray>& batches,
                         deletion.value("sessionGeneration").toInteger(),
                         deletion.value("operationId").toString());
                 }
-                sendHeartbeatBatches(batches, index + 1, requestAccount);
+                sendHeartbeatBatches(batches, index + 1, requestAccount, worktrees);
             });
 }
 

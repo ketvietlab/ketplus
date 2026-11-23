@@ -731,30 +731,56 @@ QJsonObject CloudControlClient::sealedSessionMetadata(const QJsonObject& snapsho
 }
 
 QStringList CloudControlClient::catalogWorktreePaths() const {
-    // The relay takes at most 100 worktrees a heartbeat; the ones with conversations come first.
     constexpr qsizetype maximumWorktrees = 100;
+    constexpr int pageSize = 128;
     QStringList paths;
-    QStringList repositories;
-    const auto add = [&paths](const QString& path) {
+    QSet<QString> included;
+    QSet<QString> expandedRepositories;
+    const auto add = [&](const QString& path) {
+        if (included.contains(path))
+            return;
         const QString canonical = QFileInfo(path).canonicalFilePath();
-        if (!canonical.isEmpty() && QFileInfo(canonical).isDir() && !paths.contains(canonical) &&
-            paths.size() < maximumWorktrees)
-            paths.append(canonical);
+        if (canonical.isEmpty() || included.contains(canonical) || !QFileInfo(canonical).isDir())
+            return;
+        included.insert(canonical);
+        paths.append(canonical);
     };
-    for (const QString& path : journal_->worktreePaths()) {
-        // A deleted worktree is no longer a place to start a conversation; the relay retires
-        // the entries a heartbeat leaves out.
-        add(path);
-        if (const QString canonical = QFileInfo(path).canonicalFilePath(); !canonical.isEmpty())
-            if (const QString repository = worktreeRepository(canonical);
-                !repositories.contains(repository))
-                repositories.append(repository);
-    }
-    // Every checkout of those repositories, as the desktop's New conversation dialog lists
-    // them, not only the ones a conversation already ran in.
-    for (const QString& repository : std::as_const(repositories))
-        for (const QString& checkout : repositoryCheckouts(repository))
-            add(checkout);
+    const auto addJournalPages = [&](bool conversationsOnly) {
+        QString after = QStringLiteral("");
+        while (paths.size() < maximumWorktrees) {
+            const auto page = journal_->worktreePathsAfter(after, pageSize, conversationsOnly);
+            for (const auto& path : page) {
+                add(path);
+                if (paths.size() == maximumWorktrees)
+                    return;
+            }
+            if (page.size() < pageSize)
+                return;
+            after = page.constLast();
+        }
+    };
+    // Take a snapshot of the seeds because appending checkouts changes paths.
+    const auto expandRepositories = [&](QStringList seeds) {
+        for (const QString& seed : seeds) {
+            if (paths.size() == maximumWorktrees)
+                return;
+            const QString repository = worktreeRepository(seed);
+            if (expandedRepositories.contains(repository))
+                continue;
+            expandedRepositories.insert(repository);
+            for (const QString& checkout : repositoryCheckouts(repository)) {
+                add(checkout);
+                if (paths.size() == maximumWorktrees)
+                    return;
+            }
+        }
+    };
+    // Give conversations the first places, followed by their repositories' other checkouts.
+    addJournalPages(true);
+    expandRepositories(paths);
+    addJournalPages(false);
+    // Enrolled roots without conversations also discover their linked checkouts if there is room.
+    expandRepositories(paths);
     return paths;
 }
 

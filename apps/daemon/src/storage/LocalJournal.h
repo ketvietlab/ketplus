@@ -297,6 +297,9 @@ class LocalJournal final {
     [[nodiscard]] std::optional<QSet<QString>> sessionIds() const;
     [[nodiscard]] SessionHead sessionHead(const QString& sessionId) const;
     [[nodiscard]] QStringList worktreePaths() const;
+    // Keyset page in catalog path order. The first page starts after an empty string.
+    [[nodiscard]] QStringList worktreePathsAfter(const QString& after, int limit,
+                                                 bool conversationsOnly) const;
     // Each catalog path with the repository recorded for it, empty when none was recorded.
     [[nodiscard]] QHash<QString, QString> worktreeRepositories() const;
     bool rememberWorktreeRepository(const QString& worktreePath, const QString& repositoryPath);

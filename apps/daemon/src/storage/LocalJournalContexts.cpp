@@ -91,6 +91,29 @@ bool LocalJournal::rememberWorktree(const QString& path) {
     return q.exec();
 }
 
+QStringList LocalJournal::worktreePathsAfter(const QString& after, const int limit,
+                                             const bool conversationsOnly) const {
+    QSqlQuery query(database_);
+    if (conversationsOnly) {
+        query.prepare(QStringLiteral("SELECT DISTINCT s.worktree_path FROM sessions s "
+                                     "JOIN worktree_catalog c ON c.path = s.worktree_path "
+                                     "WHERE s.worktree_path > ? ORDER BY s.worktree_path LIMIT ?"));
+    } else {
+        query.prepare(QStringLiteral(
+            "SELECT path FROM worktree_catalog WHERE path > ? ORDER BY path LIMIT ?"));
+    }
+    query.addBindValue(after);
+    query.addBindValue(limit);
+    if (!query.exec()) {
+        setError(query.lastError().text());
+        return {};
+    }
+    QStringList paths;
+    while (query.next())
+        paths.append(query.value(0).toString());
+    return paths;
+}
+
 bool LocalJournal::recordWorktreeActivity(const StoredSession& session, const QString& path,
                                           qint64 cursor) {
     QSqlQuery q(database_);
