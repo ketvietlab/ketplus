@@ -67,8 +67,8 @@ bool NativeJobSupervisor::initialize(QString* error) {
     metadata_.insert("systemd_unit", linuxJobUnit(taskId_, lease_));
 #endif
     // The receipt is this supervisor's first durable act. The daemon reads a missing receipt
-    // as a supervisor that never started (NativeJobRecovery.cpp), so nothing that can fail
-    // runs before it.
+    // as a supervisor that never started (NativeJobRecovery.cpp), so only the directory and
+    // birth-identity checks above run before it, and they launch nothing.
     if (!persist())
         return false;
     // A failure before the control socket listens launched nothing: record it as a failed

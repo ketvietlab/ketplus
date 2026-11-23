@@ -183,12 +183,19 @@ void ManagedTaskRuntime::observeProcess(const QString& id, const QJsonObject& ev
         // without that commit never launched a workload, even if it already waits for a user.
         BackgroundTaskChange change;
         if (!live->record.value("handshake_committed").toBool()) {
-            change.state = "failed";
-            change.reason = "handshake_failed";
+            // A stop, owner close or deadline that arrived first keeps the result it asked for,
+            // as stopTask does for a job without an executor.
+            const QString target =
+                previous == "stopping"
+                    ? live->record.value("terminal_target").toString("interrupted")
+                    : QStringLiteral("failed");
+            change.state = target;
+            change.reason = target == "failed" ? QStringLiteral("handshake_failed") : target;
             change.errorCode = "executor_never_started";
             change.neverLaunched = true;
+            change.cleanupConfirmed = true;
             change.cleanupStatus = "not_required";
-            change.summary = "Background task " + id + " ended with state failed.";
+            change.summary = "Background task " + id + " ended with state " + target + '.';
         } else {
             // A committed handshake whose receipt vanished is not evidence of anything.
             change.state = "needs_attention";

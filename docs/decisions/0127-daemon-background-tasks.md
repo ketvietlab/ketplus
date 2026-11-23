@@ -194,8 +194,14 @@ nor a control socket (it exited before its first durable write), the daemon ends
 as `failed(reason=handshake_failed, error=executor_never_started)` with
 `cleanup_status=not_required` and releases its slot, also from `needs_attention`. The
 supervisor persists its receipt before anything else that can fail, and a failure before
-its control socket listens is recorded as `failed/handshake_failed`. A missing receipt
-after a committed handshake stays `needs_attention`.
+its control socket listens is recorded as `failed/handshake_failed`. A job that was already
+`stopping` when this is detected ends at its `terminal_target` instead (cancelled, timed out
+or interrupted), with the same evidence. A missing receipt after a committed handshake stays
+`needs_attention`, and a client that has seen a receipt keeps retrying the identities it
+holds. A supervisor slower than the daemon's 5.5-second recovery window to write its first
+receipt (for example the first launch of a newly installed bundle while the system scans
+it) is reported the same way; it launched nothing and exits once its lease expires, so the
+`handshake_failed` result does not mean the executor or handshake is broken.
 
 Only a user may invoke `session.task.resolve_cleanup` with `task_id` and revision.
 CAS `needs_attention -> interrupted(reason=cleanup_acknowledged)` with a durable

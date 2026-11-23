@@ -267,6 +267,35 @@ class ManagedTaskRuntimeTest final : public QObject {
         QSqlDatabase::removeDatabase(connection);
     }
 
+    // A stop that lands before the client notices the dead supervisor moves the job to
+    // stopping. The never-started report must end it at that target, not leave it stopping.
+    void stopBeforeNeverStartedReportEndsAtItsTargetAndReleasesSlot() {
+        QString connection;
+        {
+            Fixture fixture;
+            connection = fixture.connection;
+            QString error;
+            QVERIFY2(fixture.initialize(&error, QStringLiteral("/usr/bin/false")),
+                     qPrintable(error));
+            const auto request = fixture.intent();
+            const auto reply = fixture.start(request, fixture.execution({"/usr/bin/true"}));
+            QVERIFY(reply.value("ok").toBool());
+            const auto id = reply.value("task").toObject().value("task_id").toString();
+            QTRY_COMPARE(fixture.permissionRequests, 1);
+            fixture.runtime->permissionResolved(id, true);
+            QTRY_COMPARE_WITH_TIMEOUT(fixture.get(id).value("state"), "starting", 3000);
+            const auto stopped = fixture.runtime->stop(id, request.owner, false);
+            QVERIFY(stopped.value("ok").toBool());
+            QCOMPARE(fixture.get(id).value("state"), "stopping");
+            QTRY_COMPARE_WITH_TIMEOUT(fixture.get(id).value("state"), "cancelled", 10000);
+            const auto task = fixture.get(id);
+            QCOMPARE(task.value("error"), "executor_never_started");
+            QCOMPARE(task.value("cleanup_status"), "not_required");
+            QCOMPARE(fixture.ledger.list(request.owner).value("active_count").toInt(), 0);
+        }
+        QSqlDatabase::removeDatabase(connection);
+    }
+
     // Journals written by affected builds hold such jobs in needs_attention with their slot.
     void restartEndsNeverStartedAttentionJobAndReleasesItsSlot() {
         QString connection;

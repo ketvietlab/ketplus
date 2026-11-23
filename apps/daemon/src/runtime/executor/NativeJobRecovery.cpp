@@ -85,12 +85,15 @@ void NativeJobClient::recoverLostSupervisor() {
         });
 #else
     const auto persisted = receipt();
-    if (persisted.isEmpty() && !QFileInfo::exists(directory_ + "/executor.json") &&
+    if (persisted.isEmpty() && lastReceipt_.isEmpty() && !authenticated_ &&
+        !QFileInfo::exists(directory_ + "/executor.json") &&
         !QFileInfo::exists(controlAddress(directory_, lease_))) {
-        // The supervisor persists its receipt before anything else and only then listens. A
-        // workload starts only on a command over that socket, sent after the daemon committed
-        // the handshake. With neither file present the supervisor never got that far, so no
-        // workload exists. The runtime still checks the handshake before ending the job.
+        // The supervisor persists its receipt before it can launch anything and only then
+        // listens. A workload starts only on a command over that socket, sent after the daemon
+        // committed the handshake. With neither file present, and no receipt ever seen by this
+        // client, the supervisor never got that far, so no workload exists. A client that saw a
+        // receipt keeps signalling the identities it holds. The runtime still checks the
+        // handshake before ending the job.
         reportNeverStarted();
         return;
     }
