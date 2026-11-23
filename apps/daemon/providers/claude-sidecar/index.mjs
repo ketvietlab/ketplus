@@ -629,6 +629,11 @@ async function startRun(messageId, params, prompt, images) {
     run.input = new TurnInput(firstPrompt, Boolean(epoch));
     if (params.resume) await ensureResumable(params.resume, run.cwd).catch(() => false);
     const authentication = authenticationOptions(params.authentication);
+    const teamSkills = {
+      leader: ["ketplusdev", "ketvietdev", "ket-atlas"],
+      developer: ["ketplusdev", "ketvietdev", "ket-atlas", "enterprise-grade", "ket-design-system"],
+      reviewer: ["ketplusdev", "ketvietdev", "enterprise-grade", "ket-design-system"],
+    };
     const teamRestrictions = teamDisallowedTools("claude", params.teamRole);
     const appended = [typeof params.browserInstructions === "string" ? params.browserInstructions : "",
       review?.instructions || ""].filter(Boolean).join("\n\n");
@@ -648,6 +653,7 @@ async function startRun(messageId, params, prompt, images) {
         // The daemon derives this from the same launch as mcpServers on every query,
         // including resume. Preserve Claude Code's system prompt and the user's input.
         ...(appended ? { systemPrompt: { type: "preset", preset: "claude_code", append: appended } } : {}),
+        ...(Object.hasOwn(teamSkills, params.teamRole) ? { skills: teamSkills[params.teamRole] } : {}),
         allowedTools: hostTools,
         model: params.model || "sonnet",
         // Per-launch CLI flag: do not replace the SDK's environment or model capacity.

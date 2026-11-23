@@ -27,6 +27,8 @@ test("sidecar supplies host MCP servers on resume and scopes auto-approval to in
           const computer = await options.canUseTool("mcp__ketplus_computer__screenshot", {});
           yield { type: "result", session_id: "thread-1", result: JSON.stringify({
             mcpServers: options.mcpServers, allowedTools: options.allowedTools,
+            skills: options.skills, settingSources: options.settingSources,
+            plugins: options.plugins, persistSession: options.persistSession,
             prompt, systemPrompt: options.systemPrompt,
             resume: options.resume, permissionMode: options.permissionMode, browser, other, similar, computer
           }) };
@@ -48,17 +50,21 @@ test("sidecar supplies host MCP servers on resume and scopes auto-approval to in
     env: { KETPLUS_COMPUTER_CONVERSATION: "session-1", KETPLUS_COMPUTER_TOKEN: "t" } };
   const cases = [
     { id: 1, browser: true, computer: true },
-    { id: 2, browser: false, computer: false },
-    { id: 3, browser: false, computer: true },
+    { id: 2, browser: false, computer: false, teamRole: "leader",
+      skills: ["ketplusdev", "ketvietdev", "ket-atlas"] },
+    { id: 3, browser: false, computer: true, teamRole: "reviewer",
+      skills: ["ketplusdev", "ketvietdev", "enterprise-grade", "ket-design-system"] },
+    { id: 4, browser: false, computer: false, teamRole: "developer",
+      skills: ["ketplusdev", "ketvietdev", "ket-atlas", "enterprise-grade", "ket-design-system"] },
   ];
-  for (const { id, browser: enabled, computer } of cases) {
+  for (const { id, browser: enabled, computer, teamRole, skills } of cases) {
     const mcpServers = {
       ...(enabled ? { ketplus_browser: server } : {}),
       ...(computer ? { ketplus_computer: computerServer } : {}),
     };
     send({ id, method: "turn/start", params: {
       sessionId: "session-1", prompt: "Inspect", resume: "thread-1", permission: "workspace-write",
-      mcpServers,
+      mcpServers, teamRole,
       browserInstructions: enabled ? "Use ketplus_browser." : "KetPlus browser is unavailable; do not fall back.",
     } });
     const approvals = [];
@@ -82,6 +88,10 @@ test("sidecar supplies host MCP servers on resume and scopes auto-approval to in
     assert.equal(answer.prompt, "Inspect");
     assert.deepEqual(answer.systemPrompt, { type: "preset", preset: "claude_code",
       append: enabled ? "Use ketplus_browser." : "KetPlus browser is unavailable; do not fall back." });
+    assert.deepEqual(answer.skills, skills);
+    assert.equal(answer.settingSources, undefined);
+    assert.equal(answer.plugins, undefined);
+    assert.equal(answer.persistSession, true);
     assert.equal(answer.resume, "thread-1");
     assert.equal(answer.permissionMode, "acceptEdits");
     assert.equal(answer.browser.behavior, enabled ? "allow" : "deny");

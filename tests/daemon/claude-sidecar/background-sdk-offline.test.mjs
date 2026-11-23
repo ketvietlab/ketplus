@@ -1,5 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { createServer } from 'node:http';
 import { mkdtemp, mkdir, readFile, writeFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
@@ -138,6 +139,79 @@ input.on('line', line => {
       assert.ok(entries.some(e => e.epoch === 'second' && e.event === 'initialized'));
     } finally {
       release(); q?.close(); controller.abort(); clearTimeout(timer);
+      await rm(cwd, { recursive: true, force: true });
+    }
+  });
+
+test('pinned SDK keeps project memory and filters skill descriptions in the prompt',
+  { skip: !directory, timeout: 20000 }, async () => {
+    const { query } = await import(pathToFileURL(path.join(directory, 'sdk.mjs')).href);
+    const cwd = await mkdtemp(path.join(tmpdir(), 'kp-sdk-skill-prompt-'));
+    const requests = [];
+    // Use only local synthetic credentials and reject every request on loopback.
+    const server = createServer(async (request, response) => {
+      let body = '';
+      for await (const chunk of request) body += chunk;
+      if (request.url.startsWith('/v1/messages') && body.includes('Compare offline skills'))
+        requests.push(body);
+      response.writeHead(400, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({ type: 'error', error: {
+        type: 'invalid_request_error', message: 'Offline fixture',
+      } }));
+    });
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), 15000);
+    try {
+      await new Promise((resolve, reject) => {
+        server.once('error', reject);
+        server.listen(0, '127.0.0.1', resolve);
+      });
+      for (const name of ['keep', 'hide']) {
+        const skill = path.join(cwd, '.claude', 'skills', name);
+        await mkdir(skill, { recursive: true });
+        await writeFile(path.join(skill, 'SKILL.md'),
+          `---\nname: ${name}\ndescription: OFFLINE_${name.toUpperCase()}\n---\nFixture\n`);
+      }
+      await writeFile(path.join(cwd, 'CLAUDE.md'), 'OFFLINE_PROJECT_MEMORY');
+      const config = path.join(cwd, 'config');
+      await mkdir(config);
+      await writeFile(path.join(config, 'CLAUDE.md'), 'OFFLINE_USER_MEMORY');
+      const plugin = path.join(cwd, 'plugin');
+      const pluginSkill = path.join(plugin, 'skills', 'other');
+      await mkdir(pluginSkill, { recursive: true });
+      await mkdir(path.join(plugin, '.claude-plugin'));
+      await writeFile(path.join(plugin, '.claude-plugin', 'plugin.json'),
+        JSON.stringify({ name: 'offline-plugin' }));
+      await writeFile(path.join(pluginSkill, 'SKILL.md'),
+        '---\nname: other\ndescription: OFFLINE_PLUGIN_SKILL\n---\nFixture\n');
+      for (const skills of [undefined, ['keep']]) {
+        requests.length = 0;
+        const q = query({ prompt: 'Compare offline skills', options: {
+          cwd, skills, plugins: [{ type: 'local', path: plugin }],
+          systemPrompt: { type: 'preset', preset: 'claude_code' },
+          abortController: controller,
+          env: {
+            PATH: process.env.PATH, HOME: cwd, USERPROFILE: cwd,
+            CLAUDE_CONFIG_DIR: config,
+            ANTHROPIC_BASE_URL: `http://127.0.0.1:${server.address().port}`,
+            ANTHROPIC_API_KEY: 'offline-fixture',
+            CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
+          },
+        } });
+        // Ensure the rejection is the fixture's by asserting the captured request.
+        try { for await (const _ of q) { /* Drain the fixture response. */ } }
+        catch {} finally { q.close(); }
+        assert.ok(requests.length > 0);
+        assert.match(requests[0], /OFFLINE_PROJECT_MEMORY/);
+        assert.match(requests[0], /OFFLINE_USER_MEMORY/);
+        assert.match(requests[0], /OFFLINE_KEEP/);
+        assert.equal(requests[0].includes('OFFLINE_PLUGIN_SKILL'), skills === undefined);
+        assert.equal(requests[0].includes('OFFLINE_HIDE'), skills === undefined);
+      }
+    } finally {
+      controller.abort();
+      clearTimeout(timer);
+      server.close();
       await rm(cwd, { recursive: true, force: true });
     }
   });

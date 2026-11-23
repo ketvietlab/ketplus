@@ -315,6 +315,20 @@ The sidecar pins Claude Agent SDK 0.3.322 in both package metadata and the lockf
 The model picker uses the SDK's live model catalog, including Sonnet 5.5; changing
 only a UI label does not upgrade the provider runtime.
 
+Claude Team queries pass the SDK's `skills` allowlist for the active role.
+All roles can discover the repository development skills. Developers can also
+use Atlas and the UI skills, leaders can use Atlas, and reviewers can use
+the UI review skills. Ordinary conversations retain default discovery.
+The allowlist filters model-facing skill descriptions, including descriptions
+from plugins. The SDK's slash-command inventory can still list those commands.
+
+Keep `settingSources` at the SDK default (user, project and local) to preserve
+filesystem permission settings and memory. The `plugins` option adds local
+plugins to the launch and does not serve as a filter for discovered skills.
+Plugin hooks and other plugin capabilities remain under Claude Code settings.
+The skill allowlist is a context filter. Treat filesystem and tool permissions
+as the security boundary.
+
 ### In-app updates (macOS)
 
 Builds do not check for updates by default. Use the

@@ -536,6 +536,7 @@ if(KETPLUS_SIDECAR_TEST_NODE)
         "${KETPLUS_SIDECAR_TESTS}/background-tasks.test.mjs"
         "${KETPLUS_SIDECAR_TESTS}/managed-background.test.mjs"
         "${KETPLUS_SIDECAR_TESTS}/model-catalog.test.mjs"
+        "${KETPLUS_SIDECAR_DAEMON_TESTS}/browser.test.mjs"
         "${KETPLUS_SIDECAR_DAEMON_TESTS}/review-guard.test.mjs"
         "${KETPLUS_SIDECAR_DAEMON_TESTS}/review-profile.test.mjs")
     if(WIN32)

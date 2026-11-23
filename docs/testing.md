@@ -943,6 +943,18 @@ server. Conversation navigation tests cover background approvals followed by
 Confirm or Stop. Cursor adapter tests cover provider-specific permission option IDs
 and cancellation while a permission is pending.
 
+Claude Team skill changes run the sidecar permission and query-option fixtures
+plus the pinned SDK prompt fixture. Point `KETPLUS_CLAUDE_SDK_DIRECTORY` at the
+local SDK package and run
+`node --test tests/daemon/claude-sidecar/background-sdk-offline.test.mjs`.
+The prompt fixture sends synthetic requests only to loopback and checks that
+project and user memory and the allowed skill appear, while unrelated project
+and plugin skills disappear. For a token comparison, use matched fresh
+sessions with the same model, workspace, input and cache conditions. Compare
+first-request uncached input, cache-read input and cache-write input separately
+and sum them for total input. Request bytes from the loopback fixture do not
+measure provider token counts or cache behavior.
+
 The September 2026 local Release verification has a known baseline in
 `ketplus_agent_tests` (14 existing UI assertions, including typography and
 interaction expectations). Compare failure names against the pre-change run;
