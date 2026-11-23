@@ -102,8 +102,13 @@ QJsonObject BackgroundTaskLedger::changeImpl(const QString& id, qint64 expectedR
         allowed = previous == "stopping" && change.cleanupConfirmed;
     else if (change.state == "interrupted")
         allowed = change.cleanupConfirmed || userAcknowledgement;
+    // The daemon sends start only after a durable handshake commit. A job that never committed
+    // one never launched a workload, so its attention record can end without a user.
+    const bool neverStarted = previous == "needs_attention" && userClientId.isEmpty() &&
+                              change.state == "failed" && change.reason == "handshake_failed" &&
+                              change.neverLaunched && !record.value("handshake_committed").toBool();
     if (previous == "needs_attention" && change.state != "needs_attention")
-        allowed = change.state == "interrupted" && userAcknowledgement;
+        allowed = (change.state == "interrupted" && userAcknowledgement) || neverStarted;
     if (!userClientId.isEmpty() && !userAcknowledgement)
         allowed = false;
     if (!allowed)

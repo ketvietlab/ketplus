@@ -65,8 +65,23 @@ bool NativeJobSupervisor::initialize(QString* error) {
     metadata_.insert("boot_id", linuxBootId());
     // The deterministic service name is committed by the daemon before launch.
     metadata_.insert("systemd_unit", linuxJobUnit(taskId_, lease_));
+#endif
+    // The receipt is this supervisor's first durable act. The daemon reads a missing receipt
+    // as a supervisor that never started (NativeJobRecovery.cpp), so only the directory and
+    // birth-identity checks above run before it, and they launch nothing.
     if (!persist())
         return false;
+    // A failure before the control socket listens launched nothing: record it as a failed
+    // handshake so the daemon ends the job and releases its slot instead of waiting for a user.
+    const auto failBeforeListening = [&] {
+#ifndef Q_OS_LINUX
+        metadata_.insert("error", "handshake_failed");
+        metadata_.insert("state", "failed");
+        persist();
+#endif
+        return false;
+    };
+#ifdef Q_OS_LINUX
     const auto boundary = linuxCreateBoundary(taskId_, lease_, error);
     if (boundary.isEmpty())
         return false;
@@ -77,10 +92,12 @@ bool NativeJobSupervisor::initialize(QString* error) {
     outputDatabase_.setConnectOptions("QSQLITE_BUSY_TIMEOUT=50");
     if (!outputDatabase_.open()) {
         *error = outputDatabase_.lastError().text();
-        return false;
+        return failBeforeListening();
     }
     output_ = std::make_unique<BackgroundTaskOutput>(outputDatabase_);
-    if (!output_->initialize(error) || !persist())
+    if (!output_->initialize(error))
+        return failBeforeListening();
+    if (!persist())
         return false;
     server_.setSocketOptions(QLocalServer::UserAccessOption);
     if (!ensureControlDirectory(error) || !server_.listen(controlAddress(directory_, lease_))) {

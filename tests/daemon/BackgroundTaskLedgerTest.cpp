@@ -236,7 +236,7 @@ class BackgroundTaskLedgerTest final : public QObject {
         QSqlDatabase::removeDatabase(name);
     }
 
-    void attentionCountsTowardNonterminalCapAndGlobalSlotsRemainBounded() {
+    void attentionCountsTowardNonterminalCapAndOnlyRootSlotsBoundExecution() {
         const auto name = QUuid::createUuid().toString();
         {
             auto db = QSqlDatabase::addDatabase("QSQLITE", name);
@@ -294,11 +294,84 @@ class BackgroundTaskLedgerTest final : public QObject {
                     QVERIFY(ledger.change(id, 1, approve).value("ok").toBool());
                 }
             }
-            for (int i = 0; i < 16; ++i)
+            // No machine-wide slot limit: every root runs its four jobs.
+            for (int i = 0; i < 20; ++i)
                 QVERIFY(!taskId(ledger.claimNext()).isEmpty());
             QVERIFY(ledger.claimNext().value("task").isNull());
-            QCOMPARE(ledger.list({"4", 1, {}}).value("active_count").toInt(), 0);
+            QCOMPARE(ledger.list({"4", 1, {}}).value("active_count").toInt(), 4);
             QCOMPARE(ledger.list({"4", 1, {}}).value("tasks").toArray().size(), 4);
+            // A fifth job of one root still waits for that root's own slot.
+            auto fifth = intent();
+            fifth.owner.sessionId = "4";
+            fifth.clientRequestId = "fifth";
+            const auto queuedId = taskId(ledger.create(fifth));
+            BackgroundTaskChange approve;
+            approve.state = "queued";
+            approve.permissionApproved = true;
+            QVERIFY(ledger.change(queuedId, 1, approve).value("ok").toBool());
+            QVERIFY(ledger.claimNext().value("task").isNull());
+        }
+        QSqlDatabase::removeDatabase(name);
+    }
+
+    void neverStartedAttentionFailsWithoutUserAndReleasesSlot() {
+        const auto name = QUuid::createUuid().toString();
+        {
+            auto db = QSqlDatabase::addDatabase("QSQLITE", name);
+            db.setDatabaseName(":memory:");
+            QVERIFY(db.open());
+            BackgroundTaskLedger ledger(db);
+            QString error;
+            QVERIFY(ledger.initialize(&error));
+            QVERIFY(seedOwner(db));
+            BackgroundTaskChange approval;
+            approval.state = "queued";
+            approval.permissionApproved = true;
+            BackgroundTaskChange attention;
+            attention.state = "needs_attention";
+            attention.executorStopped = false;
+            BackgroundTaskChange neverStarted;
+            neverStarted.state = "failed";
+            neverStarted.reason = "handshake_failed";
+            neverStarted.errorCode = "executor_never_started";
+            neverStarted.neverLaunched = true;
+            neverStarted.cleanupStatus = "not_required";
+
+            // No handshake was committed, so the daemon never sent start.
+            auto request = intent();
+            request.clientRequestId = "never-started";
+            const auto id = taskId(ledger.create(request));
+            QVERIFY(ledger.change(id, 1, approval).value("ok").toBool());
+            QCOMPARE(taskId(ledger.claimNext()), id);
+            QVERIFY(ledger.change(id, 3, attention).value("ok").toBool());
+            QCOMPARE(ledger.list(intent().owner).value("active_count").toInt(), 1);
+            auto partial = neverStarted;
+            partial.neverLaunched = false;
+            QCOMPARE(ledger.change(id, 4, partial).value("error_code"), "invalid_transition");
+            const auto result = ledger.change(id, 4, neverStarted);
+            QVERIFY(result.value("ok").toBool());
+            const auto task = result.value("task").toObject();
+            QCOMPARE(task.value("state"), "failed");
+            QCOMPARE(task.value("reason"), "handshake_failed");
+            QCOMPARE(task.value("error"), "executor_never_started");
+            QCOMPARE(task.value("cleanup_status"), "not_required");
+            QCOMPARE(task.value("executor_stopped").toBool(), true);
+            QCOMPARE(ledger.list(intent().owner).value("active_count").toInt(), 0);
+
+            // A committed handshake may have been followed by start: only a user ends it.
+            request.clientRequestId = "handshaken";
+            const auto ran = taskId(ledger.create(request));
+            QVERIFY(ledger.change(ran, 1, approval).value("ok").toBool());
+            QCOMPARE(taskId(ledger.claimNext()), ran);
+            BackgroundTaskChange running;
+            running.state = "running";
+            running.handshakeCommitted = true;
+            running.executionIdentity = {{"process_birth_identity", "birth"},
+                                         {"executor_lease_identity", "lease"}};
+            QVERIFY(ledger.change(ran, 3, running).value("ok").toBool());
+            QVERIFY(ledger.change(ran, 4, attention).value("ok").toBool());
+            QCOMPARE(ledger.change(ran, 5, neverStarted).value("error_code"), "invalid_transition");
+            QCOMPARE(ledger.list(intent().owner).value("active_count").toInt(), 1);
         }
         QSqlDatabase::removeDatabase(name);
     }

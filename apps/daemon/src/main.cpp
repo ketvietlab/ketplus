@@ -25,21 +25,6 @@
 
 using namespace ketplus::daemon;
 
-namespace {
-
-void addBundledPluginPath() {
-#if defined(Q_OS_MACOS)
-    const QDir executableDirectory(QCoreApplication::applicationDirPath());
-    const QString pluginPath =
-        QDir(executableDirectory.filePath(QStringLiteral("../PlugIns"))).canonicalPath();
-    if (!pluginPath.isEmpty()) {
-        QCoreApplication::addLibraryPath(pluginPath);
-    }
-#endif
-}
-
-} // namespace
-
 int main(int argc, char* argv[]) {
 #if defined(Q_OS_UNIX)
     // Everything the daemon creates (journal, SQLite WAL/SHM, token, credentials, attachment
@@ -51,7 +36,7 @@ int main(int argc, char* argv[]) {
     QCoreApplication::setApplicationVersion(QStringLiteral(KETPLUS_PRODUCT_VERSION));
     QCoreApplication::setOrganizationDomain(QStringLiteral("ketsuite.com"));
     QCoreApplication::setOrganizationName(QStringLiteral("Ketsuite"));
-    addBundledPluginPath();
+    DaemonApplication::addBundledPluginPath();
 
     QCommandLineParser parser;
     parser.setApplicationDescription(QStringLiteral("KetPlus local session daemon"));

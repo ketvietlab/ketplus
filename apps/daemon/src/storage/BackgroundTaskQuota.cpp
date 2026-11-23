@@ -25,15 +25,8 @@ QJsonObject BackgroundTaskLedger::claimNext() {
         database_.rollback();
         return failure(code, message);
     };
+    // Only the per-root-owner limit bounds execution; there is no machine-wide slot limit.
     QSqlQuery query(database_);
-    if (!query.exec("SELECT count(*) FROM managed_jobs WHERE holds_slot=1") || !query.next())
-        return fail("storage_error", query.lastError().text());
-    const bool full = query.value(0).toLongLong() >= 16;
-    query.finish();
-    if (full) {
-        database_.rollback();
-        return {{"ok", true}, {"task", QJsonValue::Null}};
-    }
     query.prepare(
         "SELECT j.task_id,j.record,j.parked FROM managed_jobs j "
         "JOIN sessions s ON s.id=j.owner_session_id AND s.generation=j.owner_generation "

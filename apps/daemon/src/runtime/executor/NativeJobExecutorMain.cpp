@@ -5,10 +5,13 @@
 #include <QCoreApplication>
 #include <QFile>
 #include <QJsonDocument>
+#include <QSqlDatabase>
 #include <QTextStream>
 
 int main(int argc, char** argv) {
     ketplus::daemon::DaemonApplication application(argc, argv);
+    // The supervisor opens its output spool with QSQLITE before it writes any receipt.
+    ketplus::daemon::DaemonApplication::addBundledPluginPath();
     const auto arguments = application.arguments();
 #ifdef Q_OS_LINUX
     if (arguments.size() == 4 && arguments[1] == "--linux-probe")
@@ -26,6 +29,17 @@ int main(int argc, char** argv) {
         return spec.isEmpty() ? 125 : ketplus::daemon::executor::linuxIsolationLaunch(spec);
     }
 #endif
+    // Packaging runs this against the installed bundle: the build tree finds Qt's plugins on its
+    // own, so only the deployed executor shows whether it can open its output spool.
+    if (arguments.size() == 2 && arguments[1] == "--check-runtime") {
+        if (!QSqlDatabase::isDriverAvailable(QStringLiteral("QSQLITE"))) {
+            QTextStream(stderr) << "KetPlus job executor runtime check failed: QSQLITE is "
+                                   "unavailable.\n";
+            return 1;
+        }
+        QTextStream(stdout) << "ketplus-job-executor runtime ok\n";
+        return 0;
+    }
     if (arguments.size() != 4 || arguments[2].isEmpty() || arguments[2].size() > 128 ||
         arguments[3].isEmpty() || arguments[3].size() > 128)
         return 64;

@@ -1,6 +1,7 @@
 #include "runtime/ManagedTaskRuntime.h"
 #include "storage/BackgroundTaskLedger.h"
 
+#include <QDir>
 #include <QEventLoop>
 #include <QFileInfo>
 #include <QJsonArray>
@@ -28,16 +29,21 @@ class Fixture final {
         // until after this fixture is destroyed through the test's scope below.
     }
     QString path() const { return QFileInfo(directory.path()).canonicalFilePath(); }
-    bool initialize(QString* error) {
+    bool initialize(QString* error,
+                    const QString& executor = QStringLiteral(KETPLUS_JOB_EXECUTOR_PATH)) {
+        return openJournal(error) && startRuntime(error, executor);
+    }
+    bool openJournal(QString* error) {
         database.setDatabaseName(directory.filePath("journal.sqlite"));
         if (!database.open() || !ledger.initialize(error))
             return false;
         QSqlQuery query(database);
-        if (!query.exec("CREATE TABLE sessions(id TEXT PRIMARY KEY,generation INTEGER)") ||
-            !query.exec("INSERT INTO sessions VALUES('owner',1),('other',1)"))
-            return false;
-        runtime = std::make_unique<ManagedTaskRuntime>(ledger, path() + "/jobs",
-                                                       QStringLiteral(KETPLUS_JOB_EXECUTOR_PATH));
+        return query.exec("CREATE TABLE sessions(id TEXT PRIMARY KEY,generation INTEGER)") &&
+               query.exec("INSERT INTO sessions VALUES('owner',1),('other',1)");
+    }
+    bool startRuntime(QString* error,
+                      const QString& executor = QStringLiteral(KETPLUS_JOB_EXECUTOR_PATH)) {
+        runtime = std::make_unique<ManagedTaskRuntime>(ledger, path() + "/jobs", executor);
         runtime->setCallbacks(
             [this](const QJsonObject&) { ++updates; },
             [this](const QJsonObject&, const QJsonObject&) { ++permissionRequests; }, {}, {});
@@ -231,6 +237,103 @@ class ManagedTaskRuntimeTest final : public QObject {
                          .value("revision"),
                      terminalRevision);
             QCOMPARE(fixture.ledger.list(fixture.intent().owner).value("active_count").toInt(), 0);
+        }
+        QSqlDatabase::removeDatabase(connection);
+    }
+
+    // A supervisor that dies before its first receipt (a bundle that cannot load QSQLITE did)
+    // launched nothing. The job fails and frees its slot instead of waiting for a user.
+    void supervisorThatNeverStartsFailsTheJobAndReleasesItsSlot() {
+        QString connection;
+        {
+            Fixture fixture;
+            connection = fixture.connection;
+            QString error;
+            QVERIFY2(fixture.initialize(&error, QStringLiteral("/usr/bin/false")),
+                     qPrintable(error));
+            const auto request = fixture.intent();
+            const auto reply = fixture.start(request, fixture.execution({"/usr/bin/true"}));
+            QVERIFY(reply.value("ok").toBool());
+            const auto id = reply.value("task").toObject().value("task_id").toString();
+            QTRY_COMPARE(fixture.permissionRequests, 1);
+            fixture.runtime->permissionResolved(id, true);
+            QTRY_COMPARE_WITH_TIMEOUT(fixture.get(id).value("state"), "failed", 10000);
+            const auto task = fixture.get(id);
+            QCOMPARE(task.value("reason"), "handshake_failed");
+            QCOMPARE(task.value("error"), "executor_never_started");
+            QCOMPARE(task.value("cleanup_status"), "not_required");
+            QCOMPARE(fixture.ledger.list(request.owner).value("active_count").toInt(), 0);
+        }
+        QSqlDatabase::removeDatabase(connection);
+    }
+
+    // A stop that lands before the client notices the dead supervisor moves the job to
+    // stopping. The never-started report must end it at that target, not leave it stopping.
+    void stopBeforeNeverStartedReportEndsAtItsTargetAndReleasesSlot() {
+        QString connection;
+        {
+            Fixture fixture;
+            connection = fixture.connection;
+            QString error;
+            QVERIFY2(fixture.initialize(&error, QStringLiteral("/usr/bin/false")),
+                     qPrintable(error));
+            const auto request = fixture.intent();
+            const auto reply = fixture.start(request, fixture.execution({"/usr/bin/true"}));
+            QVERIFY(reply.value("ok").toBool());
+            const auto id = reply.value("task").toObject().value("task_id").toString();
+            QTRY_COMPARE(fixture.permissionRequests, 1);
+            fixture.runtime->permissionResolved(id, true);
+            QTRY_COMPARE_WITH_TIMEOUT(fixture.get(id).value("state"), "starting", 3000);
+            const auto stopped = fixture.runtime->stop(id, request.owner, false);
+            QVERIFY(stopped.value("ok").toBool());
+            QCOMPARE(fixture.get(id).value("state"), "stopping");
+            QTRY_COMPARE_WITH_TIMEOUT(fixture.get(id).value("state"), "cancelled", 10000);
+            const auto task = fixture.get(id);
+            QCOMPARE(task.value("error"), "executor_never_started");
+            QCOMPARE(task.value("cleanup_status"), "not_required");
+            QCOMPARE(fixture.ledger.list(request.owner).value("active_count").toInt(), 0);
+        }
+        QSqlDatabase::removeDatabase(connection);
+    }
+
+    // Journals written by affected builds hold such jobs in needs_attention with their slot.
+    void restartEndsNeverStartedAttentionJobAndReleasesItsSlot() {
+        QString connection;
+        {
+            Fixture fixture;
+            connection = fixture.connection;
+            QString error;
+            QVERIFY2(fixture.openJournal(&error), qPrintable(error));
+            const auto request = fixture.intent();
+            const auto id =
+                fixture.ledger.create(request).value("task").toObject().value("task_id").toString();
+            BackgroundTaskChange approval;
+            approval.state = "queued";
+            approval.permissionApproved = true;
+            QVERIFY(fixture.ledger.change(id, 1, approval).value("ok").toBool());
+            const auto claimed = fixture.ledger.claimNext().value("task").toObject();
+            QCOMPARE(claimed.value("task_id").toString(), id);
+            const auto directory = fixture.path() + "/jobs/" + id;
+            QVERIFY(QDir().mkpath(directory));
+            QVERIFY(QFile::setPermissions(directory,
+                                          QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner));
+            const auto registered = fixture.ledger.registerExecutor(
+                id, claimed.value("revision").toInteger(),
+                {{"directory", directory},
+                 {"executor_lease_identity", QUuid::createUuid().toString(QUuid::WithoutBraces)}});
+            QVERIFY(registered.value("ok").toBool());
+            BackgroundTaskChange attention;
+            attention.state = "needs_attention";
+            attention.executorStopped = false;
+            attention.errorCode = "executor_connection_lost";
+            const auto revision = registered.value("task").toObject().value("revision").toInteger();
+            QVERIFY(fixture.ledger.change(id, revision, attention).value("ok").toBool());
+            QCOMPARE(fixture.ledger.list(request.owner).value("active_count").toInt(), 1);
+
+            QVERIFY2(fixture.startRuntime(&error), qPrintable(error));
+            QTRY_COMPARE_WITH_TIMEOUT(fixture.get(id).value("state"), "failed", 10000);
+            QCOMPARE(fixture.get(id).value("reason"), "handshake_failed");
+            QCOMPARE(fixture.ledger.list(request.owner).value("active_count").toInt(), 0);
         }
         QSqlDatabase::removeDatabase(connection);
     }

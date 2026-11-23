@@ -2,6 +2,7 @@
 #include "runtime/executor/NativeJobControlAddress.h"
 #include "runtime/executor/NativeProcessIdentity.h"
 
+#include <QDir>
 #include <QElapsedTimer>
 #include <QFile>
 #include <QJsonArray>
@@ -350,6 +351,64 @@ class NativeJobExecutorTest final : public QObject {
         QVERIFY(!result.value("launch_attempted").toBool());
         QVERIFY(result.value("root_identity").toObject().isEmpty());
         QCOMPARE(result.value("cleanup_status"), "not_required");
+        client.acknowledge();
+    }
+
+    void runtimeCheckReportsTheSqliteDriver() {
+        QProcess check;
+        check.start(QStringLiteral(KETPLUS_JOB_EXECUTOR_PATH), {"--check-runtime"});
+        QVERIFY(check.waitForFinished(10000));
+        QCOMPARE(check.exitCode(), 0);
+        QCOMPARE(check.readAllStandardOutput().trimmed(), "ketplus-job-executor runtime ok");
+    }
+
+    // The output spool opens before the control socket. A failure there launched nothing, so
+    // the receipt says failed/handshake_failed and the client ends the job.
+    void outputSpoolFailureLeavesAFailedHandshakeReceipt() {
+        Executor fixture;
+        QVERIFY(QDir(fixture.path()).mkdir("output.sqlite"));
+        NativeJobClient client(QStringLiteral(KETPLUS_JOB_EXECUTOR_PATH), fixture.path(),
+                               fixture.taskId, fixture.lease);
+        QJsonObject result;
+        QString error;
+        QVERIFY2(client.start(
+                     {{"argv", QJsonArray{"/bin/sleep", "60"}}, {"cwd", fixture.path()}}, 30000,
+                     [](const QJsonObject&) { return true; },
+                     [&](const QJsonObject& value) {
+                         if (value.value("event") == "done")
+                             result = value;
+                     },
+                     &error),
+                 qPrintable(error));
+        QTRY_VERIFY_WITH_TIMEOUT(!result.isEmpty(), 10000);
+        QCOMPARE(result.value("state"), "failed");
+        QCOMPARE(result.value("error"), "handshake_failed");
+        QVERIFY(!result.value("root_started").toBool());
+        QCOMPARE(fixture.receipt().value("state"), "failed");
+        client.acknowledge();
+    }
+
+    // No receipt and no control socket: the supervisor never reached the point where a
+    // workload could start.
+    void supervisorWithoutReceiptIsReportedNeverStarted() {
+        Executor fixture;
+        NativeJobClient client(QStringLiteral("/usr/bin/false"), fixture.path(), fixture.taskId,
+                               fixture.lease);
+        QJsonObject result;
+        QString error;
+        QVERIFY2(client.start(
+                     {{"argv", QJsonArray{"/bin/sleep", "60"}}, {"cwd", fixture.path()}}, 30000,
+                     [](const QJsonObject&) { return true; },
+                     [&](const QJsonObject& value) {
+                         if (value.value("event") == "done")
+                             result = value;
+                     },
+                     &error),
+                 qPrintable(error));
+        QTRY_VERIFY_WITH_TIMEOUT(!result.isEmpty(), 10000);
+        QCOMPARE(result.value("state"), "failed");
+        QCOMPARE(result.value("cleanup_issue"), "executor_never_started");
+        QVERIFY(result.value("executor_stopped").toBool());
         client.acknowledge();
     }
 

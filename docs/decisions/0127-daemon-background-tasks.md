@@ -188,6 +188,21 @@ Existing authenticated local administration may inspect it; do not invent a new
 grant. Cleanup retries signal only identities that can still be validated and
 never replay the command.
 
+A job that never committed its handshake never launched a workload, because the daemon
+sends start only after that commit. When such a job's supervisor left neither a receipt
+nor a control socket (it exited before its first durable write), the daemon ends the job
+as `failed(reason=handshake_failed, error=executor_never_started)` with
+`cleanup_status=not_required` and releases its slot, also from `needs_attention`. The
+supervisor persists its receipt before anything else that can fail, and a failure before
+its control socket listens is recorded as `failed/handshake_failed`. A job that was already
+`stopping` when this is detected ends at its `terminal_target` instead (cancelled, timed out
+or interrupted), with the same evidence. A missing receipt after a committed handshake stays
+`needs_attention`, and a client that has seen a receipt keeps retrying the identities it
+holds. A supervisor slower than the daemon's 5.5-second recovery window to write its first
+receipt (for example the first launch of a newly installed bundle while the system scans
+it) is reported the same way; it launched nothing and exits once its lease expires, so the
+`handshake_failed` result does not mean the executor or handshake is broken.
+
 Only a user may invoke `session.task.resolve_cleanup` with `task_id` and revision.
 CAS `needs_attention -> interrupted(reason=cleanup_acknowledged)` with a durable
 audit whose source is `user`. Acknowledgement is a user statement, not kernel
@@ -366,8 +381,10 @@ reference or its durable acceptance deduplication. Keep the compact child link
 as an ownership fence after parent expiry, so an expired worker cannot become a
 new quota root simply because its metadata aged out.
 
-Default admission limits are four execution slots per root owner session/generation
-and sixteen globally. Queued jobs do not consume slots. When slots are full,
+Default admission limits are four execution slots per root owner session/generation.
+There is no machine-wide slot limit: an earlier global limit of sixteen let attention
+records that held their slots stop every new job on the machine while each waited for a
+user. Queued jobs do not consume slots. When slots are full,
 accept into the durable queue if its one-hundred-job capacity permits; reject
 with `resource_exhausted` when the queue is full. Independently cap all nonterminal
 jobs, including parked agents, at 116. Rejected admissions create no job/outbox.

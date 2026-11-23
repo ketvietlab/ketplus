@@ -35,6 +35,28 @@ if(NOT runtime_output STREQUAL "ketplus-daemon runtime ok")
     message(FATAL_ERROR "Unexpected bundled daemon runtime check: ${runtime_output}")
 endif()
 
+# The job executor is a separate helper with its own plugin lookup. It opens its output spool
+# with QSQLITE before it writes a receipt, so a missing driver fails every background job.
+set(job_executor "${KETPLUS_APP_BUNDLE}/Contents/Helpers/ketplus_job_executor")
+if(NOT EXISTS "${job_executor}")
+    message(FATAL_ERROR "KetPlus.app does not contain Contents/Helpers/ketplus_job_executor")
+endif()
+execute_process(
+    COMMAND "${job_executor}" --check-runtime
+    RESULT_VARIABLE executor_runtime_result
+    OUTPUT_VARIABLE executor_runtime_output
+    ERROR_VARIABLE executor_runtime_error
+    OUTPUT_STRIP_TRAILING_WHITESPACE
+)
+if(NOT executor_runtime_result EQUAL 0)
+    message(FATAL_ERROR
+        "Bundled job executor cannot load its required Qt plugins: ${executor_runtime_error}"
+    )
+endif()
+if(NOT executor_runtime_output STREQUAL "ketplus-job-executor runtime ok")
+    message(FATAL_ERROR "Unexpected bundled job executor runtime check: ${executor_runtime_output}")
+endif()
+
 # A Release daemon cannot be pointed elsewhere at run time, so the relay compiled into the
 # bundle must be the one this build was configured for.
 if(KETPLUS_PRODUCTION_RELEASE OR (DEFINED KETPLUS_CONTROL_URL AND NOT KETPLUS_CONTROL_URL STREQUAL ""))
