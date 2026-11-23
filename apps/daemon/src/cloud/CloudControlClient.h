@@ -147,6 +147,11 @@ class CloudControlClient final : public QObject {
     void sendHeartbeatBatches(const QList<QJsonArray>& batches, qsizetype index,
                               const AccountFence& account);
     void uploadEvents();
+    // events.forward_only/1 in a heartbeat answer: events reach clients only as live frames and
+    // host pages, so nothing is uploaded. Withdrawing it resumes uploads from the journal head.
+    void followEventsForwardOnly(bool forwardOnly);
+    [[nodiscard]] bool eventsForwardOnly();
+    bool advanceUploadCursorsToHead();
     void uploadSessionEvents(const QString& sessionId, qint64 generation, qint64 afterCursor);
     // A deleted generation's history awaits purge but must never leave the machine (ADR 0093).
     [[nodiscard]] bool isLiveGeneration(const QString& sessionId, qint64 generation) const;
@@ -343,6 +348,10 @@ class CloudControlClient final : public QObject {
     QHash<QString, QList<std::pair<QString, qint64>>> publishedRevisions_;
     // The Relay listed runner.relay/1 in its last heartbeat answer.
     bool runnerRelayAvailable_{false};
+    // Whether the last heartbeat answer asked for forward-only events; restored from the
+    // credential store (for this upload scope) on first use so a restart does not upload the
+    // backlog before the first answer arrives.
+    std::optional<bool> eventsForwardOnly_;
     RelayMessageTake runnerMessages_;
     std::function<void()> relayOpened_;
     // Last, so it goes first: it calls back into this client.

@@ -25,7 +25,7 @@ qint64 CloudControlClient::uploadedCursor(const QString& sessionId, qint64 gener
 }
 
 void CloudControlClient::uploadEvents() {
-    if (machineId_.isEmpty() || daemonToken_.isEmpty())
+    if (machineId_.isEmpty() || daemonToken_.isEmpty() || eventsForwardOnly())
         return;
     const QList<StoredSession> sessions = journal_->sessions();
     // Every upload used to re-register every session's cursor, one journal transaction each, on
@@ -55,10 +55,13 @@ void CloudControlClient::uploadEvents() {
         if (const auto backoff = eventUploadBackoff_.constFind(key);
             backoff != eventUploadBackoff_.cend() && !backoff->retryAt.hasExpired())
             continue;
-        if (const auto known = knownUploadedCursors_.constFind(key);
-            known != knownUploadedCursors_.cend() && *known >= session.lastCursor)
+        const auto known = knownUploadedCursors_.constFind(key);
+        if (known != knownUploadedCursors_.cend() && *known >= session.lastCursor)
             continue;
-        const qint64 cursor = uploadedCursor(session.id, session.generation);
+        // A cursor this process already knows needs no credential read.
+        const qint64 cursor = known != knownUploadedCursors_.cend()
+                                  ? *known
+                                  : uploadedCursor(session.id, session.generation);
         if (cursor < 0)
             return;
         if (cursor < session.lastCursor)
@@ -89,8 +92,15 @@ bool CloudControlClient::registerCloudCursor(const StoredSession& session) {
             return false;
         }
     }
-    if (!journal_->acknowledgeCursor(QStringLiteral("cloud-control-v2"), session.id,
-                                     session.generation, cursor)) {
+    // Retention follows what the relay acknowledged, which the journal recorded with the upload.
+    // The cursor above also counts the head forward-only was withdrawn at; acknowledging that
+    // would delete events the host still serves as pages, so only the next acknowledged upload
+    // lets retention advance past it.
+    const qint64 acknowledged =
+        journal_->cloudUploadCursor(uploadScope(), session.id, session.generation);
+    if (acknowledged < 0 ||
+        !journal_->acknowledgeCursor(QStringLiteral("cloud-control-v2"), session.id,
+                                     session.generation, acknowledged)) {
         lastError_ = journal_->errorString();
         return false;
     }

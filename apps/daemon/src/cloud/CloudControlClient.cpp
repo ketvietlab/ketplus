@@ -357,7 +357,8 @@ void CloudControlClient::signOut(LocalCallback callback) {
         QStringLiteral("machine-id"),          QStringLiteral("workspace-id"),
         QStringLiteral("machine-key-version"), QStringLiteral("control-url"),
         QStringLiteral("device-pins"),         QStringLiteral("account-name"),
-        QStringLiteral("account-username"),    QStringLiteral("runner-pins")};
+        QStringLiteral("account-username"),    QStringLiteral("runner-pins"),
+        QStringLiteral("events-forward-only")};
     if (otherRelay_.isEmpty() && !credentials_.removeIf(
                                      [&enrollment](const QString& account) {
                                          return enrollment.contains(account) ||
@@ -369,6 +370,7 @@ void CloudControlClient::signOut(LocalCallback callback) {
     }
     wakeups_.stop();
     runnerRelayAvailable_ = false;
+    eventsForwardOnly_.reset();
     credentialRequestInFlight_ = false;
     finishCredentialWaiters(false, QStringLiteral("Signed out."));
     machineId_.clear();
