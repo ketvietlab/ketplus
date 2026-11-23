@@ -68,6 +68,10 @@ RelayFrameLink::RelayFrameLink(const QUrl& origin, TokenSource token, SocketFact
     connect(&retry_, &QTimer::timeout, this, &RelayFrameLink::connectNow);
 }
 
+RelayFrameLink::RelayFrameLink(const QUrl& origin, TokenSource token, SocketFactory factory,
+                               QObject* parent)
+    : RelayFrameLink(origin, std::move(token), std::move(factory), Options{}, parent) {}
+
 RelayFrameLink::~RelayFrameLink() { stop(); }
 
 void RelayFrameLink::setState(const State state) {

@@ -23,8 +23,11 @@ class RelayEventStream final : public QObject {
         int initialResubscribeMilliseconds{250};
         int maximumResubscribeMilliseconds{60'000};
     };
+    // Overloads, not a default argument: see RelayFrameLink.
     RelayEventStream(RelayFrameLink* link, QString machineId, EventCursorStore* cursors,
-                     Options options = {}, QObject* parent = nullptr);
+                     Options options, QObject* parent = nullptr);
+    RelayEventStream(RelayFrameLink* link, QString machineId, EventCursorStore* cursors,
+                     QObject* parent = nullptr);
 
     // Follows a conversation after the cursor of the newest window the caller just read.
     void open(const QString& sessionId, qint64 generation, qint64 cursor);
