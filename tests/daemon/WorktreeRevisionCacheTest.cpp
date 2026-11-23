@@ -163,6 +163,50 @@ class WorktreeRevisionCacheTest final : public QObject {
         QVERIFY(cache.revision(worktree, {}, 2, compute).isEmpty());
     }
 
+    void reftableAppendInvalidatesCachedRevision() {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const auto git = [&dir](const QStringList& arguments, QByteArray* output = nullptr) {
+            QProcess process;
+            auto environment = QProcessEnvironment::systemEnvironment();
+            environment.insert("GIT_TEST_REFTABLE_AUTOCOMPACTION", "false");
+            process.setProcessEnvironment(environment);
+            process.setWorkingDirectory(dir.path());
+            process.start(QStringLiteral("git"), arguments);
+            const bool ok = process.waitForFinished() &&
+                            process.exitStatus() == QProcess::NormalExit && process.exitCode() == 0;
+            if (output)
+                *output = (ok ? process.readAllStandardOutput() : process.readAllStandardError())
+                              .trimmed();
+            return ok;
+        };
+        QByteArray error;
+        if (!git({"init", "-q", "-b", "main", "--ref-format=reftable"}, &error)) {
+            QVERIFY2(error.contains("ref-format") || error.contains("reftable"), error.constData());
+            QSKIP("Git does not support reftable repositories.");
+        }
+        QVERIFY(git({"config", "user.name", "Fixture"}));
+        QVERIFY(git({"config", "user.email", "fixture@example.invalid"}));
+        QVERIFY(git({"-c", "commit.gpgsign=false", "commit", "--allow-empty", "-qm", "First"}));
+        QByteArray tree;
+        QVERIFY(git({"rev-parse", "HEAD^{tree}"}, &tree));
+        QByteArray next;
+        QVERIFY(git({"commit-tree", QString::fromLatin1(tree), "-m", "Second"}, &next));
+
+        QFile tables(dir.filePath(QStringLiteral(".git/reftable/tables.list")));
+        QVERIFY(tables.open(QIODevice::ReadOnly));
+        const QByteArray firstTable = tables.readLine();
+        const qint64 beforeSize = tables.size();
+        tables.close();
+        const QByteArray before = WorktreeRevisionCache::fingerprint(dir.path(), {});
+
+        QVERIFY(git({"update-ref", "refs/heads/main", QString::fromLatin1(next)}));
+        QVERIFY(tables.open(QIODevice::ReadOnly));
+        QCOMPARE(tables.readLine(), firstTable);
+        QVERIFY(tables.size() > beforeSize);
+        QVERIFY(WorktreeRevisionCache::fingerprint(dir.path(), {}) != before);
+    }
+
     void branchListingReflectsExternalDeletion() {
         QTemporaryDir dir;
         QVERIFY(dir.isValid());

@@ -83,8 +83,7 @@ void addHead(QByteArray* out, const QDir& git) {
     }
     // Packing or deleting a branch may leave no loose ref to read.
     addStamp(out, common.filePath(QStringLiteral("packed-refs")));
-    out->append(readMarker(common.filePath(QStringLiteral("reftable/tables.list"))));
-    out->append('\0');
+    addStamp(out, common.filePath(QStringLiteral("reftable/tables.list")));
 }
 
 } // namespace

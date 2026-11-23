@@ -6,6 +6,8 @@
 #include <QFile>
 #include <QJsonArray>
 #include <QProcess>
+#include <QScopeGuard>
+#include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QThread>
 #include <QThreadPool>
@@ -66,6 +68,8 @@ class DaemonWorkspaceFilesTest final : public QObject {
     void ignoredAndSecretFilesAreNotShared();
     void filterNamesWithEqualsAreNeutralized();
     void diffDoesNotSelectOtherPaths();
+    void trackedDiffStopsReadingAtTheOutputLimit();
+    void unresolvedRenameConsumesItsSourceRecord();
     void failingIgnorePolicySharesNothing();
     void revisionAsyncDeliversOnContextThread();
     void publishedFenceServesTheWorktreeAsItIsNow();
@@ -342,6 +346,93 @@ void DaemonWorkspaceFilesTest::diffDoesNotSelectOtherPaths() {
     const QJsonObject result = files.diff(request(removed, QStringLiteral("config")));
     QVERIFY(!result.value(QStringLiteral("ok")).toBool());
     QVERIFY(!QJsonDocument(result).toJson().contains("TOKEN"));
+}
+
+void DaemonWorkspaceFilesTest::trackedDiffStopsReadingAtTheOutputLimit() {
+    QTemporaryDir root;
+    QVERIFY(root.isValid());
+    initRepository(root.path());
+    const QString path = QStringLiteral("README.md");
+    const QByteArray line = QByteArray(80, 'x') + '\n';
+    writeFile(root.filePath(path),
+              line.repeated(ReadOnlyWorkspaceFiles::maximumDiffBytes / line.size() + 1));
+    const ReadOnlyWorkspaceFiles files(scopeFor(root.path()),
+                                       ReadOnlyWorkspaceFiles::RevisionFence::Published);
+    const QJsonObject query = request(QStringLiteral("published-revision"), path);
+    const auto verifyOversized = [&] {
+        const QJsonObject result = files.diff(query);
+        QCOMPARE(result.value(QStringLiteral("error_code")).toString(),
+                 QStringLiteral("oversized"));
+        QVERIFY(!result.contains(QStringLiteral("content")));
+    };
+    verifyOversized();
+
+#if defined(Q_OS_UNIX)
+    if (QStandardPaths::findExecutable(QStringLiteral("python3")).isEmpty())
+        QSKIP("The early process-stop fixture requires Python 3.");
+    const QString realGit = QStandardPaths::findExecutable(QStringLiteral("git"));
+    QVERIFY(!realGit.isEmpty());
+    QTemporaryDir commands;
+    QVERIFY(commands.isValid());
+    const QString fakeGit = commands.filePath(QStringLiteral("git"));
+    const QString marker = commands.filePath(QStringLiteral("producer-finished"));
+    const QByteArray producer = R"PY(#!/usr/bin/env python3
+import os
+import sys
+import time
+if "diff-index" not in sys.argv or "-p" not in sys.argv:
+    os.execv(os.environ["KETPLUS_TEST_REAL_GIT"], sys.argv)
+sys.stdout.buffer.write(b"x" * (512 * 1024 + 1))
+sys.stdout.buffer.flush()
+time.sleep(2)
+with open(os.environ["KETPLUS_TEST_GIT_FINISHED"], "wb"):
+    pass
+sys.stdout.buffer.write(b"remaining output\n")
+)PY";
+    writeFile(fakeGit, producer);
+    QVERIFY(QFile::setPermissions(fakeGit, QFileDevice::ReadOwner | QFileDevice::ExeOwner));
+    const QByteArray previousPath = qgetenv("PATH");
+    const auto restoreEnvironment = qScopeGuard([&] {
+        qputenv("PATH", previousPath);
+        qunsetenv("KETPLUS_TEST_REAL_GIT");
+        qunsetenv("KETPLUS_TEST_GIT_FINISHED");
+    });
+    qputenv("KETPLUS_TEST_REAL_GIT", QFile::encodeName(realGit));
+    qputenv("KETPLUS_TEST_GIT_FINISHED", QFile::encodeName(marker));
+    qputenv("PATH", QFile::encodeName(commands.path()) + ':' + previousPath);
+    verifyOversized();
+    QVERIFY(!QFileInfo::exists(marker));
+#endif
+}
+
+void DaemonWorkspaceFilesTest::unresolvedRenameConsumesItsSourceRecord() {
+#if !defined(Q_OS_UNIX)
+    QSKIP("The fixture requires symlinks and a filename with question marks.");
+#else
+    QTemporaryDir root;
+    QVERIFY(root.isValid());
+    initRepository(root.path());
+    git(root.path(), {"config", "status.renames", "true"});
+    const QString source = QStringLiteral("?? unrelated.txt");
+    const QString destination = QStringLiteral("renamed-link");
+    QVERIFY(QFile::link(root.filePath(QStringLiteral("README.md")), root.filePath(source)));
+    writeFile(root.filePath(QStringLiteral("unrelated.txt")), "Tracked fixture text\n");
+    git(root.path(), {"add", "--", source, "unrelated.txt"});
+    git(root.path(), {"commit", "-qm", "Track the link and the unrelated file"});
+    git(root.path(), {"mv", "--", source, destination});
+    writeFile(root.filePath(QStringLiteral("README.md")), "Changed fixture text\n");
+
+    const ReadOnlyWorkspaceFiles files(scopeFor(root.path()),
+                                       ReadOnlyWorkspaceFiles::RevisionFence::Published);
+    QJsonObject query = request(QStringLiteral("published-revision"));
+    query.insert(QStringLiteral("modified_only"), true);
+    const QJsonObject result = files.tree(query);
+    QVERIFY(result.value(QStringLiteral("ok")).toBool());
+    const QJsonArray entries = result.value(QStringLiteral("entries")).toArray();
+    QCOMPARE(entries.size(), 1);
+    QCOMPARE(entries.at(0).toObject().value(QStringLiteral("path")).toString(),
+             QStringLiteral("README.md"));
+#endif
 }
 
 void DaemonWorkspaceFilesTest::failingIgnorePolicySharesNothing() {
