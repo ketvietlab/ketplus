@@ -678,7 +678,9 @@ class TeamRemoteTest final : public QObject {
                   QJsonArray{two, QJsonObject{{"name", "Developer 3"}, {"lane", "Docs"}}}}});
         QVERIFY2(added.value("ok").toBool(), qPrintable(text(added)));
         QVERIFY(added.value("team").isObject());
-        QCOMPARE(developers(), before + QStringList{"Developer 2/Developer 2", "Developer 3/Docs"});
+        const QStringList joined =
+            before + QStringList{"Developer 2/Developer 2", "Developer 3/Docs"};
+        QCOMPARE(developers(), joined);
         QCOMPARE(fixture.journal->sessions().size(), sessions + 2);
         // One change: the members moved by one revision.
         QCOMPARE(revision(fixture, team.id), seen + 1);
