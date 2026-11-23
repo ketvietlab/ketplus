@@ -186,6 +186,10 @@ MainWindow::MainWindow(ThemeManager& theme, QWidget* parent)
     columnLayout->addWidget(mainSplit_, 1);
     workspaceSplit_->setChildrenCollapsible(false);
     workspaceSplit_->setHandleWidth(1);
+    connect(workspaceSplit_, &QSplitter::splitterMoved, this, [this] {
+        navigationWidth_.remember(workspaceSplit_, explorer_);
+        navigationWidth_.remember(workspaceSplit_, gitChanges_);
+    });
     workspaceSplit_->addWidget(editorColumn_);
 
     git_ = new GitService(this);

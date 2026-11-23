@@ -881,7 +881,7 @@ class AgentWorkspaceShellTest final : public QObject {
         QVERIFY(explorer);
         QVERIFY(explorer->testAttribute(Qt::WA_StyledBackground));
         QTRY_VERIFY(sidebar->isVisible());
-        QTRY_COMPARE(explorer->width(), 224);
+        QTRY_COMPARE(explorer->width(), ketplus::NavigationPanelWidth().shown());
         QCOMPARE(sidebar->mode(), ketplus::ActivityBar::Mode::Explorer);
         QTRY_VERIFY(window.statusBar()->isVisible());
         QCOMPARE(window.statusBar()->contentsMargins().left(), ketplus::ActivityBar::kWidth);
