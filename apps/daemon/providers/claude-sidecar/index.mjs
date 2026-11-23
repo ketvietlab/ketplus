@@ -18,16 +18,34 @@ function emit(value) {
   stdout.write(`${JSON.stringify(redact(value))}\n`);
 }
 
-async function teamSkillNames(cwd) {
-  const builtInNames = ["ketplusdev", "ketvietdev", "ketplus-browser", "enterprise-grade", "ket-design-system"];
-  // The SDK accepts skill names, with no source selector for project skills.
-  const directory = path.join(cwd, ".claude", "skills");
-  const entries = await readdir(directory).catch(() => []);
-  const projectNames = await Promise.all(entries.sort().map(async (name) => {
-    const skill = await stat(path.join(directory, name, "SKILL.md")).catch(() => undefined);
-    return skill?.isFile() ? name : undefined;
-  }));
-  return [...new Set([...builtInNames, ...projectNames.filter(Boolean)])];
+const leaderSkills = ["enterprise-grade", "ket-design-system"];
+const skippedSkillDirectories = new Set(["node_modules", "build"]);
+
+async function teamSkillNames(cwd, role) {
+  const names = new Set(["ketplusdev", "ketvietdev", "ketplus-browser"]);
+  if (role === "leader") for (const name of leaderSkills) names.add(name);
+  // The SDK accepts names only, so reserved names must also be filtered at discovery.
+  const pending = [cwd];
+  while (pending.length) {
+    const directory = pending.pop();
+    const entries = await readdir(directory, { withFileTypes: true }).catch(() => []);
+    if (entries.some(entry => entry.name === ".claude" && entry.isDirectory())) {
+      const skills = path.join(directory, ".claude", "skills");
+      const candidates = await readdir(skills).catch(() => []);
+      for (const name of candidates.sort()) {
+        if (role !== "leader" && leaderSkills.includes(name)) continue;
+        const skill = await stat(path.join(skills, name, "SKILL.md")).catch(() => undefined);
+        if (skill?.isFile()) names.add(name);
+      }
+    }
+    for (const entry of entries.sort((a, b) => b.name.localeCompare(a.name))) {
+      if (entry.isDirectory() && !entry.name.startsWith(".") &&
+          !skippedSkillDirectories.has(entry.name) && !entry.name.startsWith("build-")) {
+        pending.push(path.join(directory, entry.name));
+      }
+    }
+  }
+  return [...names];
 }
 
 function permissionMode(profile) {
@@ -642,7 +660,7 @@ async function startRun(messageId, params, prompt, images) {
     if (params.resume) await ensureResumable(params.resume, run.cwd).catch(() => false);
     const authentication = authenticationOptions(params.authentication);
     const skills = ["leader", "developer", "reviewer"].includes(params.teamRole)
-      ? await teamSkillNames(run.cwd) : undefined;
+      ? await teamSkillNames(run.cwd, params.teamRole) : undefined;
     const teamRestrictions = teamDisallowedTools("claude", params.teamRole);
     const appended = [typeof params.browserInstructions === "string" ? params.browserInstructions : "",
       review?.instructions || ""].filter(Boolean).join("\n\n");

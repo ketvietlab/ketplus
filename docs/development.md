@@ -316,17 +316,22 @@ The model picker uses the SDK's live model catalog, including Sonnet 5.5; changi
 only a UI label does not upgrade the provider runtime.
 
 Claude Team queries pass a names-only `skills` allowlist to the SDK. It includes
-the workspace's `.claude/skills/<name>/SKILL.md` directories, the repository
-development skills, `ketplus-browser`, and the UI design and review skills.
+project skills in `.claude/skills/<name>/SKILL.md` at the workspace root and
+under its subdirectories, the repository development skills, and
+`ketplus-browser`. The scan skips hidden directories such as `.git`, dependency
+trees named `node_modules`, output directories named `build` or starting with
+`build-`, and symlinked workspace subdirectories. Each scanned directory's
+`.claude/skills` is checked directly. Only leaders receive `enterprise-grade`
+and `ket-design-system`, including project skills with those names.
 Atlas guidance and the bundled browser instructions are also available
 through the KetPlus instructions, which reference their skill files directly.
 Ordinary conversations retain default discovery.
 
 The SDK may still advertise filtered skills in its slash-command inventory.
-According to the pinned SDK contract, the model-facing Skill tool rejects
-unlisted skills. Reading a skill file directly is governed by normal permissions.
-Project skills outside the workspace's `.claude/skills` directory need an
-explicit allowlisted name to appear if Claude discovers them.
+The pinned SDK loopback test verifies that the model-facing Skill tool accepts
+a listed skill and rejects an unlisted one. The SDK still controls skill source
+discovery, so adding a nested skill name to the allowlist preserves eligibility
+when Claude discovers it. Normal filesystem permissions govern direct reads.
 
 Keep `settingSources` at the SDK default (user, project and local) to preserve
 filesystem permission settings and memory. The `plugins` option adds local
