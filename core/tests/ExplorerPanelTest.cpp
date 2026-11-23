@@ -9,6 +9,7 @@
 #include <QImage>
 #include <QLineEdit>
 #include <QMetaObject>
+#include <QProcess>
 #include <QSignalSpy>
 #include <QTemporaryDir>
 #include <QTreeView>
@@ -21,6 +22,7 @@ class ExplorerPanelTest final : public QObject {
 
   private slots:
     void loadsOnlyAfterReceivingARoot();
+    void updatesTheLinkedWorktreeAfterExternalFileChanges();
     void opensFilesFromTheTree();
     void togglesFoldersFromTheTree();
     void revealsAnOpenFile();
@@ -228,6 +230,61 @@ void ExplorerPanelTest::loadsOnlyAfterReceivingARoot() {
     QVERIFY(model != nullptr);
     QTRY_VERIFY_WITH_TIMEOUT(model->rowCount(tree->rootIndex()) >= 2, 3000);
     QVERIFY(model->index(file.fileName()).isValid());
+}
+
+void ExplorerPanelTest::updatesTheLinkedWorktreeAfterExternalFileChanges() {
+    QTemporaryDir directory;
+    QVERIFY(directory.isValid());
+    QVERIFY(QDir(directory.path()).mkdir(QStringLiteral("repo")));
+    const QString repository = directory.filePath(QStringLiteral("repo"));
+    const QString worktree = directory.filePath(QStringLiteral("worktree"));
+    const auto git = [&repository](const QStringList& arguments) {
+        QProcess process;
+        process.setWorkingDirectory(repository);
+        process.start(QStringLiteral("git"), arguments);
+        QVERIFY(process.waitForFinished());
+        QCOMPARE(process.exitCode(), 0);
+    };
+    git({"init", "-q", "-b", "main"});
+    QFile tracked(QDir(repository).filePath(QStringLiteral("tracked.txt")));
+    QVERIFY(tracked.open(QIODevice::WriteOnly));
+    tracked.close();
+    git({"add", "tracked.txt"});
+    git({"-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "-c",
+         "commit.gpgsign=false", "commit", "-qm", "Initial commit"});
+    git({"worktree", "add", "-qb", "linked", worktree});
+
+    const QDir checkout(worktree);
+    QVERIFY(checkout.mkdir(QStringLiteral("large")));
+    for (int index = 0; index < 2'000; ++index) {
+        QFile file(checkout.filePath(QStringLiteral("large/entry-%1.txt").arg(index)));
+        QVERIFY(file.open(QIODevice::WriteOnly));
+    }
+
+    ketplus::ExplorerPanel explorer;
+    explorer.setRootPath(worktree);
+    auto* tree = explorer.findChild<QTreeView*>(QStringLiteral("explorerTree"));
+    QVERIFY(tree);
+    auto* model = tree->model();
+    const auto names = [&] {
+        QStringList result;
+        const QModelIndex root = tree->rootIndex();
+        for (int row = 0; row < model->rowCount(root); ++row)
+            result.append(model->index(row, 0, root).data().toString());
+        return result;
+    };
+    const QStringList rootEntries{QStringLiteral("large"), QStringLiteral("tracked.txt")};
+    QTRY_COMPARE(names(), rootEntries);
+    const QModelIndex folder = model->index(0, 0, tree->rootIndex());
+    QVERIFY(model->canFetchMore(folder));
+    QCOMPARE(model->rowCount(folder), 0);
+    const QString unicodeName = QStringLiteral("tệp-雪.txt");
+    QFile external(QDir(worktree).filePath(unicodeName));
+    QVERIFY(external.open(QIODevice::WriteOnly));
+    external.close();
+    QTRY_VERIFY(names().contains(unicodeName));
+    QVERIFY(external.remove());
+    QTRY_COMPARE(names(), rootEntries);
 }
 
 void ExplorerPanelTest::opensFilesFromTheTree() {

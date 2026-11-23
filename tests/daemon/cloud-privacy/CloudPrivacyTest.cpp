@@ -3024,6 +3024,25 @@ class CloudPrivacyTest final : public QObject {
         QVERIFY(!worktree.contains("lifecycleRevision"));
         // The host path never leaves the machine.
         QVERIFY(!plaintext.contains(canonical.toUtf8()));
+
+        for (const QString& field :
+             {QStringLiteral("repositoryId"), QStringLiteral("worktreeId")}) {
+            QJsonObject unknown = command;
+            const QString commandId = QStringLiteral("unknown-") + field;
+            unknown.insert(QStringLiteral("id"), commandId);
+            unknown.insert(QStringLiteral("kind"), QStringLiteral("worktree.branches.read"));
+            unknown.insert(field, QString(64, u'0'));
+            const QString refusalAck = QStringLiteral("/v2/commands/%1/ack").arg(commandId);
+            const auto refusal = [&]() -> QJsonObject {
+                for (qsizetype i = before; i < c.transport.requests.size(); ++i)
+                    if (c.transport.requests.at(i).url().path() == refusalAck)
+                        return QJsonDocument::fromJson(c.transport.bodies.at(i)).object();
+                return {};
+            };
+            Access::worktreeCommand(*c.client, unknown, {}, phoneAgreement);
+            QTRY_COMPARE(refusal().value(QStringLiteral("resultCode")).toString(),
+                         QStringLiteral("worktree_scope_changed"));
+        }
     }
 
     void aRedeliveredNewWorktreeAnswersWithItsFirstResultAndCreationIsBounded() {
