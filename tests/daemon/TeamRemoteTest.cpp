@@ -604,6 +604,124 @@ class TeamRemoteTest final : public QObject {
         QCOMPARE(phone(fixture, "team.list", {}).value("teams").toArray().size(), 0);
     }
 
+    // T-18: a phone adds several developers in one change, as a local client does (T-4).
+    void aPhoneAddsSeveralDevelopersAtOnce() {
+        Fixture fixture;
+        QVERIFY(fixture.open());
+        const Team team = create(fixture);
+        const auto developers = [&] {
+            QStringList names;
+            for (const QJsonValue& value : local(fixture, "team.get", {{"team_id", team.id}})
+                                               .value("team")
+                                               .toObject()
+                                               .value("members")
+                                               .toArray())
+                if (value.toObject().value("role").toString() == "developer")
+                    names.append(value.toObject().value("name").toString() + "/" +
+                                 value.toObject().value("lane").toString());
+            return names;
+        };
+        const QStringList before = developers();
+        const qsizetype sessions = fixture.journal->sessions().size();
+        const auto add = [&](const QJsonObject& extra) {
+            QJsonObject payload{{"team_id", team.id},
+                                {"provider", "codex"},
+                                {"expected_revision", revision(fixture, team.id)}};
+            for (auto it = extra.constBegin(); it != extra.constEnd(); ++it)
+                payload.insert(it.key(), it.value());
+            return phone(fixture, "team.member.add", payload);
+        };
+        const auto refused = [&](const QJsonObject& extra, const QString& code) {
+            const QJsonObject reply = add(extra);
+            QCOMPARE(reply.value("error_code").toString(), code);
+            QCOMPARE(developers(), before);
+            QCOMPARE(fixture.journal->sessions().size(), sessions);
+        };
+        const QJsonObject two{{"name", "Developer 2"}};
+        // Shapes the contract does not allow are refused before the local path runs.
+        refused({{"developers", QJsonArray{}}}, "invalid_payload");
+        refused(
+            {{"developers", QJsonArray{two, QJsonObject{{"name", "a"}}, QJsonObject{{"name", "b"}},
+                                       QJsonObject{{"name", "c"}}, QJsonObject{{"name", "d"}},
+                                       QJsonObject{{"name", "e"}}}}},
+            "invalid_payload");
+        refused({{"developers", two}}, "invalid_payload");
+        refused({{"developers", QJsonArray{"Developer 2"}}}, "invalid_payload");
+        refused({{"developers", QJsonArray{QJsonObject{{"lane", "Docs"}}}}}, "invalid_payload");
+        refused({{"developers", QJsonArray{QJsonObject{{"name", 2}}}}}, "invalid_payload");
+        refused({{"developers", QJsonArray{QJsonObject{{"name", "Developer 2"}, {"lane", 3}}}}},
+                "invalid_payload");
+        refused({{"developers", QJsonArray{QJsonObject{{"name", "Developer 2"}, {"role", "x"}}}}},
+                "invalid_payload");
+        refused({{"developers",
+                  QJsonArray{QJsonObject{{"name", "Developer 2"}, {"lane", QString(121, 'x')}}}}},
+                "invalid_payload");
+        refused({{"developers", QJsonArray{two}}, {"name", "Developer 3"}}, "invalid_payload");
+        refused({{"developers", QJsonArray{two}}, {"lane", "Docs"}}, "invalid_payload");
+        // The checks of the local path: a name given twice, a lane the team has, no room.
+        refused({{"developers", QJsonArray{two, two}}}, "invalid_payload");
+        refused({{"developers", QJsonArray{QJsonObject{{"name", "Developer 2"}, {"lane", "Web"}}}}},
+                "invalid_payload");
+        refused({{"developers", QJsonArray{two, QJsonObject{{"name", "Developer 3"}},
+                                           QJsonObject{{"name", "Developer 4"}},
+                                           QJsonObject{{"name", "Developer 5"}},
+                                           QJsonObject{{"name", "Developer 6"}}}}},
+                "team_full");
+
+        const qint64 seen = revision(fixture, team.id);
+        const QJsonObject added =
+            add({{"developers",
+                  QJsonArray{two, QJsonObject{{"name", "Developer 3"}, {"lane", "Docs"}}}}});
+        QVERIFY2(added.value("ok").toBool(), qPrintable(text(added)));
+        QVERIFY(added.value("team").isObject());
+        QCOMPARE(developers(), before + QStringList{"Developer 2/Developer 2", "Developer 3/Docs"});
+        QCOMPARE(fixture.journal->sessions().size(), sessions + 2);
+        // One change: the members moved by one revision.
+        QCOMPARE(revision(fixture, team.id), seen + 1);
+        // A single `name` still adds one.
+        const QJsonObject single = add({{"name", "Developer 4"}});
+        QVERIFY2(single.value("ok").toBool(), qPrintable(text(single)));
+        QCOMPARE(developers().size(), before.size() + 3);
+    }
+
+    // T-18: a developer whose conversation cannot start leaves none of the others on the team.
+    void aPhoneAddingDevelopersThatCannotStartLeavesNothing() {
+        Fixture fixture;
+        QVERIFY(fixture.open());
+        const Team team = create(fixture);
+        const qsizetype members = local(fixture, "team.get", {{"team_id", team.id}})
+                                      .value("team")
+                                      .toObject()
+                                      .value("members")
+                                      .toArray()
+                                      .size();
+        const qsizetype sessions = fixture.journal->sessions().size();
+        const qint64 seen = revision(fixture, team.id);
+        QVERIFY(QDir(repository(fixture)).removeRecursively());
+        const QJsonObject reply =
+            phone(fixture, "team.member.add",
+                  {{"team_id", team.id},
+                   {"provider", "codex"},
+                   {"developers", QJsonArray{QJsonObject{{"name", "Developer 2"}},
+                                             QJsonObject{{"name", "Developer 3"}}}},
+                   {"expected_revision", seen}});
+        QCOMPARE(reply.value("error_code").toString(), QStringLiteral("member_unavailable"));
+        QVERIFY2(reply.value("error_message")
+                     .toString()
+                     .startsWith(QStringLiteral("No developer was added: Developer 2 could not "
+                                                "start.")),
+                 qPrintable(text(reply)));
+        QCOMPARE(fixture.journal->sessions().size(), sessions);
+        QCOMPARE(revision(fixture, team.id), seen);
+        QCOMPARE(local(fixture, "team.get", {{"team_id", team.id}})
+                     .value("team")
+                     .toObject()
+                     .value("members")
+                     .toArray()
+                     .size(),
+                 members);
+    }
+
     // T-69: a full team (its leader, five developers and two reviewers) reaches the phone whole.
     // The second reviewer joins last, so a cap below eight members cut it off the phone's Home.
     void aFullTeamReachesThePhoneWithItsSecondReviewer() {

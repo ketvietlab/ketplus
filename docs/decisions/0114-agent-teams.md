@@ -690,8 +690,8 @@ Every one is checked before any conversation starts: a name the team or the requ
 has, or a developer's lane it already has, is refused with `invalid_payload`, and more than
 the room left with `team_full`. A conversation that cannot start discards the ones started
 and answers `member_unavailable` saying whose it was; none joins. Otherwise all join in one
-change: one revision of the team's members, one `member_added` update each. A paired device
-cannot send `developers` (§4 of ADR 0116 lists its fields).
+change: one revision of the team's members, one `member_added` update each. T-18: a paired
+device sends `developers` too (§4 of ADR 0116).
 
 `team.create` takes `execution_policy` (`read-only`, `ask` or `full`; `ask` when absent):
 what the leader and the developers may do without asking. `full` needs
