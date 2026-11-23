@@ -13,6 +13,9 @@ test("sidecar supplies host MCP servers on resume and scopes auto-approval to in
   t.after(() => fs.rm(root, { recursive: true, force: true }));
   for (const file of ["authentication.mjs", "index.mjs", "transcript.mjs", "input.mjs", "tasks.mjs", "resume.mjs", "session-delete.mjs", "session-usage.mjs", "review-guard.mjs", "background-policy.mjs", "process-barrier.mjs"])
     await fs.copyFile(new URL(`../${file}`, import.meta.url), path.join(root, file));
+  const projectSkill = path.join(root, ".claude", "skills", "project-build");
+  await fs.mkdir(projectSkill, { recursive: true });
+  await fs.writeFile(path.join(projectSkill, "SKILL.md"), "---\nname: project-build\n---\n");
   const sdk = path.join(root, "node_modules/@anthropic-ai/claude-agent-sdk");
   await fs.mkdir(sdk, { recursive: true });
   await fs.writeFile(path.join(sdk, "package.json"), JSON.stringify({ type: "module", exports: "./index.mjs" }));
@@ -48,23 +51,21 @@ test("sidecar supplies host MCP servers on resume and scopes auto-approval to in
   const server = { type: "stdio", command: "/test/node", args: ["/test/mcp.mjs"], env: { KETPLUS_BROWSER_ALLOWED_ORIGINS: "loopback" } };
   const computerServer = { type: "stdio", command: "/test/ketplus-computer-mcp", args: [],
     env: { KETPLUS_COMPUTER_CONVERSATION: "session-1", KETPLUS_COMPUTER_TOKEN: "t" } };
+  const teamSkills = ["ketplusdev", "ketvietdev", "ketplus-browser", "enterprise-grade", "ket-design-system", "project-build"];
   const cases = [
     { id: 1, browser: true, computer: true },
-    { id: 2, browser: false, computer: false, teamRole: "leader",
-      skills: ["ketplusdev", "ketvietdev", "ket-atlas"] },
-    { id: 3, browser: false, computer: true, teamRole: "reviewer",
-      skills: ["ketplusdev", "ketvietdev", "enterprise-grade", "ket-design-system"] },
-    { id: 4, browser: false, computer: false, teamRole: "developer",
-      skills: ["ketplusdev", "ketvietdev", "ket-atlas", "enterprise-grade", "ket-design-system"] },
+    { id: 2, browser: false, computer: false, teamRole: "leader" },
+    { id: 3, browser: false, computer: true, teamRole: "reviewer" },
+    { id: 4, browser: false, computer: false, teamRole: "developer" },
   ];
-  for (const { id, browser: enabled, computer, teamRole, skills } of cases) {
+  for (const { id, browser: enabled, computer, teamRole } of cases) {
     const mcpServers = {
       ...(enabled ? { ketplus_browser: server } : {}),
       ...(computer ? { ketplus_computer: computerServer } : {}),
     };
     send({ id, method: "turn/start", params: {
       sessionId: "session-1", prompt: "Inspect", resume: "thread-1", permission: "workspace-write",
-      mcpServers, teamRole,
+      mcpServers, teamRole, cwd: root,
       browserInstructions: enabled ? "Use ketplus_browser." : "KetPlus browser is unavailable; do not fall back.",
     } });
     const approvals = [];
@@ -88,7 +89,7 @@ test("sidecar supplies host MCP servers on resume and scopes auto-approval to in
     assert.equal(answer.prompt, "Inspect");
     assert.deepEqual(answer.systemPrompt, { type: "preset", preset: "claude_code",
       append: enabled ? "Use ketplus_browser." : "KetPlus browser is unavailable; do not fall back." });
-    assert.deepEqual(answer.skills, skills);
+    assert.deepEqual(answer.skills, teamRole ? teamSkills : undefined);
     assert.equal(answer.settingSources, undefined);
     assert.equal(answer.plugins, undefined);
     assert.equal(answer.persistSession, true);
