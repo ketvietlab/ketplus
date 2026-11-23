@@ -57,13 +57,14 @@ void TeamTaskDialog::readHistory(const bool earlier) {
                 const QJsonArray page = task.value(QStringLiteral("history")).toArray();
                 const qsizetype start = task.value(QStringLiteral("history_start")).toInteger();
                 const qsizetype shownEnd = alive->historyStart_ + alive->history_.size();
+                qsizetype first = alive->historyStart_;
                 QJsonArray joined;
                 if (earlier && alive->historyRead_ && start + page.size() == alive->historyStart_) {
                     // The page before the first entry shown.
                     joined = page;
                     for (const auto& value : alive->history_)
                         joined.append(value);
-                    alive->historyStart_ = start;
+                    first = start;
                 } else if (!earlier && alive->historyRead_ && start >= alive->historyStart_ &&
                            start <= shownEnd) {
                     // A newer page: keep what was read before it.
@@ -73,12 +74,18 @@ void TeamTaskDialog::readHistory(const bool earlier) {
                         joined.append(value);
                 } else {
                     joined = page;
-                    alive->historyStart_ = start;
+                    first = start;
                 }
+                const qsizetype total = task.value(QStringLiteral("history_total")).toInteger();
+                // T-6: the history as it is shown already builds nothing again.
+                const bool same = alive->historyRead_ && joined == alive->history_ &&
+                                  first == alive->historyStart_ && total == alive->historyTotal_;
                 alive->history_ = joined;
-                alive->historyTotal_ = task.value(QStringLiteral("history_total")).toInteger();
+                alive->historyStart_ = first;
+                alive->historyTotal_ = total;
                 alive->historyRead_ = true;
-                alive->rebuild();
+                if (!same)
+                    alive->rebuild();
             }
             if (std::exchange(alive->historyAgain_, false))
                 alive->readHistory();

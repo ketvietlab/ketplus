@@ -487,6 +487,19 @@ unready provider's tooltip names it. No provider or real team is started.
 The [layout verification record](evidence/new-team-dialog-layout.md) retains the
 full Pro matrix results, initial failures, one isolated retry and platform skips.
 
+## Team page live updates
+
+`ketplus_team_page_refresh_tests` drives the team page and the task dialog with
+`team.changed` from a fake daemon. It counts how often each page section and the
+dialog's details are built and how many `team.get` and `team.task.get` requests
+go out: a change of another team, another task or a member's activity builds
+nothing in the dialog, a burst of changes builds each section once, and a section
+is built again only for its own data. It also checks the scroll position, focus,
+current task and an open task dialog across changes, the theme and every zoom step,
+that building makes no top-level window, and that the directory form of a team
+already read changes nothing. Run it with `ketplus_team_page_tests` after changing
+`apps/desktop/src/teams`.
+
 ## Minimum verification
 
 Linux Pro packaging changes run `tests/packaging/test_linux_desktop_packages.py`,

@@ -55,8 +55,10 @@ void TeamPage::buildTasks(const QJsonObject& team) {
         fillTasks();
     };
     // Segments beside the title while they fit; the same choices as a select when they do not.
+    // Both are made inside the column: a widget without a parent that is shown becomes a
+    // window of its own for a moment (T-6, finding A3).
     QWidget* filter = nullptr;
-    auto* segments = new ket::SegmentedControl(labels);
+    auto* segments = new ket::SegmentedControl(labels, column_);
     segmentedWidth_ = segments->sizeHint().width();
     segmented_ = filterFits();
     if (segmented_) {
@@ -65,7 +67,7 @@ void TeamPage::buildTasks(const QJsonObject& team) {
         filter = segments;
     } else {
         delete segments;
-        auto* select = new ket::Select;
+        auto* select = new ket::Select(column_);
         select->addItems(labels);
         select->setCurrentIndex(current);
         connect(select, &QComboBox::activated, this, choose);

@@ -49,7 +49,8 @@ void TeamPage::readStorage() {
                             return;
                         alive->storage_ = storage;
                         alive->forgetStaleRemoval();
-                        alive->rebuild();
+                        // The disk shows in the banners and the done tasks' worktrees alone.
+                        alive->rebuildSections({Section::Banners, Section::DoneWorktrees});
                     });
 }
 
@@ -101,7 +102,7 @@ void TeamPage::buildDoneWorktrees(const QJsonObject& team) {
         return;
     }
     // T-62: every listed worktree through the same removal, after one confirmation.
-    auto* removeAll = new ket::Button(tr("Remove all…"), ket::ButtonVariant::Ghost);
+    auto* removeAll = new ket::Button(tr("Remove all…"), ket::ButtonVariant::Ghost, column_);
     removeAll->setObjectName(QStringLiteral("teamDoneWorktreesRemoveAll"));
     removeAll->setIcon(ket::Icons::icon(u"trash"));
     removeAll->setEnabled(!removingAll_);

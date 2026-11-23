@@ -200,6 +200,9 @@ target_link_libraries(ketplus_team_goal_form_tests PRIVATE Qt6::Test ketplus_des
 ketplus_add_gui_test(ketplus_team_commands_tests TeamCommandsTest.cpp)
 target_link_libraries(ketplus_team_page_tests PRIVATE Qt6::Test ketplus_desktop_shell)
 target_link_libraries(ketplus_team_commands_tests PRIVATE Qt6::Test ketplus_desktop_shell)
+# T-6: the team page and the task dialog build only what a team change touched.
+ketplus_add_gui_test(ketplus_team_page_refresh_tests TeamPageRefreshTest.cpp)
+target_link_libraries(ketplus_team_page_refresh_tests PRIVATE Qt6::Test ketplus_desktop_shell)
 # T-56: the team page in its team's language, checked against the Vietnamese catalog.
 ketplus_add_gui_test(ketplus_team_page_language_tests TeamPageLanguageTest.cpp)
 target_link_libraries(ketplus_team_page_language_tests PRIVATE Qt6::Test ketplus_desktop_shell)
