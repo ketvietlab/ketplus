@@ -18,6 +18,9 @@ PHASES = (
     "contains",
 )
 CALL = re.compile(r"^(\d+)\s+(\w+)\(")
+# Phase markers, other writes, and reads of the instrument's CPU clock are
+# excluded even when the supplied trace includes them.
+IGNORED_CALLS = {"clock_gettime", "clock_gettime64", "write"}
 MARKER = re.compile(r'write\(2, "ketplus-phase:(\d+|end)\\n"')
 
 
@@ -36,7 +39,7 @@ def count(path):
                 active.pop(pid)
             else:
                 active[pid] = int(value)
-        elif pid in active and syscall != "write":
+        elif pid in active and syscall not in IGNORED_CALLS:
             counts[active[pid]][syscall] += 1
     if active or not any(counts):
         raise ValueError("Expected a complete phase-tagged strace")

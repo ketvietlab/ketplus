@@ -240,3 +240,37 @@ temporary state directory, never written back, and never committed; no path to
 one is checked in.
 
 The scroll runner selects the conversation's origin scope even when its execution worktree changed, and forwards live reading-key changes just like Desktop. A run with zero hydrated transcript rows exits with an error; it is not a successful zero-drift measurement.
+
+## Heartbeat worktree catalog
+
+On Linux, configure the headless daemon with the Qt toolchain and build the
+opt-in benchmark target:
+
+```sh
+cmake --preset daemon-dev
+cmake --build --preset daemon-dev --target ketplus_heartbeat_worktree_catalog_benchmark
+bench=build/daemon-dev/ketplus_heartbeat_worktree_catalog_benchmark
+fixture="$PWD/build/heartbeat-fixture"
+"$bench" --fixture "$fixture"
+```
+
+The benchmark uses 1,996 synthetic journal rows and an in-process relay.
+`--fixture` creates or reuses a fixture directory. Set `--present-percent`,
+`--repositories`, and `--sessions` when creating a fixture to vary its workload.
+Use a disk-backed fixture for the `file-data-cold` samples. Eviction applies to
+file data pages, and the directory and inode caches stay warm. With the
+default 12 cold samples, nearest-rank p95 is the largest sample.
+
+For a phase trace, run `--mode phases --trace-phases` separately from timing:
+
+```sh
+strace -f -qq -e trace=%file,read,pread64,getdents64,write -o build/heartbeat-phases.trace \
+  "$bench" --fixture "$fixture" --mode phases --iterations 1 --trace-phases 2>/dev/null
+python3 -I benchmarks/count-heartbeat-worktree-syscalls.py build/heartbeat-phases.trace
+```
+
+The parser counts calls from the thread that emitted the enclosing phase
+markers. It excludes writes and instrumentation clock reads. For aggregate
+`strace -c` counts, compare a snapshot-only run with `--mode noop` on the same
+fixture and the same file-syscall filter. The no-op mode performs only setup
+and teardown.

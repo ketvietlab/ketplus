@@ -387,6 +387,9 @@ int main(int argc, char** argv) {
     };
     QTextStream out(stdout);
     out << "metric,samples,calls,cpu_median_ms,cpu_p95_ms,wall_median_ms,wall_p95_ms" << Qt::endl;
+    // Retain the same setup and teardown for strace subtraction without sampling a snapshot.
+    if (mode == "noop")
+        return 0;
     const auto snapshot = [&] {
         const QJsonArray result = Access::worktreeSnapshots(client);
         if (result.isEmpty() || result.size() > pageLimit)
