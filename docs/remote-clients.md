@@ -4,7 +4,7 @@ A paired phone or desktop reaches the daemon over an encrypted peer connection, 
 
 ## Who may connect
 
-- Only devices pinned on this host (ADR 0034's rule, summarised in `daemon-architecture.md`) are admitted. A grant limits the connection in time and in capability; a revoked or replaced device, an expired grant or a removed pin closes its links at once.
+- Only devices pinned on this host (a device's id, key version and key fingerprint must match a pin the user approved on this host; see "Trust boundaries" in `daemon-architecture.md`) are admitted. A grant limits the connection in time and in capability; a revoked or replaced device, an expired grant or a removed pin closes its links at once.
 - The daemon keeps one connection per device and numbers them by epoch; a client drops frames from an older epoch. At most eight connections are open at once.
 - A peer connection must say `hello` within 10 seconds; the daemon pings every 15 seconds and closes after three unanswered pings.
 

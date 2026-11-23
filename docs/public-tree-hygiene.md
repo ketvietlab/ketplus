@@ -1,6 +1,6 @@
 # Public-tree boundary hygiene
 
-The mobile clients and hosted service/account services are proprietary and maintained
+The mobile clients and hosted account and service components are proprietary and maintained
 in private repositories. Public documentation describes the product boundary and
 public wire protocol without naming private repositories, revisions, implementation
 paths, schemas or deployment infrastructure. No history was rewritten.

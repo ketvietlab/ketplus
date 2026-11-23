@@ -13,7 +13,7 @@ The team task named this ADR 0102; that number was already taken by
 
 ## Context
 
-Desktop can sign in, pair a Linux daemon through the KetPlus Relay
+Desktop can sign in, pair a Linux daemon through the hosted service
 (`LinuxMachinesSection`, Control v2) and list its machine ids in the
 machine picker. Choosing a Linux machine only opens Connections: conversations,
 worktrees, the transcript and approvals still come from This Mac's daemon only,
@@ -21,7 +21,7 @@ because every consumer calls `remote::DaemonClient` (the local Unix socket)
 directly.
 
 Issue #419 wants Desktop to work on a connected Linux machine like on This Mac,
-over the user's own SSH access (free) or through the Relay (Pro). Without one
+over the user's own SSH access (free) or through the hosted service (Pro). Without one
 seam, each consumer would grow a branch per transport.
 
 ## Decision
@@ -68,7 +68,7 @@ a consumer parses one shape, with two exceptions where the routes differ:
   so its pages carry no references and its `transcriptLargeEvent` fails.
 
 Each backend has a `machineId` (see "Machine identity") and a `Route`:
-`Local`, `Relay` or `Ssh`.
+`Local`, `Hosted` or `Ssh`.
 
 Three implementations:
 
@@ -88,7 +88,7 @@ Three implementations:
   route turns a missing local daemon install into Offline; the SSH route
   reports its own reasons (host unreachable, key changed, not installed on the
   host).
-- **Relay** — `RelayMachineBackend` over `ControlV2Client`, which turns each
+- **Hosted service** — `RelayMachineBackend` over `ControlV2Client`, which turns each
   operation into an encrypted Control v2 command and each authenticated,
   decrypted event page into `eventReceived` (scope item 2 of #419, see "hosted service
   backend"). Each event is re-shaped into the local daemon's `session.event`
@@ -107,12 +107,12 @@ interface with their local mapping when that consumer moves, not speculatively.
 `MachineBackend::supports(Feature)` says whether the machine can run a
 conversation operation now, and `unsupportedReason(Feature)` says why not
 ("Available once this machine is connected." while it is not Connected, "Not
-available on Linux machines yet." or "Not available through the Relay yet."
+available on Linux machines yet." or "Not available through the hosted service yet."
 otherwise). Desktop offers every operation on every route: one that is not
 supported is disabled with that reason as its tooltip, never hidden, and an
 operation that fails shows its error.
 
-| Operation | `MachineBackend` | Local and SSH | Relay |
+| Operation | `MachineBackend` | Local and SSH | Hosted service |
 |---|---|---|---|
 | Rename | `renameConversation` | `session.rename {title}` | Control v2 `session.rename` |
 | Fork | `forkConversation` | `session.fork {fork_session_id}`, daemon feature `session.fork` | Control v2 `session.fork`, the host's remote operation; the new session arrives in the command's completion |
@@ -124,7 +124,7 @@ operation that fails shows its error.
 Over SSH the daemon features come from the remote daemon's `daemon.hello`, as on
 This Mac, so an older Linux daemon shows Fork and Archive disabled. The client
 names a fork (`fork_session_id`), so a retried request cannot fork twice; the
-fork opens once the machine lists it (the Relay verifies it first), unless the
+fork opens once the machine lists it (the hosted service route verifies it first), unless the
 reader has moved on since asking. A queued
 Hosted service rename or fork finishes when the host confirms the command.
 
@@ -134,7 +134,7 @@ Mac's renderer, `AgentWorkspaceView`, in transcript-only mode
 (`apps/desktop/src/machine`). The rows are projected from the session's cached
 journal events, in the shape `remote::windowEvent()` delivers, by the same
 `agent_message::daemonWindowMessages()` This Mac uses, so Markdown, tool calls,
-diffs and changed files read the same on SSH and on the Relay. An older page is
+diffs and changed files read the same on SSH and on the hosted service route. An older page is
 prepended and a live event appends or updates its row, so the renderer keeps
 the reader's place; its own top edge asks `MachineConversationSession::loadOlder`
 for the page before the oldest cached event (large events are reassembled
@@ -155,7 +155,7 @@ fingerprint (the key pinned at pairing,
 the device-pin rule in `daemon-architecture.md`), which is the same whichever
 route reaches it:
 
-- The Relay backend maps its relay machine id to the pinned fingerprint.
+- The hosted-service backend maps its machine id to the pinned fingerprint.
 - The SSH backend reads the fingerprint from the daemon's `daemon.hello`
   reply: `host_key_fingerprint`, advertised by the `daemon.host_identity/1`
   feature at protocol minor 1. It is `CloudCrypto::keyFingerprint` of the
@@ -165,7 +165,7 @@ route reaches it:
 - A host reachable over both routes is therefore one machine: one picker row,
   one conversation list, and conversations bound to the fingerprint keep
   their binding when the route changes. Desktop prefers SSH while it is
-  reachable and falls back to the Relay.
+  reachable and falls back to the hosted service.
 
 ### Host key rotation
 
@@ -219,7 +219,7 @@ the selected machine's backend, never a transport:
 | State | Meaning | What the UI shows |
 | --- | --- | --- |
 | Connecting | No session yet: first attempt, or a failed first attempt | Picker row and Connections show "Connecting…"; the sidebar shows a loading placeholder, no stale list |
-| Connected | Hello completed; requests flow | Normal UI; Connections shows "Connected" with the route (SSH or Relay) |
+| Connected | Hello completed; requests flow | Normal UI; Connections shows "Connected" with the route (SSH or hosted service) |
 | Reconnecting | A Connected session dropped; the route retries on its own | Last lists stay visible but read-only; composer and approval buttons are disabled with "Reconnecting…" and the reason |
 | Offline | The route cannot reach the host or will not retry (host key changed, not installed, signed out, revoked) | Connections shows "Offline" and the reason with Connect; the picker row is dimmed; opening the machine shows the reason instead of a list |
 
@@ -227,10 +227,10 @@ A request made before Connected is the route's to hold or fail. The local and
 SSH routes both speak through `DaemonClient`, which queues it until the hello,
 as it always has. A request made while a route is Offline (it will not retry
 on its own) fails at once with the state's reason rather than leaving the UI
-waiting unseen; the Relay route does the same. While Connecting or
-Reconnecting the Relay route holds a request until Connected, bounded by the
+waiting unseen; the hosted-service route does the same. While Connecting or
+Reconnecting the hosted-service route holds a request until Connected, bounded by the
 hosted service's 15-minute command lifetime. Writes are never replayed after a drop
-(the existing `DaemonClient` rule); the Relay route's outbox is the exception
+(the existing `DaemonClient` rule); the hosted-service route's outbox is the exception
 described below.
 
 ### SSH trust
@@ -307,7 +307,7 @@ The code is `ControlV2Client::entitlements()` and `apps/desktop/src/remote/Accou
   reasons above (`tests/MachineTranscriptPagingTest.cpp`). The rich renderer for
   remote transcripts (ketplus#598) is covered by
   `tests/MachineRichTranscriptTest.cpp`.
-- Scope item 2 (Relay backend) lands as `RelayMachineBackend`, `CommandOutbox`
+- Scope item 2 (hosted-service backend) lands as `RelayMachineBackend`, `CommandOutbox`
   and the host's signed worktree scope in `worktree.configuration.read`, tested
   against the loopback hosted service (`tests/daemon/RemoteRelayBackendTest.cpp`).
 - Ownership: the app has one set of remote machine backends (`LinuxMachines`,
@@ -346,7 +346,7 @@ The code is `ControlV2Client::entitlements()` and `apps/desktop/src/remote/Accou
 
 The remote workspace stages files and clipboard images for an existing conversation
 through `MachineAttachmentUpload`, a session/generation-bound coordinator. It sends
-32-KiB chunks and waits for the verified result of every command, including a Relay
+32-KiB chunks and waits for the verified result of every command, including a hosted-service
 outbox command initially reported as queued, before advancing. A file is sendable only
 after commit returns `ready`; a failed chunk cannot silently become turn input.
 Removal waits for any pending operation before issuing cancel. The daemon remains

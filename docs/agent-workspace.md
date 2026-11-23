@@ -29,7 +29,7 @@ ADR 0119 "Binding to the selected machine". The window keeps one
 `DaemonMachineBackend` under `local`, and the backend Connections registers for
 each Linux machine. This Mac keeps the existing Agent Workspace and sidebar.
 Choosing another machine in the picker binds `MachineCatalog` to its backend and
-shows `MachineWorkspaceView`; neither reads a transport, so the SSH and Relay
+shows `MachineWorkspaceView`; neither reads a transport, so the SSH and hosted-service
 routes share every line of UI code. Every way into the Agent Workspace (the
 activity bar, View > Agent Workspace, the compact window) shows the selected
 machine's. A picked machine with no backend yet opens Connections with an empty
@@ -50,7 +50,7 @@ transcript windows carry `event_type` and the data as `payload`.
   reader is still where they asked from (the forked conversation, another
   row's menu or the new-conversation composer); opening another conversation,
   starting a new one, or the machine going away or being destroyed drops it,
-  and a failed or expired fork leaves nothing waiting. A command the Relay
+  and a failed or expired fork leaves nothing waiting. A command the hosted service
   queued shows "Fork sent. Waiting for the machine…" (or Rename, Archive) in
   the status line of the conversation that sent it until the host answers. A
   failure shows in the composer's status line.
@@ -99,16 +99,16 @@ transcript windows carry `event_type` and the data as `payload`.
   say why they are unavailable (ADR 0119, "Rich renderer").
   Attach is shown disabled with its reason.
 - **Held and queued writes.** A route may hold a request while it is
-  Connecting or Reconnecting (up to 15 minutes on the Relay); the composer then
-  says it waits for the machine instead of looking hung. A Relay write may
+  Connecting or Reconnecting (up to 15 minutes on the hosted service); the composer then
+  says it waits for the machine instead of looking hung. A hosted-service write may
   answer `{"status": "queued", "command_id"}` with no result: the composer
   shows it as sent and waiting for the host, and the outcome (the new
   conversation, or an expired card) is applied on
   `MachineBackend::commandCompleted()`, which moved to the interface so the UI
-  needs no Relay type.
+  needs no hosted-service type.
 - **Registration.** The window's slot for `RemoteControlView::machinesChanged`
   (`MainWindowRemote.cpp`) calls `MachineSelection::syncBackends()` with
-  `LinuxMachinesSection::machineBackend(id)`: the SSH backend, or the Relay's
+  `LinuxMachinesSection::machineBackend(id)`: the SSH backend, or the hosted service's
   while it is the row's route. Each listed id with a backend is registered or
   replaced (a replacement for the selected machine rebinds every view); a listed
   machine without one stays selectable and shows as not connected; a machine no
