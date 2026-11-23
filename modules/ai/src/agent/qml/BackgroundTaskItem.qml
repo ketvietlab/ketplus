@@ -8,6 +8,10 @@ ColumnLayout {
     required property var taskBar
     readonly property var action: (agentHost.backgroundTaskActions || {})[modelData.task_id] || ({})
     readonly property bool confirming: taskBar.confirmingStop === modelData.task_id
+    // Notes under a card line up with its content; under the attention banner, which
+    // replaces the card, they line up with the banner and its actions.
+    readonly property real noteInset: taskBar.attention(modelData) ? 0 : taskRow.recipe.paddingStart
+    readonly property real notePixels: taskRow.recipe.metaPixels
     Layout.fillWidth: true
     spacing: KetTheme.px(4, KetTheme.zoom)
     objectName: "backgroundTask_" + modelData.task_id
@@ -113,38 +117,41 @@ ColumnLayout {
         objectName: "backgroundTaskActionError_" + row.modelData.task_id
         Layout.fillWidth: true
         visible: !!row.action.error
+        leftPadding: row.noteInset
         text: row.action.error || ""
         textFormat: Text.PlainText
         color: KetTheme.t.danger
         font.family: KetTheme.fontFamily
-        font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
+        font.pixelSize: row.notePixels
         wrapMode: Text.Wrap
     }
-    // A note on this task, set as the card's meta line: same size and muted colour, aligned
-    // with the card's content rather than with the strip's edge.
+    // A note on this task at the card's meta size. Only a cleanup warning takes a status
+    // colour: a failed card's red meta line is not the colour of its follow-up notes.
     Text {
         objectName: "backgroundTaskDetails_" + row.modelData.task_id
         Layout.fillWidth: true
         visible: text.length > 0
-        leftPadding: taskRow.recipe.paddingStart
+        leftPadding: row.noteInset
         rightPadding: taskRow.recipe.paddingEnd
         text: taskBar.details(row.modelData)
         textFormat: Text.PlainText
-        color: taskBar.attention(row.modelData) ? KetTheme.t.warning : taskRow.recipe.meta
+        color: taskBar.attention(row.modelData) ? KetTheme.t.warning : KetTheme.t.textMuted
         font.family: KetTheme.fontFamily
-        font.pixelSize: taskRow.recipe.metaPixels
+        font.pixelSize: row.notePixels
         wrapMode: Text.Wrap
     }
     Text {
         visible: row.confirming
         Layout.fillWidth: true
+        leftPadding: row.noteInset
         text: "Stop “" + row.modelData.title + "”? " + (row.modelData.kind === "agent" ? "The subagent stops after its current step." : "The command is terminated. Output so far stays readable.")
         color: KetTheme.t.textSecondary
         font.family: KetTheme.fontFamily
-        font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
+        font.pixelSize: row.notePixels
         wrapMode: Text.Wrap
     }
     RowLayout {
+        Layout.leftMargin: row.noteInset
         visible: row.confirming
         KetButton {
             text: "Keep running"

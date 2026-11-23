@@ -220,6 +220,8 @@ void AgentWorkspaceViewTest::managedTaskOutputRetriesAfterReadError() {
     QVERIFY(footer);
     QTRY_VERIFY(footer->isVisible());
     QCOMPARE(footer->property("text").toString(), "Task job · Best effort cleanup complete");
+    view.setBackgroundTasks({task("job", "running")});
+    QTRY_COMPARE(footer->property("text").toString(), "Task job · Best effort cleanup");
 }
 
 void AgentWorkspaceViewTest::managedTaskStatesRender_data() {
@@ -284,11 +286,24 @@ void AgentWorkspaceViewTest::managedTaskStatesRender() {
                       recipe.value("metaPixels").toReal()) < 1.0,
                  qPrintable(id));
     }
-    QVERIFY(!findVisualItem(root, "backgroundTaskDetails_queued-0")->isVisible());
+    auto* quiet = findVisualItem(root, "backgroundTaskDetails_queued-0");
+    QVERIFY(quiet);
+    QVERIFY(!quiet->isVisible());
+    // A failed card's meta is red; its follow-up note is not an error.
+    QCOMPARE(findVisualItem(root, "backgroundTaskDetails_failed")->property("color"),
+             findVisualItem(root, "backgroundTaskDetails_completed")->property("color"));
+    // Under the banner that replaces an attention card, notes start at the banner's edge.
+    QCOMPARE(
+        findVisualItem(root, "backgroundTaskDetails_attention")->property("leftPadding").toReal(),
+        0.0);
+    QVERIFY(
+        findVisualItem(root, "backgroundTaskDetails_running")->property("leftPadding").toReal() >
+        0);
     auto* assurance = findVisualItem(root, "backgroundTaskAssurance");
     QVERIFY(assurance);
     QTRY_VERIFY(assurance->isVisible());
     QVERIFY(assurance->property("text").toString().contains("best effort"));
+    QVERIFY(assurance->property("text").toString().contains("descendant"));
     QSignalSpy pages(&view, &ketplus::AgentWorkspaceView::backgroundTasksRequested);
     auto* more = findVisualItem(root, "backgroundTasksLoadMore");
     QVERIFY(more);
@@ -346,4 +361,9 @@ void AgentWorkspaceViewTest::managedTaskStatesRender() {
     view.applyTheme(testPalette());
     QTRY_VERIFY(bar->mapToScene(QPointF(bar->width(), 0)).x() <= view.quickView()->width() + 1);
     QCOMPARE(view.backgroundTasks().size(), 25);
+    // Kernel-verified cleanup makes no best-effort claim.
+    auto verified = task("verified", "running");
+    verified.insert("containment_mode", "cgroup_v2");
+    view.setBackgroundTasks({verified});
+    QTRY_VERIFY(!assurance->isVisible());
 }

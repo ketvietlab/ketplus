@@ -291,7 +291,7 @@ Rectangle {
             visible: !bar.collapsed && bar.bestEffort
             leftPadding: bar.barRecipe.paddingInline
             rightPadding: bar.barRecipe.paddingInline
-            text: "Native macOS · cleanup is best effort. Unobserved child processes may remain."
+            text: "Native macOS · cleanup is best effort. Unobserved descendant processes may remain."
             color: KetTheme.t.textMuted
             font.family: KetTheme.fontFamily
             font.pixelSize: bar.barRecipe.fontPixels
@@ -448,7 +448,7 @@ Rectangle {
                     readOnly: true
                     selectByMouse: true // the task id is for support and logs
                     textFormat: TextEdit.PlainText
-                    wrapMode: TextEdit.Wrap
+                    wrapMode: TextEdit.WrapAnywhere // a task id has no break points
                     text: outputPane.task ? bar.outputFooter(outputPane.task) : ""
                     color: KetTheme.t.textMuted
                     font.family: KetTheme.fontFamily
