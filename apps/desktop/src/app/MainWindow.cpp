@@ -126,6 +126,10 @@ MainWindow::MainWindow(ThemeManager& theme, QWidget* parent)
     workspaceSplit_->setChildrenCollapsible(false);
     workspaceSplit_->setHandleWidth(1);
     workspaceSplit_->setMinimumSize(320, 240);
+    connect(workspaceSplit_, &QSplitter::splitterMoved, this, [this] {
+        navigationWidth_.remember(workspaceSplit_, explorer_);
+        navigationWidth_.remember(workspaceSplit_, gitChanges_);
+    });
     workspaceSplit_->addWidget(editorSplit_);
     mainSplit_->setChildrenCollapsible(false);
     mainSplit_->setHandleWidth(1);

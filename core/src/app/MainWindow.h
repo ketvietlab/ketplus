@@ -4,6 +4,7 @@
 #include "core/Document.h"
 #include "editor/EditorViewOptions.h"
 #include "git/GitTypes.h"
+#include "workspace/NavigationPanelWidth.h"
 #include "workspace/WorkspaceFileIndex.h"
 #include "workspace/WorkspaceSearch.h"
 
@@ -301,6 +302,8 @@ class MainWindow final : public QMainWindow {
     QAction* reopenClosedTabAction_{nullptr};
     QStringList closedFilePaths_;
     ExplorerPanel* explorer_{nullptr};
+    // Shared by the Explorer and Source Control columns.
+    NavigationPanelWidth navigationWidth_;
     GitChangesPanel* gitChanges_{nullptr};
     MarkdownPreviewPane* markdownPreview_{nullptr};
     TerminalPanel* terminal_{nullptr};

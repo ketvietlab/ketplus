@@ -2,10 +2,12 @@
 #include "KetCommandPalette.h"
 #include "app/MainWindow.h"
 #include "app/ReviewCapture.h"
+#include "git/GitChangesPanel.h"
 #include "git/GitDiffView.h"
 #include "terminal/TerminalPanel.h"
 #include "ui/Theme.h"
 #include "workspace/ExplorerPanel.h"
+#include "workspace/NavigationPanelWidth.h"
 #include "workspace/SearchPanel.h"
 
 #include "KetAppearance.h"
@@ -212,10 +214,11 @@ class LiteWindowTest final : public QObject {
         QVERIFY(explorer && search);
         QVERIFY(marked(explorer));
         QVERIFY(!marked(search));
-        // The mock's 248 px Explorer column at the interface zoom.
+        // The shared navigation width, at the interface zoom.
         QCOMPARE(window.findChild<QTreeView*>(QStringLiteral("explorerTree"))->window(), &window);
         QCOMPARE(window.findChild<ket::FileRow*>(QStringLiteral("explorerRoot"))->width(),
-                 qRound(ket::Appearance::instance().scaled(248)));
+                 qRound(ket::Appearance::instance().scaled(
+                     ketplus::NavigationPanelWidth::defaultWidth)));
 
         // Switching panels sets the actions under signal blockers; the buttons still repaint.
         PaintCounter counter;
@@ -229,6 +232,53 @@ class LiteWindowTest final : public QObject {
         search->click();
         QVERIFY(!search->isChecked());
         QVERIFY(!viewAction(window, QStringLiteral("Search in Files"))->isChecked());
+    }
+
+    // The Explorer and Source Control columns open at one width, and the width the user drags
+    // either to is the one both open at: switching between them never moves the editor.
+    void explorerAndSourceControlOpenAtOneWidth() {
+        QTemporaryDir repository;
+        QVERIFY(repository.isValid());
+        QProcess git;
+        git.setWorkingDirectory(repository.path());
+        git.start(QStringLiteral("git"), {QStringLiteral("init"), QStringLiteral("-q")});
+        QVERIFY(git.waitForFinished(10000) && git.exitCode() == 0);
+        ketplus::ThemeManager theme(*qApp);
+        ketplus::MainWindow window(theme);
+        window.resize(1280, 820);
+        window.openFolder(repository.path());
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        const int standard =
+            qRound(ket::Appearance::instance().scaled(ketplus::NavigationPanelWidth::defaultWidth));
+        viewAction(window, QStringLiteral("Explorer"))->trigger();
+        auto* explorer = window.findChild<ketplus::ExplorerPanel*>();
+        ketplus::GitChangesPanel* changes = nullptr;
+        QVERIFY(explorer != nullptr);
+        QTRY_COMPARE(explorer->width(), standard);
+        QTRY_VERIFY_WITH_TIMEOUT(viewAction(window, QStringLiteral("Source Control"))->isEnabled(),
+                                 10000);
+        viewAction(window, QStringLiteral("Source Control"))->trigger();
+        changes = window.findChild<ketplus::GitChangesPanel*>();
+        QVERIFY(changes != nullptr);
+        QTRY_COMPARE(changes->width(), standard);
+
+        // Dragging Source Control's edge sets the width the Explorer opens at, too.
+        auto* split = qobject_cast<QSplitter*>(changes->parentWidget());
+        QVERIFY(split != nullptr);
+        auto sizes = split->sizes();
+        const int panel = split->indexOf(changes);
+        const int editor =
+            split->indexOf(window.findChild<QWidget*>(QStringLiteral("editorColumn")));
+        const int dragged = standard + 60;
+        sizes[editor] -= dragged - sizes[panel];
+        sizes[panel] = dragged;
+        split->setSizes(sizes);
+        QMetaObject::invokeMethod(split, "splitterMoved", Q_ARG(int, dragged), Q_ARG(int, panel));
+        viewAction(window, QStringLiteral("Explorer"))->trigger();
+        QTRY_COMPARE(explorer->width(), dragged);
+        viewAction(window, QStringLiteral("Source Control"))->trigger();
+        QTRY_COMPARE(changes->width(), dragged);
     }
 
     void sidePanelWidthFollowsTheZoom() {

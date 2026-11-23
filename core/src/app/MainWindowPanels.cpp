@@ -185,8 +185,8 @@ void MainWindow::setExplorerVisible(bool visible) {
         }
         explorer->show();
         QList<int> sizes(workspaceSplit_->count(), 0);
-        // The mock's 248 px column, at the interface zoom.
-        const int width = qRound(ket::Appearance::instance().scaled(248));
+        // One width for the Explorer and Source Control, as they were last dragged.
+        const int width = navigationWidth_.shown();
         sizes[workspaceSplit_->indexOf(explorer)] = width;
         sizes[workspaceSplit_->indexOf(editorColumn_)] =
             qMax(420, workspaceSplit_->width() - width);
@@ -251,8 +251,8 @@ void MainWindow::setSourceControlVisible(bool visible) {
         }
         changes->show();
         QList<int> sizes(workspaceSplit_->count(), 0);
-        // As wide as the Explorer, as in the mock.
-        const int width = qRound(ket::Appearance::instance().scaled(248));
+        // One width for the Explorer and Source Control, as they were last dragged.
+        const int width = navigationWidth_.shown();
         sizes[workspaceSplit_->indexOf(changes)] = width;
         sizes[workspaceSplit_->indexOf(editorColumn_)] =
             qMax(420, workspaceSplit_->width() - width);
