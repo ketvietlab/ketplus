@@ -70,7 +70,7 @@ class AgentBackgroundToolsTest final : public QObject {
             QVERIFY(names.contains(QStringLiteral("background_task_") + operation));
         QCOMPARE(names.size(), 11);
         QVERIFY(!names.contains("background_task_resolve_cleanup"));
-        const auto instructions = agent_messaging::toolInstructions("4821");
+        const auto instructions = agent_messaging::toolInstructions();
         QVERIFY(instructions.contains("background_task_start"));
         QVERIFY(instructions.contains("do not poll"));
     }

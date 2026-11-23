@@ -234,6 +234,19 @@ tree); there is no option to leave it out, and the bundle check fails without it
 bundle and replaces the installed copies, so neither keeps files from the tree
 the bundle was last built with (#124), as for the browser runtime (#94).
 
+The daemon builds agent messaging instructions and team role guidance from
+fixed text. It puts conversation identity, team settings and the assignment
+briefing in the first provider turn. Codex and Claude receive the shared guidance in
+their instruction fields. ACP receives that guidance in a leading prompt
+block because it has no system instruction field. Tool availability and
+provider-generated context can still affect the provider's cache prefix.
+The initial message snapshots team settings. Each role uses `team_get` when
+it needs current settings. If a provider loses or replaces its history while
+the daemon still has a thread ID, that turn may lack the initial identity and
+team block. This can happen when ACP falls back to a new session after a
+failed history load. The daemon does not currently reinsert the block in this
+case.
+
 ACP providers share `providers/acp/AcpAdapter`: it owns stdio process lifetime,
 bounded JSON-RPC framing and response correlation, initialization, session
 creation/loading with host-supplied MCP servers, prompt/cancel, permission

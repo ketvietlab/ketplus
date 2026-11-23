@@ -262,14 +262,12 @@ std::optional<agent_tools::Launch> SessionHost::agentLaunch(const QString& sessi
 QString SessionHost::agentInstructions(const Session& session) const {
     if (agentSocket_.isEmpty() || agentExecutable_.isEmpty())
         return {};
-    const QString number =
-        journal_->conversationNumber(session.stored.id, session.stored.generation);
-    if (number.isEmpty())
-        return {};
-    // ADR 0114: a member also gets its role's instructions, current at every turn.
-    const QString team = teamInstructionsFor(session.stored.id);
-    return team.isEmpty() ? agent_messaging::toolInstructions(number)
-                          : agent_messaging::toolInstructions(number) + QLatin1Char('\n') + team;
+    const auto* team = teams_ ? teams_->teamOf(session.stored.id) : nullptr;
+    QString instructions = agent_messaging::toolInstructions();
+    if (team)
+        instructions += QLatin1Char('\n') +
+                        agent_messaging::teamInstructions(team->member(session.stored.id)->role);
+    return instructions;
 }
 
 void SessionHost::addAgentContext(Session& session, const QString& userText, QJsonArray& input,

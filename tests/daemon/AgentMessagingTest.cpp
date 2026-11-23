@@ -17,6 +17,7 @@
 #include <QJsonDocument>
 #include <QLocalSocket>
 #include <QRegularExpression>
+#include <QScopeGuard>
 #include <QSqlDatabase>
 #include <QSqlQuery>
 #include <QStandardPaths>
@@ -778,6 +779,14 @@ class AgentMessagingTest final : public QObject {
     }
 
     void providersReceiveTheirOwnAgentServer() {
+        const auto oldInputLog = qgetenv("KETPLUS_FAKE_CODEX_LOG_INPUT");
+        qputenv("KETPLUS_FAKE_CODEX_LOG_INPUT", "1");
+        const auto restoreInputLog = qScopeGuard([oldInputLog] {
+            if (oldInputLog.isNull())
+                qunsetenv("KETPLUS_FAKE_CODEX_LOG_INPUT");
+            else
+                qputenv("KETPLUS_FAKE_CODEX_LOG_INPUT", oldInputLog);
+        });
         Fixture fixture;
         QVERIFY(fixture.open(true));
         const QString claude = fixture.start("claude", "hello");

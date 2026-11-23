@@ -2354,6 +2354,18 @@ the Microsoft Store alias), and producer-flood timing (QProcess drains the pipe 
 Windows; its cause has not been measured. Fixtures that write exact byte counts switch stdout to
 binary mode (`BinaryStdio.h`), because the C runtime would otherwise add `\r`.
 
+## Team prompt prefix
+
+Run `ketplus_team_agent_tools_tests`, `ketplus_team_language_tests`,
+`ketplus_agent_messaging_tests`, `ketplus_agent_urgent_delivery_tests` and the
+Claude, Cursor and Copilot adapter suites for changes to team prompt assembly.
+The team agent tools fixture starts two leaders per provider for Claude, Codex
+and Cursor (ACP). It compares the policy and MCP server declarations captured by
+the fake providers, excluding launch environment values. It also compares the
+ordered MCP tool list through the real session-bound agent command handler.
+Provider-generated context, deferred-tool ordering, and cache read and creation
+counts require real provider usage records.
+
 ## English chrome and multilingual team content (T30)
 
 See [the inventory](team-content-language.md). Run `ketplus_team_page_language_tests`,

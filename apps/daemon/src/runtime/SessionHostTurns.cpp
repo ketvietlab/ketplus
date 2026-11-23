@@ -105,7 +105,7 @@ void SessionHost::addCodexAgentTools(Session& session, QJsonObject& params, QJso
 }
 
 void SessionHost::prepareTurn(const QString& sessionId, const qint64 generation,
-                              const QJsonArray& input, const QJsonObject& options) {
+                              const QJsonArray& originalInput, const QJsonObject& options) {
     auto it = sessions_.find(sessionId);
     if (it == sessions_.end() || it->stored.generation != generation) {
         return;
@@ -113,6 +113,14 @@ void SessionHost::prepareTurn(const QString& sessionId, const qint64 generation,
     noteProviderRuntime(sessionId, generation);
     prepareManagedTaskOrigin(*it, options);
     const qint64 compactWindow = options.value(QStringLiteral("compactWindow")).toInteger();
+    QJsonArray input = originalInput;
+    if (it->stored.threadId.isEmpty() && !agentSocket_.isEmpty() && !agentExecutable_.isEmpty()) {
+        const QString number = journal_->conversationNumber(sessionId, generation);
+        if (!number.isEmpty())
+            input.append(QJsonObject{
+                {"type", "text"},
+                {"text", agent_messaging::conversationContext(number, teamContextFor(sessionId))}});
+    }
     if (it->stored.adapter == QStringLiteral("claude")) {
         beginClaudeTurn(sessionId, generation, input, options);
         return;
