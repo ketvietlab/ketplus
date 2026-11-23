@@ -5,7 +5,7 @@ The Linux server owns provider processes, repositories, the durable SQLite journ
 session keys and approval decisions. iOS and a remote Desktop client communicate
 through Control v2. Nothing connects to the local Unix socket over the network;
 a Desktop on the user's own SSH access reaches it only through SSH (ADR 0119).
-The daemon opens outbound HTTPS and WebSocket connections to the relay; this
+The daemon opens outbound HTTPS and WebSocket connections to the hosted service; this
 topology needs no inbound TCP port or display server.
 
 The Qt remote-client backend is implemented in `ketplus_remote_control`. Desktop
@@ -24,7 +24,7 @@ target. Tests additionally require Qt Test. Node 24+ and npm stage the Claude
 sidecar. An already staged tree can be supplied with
 `KETPLUS_CLAUDE_SIDECAR_DIR` for an offline build.
 
-Set the intended relay URL at configure time. Release builds cannot replace it
+Set the intended service URL at configure time. Release builds cannot replace it
 using an environment variable. A loopback URL is suitable only for isolated tests.
 
 ```sh
@@ -133,7 +133,7 @@ To cancel a pending login, use `ketplusctl call remote.sign_in.cancel`.
 Workspace registration accepts an existing absolute Git worktree root, and is
 local-administration only. It persists even when there are no conversations, so
 iOS can create the first conversation remotely. A retained session prevents
-unregistration. Paths are encrypted in remote metadata; the relay does not expose
+unregistration. Paths are encrypted in remote metadata; the hosted service does not expose
 the filesystem path as a routing identifier.
 
 Enter the pairing ticket/code in the iOS app (or a future Desktop pairing UI).
@@ -143,7 +143,7 @@ whose keys reproduce its digest it prints `claim_verified: true`, the
 `claim_digest`; an unverified claim has no code and cannot be approved. Approve
 that exact claim with `ketplusctl pairing approve TICKET_ID CLAIM_DIGEST`. The daemon refuses the
 approval when the ticket's digest changed or does not match the claimed keys,
-and pins the device only on this machine (ADR 0034).
+and pins the device only on this machine.
 Enrollment is account authentication; pairing separately grants the device
 access to host-wrapped session keys. Revoke a ticket or device with
 `ketplusctl pairing revoke TICKET_ID` / `ketplusctl device revoke DEVICE_ID`.
@@ -163,20 +163,20 @@ single executable in an existing deployment.
 Local deterministic tests use fake providers and isolated data directories. They
 do not log in to a real provider, consume model quota, install to a user's service,
 or prove a physical phone/network deployment. Production acceptance still needs
-the intended relay deployment, a native server, provider authentication, a real
+the intended service deployment, a native server, provider authentication, a real
 pairing round and restart/offline recovery on that server. The CI Linux job builds,
 tests, stages and archives the headless target independently of Desktop.
 
 The scoped results and remaining deployment checks for 0.1.29 are recorded in
 [`linux-headless-verification.md`](linux-headless-verification.md).
 
-## Desktop on a Linux machine (SSH and Relay)
+## Desktop on a Linux machine (SSH and hosted service)
 
-Desktop works on a Linux machine over SSH or over the Relay (#419). ADR 0119
+Desktop works on a Linux machine over SSH or over the hosted service (#419). ADR 0119
 defines how Desktop composes a remote machine: one machine-neutral
 `MachineBackend` (`modules/remote/src/MachineBackend.h`) implemented by the
-local socket (`DaemonMachineBackend`), a Relay backend over `ControlV2Client`
-(`RelayMachineBackend`) and an SSH route that carries the local protocol to the user's own socket; how
+local socket (`DaemonMachineBackend`), a hosted service backend over `ControlV2Client`
+(the hosted-service machine backend) and an SSH route that carries the local protocol to the user's own socket; how
 the sidebar, Agent Workspace, worktree picker and approvals bind to the selected
 machine; the Connecting / Connected / Reconnecting / Offline states; and the SSH
 trust decision (host key from `known_hosts` or an accepted SHA256 fingerprint,
@@ -186,13 +186,13 @@ sidebar, Agent Workspace, worktree picker, composer and approval cards then
 follow that machine's `MachineBackend` until the picker returns to This Mac
 (`docs/agent-workspace.md`, "Remote machines"). The SSH route reaches the
 user's own daemon socket through `SshTunnel` (`docs/ssh-transport.md`); the
-Relay route is `RelayMachineBackend` below.
+Hosted service route is the hosted-service machine backend below.
 
 Remaining follow-ups:
 
-- **Relay entitlement.** The Relay is gated on the signed-in session's
-  `ketplus.relay` entitlement and fails closed while the relay names none
-  (D-4). Granting it is work in the private auth service; until then the Relay
+- **Hosted service entitlement.** The hosted service is gated on the signed-in session's
+  hosted-route entitlement and fails closed while the hosted service names none
+  (D-4). Granting it is work in the private auth service; until then the hosted service
   route is available only where that service grants it, and SSH needs no
   account.
 - **Remote daemon install over SSH.** A host without `ketplus_daemon` is
@@ -212,16 +212,16 @@ failed. A rotated credential that cannot be stored stays in memory and is
 written again on the next access.
 
 Pairing pins the host (#88). The pairing link must carry `machine`, `kv` and
-`fp` (the host key fingerprint, ADR 0034); a link without them is refused. The
+`fp` (the host key fingerprint); a link without them is refused. The
 claimed ticket must name that machine, and accepting the pairing stores the
 pin (`machine/version` -> fingerprint) in the client's own `host-pins`
-credential account. Nothing the relay returns at sign-in or refresh can add a
+credential account. Nothing the hosted service returns at sign-in or refresh can add a
 pin. Signing in to another account or signing out empties the pin set before
 the credential changes, so a credential that survives a failed write or removal
 never adopts host keys, even after a restart. Host keys the
-relay serves are used only when they match a pin, so a new host key version
+hosted service serves are used only when they match a pin, so a new host key version
 needs a new pairing. A client paired before pins adopts the first host keys it
-reads once. The claim digest is base64url, as the relay computes it.
+reads once. The claim digest is base64url, as the hosted service computes it.
 
 Desktop now uses a loopback PKCE browser handoff to obtain a UserSession for the
 backend's installation ID, and Connections can claim and approve a Linux pairing
@@ -244,9 +244,9 @@ host grants the key), `host_key_not_pinned`, `host_key_changed`,
 `host_upgrade_required` (a host that does not seal title and state),
 `invalid_index_entry`, `unsigned_index_entry` (a worktree with no verified
 conversation) or `verification_failed` (with the error in `detail`).
-Every read verifies the relay-served keys against the pins again. A projected
+Every read verifies the hosted service-served keys against the pins again. A projected
 row also carries `adapter`, `lastEventCursor`, `currentTurnSequence` and
-`workspaceRevision` from the relay index. These are unsigned relay routing
+`workspaceRevision` from the hosted service index. These are unsigned hosted service routing
 values, not host-signed: they choose what to fetch, and every event or page
 fetched with them is verified on its own. Sealing them is a future extension.
 
@@ -260,20 +260,20 @@ with the host's pinned signing key and the page digest is checked before use.
 A large event in the page is fetched through a continuation chain (each
 request bound to the previous response digest) and reassembled with
 `LargeEventReassembler` before the page is delivered. A root request gets a
-540-second deadline, a minute under the relay's 600-second limit so clock skew
-never makes the relay reject it, and its continuations share it. When the host
-refuses a page (for example, sealed fragments over the byte cap), the relay
+540-second deadline, a minute under the hosted service's 600-second limit so clock skew
+never makes the hosted service reject it, and its continuations share it. When the host
+refuses a page (for example, sealed fragments over the byte cap), the hosted service
 answers the poll with 410 `restore_window_unavailable` (or a page with status
 `failed`); the client then asks again at the same snapshot with half the
 `event_limit`, down to one event. An abandoned request is cancelled at the
-relay.
+hosted service.
 
 Any host-signed content naming a signing key version other than the pinned
 one that opened its session key fails closed (events, metadata and restore
 responses) and needs a new pairing; historical-key selection is a future
 extension.
 
-`RelayMachineBackend` implements ADR 0119's `MachineBackend` for one paired
+the hosted-service machine backend implements ADR 0119's `MachineBackend` for one paired
 machine. Its writes, including session creation in a verified worktree
 (`session.create` through `session-creates`, the host's existing path), go
 through a durable `CommandOutbox`: the encrypted envelope is written to an
@@ -283,5 +283,5 @@ Index worktrees with no conversation are shown only after the host signs their
 catalog scope in a `worktree.configuration.read` result (ADR 0119, decision C).
 Desktop composes it through ADR 0119's `MachineBackend` like the other routes;
 `tests/MachineEndToEndTest.cpp` drives that composition end to end against the
-loopback relay of `tests/daemon/SyntheticRelay.h`, and over SSH through a
+loopback hosted service of `tests/daemon/SyntheticRelay.h`, and over SSH through a
 loopback sshd to a real `ketplus_daemon` with a fake provider.

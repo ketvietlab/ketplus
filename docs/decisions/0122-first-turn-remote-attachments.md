@@ -15,7 +15,7 @@ The relevant current behavior is explicit in the public code:
 
 - `MachineWorkspaceView::createConversation` sends a worktree and a nonempty prompt.
 - `DaemonMachineBackend::createSession` maps that operation to `session.start_turn`.
-- `RelayMachineBackend::createSession` rejects an empty prompt and issues the
+- `the hosted-service machine backend::createSession` rejects an empty prompt and issues the
   worktree-scoped `session.create` command.
 - `CloudControlWorktreeCommands.cpp` also requires a prompt and maps creation to
   `session.start_turn`; `SessionHost::startTurn` starts provider work.
@@ -29,9 +29,9 @@ work, create misleading transcript content and complicate cancellation.
 ## Decision
 
 Choose a pre-created inactive session, rather than a separate pending-file store.
-The additive Relay operation and coordinated hosted support are approved. Shipping
+The additive hosted service operation and coordinated hosted support are approved. Shipping
 requires both sides to implement the lifecycle and advertise the capability. Until
-the hosted Relay supports the additive contract and the target advertises
+the hosted service supports the additive contract and the target advertises
 `session.prepare/1`, first-turn Attach stays unavailable; a missing/failed hosted
 capability read disables only preparation. Plain first sends and existing-session
 uploads keep their previous behavior. Hosted deployment is a separate owner step,
@@ -51,13 +51,13 @@ Use one backend preparation contract across the Machine workspace transports:
 | Existing local Agent Workspace | Preserve its existing local first-message attachment path. |
 | This Mac in Machine workspace | Prepare through local daemon IPC, then use the existing attachment commands. |
 | SSH Machine workspace | Carry the preparation operation through authenticated daemon IPC over SSH; keep files on the selected host. |
-| Relay Machine workspace | Add an explicit worktree-scoped `session.prepare` operation, then reuse session-key-protected staging and turn commands. |
+| Hosted-service machine workspace | Add an explicit worktree-scoped `session.prepare` operation, then reuse session-key-protected staging and turn commands. |
 
-The Relay operation uses the `session.prepare/1` capability. Preparation and its
+The hosted service operation uses the `session.prepare/1` capability. Preparation and its
 prepared-only cancellation are additive; normal session deletion must not be used
-to discard a draft that may have become active. Both the daemon and hosted Relay
+to discard a draft that may have become active. Both the daemon and hosted service
 must advertise support before the client enables first-turn attachment. SSH needs
-the daemon capability alone. The Relay operation must have an advertised capability. A client must not infer
+the daemon capability alone. The hosted service operation must have an advertised capability. A client must not infer
 support from existing-conversation attachment support or silently fall back to a
 dummy turn on older hosts. Unsupported hosts keep first-message attachment disabled
 with a clear explanation; existing-conversation uploads continue to work.
@@ -67,7 +67,7 @@ The new operations are:
 - `session.prepare`, scoped to the verified worktree, with `client_request_id` and
   initial provider `options`. It returns `session_id`, `session_generation` (1),
   `state` (`prepared`) and `expires_at_ms`. Local IPC/SSH additionally supplies the
-  canonical `worktree_path`; Relay resolves the enrolled worktree on the host.
+  canonical `worktree_path`; hosted service resolves the enrolled worktree on the host.
 - `session.prepare.cancel`, scoped to that session and generation. It discards only
   an inactive allocation, is safe to retry, and refuses an activated conversation.
 
@@ -86,7 +86,7 @@ existing session-creation quotas and keep at most one preparation active per dra
 Bind the result and every upload to machine, worktree, session and generation.
 A late result after a machine/worktree switch must not attach files or replace the
 new view’s draft. Reject stale generations and changed/deleted worktrees before
-allocating or accepting bytes. The Relay must establish the ordinary authorized
+allocating or accepting bytes. The hosted service must establish the ordinary authorized
 session/key scope before accepting any attachment command.
 
 Keep the text and selected files visible while preparation runs; disable Send until
@@ -95,13 +95,13 @@ draft and show retry/removal. Local file names and Remove remain available befor
 session exists, including during preparation and after refusal; the text remains
 editable. Removing every selected file cancels/abandons preparation and enables an
 ordinary text-only first message without leaving the view. A failed turn keeps ready
-attachment IDs, as existing conversation sends do. Do not consume them on a queued Relay acknowledgement.
+attachment IDs, as existing conversation sends do. Do not consume them on a queued hosted service acknowledgement.
 
-Over Relay, prepared sessions are private to the authenticated subject and creating
+Over hosted service, prepared sessions are private to the authenticated subject and creating
 device. They have no provider turn or transcript entry and are excluded from ordinary session,
 repository, team, phone and other-subject listings before the first real turn.
 Only the owner can stage, start the first turn, or discard a prepared session;
-knowing an ID or sharing the same workspace is insufficient on Relay. Local IPC and
+knowing an ID or sharing the same workspace is insufficient on hosted service. Local IPC and
 SSH use the existing OS-user trust boundary: clients connected to the same daemon
 as the same host OS user share the `local` owner, just as for ordinary sessions.
 SSH authentication identifies that host user, not an individual desktop device;
@@ -112,7 +112,7 @@ metadata may identify this private scope, but attachment contents remain encrypt
 Removing a file cancels its existing staging operation. Discarding the draft also
 cancels preparation/staging and removes the prepared session and staged bytes,
 including when a queued preparation completes late. The composer itself is not
-restored after a desktop process restart: the Relay backend replays its durable
+restored after a desktop process restart: the hosted service backend replays its durable
 preparation envelope, verifies the result and atomically replaces that outbox entry
 with an encrypted cancellation before recording preparation as complete. A crash
 before that replacement replays preparation; a crash after it replays cancellation.
@@ -139,13 +139,13 @@ ownership/workspace checks and normal resource quotas.
 
 ### Protocol and security impact
 
-**This is an approved additive Relay wire-contract change.** The new
+**This is an approved additive hosted service wire-contract change.** The new
 worktree-scoped command kind, its authenticated/idempotent result and capability
-must be understood by the client, host and Relay allowlist/validation path. Reusing
+must be understood by the client, host and hosted service allowlist/validation path. Reusing
 an optional field of `session.create` would still change its prompt-required
 semantics; it is not a way to claim protocol compatibility.
 
-Before acknowledging a Relay preparation, the daemon publishes a private routing
+Before acknowledging a hosted service preparation, the daemon publishes a private routing
 snapshot and a signed session-key envelope addressed only to the creating device.
 Both writes must succeed before the sealed result reports success. The snapshot
 contains opaque scope identifiers, creator device, generation and the original
@@ -160,7 +160,7 @@ Do not weaken the existing session requirement for `attachment.stage.*`, introdu
 an unauthenticated pending upload area, or send remote host paths as local files.
 Retain the existing per-file/draft quotas, digest validation, generation checks,
 bounded encrypted chunks, key wrapping and expiry. No provider credentials, file
-bytes or plaintext attachment paths belong in Relay routing metadata or logs.
+bytes or plaintext attachment paths belong in hosted service routing metadata or logs.
 
 ## Consequences
 
@@ -170,7 +170,7 @@ uploads and their wire format remain unchanged. The hidden prepared-session life
 than hidden behind a fabricated turn.
 
 Implement and verify backend and offscreen GUI coverage
-for first-turn staging over local IPC, SSH and Relay; attachment-only Send; queued
+for first-turn staging over local IPC, SSH and hosted service; attachment-only Send; queued
 preparation completion; duplicate delivery; remove/discard during preparation and
 upload; stale scope/generation; denied or failed preparation; upload/commit failure;
 and a failed first turn retaining ready files. Re-run the existing attachment
@@ -181,11 +181,11 @@ results must accompany it before release.
 
 - **Pending staging adopted by the first turn:** avoids creating an empty session,
   but requires a new worktree/device-bound upload identity, encrypted chunk/key
-  scope, quota/expiry store and atomic adoption contract. It also changes Relay
+  scope, quota/expiry store and atomic adoption contract. It also changes hosted service
   commands and has more authorization and orphan-cleanup paths. Rejected in favor
   of reusing the existing session-bound attachment mechanism.
 - **Create-and-start with a placeholder prompt:** rejected because it starts work
   the user did not request and makes failure, history and cancellation misleading.
 - **Inline files in the first create command:** rejected because it bypasses the
   bounded chunk/commit contract, exceeds existing envelope limits and changes the
-  Relay payload and attachment validation semantics.
+  Hosted service payload and attachment validation semantics.

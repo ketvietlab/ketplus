@@ -447,7 +447,7 @@ and `ketplusctl` from requesting an idle daemon upgrade while preserving local
 authentication and feature negotiation. The complete bundle still includes its
 matching helper for startup when no daemon is running.
 
-The existing daemon keeps its own compiled relay URL. This option cannot switch
+The existing daemon keeps its own compiled service URL. This option cannot switch
 it to staging; inspect its `--build-info` independently. Activity summaries need
 a daemon advertising `transcript.activity_groups/1`; an older daemon continues
 with the existing local grouping until a separately scheduled daemon upgrade.
@@ -458,8 +458,8 @@ The daemon build fetches the pinned, data-only libdatachannel dependency from
 `cmake/WebRtc.cmake`. Offline builds may provide
 `FETCHCONTENT_SOURCE_DIR_KETPLUS_LIBDATACHANNEL` with the complete pinned source
 and its three pinned submodules. Dependency build trees stay local to each build.
-The daemon advertises `transport.webrtc/1`; it admits offers only after a heartbeat
-negotiates that capability. Relay feature flags remain the rollout control.
+The daemon advertises the peer-transport capability; it admits offers only after a heartbeat
+negotiates that capability. Hosted service feature flags remain the rollout control.
 No provider account or quota is needed for `ketplus_daemon_peer_transport_tests`.
 
 `KETPLUS_CAPTURE` and `KETPLUS_BENCHMARK_STARTUP` runs of Lite use a temporary

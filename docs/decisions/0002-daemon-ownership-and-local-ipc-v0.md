@@ -56,7 +56,7 @@ older clients and servers.
 
 The journal assigns a monotonic cursor within `(session_id, generation)` and
 deletes only the prefix acknowledged by every recorded local client. Requests
-older than the retained prefix return `cursor_expired`. Cloud routes and relay
+older than the retained prefix return `cursor_expired`. Cloud routes and hosted service
 transport remain disabled and outside this decision.
 
 ## Consequences
@@ -77,5 +77,5 @@ transport remain disabled and outside this decision.
   enforce before buffering a complete message.
 - Raw Codex JSON-RPC was rejected because provider changes would force Desktop,
   mobile, and backend contract changes.
-- WebSocket or cloud relay work was deferred until local ownership, replay, and
+- WebSocket or hosted service work was deferred until local ownership, replay, and
   idempotency semantics are proven.

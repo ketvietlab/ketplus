@@ -13,15 +13,15 @@ The team task named this ADR 0102; that number was already taken by
 
 ## Context
 
-Desktop can sign in, pair a Linux daemon through the KetPlus Relay
-(`LinuxMachinesSection`, Control v2, ADR 0025) and list its machine ids in the
+Desktop can sign in, pair a Linux daemon through the hosted service
+(`LinuxMachinesSection`, Control v2) and list its machine ids in the
 machine picker. Choosing a Linux machine only opens Connections: conversations,
 worktrees, the transcript and approvals still come from This Mac's daemon only,
 because every consumer calls `remote::DaemonClient` (the local Unix socket)
 directly.
 
 Issue #419 wants Desktop to work on a connected Linux machine like on This Mac,
-over the user's own SSH access (free) or through the Relay (Pro). Without one
+over the user's own SSH access (free) or through the hosted service (Pro). Without one
 seam, each consumer would grow a branch per transport.
 
 ## Decision
@@ -53,22 +53,22 @@ a consumer parses one shape, with two exceptions where the routes differ:
   (`[{"id", "label", "path", "available"}]`). The local and SSH routes group
   `workspace.list` (`workspaces[{path, available, repository_path}]`) by
   `repository_path`, so a repository with linked worktrees is one row, the same
-  grain as the Relay's repository id: `id` = `repository_path`, `label` = its
+  grain as the hosted service's repository id: `id` = `repository_path`, `label` = its
   last path component. The daemon reads `repository_path` from a linked
   worktree's `.git` file and the gitdir's `commondir` without running Git; a
   checkout it cannot read, or a daemon that does not send the field, is its own
-  repository. The Relay sends the
+  repository. The hosted service sends the
   salted repository id and label it already uses and no `path`, so a consumer
   shows a path only where one is present and keys everything else by `id`.
   `workspace.list` joins `DaemonClient`'s read set that is replayed after a
   disconnect.
 - **Large transcript events.** A local or SSH page may carry `large_event`
   references; the consumer reads each fragment with `transcriptLargeEvent`.
-  The Relay reassembles large events on the host before it encrypts a page,
+  The hosted service reassembles large events on the host before it encrypts a page,
   so its pages carry no references and its `transcriptLargeEvent` fails.
 
 Each backend has a `machineId` (see "Machine identity") and a `Route`:
-`Local`, `Relay` or `Ssh`.
+`Local`, `Relay` (the route through the hosted service) or `Ssh`.
 
 Three implementations:
 
@@ -88,9 +88,9 @@ Three implementations:
   route turns a missing local daemon install into Offline; the SSH route
   reports its own reasons (host unreachable, key changed, not installed on the
   host).
-- **Relay** — `RelayMachineBackend` over `ControlV2Client`, which turns each
+- **Hosted service route** (`Relay` in the code) — `RelayMachineBackend` over `ControlV2Client`, which turns each
   operation into an encrypted Control v2 command and each authenticated,
-  decrypted event page into `eventReceived` (scope item 2 of #419, see "Relay
+  decrypted event page into `eventReceived` (scope item 2 of #419, see "hosted service
   backend"). Each event is re-shaped into the local daemon's `session.event`
   envelope (`session_id`, `session_generation`, `cursor`, `turn_sequence`,
   `sent_at`, `payload {event_type, data}`), so consumers read one shape on
@@ -107,12 +107,12 @@ interface with their local mapping when that consumer moves, not speculatively.
 `MachineBackend::supports(Feature)` says whether the machine can run a
 conversation operation now, and `unsupportedReason(Feature)` says why not
 ("Available once this machine is connected." while it is not Connected, "Not
-available on Linux machines yet." or "Not available through the Relay yet."
+available on Linux machines yet." or "Not available through the hosted service yet."
 otherwise). Desktop offers every operation on every route: one that is not
 supported is disabled with that reason as its tooltip, never hidden, and an
 operation that fails shows its error.
 
-| Operation | `MachineBackend` | Local and SSH | Relay |
+| Operation | `MachineBackend` | Local and SSH | Hosted service |
 |---|---|---|---|
 | Rename | `renameConversation` | `session.rename {title}` | Control v2 `session.rename` |
 | Fork | `forkConversation` | `session.fork {fork_session_id}`, daemon feature `session.fork` | Control v2 `session.fork`, the host's remote operation; the new session arrives in the command's completion |
@@ -124,9 +124,9 @@ operation that fails shows its error.
 Over SSH the daemon features come from the remote daemon's `daemon.hello`, as on
 This Mac, so an older Linux daemon shows Fork and Archive disabled. The client
 names a fork (`fork_session_id`), so a retried request cannot fork twice; the
-fork opens once the machine lists it (the Relay verifies it first), unless the
+fork opens once the machine lists it (the hosted service route verifies it first), unless the
 reader has moved on since asking. A queued
-Relay rename or fork finishes when the host confirms the command.
+Hosted service rename or fork finishes when the host confirms the command.
 
 **Rich renderer (ketplus#598).** A remote conversation renders through This
 Mac's renderer, `AgentWorkspaceView`, in transcript-only mode
@@ -134,7 +134,7 @@ Mac's renderer, `AgentWorkspaceView`, in transcript-only mode
 (`apps/desktop/src/machine`). The rows are projected from the session's cached
 journal events, in the shape `remote::windowEvent()` delivers, by the same
 `agent_message::daemonWindowMessages()` This Mac uses, so Markdown, tool calls,
-diffs and changed files read the same on SSH and on the Relay. An older page is
+diffs and changed files read the same on SSH and on the hosted service route. An older page is
 prepended and a live event appends or updates its row, so the renderer keeps
 the reader's place; its own top edge asks `MachineConversationSession::loadOlder`
 for the page before the oldest cached event (large events are reassembled
@@ -152,10 +152,10 @@ files on the other machine do not load on this Mac yet (ketplus#637).
 
 `local` names This Mac. A Linux machine is named by its daemon's host key
 fingerprint (the key pinned at pairing,
-[ADR 0034](0034-relay-is-not-trusted-for-device-identity.md)), which is the same whichever
+the device-pin rule in `daemon-architecture.md`), which is the same whichever
 route reaches it:
 
-- The Relay backend maps its relay machine id to the pinned fingerprint.
+- The hosted-service backend maps its machine id to the pinned fingerprint.
 - The SSH backend reads the fingerprint from the daemon's `daemon.hello`
   reply: `host_key_fingerprint`, advertised by the `daemon.host_identity/1`
   feature at protocol minor 1. It is `CloudCrypto::keyFingerprint` of the
@@ -165,7 +165,7 @@ route reaches it:
 - A host reachable over both routes is therefore one machine: one picker row,
   one conversation list, and conversations bound to the fingerprint keep
   their binding when the route changes. Desktop prefers SSH while it is
-  reachable and falls back to the Relay.
+  reachable and falls back to the hosted service.
 
 ### Host key rotation
 
@@ -188,8 +188,8 @@ An SSH machine has two keys, and they rotate independently:
   "Trust the new identity" replaces the stored id. When the user does that,
   every conversation binding recorded with the old id moves to the new id in
   one rewrite, so the user keeps their conversations on that host. Rejecting
-  leaves the machine Offline, and removing the machine forgets both. A Relay
-  pairing is not moved: the Relay pins the old key (#88), so that route needs
+  leaves the machine Offline, and removing the machine forgets both. A hosted service
+  pairing is not moved: the hosted service pins the old key (#88), so that route needs
   a new pairing.
 
 ### Binding to the selected machine
@@ -219,7 +219,7 @@ the selected machine's backend, never a transport:
 | State | Meaning | What the UI shows |
 | --- | --- | --- |
 | Connecting | No session yet: first attempt, or a failed first attempt | Picker row and Connections show "Connecting…"; the sidebar shows a loading placeholder, no stale list |
-| Connected | Hello completed; requests flow | Normal UI; Connections shows "Connected" with the route (SSH or Relay) |
+| Connected | Hello completed; requests flow | Normal UI; Connections shows "Connected" with the route (SSH or hosted service) |
 | Reconnecting | A Connected session dropped; the route retries on its own | Last lists stay visible but read-only; composer and approval buttons are disabled with "Reconnecting…" and the reason |
 | Offline | The route cannot reach the host or will not retry (host key changed, not installed, signed out, revoked) | Connections shows "Offline" and the reason with Connect; the picker row is dimmed; opening the machine shows the reason instead of a list |
 
@@ -227,10 +227,10 @@ A request made before Connected is the route's to hold or fail. The local and
 SSH routes both speak through `DaemonClient`, which queues it until the hello,
 as it always has. A request made while a route is Offline (it will not retry
 on its own) fails at once with the state's reason rather than leaving the UI
-waiting unseen; the Relay route does the same. While Connecting or
-Reconnecting the Relay route holds a request until Connected, bounded by the
-relay's 15-minute command lifetime. Writes are never replayed after a drop
-(the existing `DaemonClient` rule); the Relay route's outbox is the exception
+waiting unseen; the hosted-service route does the same. While Connecting or
+Reconnecting the hosted-service route holds a request until Connected, bounded by the
+hosted service's 15-minute command lifetime. Writes are never replayed after a drop
+(the existing `DaemonClient` rule); the hosted-service route's outbox is the exception
 described below.
 
 ### SSH trust
@@ -266,124 +266,31 @@ to another user's socket.
   that connection is up and never writes it to This Mac. A token readable by
   other users is refused (`DaemonTokenInsecure`).
 - The SSH route is the user's own access to their own account, so it needs no
-  KetPlus account, pairing or Relay. Approvals on that host are answered by
+  KetPlus account, pairing or hosted service. Approvals on that host are answered by
   whoever holds that SSH access, exactly as `ketplusctl` on the host would.
 
-### Relay backend
+### Hosted-service backend
 
-Reads come from `ControlV2Client`'s host-verified projection, filtered to the
-backend's relay machine id; transcript windows and pages from its restore
-path. Repositories use the neutral shape with the salted id and no `path`.
-`createSession` takes `{"repository_id", "worktree_id", "prompt", "options"}`
-and is sent only for a worktree in the verified projection: it reuses the
-deployed `POST /v2/mobile/workspaces/{workspace}/session-creates` command and
-the host's existing `CloudControlCommands` `session.create` path, sealed to the
-machine's pinned agreement key with its envelope bound into the associated
-data. No relay change is needed.
+The hosted-service backend implements the same machine interface as the SSH backend and keeps the same conversation semantics.
 
-**Worktrees without a conversation (decision C).** The deployed relay's
-worktree index (`GET /v2/mobile/worktrees`) is a plaintext heartbeat copy with
-no host signature, so an entry no verified conversation covers is not shown on
-the relay's word. For each such entry of a pinned machine, lazily and up to a
-bound of new checks per listing (`verify_worktrees`, default 32, at most 100),
-the client sends the existing `worktree.configuration.read` command in the
-background: at most four at a time, each abandoned after five seconds. No
-listing waits for it; an entry being checked is reported in `pending`, and
-`MachineBackend::catalogChanged` announces each verdict. The verdict is cached
-per catalog scope (ids, labels and the index's revisions), so a worktree is
-checked once until its scope changes; a check that got no answer is tried again
-after 30 seconds. The host answers inside its signed, sealed result with the
-catalog scope it holds for that worktree (`repositoryId`, `worktreeId`,
-`repositoryLabel`, `worktreeLabel`). The host keeps no catalog or lifecycle
-revision (it accepts only 0), so the revisions are not part of the comparison.
-The entry is shown, marked `verified: "host_read"`, only when every echoed
-field equals the index entry.
-Otherwise it is reported in `rejected` with a stable reason:
-`unsigned_index_entry` (beyond the bound or not active), `worktree_not_granted`
-(the relay refused the command as forbidden) or `verification_failed` (no
-answer, a bad signature or a different scope). A `worktree_not_granted`
-verdict expires after 30 seconds like any other, because grants change without
-a scope change: a worktree granted later appears without a new sign-in. This needs no relay change and
-no relay deploy. **Option A**, a relay-side index whose entries the host
-seals (as it already seals session metadata), would remove the per-entry round
-trip and is future work in the private relay service.
+**Reads** come from the client's host-verified projection of the machine, filtered to the backend's machine id; transcript windows and pages come from its restore path. Repositories use the neutral shape with the salted id and no `path`. `createSession` takes `{"repository_id", "worktree_id", "prompt", "options"}` and is sent only for a worktree in the verified projection. It reuses the existing session-create command and the host's `session.create` path, sealed to the machine's pinned agreement key with its envelope bound into the associated data.
 
-**Durable command outbox.** Every write (`startTurn`, `steerTurn`, `stopTurn`,
-`resolveApproval`, `answerQuestion`, `createSession`) is
-prepared and encrypted once, written to a per-machine owner-only
-`CommandOutbox` file, and only then submitted. After a restart or reconnect,
-only that stored ciphertext is submitted again, so the relay's idempotency key
-answers with the command it already has and the host's command journal runs it
-once. A result is verified (host signature, original scope) before a callback
-or `commandCompleted` sees it, and each command id is applied at most once,
-including after a restart: its completion is written to the outbox before the
-result is applied, and a result that cannot be recorded stays pending and is
-read back again while the link stays up, after 1 s doubling to 30 s with one
-warning (and on a later connection). `pendingApprovals` is a read the relay carries as a command: it is
-submitted and polled for its signed result without touching the outbox, so it
-writes nothing to disk, is never replayed and does not count toward the
-outbox's 256-entry cap; a lost one is asked again by its caller. A refusal
-without an error code (`Control refused the request.`) fails that command and
-leaves the link `Connected`; a server error, timeout or rate limit without a
-code (HTTP 5xx, 408, 429) is a transport failure, so it keeps the command and
-retries it. Only transport failures and invalid responses keep a command for
-the next connection. Events are polled only for conversations the UI has open:
-a transcript read or a write starts following a conversation (a read such as
-`pendingApprovals` does not), and `MachineBackend::conversationClosed` removes
-one that is closed or deselected, so the poll load does not grow with every
-conversation ever opened. No UI consumer uses the Relay backend yet; the one
-that moves onto it calls `conversationClosed`. Plaintext never reaches the file. An entry older than the
-relay's 15-minute command lifetime is given up. A reported failure means the
-command will never be sent: on `disconnectFromRelay()` or a fatal answer, a
-command that never left this device is withdrawn from the outbox and fails,
-and one the relay may already hold is answered `{"status": "queued",
-"command_id"}`, with its outcome arriving later through `commandCompleted`.
+**Worktrees without a conversation.** A worktree list the service returns is a plain copy that carries no host signature, so an entry that no verified conversation covers is not shown on the service's word. For each such entry of a pinned machine the client lazily sends the existing `worktree.configuration.read` command in the background, up to a bound of new checks per listing (`verify_worktrees`, default 32, at most 100), at most four at a time, each abandoned after five seconds. No listing waits for a check; an entry being checked is reported in `pending`, and `MachineBackend::catalogChanged` announces each verdict. A verdict is cached per catalog scope, and a check that got no answer is tried again after 30 seconds. The host answers inside its signed, sealed result with the catalog scope it holds for that worktree. The entry is shown, marked `verified: "host_read"`, only when every echoed field equals the listed entry. Otherwise it is reported in `rejected` with `unsigned_index_entry`, `worktree_not_granted` or `verification_failed`; a `worktree_not_granted` verdict expires after 30 seconds, so a worktree granted later appears without a new sign-in.
 
-**Connection states** follow the relay link: `Connecting` until the first
-successful read, `Connected`, `Reconnecting` with bounded backoff (1 s doubling
-to 30 s) after a transport failure, and `Offline` after `disconnectFromRelay()`
-or a fatal answer (`invalid_access`, a revoked device or machine, sign-out, a
-changed account). A refresh refused with 401 emits
-`ControlV2Client::credentialRevoked`; the backend fences every request in
-flight, so no response issued before the revocation reaches the UI, and it does
-not retry until the user signs in again.
+**Durable command outbox.** Every write (`startTurn`, `steerTurn`, `stopTurn`, `resolveApproval`, `answerQuestion`, `createSession`) is prepared and encrypted once, written to a per-machine owner-only `CommandOutbox` file, and only then submitted. After a restart or reconnect only that stored ciphertext is submitted again, so the command's idempotency key answers with the command already accepted and the host's command journal runs it once. A result is verified (host signature, original scope) before a callback or `commandCompleted` sees it, and each command id is applied at most once, including after a restart. A result that cannot be recorded stays pending and is read back again while the link stays up, after 1 s doubling to 30 s with one warning, and on a later connection. `pendingApprovals` is a read carried as a command: it is polled for its signed result without touching the outbox, writes nothing to disk, is never replayed and does not count toward the outbox's 256-entry cap. A refusal without an error code fails that command and leaves the link `Connected`; a server error, timeout or rate limit without a code (HTTP 5xx, 408, 429) is a transport failure, so it keeps the command and retries. Events are polled only for conversations the UI has open: a transcript read or a write starts following a conversation, and `MachineBackend::conversationClosed` removes one that is closed or deselected. Plaintext never reaches the outbox file. An entry older than the 15-minute command lifetime is given up. On `disconnect` or a fatal answer, a command that never left this device is withdrawn and fails, and one the service may already hold is answered `{"status": "queued", "command_id"}` with its outcome arriving later through `commandCompleted`.
 
-**Relay** keeps Control v2 unchanged: end-to-end encryption between Desktop and
-the host, host keys pinned at pairing (#88,
-[ADR 0034](0034-relay-is-not-trusted-for-device-identity.md)), and a relay that sees only
-ciphertext. The two routes never mix: a Relay machine is never reached over SSH
-by the Relay's identity, and an SSH machine needs no Relay credential.
+**Connection states** follow the link: `Connecting` until the first successful read, `Connected`, `Reconnecting` with bounded backoff (1 s doubling to 30 s) after a transport failure, and `Offline` after a disconnect or a fatal answer (`invalid_access`, a revoked device or machine, sign-out, a changed account). A refresh refused with 401 emits `credentialRevoked`; the backend fences every request in flight, so no response issued before the revocation reaches the UI, and it does not retry until the user signs in again.
 
-### Relay entitlement
+The hosted route keeps end-to-end encryption between Desktop and the host and host keys pinned at pairing; the service sees only ciphertext. The two routes never mix: a hosted-service machine is never reached over SSH, and an SSH machine needs no service credential.
 
-SSH is free; the Relay route is ketPlus Pro, and the private account service
-decides who has it. Desktop reads it from the user session the account service
-returns. That is the JSON body of `POST /v2/auth/token`, sent when the browser
-sign-in completes, and of `POST /v2/auth/refresh`, which replaces it on every
-credential rotation. Desktop reads one field:
+### Entitlement
 
-```json
-{
-  "accessToken": "…",
-  "refreshToken": "…",
-  "subject": { "id": "…" },
-  "entitlements": ["ketplus.relay"]
-}
-```
+SSH is free; the hosted route is KétPlus Pro, and the account service decides who has it. Desktop reads one field of the signed-in user session: `entitlements`, an array of strings. The value that enables the hosted route lets the account pair Linux machines and work on them through it.
 
-- `entitlements` is an array of strings. `"ketplus.relay"` lets the account
-  pair Linux machines and work on them through the Relay.
-- A session without the field, with the field in another shape, or without
-  `"ketplus.relay"` in it is not entitled. Desktop fails closed (decision
-  D-4): the Relay route is disabled with an upgrade hint, and SSH stays
-  available.
-- Desktop never gates the route on its build edition. The relay still
-  authorizes each request by account and entitlement, and it trusts nothing a
-  client says about itself; the client-side gate only explains the refusal
-  before the user meets it.
+- A session without the field, with the field in another shape, or without that value is not entitled. Desktop fails closed: the hosted route is disabled with an upgrade hint, and SSH stays available.
+- Desktop never gates the route on its build edition. The hosted service authorizes each request by account and entitlement and trusts nothing a client says about itself; the client-side gate only explains the refusal before the user meets it.
 
-The code is `ControlV2Client::entitlements()` and
-`apps/desktop/src/remote/AccountEntitlements.h`.
+The code is `ControlV2Client::entitlements()` and `apps/desktop/src/remote/AccountEntitlements.h`.
 
 ## Consequences
 
@@ -400,12 +307,12 @@ The code is `ControlV2Client::entitlements()` and
   reasons above (`tests/MachineTranscriptPagingTest.cpp`). The rich renderer for
   remote transcripts (ketplus#598) is covered by
   `tests/MachineRichTranscriptTest.cpp`.
-- Scope item 2 (Relay backend) lands as `RelayMachineBackend`, `CommandOutbox`
+- Scope item 2 (hosted-service backend) lands as `RelayMachineBackend`, `CommandOutbox`
   and the host's signed worktree scope in `worktree.configuration.read`, tested
-  against the loopback relay (`tests/daemon/RemoteRelayBackendTest.cpp`).
+  against the loopback hosted service (`tests/daemon/RemoteRelayBackendTest.cpp`).
 - Ownership: the app has one set of remote machine backends (`LinuxMachines`,
   docs/ssh-transport.md "Connections"). It holds one SSH tunnel per saved
-  machine and one `RelayMachineBackend`, and so one outbox writer, per Relay
+  machine and one the hosted-service machine backend, and so one outbox writer, per hosted service
   host. Every window's `MachineSelection`, picker and Connections read from that
   set, so a machine is the same backend in every window. Windows open and close
   without starting or dropping connections, and quitting closes them.
@@ -424,7 +331,7 @@ The code is `ControlV2Client::entitlements()` and
 - **A `DaemonClient` subclass per transport.** `DaemonClient` owns the local
   socket's framing, hello, queueing and replay; Control v2 shares none of it
   (encrypted commands, signed results, event pages). Subclassing would force
-  the Relay to fake a socket. The interface sits above both instead.
+  the hosted service to fake a socket. The interface sits above both instead.
 - **SSH carrying Control v2 instead of the local protocol.** It would give SSH
   a second end-to-end layer on top of SSH's own, and need pairing and a KetPlus
   account for a user who already has shell access to their account. SSH
@@ -432,14 +339,14 @@ The code is `ControlV2Client::entitlements()` and
   socket, so a second layer adds keys to manage and no protection.
 - **A TCP listener on the Linux daemon.** Rejected: it adds an inbound port and
   a new authentication surface (ADR 0022 keeps the host outbound-only).
-- **Password authentication for SSH.** Rejected: KetPlus would hold or relay a
+- **Password authentication for SSH.** Rejected: KetPlus would hold or hosted service a
   secret it cannot protect better than the user's SSH agent.
 
 ## Remote attachment staging
 
 The remote workspace stages files and clipboard images for an existing conversation
 through `MachineAttachmentUpload`, a session/generation-bound coordinator. It sends
-32-KiB chunks and waits for the verified result of every command, including a Relay
+32-KiB chunks and waits for the verified result of every command, including a hosted-service
 outbox command initially reported as queued, before advancing. A file is sendable only
 after commit returns `ready`; a failed chunk cannot silently become turn input.
 Removal waits for any pending operation before issuing cancel. The daemon remains

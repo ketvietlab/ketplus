@@ -787,7 +787,7 @@ local commands; the phone's `team.update` is unchanged.
 
 `team.create` and `team.update` take `max_rounds` (1 to 5; 2 when absent) and
 `review_place` (`board` or `pull_request`; `board` when absent), and the team's document
-returns both (§2). These are local commands; the relay contract and the phone's
+returns both (§2). These are local commands; the hosted service contract and the phone's
 `team.update` are unchanged, so a phone creates a team with two rounds on the board. The
 phone's team summary carries `max_rounds` read-only (T-53, ADR 0116).
 

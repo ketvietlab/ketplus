@@ -210,7 +210,7 @@ browser, Computer, Atlas readiness and update decisions/contracts.
   the resolved addresses and dials those same addresses without re-resolution;
   unit tests cover local/private/metadata and rebinding refusal. Contexts block
   service workers/downloads, use temporary profiles, and disable non-proxied
-  WebRTC UDP. Node actions require fresh snapshots and verify element fingerprints.
+  peer transport UDP. Node actions require fresh snapshots and verify element fingerprints.
   These network/action controls do not compensate for the disabled process sandbox
   confirmed in PS-06.
 - Runtime manifest paths are canonicalized inside the runtime root

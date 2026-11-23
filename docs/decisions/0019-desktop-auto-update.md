@@ -120,8 +120,8 @@ path that must not trust the download server or the network.
 - A KetPlus-specific updater (download a DMG, verify it, swap the bundle with a
   helper). It would duplicate Sparkle's signed-update verification, safe
   bundle replacement and relaunch, which are the security-sensitive parts.
-- Updating through the relay or the daemon. That would tie desktop updates to
-  account state and give the relay a code-delivery role. The appcast is a
+- Updating through the hosted service or the daemon. That would tie desktop updates to
+  account state and give the hosted service a code-delivery role. The appcast is a
   separate static feed.
 - A feed URL chosen at run time (settings or environment). It would let a local
   setting redirect updates. The build-time URL and key keep a shipped app bound

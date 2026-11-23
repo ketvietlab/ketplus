@@ -262,7 +262,7 @@ Linux store policy, signed upgrade prompts and platform release acceptance remai
 - The unreviewed workspaces UI layer consumes kit worktree actions/badges,
   searchable picker rows and Connections controls. Repository/worktree switching
   still waits for the existing revisioned acknowledgment. Linux pairing continues
-  through authenticated outbound Relay; this layer does not add SSH setup.
+  through authenticated outbound hosted service; this layer does not add SSH setup.
   There is no Worktrees page (ADR 0111): worktrees are created for a
   conversation, from New conversation or the repository picker's Create
   worktree… card, which moves that conversation to the new worktree, and
@@ -272,31 +272,31 @@ Linux store policy, signed upgrade prompts and platform release acceptance remai
   separators and the kit empty state and avatar. Its phone pairing dialog follows
   the app's scan, compare and approve flow (no typed pairing code). Since #419
   (ADR 0119) the Linux rows come from `LinuxMachineModel` and show the route
-  (SSH or Relay), the Connecting / Connected / Reconnecting / Offline state or an
+  (SSH or hosted service), the Connecting / Connected / Reconnecting / Offline state or an
   actionable error (host key changed, SSH key refused, daemon not installed),
   Details with the verified fingerprint, and Connect / Disconnect. "Connect a
   Linux machine" has an SSH (free) mode (host alias or user@host[:port], a
   first-use host key to accept or reject, no password field) and a ketPlus
-  Relay (Pro) mode (the existing pairing link). The SSH route is wired to
+  Hosted service (Pro) mode (the existing pairing link). The SSH route is wired to
   `SshMachineBackend` through `LinuxSshMachines` (docs/ssh-transport.md
   "Connections"): live state, the verified host key, a mismatched key shown as
   such, Connect / Disconnect / Remove, Forget old key after a mismatch of a
   key ketPlus accepted, and Trust new identity after an ADR 0119 rotation.
   Removing a machine deletes its identity and its accepted key from the
-  KetPlus known_hosts file. The Relay route is wired to `RelayMachineBackend`
-  through `LinuxRelayMachines`: live state, the pinned host identity, host
+  KetPlus known_hosts file. The hosted service route is wired to the hosted-service machine backend
+  through the hosted-service machine list: live state, the pinned host identity, host
   presence ("Host offline, last seen …"), requests that wait for an absent
-  host, and pending outcomes. The Relay is
-  gated on the signed-in session's `entitlements` (`ketplus.relay`,
-  `AccountEntitlements.h`) and fails closed while the relay names none (D-4).
+  host, and pending outcomes. The hosted service is
+  gated on the signed-in session's `entitlements` (see
+  `AccountEntitlements.h`) and fails closed while the hosted service names none (D-4).
   SSH needs no account. Machines are keyed by the ADR 0119 machine id, the
-  daemon's host key fingerprint (for the Relay, the one pinned at pairing); the
-  Relay's machine id is a route attribute, so a host on both routes is one row,
-  reached over SSH, with the Relay as the fallback while SSH cannot reach it
+  daemon's host key fingerprint (for the hosted service, the one pinned at pairing); the
+  Hosted service's machine id is a route attribute, so a host on both routes is one row,
+  reached over SSH, with the hosted service as the fallback while SSH cannot reach it
   (the row says why and offers Use SSH). Saved SSH machines and, while
-  entitled, the Relay machines connect at launch, so the activity bar's picker
+  entitled, the hosted service machines connect at launch, so the activity bar's picker
   lists them before Connections is opened. The app owns one set of these
-  backends (`LinuxMachines`) that every window shares: one tunnel and one Relay
+  backends (`LinuxMachines`) that every window shares: one tunnel and one hosted service
   outbox writer per host. The picker shows each machine's
   route and state. On every `machinesChanged`, `MainWindowRemote.cpp` registers
   `LinuxMachinesSection::machineBackend(id)` in the window's `MachineSelection`
@@ -691,14 +691,14 @@ Linux store policy, signed upgrade prompts and platform release acceptance remai
   duplicate terminal events cannot reopen a completed compaction. Fake-daemon regressions
   include provider activity arriving during the refresh and overlapping compactions.
 
-- WebRTC host transport phase 3 (0.1.37): libdatachannel with signed SDP,
+- Peer transport host phase 3 (0.1.37): libdatachannel with signed SDP,
   active-pairing verification, expiring grants, revocation, connection epochs,
   three bounded ordered channels, cursor subscriptions and encrypted command
-  results. WebRTC and mailbox dispatch share the journal's command deduplication
+  results. peer transport and mailbox dispatch share the journal's command deduplication
   and the cloud-safe encrypted event projection. Native clients remain phase 4;
-  `events.forward_only/1`, relay-frame-only delivery and removal of legacy event
+  the event-forwarding capability, frame-only delivery and removal of legacy event
   upload remain gated for the later migration. The current mobile app keeps its
-  Control v2 path. See `remote-transport.md` for the precise host wire contract.
+  Control v2 path. See `remote-clients.md` for what the daemon does.
 
 - Async assistant questions expire with their originating turn (completion, provider stop,
   or a new turn). Canonical expiry receipts hide live and replayed unanswered question
@@ -711,7 +711,7 @@ Linux store policy, signed upgrade prompts and platform release acceptance remai
   group loads bounded, cursor-fenced detail pages; output/status changes catch up
   while open, collapse fences late replies, and explicit conversation copy still
   reads full canonical history. Capture/compare and screenshot observations stay
-  outside groups. Legacy clients and the current relay/mobile projection are unchanged.
+  outside groups. Legacy clients and the current hosted service/mobile projection are unchanged.
 
 - Explicit economic context harness (ADR 0021): persisted `compactWindow` on new
   and resumed daemon turns, idle configuration changes and forks. Codex receives
@@ -866,7 +866,7 @@ Linux store policy, signed upgrade prompts and platform release acceptance remai
   (0.1.29), systemd user unit, authenticated `ketplusctl`, browser-approved
   device authorization and a durable zero-session workspace catalog. ADR 0119
   records the remote composition (one `MachineBackend` for the local socket,
-  the Relay and SSH; machine binding; connection states; the SSH trust
+  the hosted service and SSH; machine binding; connection states; the SSH trust
   decision); its local adapter `DaemonMachineBackend` is in `ketplus_remote`,
   and the SSH backend `SshMachineBackend` with its secret-free machine store is
   in `ketplus_remote_ssh_backend` (`ssh-transport.md`). Desktop composes a
@@ -878,15 +878,15 @@ Linux store policy, signed upgrade prompts and platform release acceptance remai
   machines"). Scrolling up reads older transcript pages through the backend,
   with large events reassembled first (live ones too); rename runs on every
   route, fork where the daemon's hello offers `session.fork` and through the
-  Relay, and archive where it offers `session.archive/1`. Not yet on remote
+  Hosted service, and archive where it offers `session.archive/1`. Not yet on remote
   machines, each shown disabled with its reason (ADR 0119, "Parity of
-  conversation operations"): archive through the Relay. Attachments stage through
-  SSH and the encrypted Relay outbox for existing conversations. Remote transcripts render through This Mac's rich renderer in
+  conversation operations"): archive through the hosted service. Attachments stage through
+  SSH and the encrypted hosted service outbox for existing conversations. Remote transcripts render through This Mac's rich renderer in
   transcript-only mode (ketplus#598); file actions that need this Mac's disk
   say why they are unavailable.
   `tests/MachineEndToEndTest.cpp` drives this window end to end (#419): over SSH
-  against a real daemon behind a loopback sshd with FakeCodex, and over the Relay
-  against the loopback relay of `tests/daemon/SyntheticRelay.h`, including a
+  against a real daemon behind a loopback sshd with FakeCodex, and over the hosted service
+  against the loopback hosted service of `tests/daemon/SyntheticRelay.h`, including a
   worktree that turns from pending to verified, a create queued while the host
   is away that completes through `commandCompleted`, and an outage on each route
   that shows Reconnecting/Offline and recovers without falling back to This Mac.
@@ -956,22 +956,19 @@ Linux store policy, signed upgrade prompts and platform release acceptance remai
   controls, based on actual runtime retention and occupancy rather than a shared
   timeout. Native boundary-only compaction needs provider capability verification.
 
-- Linux machine follow-ups to #419: the Relay entitlement (`ketplus.relay`) issued by
+- Linux machine follow-ups to #419: the hosted service entitlement issued by
   the private auth service (Desktop fails closed until a session names it, D-4), and
   installing or updating the daemon on a remote host over SSH (today Connections
   shows such a host as "Daemon not installed"; see `linux-headless-daemon.md`).
 - Deployment and production operation of the versioned cloud Control API.
 - Entitlements and organization-aware session policy beyond personal workspaces.
 - KétRouter client integration and cloud services.
-- Push/background delivery and a lower-latency relay transport beyond bounded
+- Push/background delivery and a lower-latency hosted service transport beyond bounded
   authenticated polling.
-- WebRTC DataChannel transport for remote Desktop and mobile clients (direct, then
-  TURN, then the HTTPS relay) with a forward-only relay that no longer stores
-  transcript events; an offline host leaves clients with their own cache
-  ([ADR 0024](decisions/0024-webrtc-transport-and-forward-only-relay.md)). The protocol
-  (capability negotiation, signaling through the relay, peer authentication, frames) is specified
-  in [remote transport](remote-transport.md) and
-  [ADR 0025](decisions/0025-remote-transport-protocol.md).
+- Remote Desktop and mobile clients may read events over an encrypted peer connection or the
+  daemon's message socket instead of events stored by the hosted service; an offline host leaves
+  clients with their own cache. What the daemon does and the limits clients follow are in
+  [serving remote clients](remote-clients.md).
 - Computer use follow-ups ([ADR 0030](decisions/0030-ketplus-computer-agent-app.md)):
   Codex (per-conversation MCP binding), before/after thumbnails in the
   transcript, minimized windows and other Spaces, shortcuts
@@ -1110,7 +1107,7 @@ The approved flow is implemented in the native Qt picker and SwiftUI companion.
 Acknowledged switches preserve the conversation anchor/draft, regroup the sidebar
 and update Files/Source Control and file search. Local repositories include both
 recent folders and the daemon’s enrolled catalog. Cross-repository remote use
-requires the companion relay target-grant authorization update; deployment and
+requires the companion hosted service target-grant authorization update; deployment and
 installed-bundle verification remain separate from source/build verification.
 
 
@@ -1133,8 +1130,8 @@ required to inspect a receipt.
 ### Linux conversation attachments (#623)
 
 Remote conversations stage files and clipboard images through the machine-neutral
-backend over SSH and the encrypted Relay outbox. Uploads advance only after each
-begin/chunk/commit result is confirmed; Relay `queued` receipts wait for
+backend over SSH and the encrypted hosted service outbox. Uploads advance only after each
+begin/chunk/commit result is confirmed; hosted service `queued` receipts wait for
 `commandCompleted`. Ready attachment IDs accompany start/steer, and failures remain
 visible in the draft. Per-file limits match the local workspace; daemon draft quotas
 remain authoritative. Attachments require an existing conversation/session. See ADR

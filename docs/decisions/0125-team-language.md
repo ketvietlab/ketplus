@@ -17,7 +17,7 @@ kind.
 ## Decision
 
 1. **A team stores a language.** `language` is `"en"` or `"vi"` (ISO 639-1; more can be
-   added). It is part of the team record, the team JSON the desktop reads and the relay
+   added). It is part of the team record, the team JSON the desktop reads and the hosted service
    `teams.remote/1` payload. A team saved before this field, or created by a client that sends
    none, is English. Any other value is refused with `invalid_payload`.
 2. **Set at creation, changed in settings.** New Team has a Language field.
@@ -64,7 +64,7 @@ kind.
   does not rewrite earlier Updates or history.
 - The words a member writes (task titles, notes, decision questions) are as the member wrote
   them; only the instructions steer their language.
-- The phone reads `language` from the relay payload; its own strings are its own work.
+- The phone reads `language` from the service payload; its own strings are its own work.
 - A new team text needs a translation: the catalog refresh lists the ones without one, and
   `ketplus_team_page_language_tests` fails when the team page shows an English fixed text for
   a Vietnamese team.

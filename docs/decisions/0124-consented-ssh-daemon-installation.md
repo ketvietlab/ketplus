@@ -20,7 +20,7 @@ archive size, verification, user-space location, startup and rollback behavior.
 Consent is bound to the tunnel generation, verified identity, signed artifact,
 profile paths and existing installation receipt. Changed inputs require review
 again. No password field or storage, sudo, OS-user creation, system package
-installation, SSH configuration change or relay enrolment is included.
+installation, SSH configuration change or service enrolment is included.
 
 ### Release channel and publisher contract
 
@@ -199,7 +199,7 @@ Linux proofs use a task-owned QA keypair and local manifest/artifact server, plu
 an isolated **same-UID HOME/XDG profile**, not a newly created OS user. The private
 QA key stays outside the source tree. The full staged QA daemon is built with a
 loopback control URL and an empty isolated credential store; it must never enrol
-or connect as a real machine to any hosted relay. Stop only test-owned processes
+or connect as a real machine to any hosted service. Stop only test-owned processes
 and delete only test-owned files.
 
 Offscreen coverage includes real Connections controls, verified SSH, the release

@@ -37,7 +37,7 @@ including team members, while the user is reading them. A directory called
   `sidebarPlacementKnown`, opaque `sidebarRepositoryId`, and `sidebarRepositoryLabel`.
   Unknown legacy placement carries `false` plus the stable navigation fallback.
   Optional team placement is sealed with the existing membership descriptor.
-  Plaintext relay routing continues to use the current execution repository/worktree;
+  Plaintext service routing continues to use the current execution repository/worktree;
   origin paths are not sent there. Missing fields on older hosts remain compatible.
 - Workspace catalogs retain every execution worktree. A separate display-only
   `sidebarVisible` marker omits confirmed non-Git roots from repository groups, while

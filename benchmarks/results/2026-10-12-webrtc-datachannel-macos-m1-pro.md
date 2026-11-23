@@ -1,6 +1,6 @@
 # WebRTC data channel spike — 2026-10-12
 
-Findings and recommendation: `docs/webrtc-transport-spike.md`.
+The findings document for this run is no longer in this repository.
 
 ## Environment
 

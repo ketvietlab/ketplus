@@ -48,7 +48,7 @@ class CloudControlClient final : public QObject {
 
   public:
     // A peer further behind the journal head than this many events is reset instead of paged
-    // (docs/remote-transport.md, "Resume and retry"), so no peer needs older events.
+    // (docs/remote-clients.md), so no peer needs older events.
     static constexpr qint64 peerEventWindow = 2000;
     // Retention is released in steps of this many events, not on every event. A step stays under
     // the 128 rows one acknowledgement cleanup pass removes, so cleanup keeps up with it.

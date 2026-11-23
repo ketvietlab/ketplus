@@ -1,6 +1,6 @@
 # ADR 0015: Stable conversations with versioned execution contexts
 
-Status: daemon, isolated relay and mock-reviewed desktop/iOS switch UI implemented; not deployed.
+Status: daemon, isolated hosted service and mock-reviewed desktop/iOS switch UI implemented; not deployed.
 Date: 2026-09-30.
 
 A conversation keeps its ID, provider thread, generation and transcript when its
@@ -67,29 +67,29 @@ remain available. Explicit file requests may carry encrypted
 command's authenticated repository/worktree IDs and content revision against it.
 Unknown contexts fail closed; async completion rechecks session generation and
 recorded context rather than requiring the root still be active.
-The isolated relay change additionally requires an active catalog and explicit
+The isolated hosted service change additionally requires an active catalog and explicit
 `workspace.files.read` target-worktree grant for historical reads, alongside the
 conversation grant. It checks at enqueue, lease and result retrieval. Discovery
 never grants this capability automatically. Mobile request encoding supports the
 field. Full provenance-to-link routing remains pending: after switching, mobile refuses unscoped transcript file links and desktop refuses relative unscoped links rather than resolving them against a different root.
-Scope is checked again at the daemon, even if a stale relay catalog accepted a
+Scope is checked again at the daemon, even if a stale service catalog accepted a
 request. No provider quota is consumed by this slice's automated tests.
 
 ## Isolation and verification
 
 Develop and build in an independent worktree. All new tests use temporary Git
-repositories, SQLite databases and fake providers. The relay boundary test runs
+repositories, SQLite databases and fake providers. The hosted service boundary test runs
 production HTTP serialization and encryption against both an in-memory transport
-and a private HTTP relay fixture on a random loopback port. Its network transport
+and a private HTTP hosted service fixture on a random loopback port. Its network transport
 rejects every destination except that fixture. Both variants use an in-memory
 credential store instead of Keychain.
-No running desktop, user daemon, existing relay, live credentials or user session
+No running desktop, user daemon, existing hosted service, live credentials or user session
 is restarted or used. Do not enable authenticated/native smoke flags for this lane.
 
 Tests cover A → B → A and same-thread cwd forwarding, busy/approval rejection,
 stale requests, no-op selection, foreign and non-root directories, unchanged dirty
 files, migration/restart, stale writer fencing, atomic failure rollback and the
-legacy relay file boundary. The loopback relay fixture is not the deployed Control
+legacy hosted service file boundary. The loopback hosted service fixture is not the deployed Control
 API service and does not qualify a production remote switch. These prove the adapter contract with a fake provider,
 not the behavior of a quota-consuming Codex session.
 
@@ -138,11 +138,11 @@ root. Its catalog additionally exposes recorded repository roots locally; cloud
 projection removes that list, context paths and absolute worktree paths.
 
 A phone selects only opaque catalog targets in the same workspace and machine.
-Both relay enqueue and lease require the conversation capability plus an active
+Both hosted service enqueue and lease require the conversation capability plus an active
 independent target catalog entry and `session.create` target grant. Command and
 result AAD bind both target IDs. Encrypted payload paths cannot opt into local
 repository browsing or override catalog resolution. The matching service change
-is owned by KétViệt; an older relay safely rejects cross-repository switches.
+is owned by KétViệt; an older hosted service safely rejects cross-repository switches.
 
 The stable conversation/navigation anchor is unchanged. Native clients project
 its acknowledged execution root separately into header, Files/Source Control,
@@ -151,7 +151,7 @@ group. Old file/Atlas provenance remains captured. A running turn keeps its
 original root; next-turn preparation uses the newly selected root. Startup,
 shutdown and pending approvals remain fenced, and unsupported providers remain
 explicitly unavailable. Qt rejects stale context read responses; iOS retains
-verified result metadata until the relay reports an equal/newer context revision.
+verified result metadata until the hosted service reports an equal/newer context revision.
 
 ADR 0105 (2026-11-10) lets local IPC list another repository's worktrees with
 `repository_path` before switching, as the mock's picker does.

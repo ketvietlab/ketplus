@@ -5,7 +5,7 @@
 Linux remote-host topology is specified in
 [`linux-headless-daemon.md`](linux-headless-daemon.md) and ADR 0022. The server
 runs the daemon independently; remote clients use the encrypted Control
-relay. `ketplus_remote_control` prepares a Qt client backend without changing
+hosted service. `ketplus_remote_control` prepares a Qt client backend without changing
 Desktop UI or its current local-daemon composition.
 
 ```text
@@ -412,7 +412,7 @@ Claude native background/subagent entry points are disabled through the pinned
 SDK settings, tool exclusions and deny hooks. Completion is delivered by the
 daemon's durable owner-wake boundary, not by keeping a Claude query alive.
 The existing `switch_supported` and `switch_available` fields drive both clients;
-no mobile binary or relay contract change is required. Cursor remains unsupported.
+no mobile binary or hosted service contract change is required. Cursor remains unsupported.
 
 The independent `ketplus_daemon` executable now owns local Codex, Claude, and
 Cursor adapters, normalized session events, approval arbitration, and a SQLite WAL replay

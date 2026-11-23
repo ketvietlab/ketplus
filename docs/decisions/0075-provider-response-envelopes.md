@@ -34,7 +34,7 @@ A small QtCore-only header shares the three adapters' identical envelope rule.
 CursorAdapter is already above 1,000 lines; this change only adds the include and
 guard at its response dispatch, with no unrelated ACP refactor. Shared-header
 changes require full Pro build/tests and independent exact-head review. No UI,
-installed daemon, user journal or relay deployment changes are included.
+installed daemon, user journal or service deployment changes are included.
 
 Duplicate keys, malformed method classification, method-specific result schemas,
 pending-call admission/timeouts/cancellation, stderr privacy and counter exhaustion

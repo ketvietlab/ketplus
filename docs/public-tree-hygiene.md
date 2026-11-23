@@ -1,6 +1,6 @@
 # Public-tree boundary hygiene
 
-The mobile clients and hosted relay/account services are proprietary and maintained
+The mobile clients and hosted account and service components are proprietary and maintained
 in private repositories. Public documentation describes the product boundary and
 public wire protocol without naming private repositories, revisions, implementation
 paths, schemas or deployment infrastructure. No history was rewritten.
@@ -91,17 +91,14 @@ recorded digest was refreshed. Existing license/copyright notices are unchanged.
 - `core/docs/mermaid-theme-review.md`
 - `core/resources/mermaid/SOURCE.json`
 - `docs/decisions/0021-default-agent-skills.md`
-- `docs/decisions/0024-webrtc-transport-and-forward-only-relay.md`
 - `docs/decisions/0029-one-public-repository-two-editions.md`
 - `docs/decisions/0030-integration-branch.md`
 - `docs/decisions/0116-teams-on-paired-devices.md`
 - `docs/licensing.md`
 - `docs/linux-headless-verification.md`
 - `docs/product-architecture.md`
-- `docs/remote-transport.md`
 - `docs/repository-boundaries.md`
 - `docs/testing.md`
-- `docs/webrtc-transport-spike.md`
 - `ketplus.ketatlas/DESIGN.md`
 - `ketplus.ketatlas/FLOW-CONTRACT.md`
 - `ketplus.ketatlas/README.md`

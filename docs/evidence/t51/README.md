@@ -18,7 +18,7 @@ The daemon payload is the complete `cmake --install` stage from public revision
 sidecar, skills and licence notices. Its verified identity is `0.1.52`, control URL
 `http://127.0.0.1:9`, runtime URL overrides disabled. It passes `--check-runtime`
 without SDK library/plugin environment overrides; its installed RUNPATH is
-`$ORIGIN/../lib`. No existing deployment, provider turn, real relay enrolment,
+`$ORIGIN/../lib`. No existing deployment, provider turn, real service enrolment,
 sudo or OS-user creation was used.
 
 The final QA archive contains 6,858 entries, 267,220,682 compressed bytes and

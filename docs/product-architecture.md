@@ -57,7 +57,7 @@ from an assumption that a user belongs to exactly one tenant.
 ## Packaging and monetization
 
 Both desktop editions are free and open source. Revenue comes from the mobile
-app, the hosted relay for remote sessions, and KétRouter usage. Paid features
+app, the hosted service for remote sessions, and KétRouter usage. Paid features
 are enforced by those services through account entitlements, never by a build
-flag: anyone may build KétPlus Pro from source, and the relay trusts nothing a
+flag: anyone may build KétPlus Pro from source, and the hosted service trusts nothing a
 client asserts about its build.

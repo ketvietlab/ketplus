@@ -29,7 +29,7 @@ ADR 0119 "Binding to the selected machine". The window keeps one
 `DaemonMachineBackend` under `local`, and the backend Connections registers for
 each Linux machine. This Mac keeps the existing Agent Workspace and sidebar.
 Choosing another machine in the picker binds `MachineCatalog` to its backend and
-shows `MachineWorkspaceView`; neither reads a transport, so the SSH and Relay
+shows `MachineWorkspaceView`; neither reads a transport, so the SSH and hosted-service
 routes share every line of UI code. Every way into the Agent Workspace (the
 activity bar, View > Agent Workspace, the compact window) shows the selected
 machine's. A picked machine with no backend yet opens Connections with an empty
@@ -50,14 +50,14 @@ transcript windows carry `event_type` and the data as `payload`.
   reader is still where they asked from (the forked conversation, another
   row's menu or the new-conversation composer); opening another conversation,
   starting a new one, or the machine going away or being destroyed drops it,
-  and a failed or expired fork leaves nothing waiting. A command the Relay
+  and a failed or expired fork leaves nothing waiting. A command the hosted service
   queued shows "Fork sent. Waiting for the machine…" (or Rename, Archive) in
   the status line of the conversation that sent it until the host answers. A
   failure shows in the composer's status line.
 - **Repository grain.** The daemon's `workspace.list` names each checkout's
   `repository_path` (read from a linked worktree's `.git` file and `commondir`,
   without running Git), and the local and SSH adapter groups checkouts under it
-  with their `worktrees`, as the Relay groups by repository id. A repository
+  with their `worktrees`, as the hosted service groups by repository id. A repository
   therefore appears once on every route.
 - **Conversation binding.** A `MachineConversationSession` keeps the backend it
   was opened with; turns, steer, stop and approval answers go to that machine
@@ -71,7 +71,7 @@ transcript windows carry `event_type` and the data as `payload`.
   Connected lists again and reloads the transcript window and pending
   approvals on its own.
 - **Worktree picker.** A new conversation picks a worktree of the selected
-  machine and starts with `MachineBackend::createSession`. Worktrees the Relay
+  machine and starts with `MachineBackend::createSession`. Worktrees the hosted service
   still verifies (`pending`) are listed as "verifying…" and cannot be chosen;
   `catalogChanged()` lists again and fills them in.
 - **Approvals and questions.** Cards answer through the conversation's machine;
@@ -99,16 +99,16 @@ transcript windows carry `event_type` and the data as `payload`.
   say why they are unavailable (ADR 0119, "Rich renderer").
   Attach is shown disabled with its reason.
 - **Held and queued writes.** A route may hold a request while it is
-  Connecting or Reconnecting (up to 15 minutes on the Relay); the composer then
-  says it waits for the machine instead of looking hung. A Relay write may
+  Connecting or Reconnecting (up to 15 minutes on the hosted service); the composer then
+  says it waits for the machine instead of looking hung. A hosted-service write may
   answer `{"status": "queued", "command_id"}` with no result: the composer
   shows it as sent and waiting for the host, and the outcome (the new
   conversation, or an expired card) is applied on
   `MachineBackend::commandCompleted()`, which moved to the interface so the UI
-  needs no Relay type.
+  needs no hosted-service type.
 - **Registration.** The window's slot for `RemoteControlView::machinesChanged`
   (`MainWindowRemote.cpp`) calls `MachineSelection::syncBackends()` with
-  `LinuxMachinesSection::machineBackend(id)`: the SSH backend, or the Relay's
+  `LinuxMachinesSection::machineBackend(id)`: the SSH backend, or the hosted service's
   while it is the row's route. Each listed id with a backend is registered or
   replaced (a replacement for the selected machine rebinds every view); a listed
   machine without one stays selectable and shows as not connected; a machine no
@@ -941,7 +941,7 @@ in [ADR 0120](decisions/0120-github-copilot-acp-provider.md) and
 `--copilot` and `KETPLUS_COPILOT` select a custom executable location. These UI
 paths do not install a CLI or run a provider prompt by themselves.
 
-History, notifications and local/ControlV2/relay transport retain `copilot` as the
+History, notifications and local/ControlV2/hosted service transport retain `copilot` as the
 adapter id. Journal `cursor` fields remain event sequence numbers. No remote
 wire format or transcript cursor semantics change. Availability of actual turns,
 models and modes depends on the installed daemon's Copilot adapter.
@@ -1310,7 +1310,7 @@ Console, select **My Anthropic API key**, and choose **Save Claude settings**.
 Leave the key field blank to keep a saved key while changing mode or query budget.
 **Check connection** validates catalog access without model inference. The key is
 stored on the daemon's Mac in Keychain; paired phones use the same configuration.
-No key needs to be pasted into a conversation or sent through the relay.
+No key needs to be pasted into a conversation or sent through the hosted service.
 
 Changes apply to new queries. If Claude still owns background tasks, finish or stop
 those tasks before starting a turn with the changed configuration. Removing a key

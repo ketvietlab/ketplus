@@ -13,11 +13,11 @@ The repository and licensing split is (ADR 0029):
 | --- | --- | --- |
 | `ketplus` / KétPlus (Lite) and KétPlus Pro | Public | MPL 2.0 |
 | the private mobile app | Private | Proprietary |
-| Ketsuite cloud services (relay, gateway, accounts, KétRouter) | Private | Proprietary |
+| Ketsuite cloud services (hosted service, gateway, accounts, KétRouter) | Private | Proprietary |
 
 The Lite edition contains only `core/`: the native editor, workspace, Git
 integration, terminal, and local document preview. Pro adds Agent Workspace,
-model-provider adapters, Atlas, the daemon, and the relay client. Until ADR 0029
+model-provider adapters, Atlas, the daemon, and the service client. Until ADR 0029
 Pro was the proprietary `ketplus-desktop` repository; the copyright holder
 relicensed that source under MPL 2.0 when importing it here.
 
@@ -65,14 +65,14 @@ https://www.scintilla.org/License.txt
 libvterm license:
 https://github.com/neovim/libvterm/blob/v0.3.3/LICENSE
 
-### Daemon WebRTC dependencies
+### Daemon peer transport dependencies
 
 `cmake/WebRtc.cmake` pins libdatachannel 0.24.6 (MPL-2.0), libjuice
 `cb523763255f241442da1fbdd72c498f33a54b35` (MPL-2.0, the upstream zero-tiebreaker
 fix), usrsctp `fec583d54493f879d2ae44a743423bf8a04371ab` (BSD-3-Clause) and
 plog `94899e0b926ac1b0f4750bfbd495167b4a6ae9ef` (MIT). They are statically linked
 into the daemon; upstream source is unmodified. Media, SRTP, upstream
-WebSockets, examples and tests are disabled. Qt still owns the relay socket.
+WebSockets, examples and tests are disabled. Qt still owns the hosted service socket.
 OpenSSL Crypto and SSL are dynamic SDK dependencies (Apache-2.0 for supported
 OpenSSL 3+), and must be bundled/audited alongside Qt for a redistributable app.
 Source URLs and complete notices ship in `THIRD_PARTY_NOTICES.md` and

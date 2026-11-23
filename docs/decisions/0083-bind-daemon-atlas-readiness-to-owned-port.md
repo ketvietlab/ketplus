@@ -33,4 +33,4 @@ read-only viewer arguments. It does not authenticate the executable or listener,
 remove the reserve/release port race, bound the initial `readAll` allocation,
 prove renderer/descendant cleanup or accept all tunnel/grant/lease behavior.
 The real CLI opt-in remains separate; no installed CLI, user workspace, provider,
-UI, relay deployment or device installation is exercised by these fixtures.
+UI, service deployment or device installation is exercised by these fixtures.

@@ -14,7 +14,7 @@ as unavailable; they do not silently fall back to plaintext files.
 Only authenticated local IPC exposes `provider.claude.credentials.status`, `.save`,
 `.remove`, and `.check` (feature `provider.claude.credentials/1`). These commands are
 handled before SessionHost and are not persisted in command history or the journal.
-The relay command allowlist does not expose them. The UI receives configuration
+The service command allowlist does not expose them. The UI receives configuration
 metadata only, never a saved key. Removing a key keeps only disabled configuration
 metadata, so the next query returns to inherited runtime authentication.
 Successful credential IPC responses include `ok: true`, as required by the desktop
@@ -27,7 +27,7 @@ user refreshes status before retrying an operation with an uncertain outcome.
 The iPhone continues to send existing session commands through the paired connection.
 Claude executes on its host using that host's selected authentication, whether a turn
 originated on desktop or phone. This does not alter KétViệt identity, pairing grants,
-the relay endpoint, conversation history, or database ownership.
+the hosted service endpoint, conversation history, or database ownership.
 
 ## Query lifecycle and authentication
 
@@ -67,7 +67,7 @@ entry that fails every Claude turn can be cleared from Settings. A locked or den
 keychain still refuses. Background reads do not open a hidden authorization dialog. A stable signed
 daemon identity must retain access across app replacement; if access fails, Settings
 instructs the user to unlock/authorize the login keychain. There is no migration of
-relay/device credentials or fallback to their existing owner-only JSON store.
+hosted service/device credentials or fallback to their existing owner-only JSON store.
 
 The SDK child necessarily receives the API key. This is not a credential isolation
 boundary against arbitrary code running as the same OS user, including full-access
@@ -111,7 +111,7 @@ References (checked 2026-10-30):
 local-only IPC operations under the existing non-journaled credential dispatcher.
 A distinct Keychain account derived from the host profile stores the Admin key; it is
 never returned by `launchConfiguration`, forwarded to the sidecar, persisted in session
-options, or exposed through relay commands. Inference-key fields reject Admin keys.
+options, or exposed through service commands. Inference-key fields reject Admin keys.
 Removing either key leaves the other intact. UI callbacks and diagnostic errors never
 include provider response bodies or credential values.
 
@@ -143,7 +143,7 @@ An explicit `session.configuration.read` with `effective_only: true` and
 `include_claude_usage: true` returns `claude_account_usage` to an authorized paired client.
 It uses the existing encrypted configuration command/result and context revision fence.
 The host validates session generation, lifecycle, provider and context both before and after
-fetching the report. No new relay command kind or credential write capability is exposed.
+fetching the report. No new service command kind or credential write capability is exposed.
 The result contains only supported/configured/stale flags, sanitized failure text, and the
 aggregate cost/token/period/freshness fields. It is not appended to the transcript journal.
 Paired clients that can read this host's Claude session configuration can read this organization

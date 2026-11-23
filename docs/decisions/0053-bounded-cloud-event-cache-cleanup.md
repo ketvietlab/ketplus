@@ -21,7 +21,7 @@ workspace or machine callbacks release their in-flight slot without writing
 progress/receipts/backoff or restarting upload.
 
 Receipts and a scoped recovery cursor commit in the **same SQLite transaction**.
-The versioned scope tuple includes relay URL, workspace, machine and signing-key
+The versioned scope tuple includes service URL, workspace, machine and signing-key
 version. Credential-file upload progress is then mirrored and the raw journal
 cursor acknowledged. If receipt/progress persistence fails, neither advances;
 normal retry retains the same ciphertext. If the later credential/raw-ACK step
@@ -29,14 +29,14 @@ fails or the process stops, the journal cursor survives cache reclamation and
 prevents re-encrypting an already accepted event. Registration repairs the mirror
 and raw ACK; reads take the maximum of the legacy mirror and the exact scoped
 journal cursor, and fail closed on unsupported journal progress. Old-scope rows
-cannot advance a different account/workspace/relay. Orphaned progress uses its
+cannot advance a different account/workspace/hosted service. Orphaned progress uses its
 own bounded metadata lane; progress for retained sessions remains recoverable.
 
 This resolves the independent P2 reproduction where the old callback advanced the
 mirror/raw cursor before receipt storage, permanently stranding unmarked cache.
 Simply moving receipts earlier without durable recovery would create another
 crash window: after cache reclamation, retry could send different ciphertext for
-an event already accepted by the relay.
+an event already accepted by the hosted service.
 
 Each receipt/pending transaction checks at most 100 cache rows; a receipt also
 writes one scoped-progress row. All share a 1-MiB stored-column budget, using

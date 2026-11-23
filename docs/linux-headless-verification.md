@@ -11,7 +11,7 @@ tested scope, not production deployment acceptance.
 | Standalone release/privacy regression | Passed | 3/3 CTest targets |
 | Fake Claude SDK checks | Passed | 14/14 Node tests; no provider calls |
 | Control device authorization | Passed | Deployment `ketplus`: 12/12 SQLite and 12/12 PostgreSQL cases; additional focused log-privacy assertion passed |
-| Encrypted relay platform matrix | Passed | Linux host with synthetic iOS, Android, macOS, Linux and Windows clients; all five topologies passed |
+| Encrypted hosted service platform matrix | Passed | Linux host with synthetic iOS, Android, macOS, Linux and Windows clients; all five topologies passed |
 | Browser consent | Passed | Vietnamese/English, light/dark, 390×844 and 1280×800; mobile action 44px, desktop 36px, no horizontal overflow or CSP errors; approval/completion checked and all sessions closed |
 | iOS | Passed | 449 Swift tests in 11 suites with `--no-parallel`; unsigned iOS Simulator build succeeded |
 | Contract/boundary checks | Passed | Canonical/consumer OpenAPI byte-identical, all internal references resolve, presets/workflow parse, shell syntax, C++ formatting, diff checks, immutable CM tag unchanged |
@@ -23,5 +23,5 @@ removal failure during logout. The final two regressions failed before their fix
 
 Reproduce native checks using `docs/testing.md`. Linux build, staging,
 clean-runtime acceptance and administration commands are in
-[`linux-headless-daemon.md`](linux-headless-daemon.md). Private relay and mobile acceptance procedures are maintained with those services.
+[`linux-headless-daemon.md`](linux-headless-daemon.md). Private hosted service and mobile acceptance procedures are maintained with those services.
 This public repository documents only its native daemon/client checks.
