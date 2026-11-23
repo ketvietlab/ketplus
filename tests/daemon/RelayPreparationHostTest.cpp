@@ -157,6 +157,12 @@ class RelayPreparationHostTest final : public QObject {
         const int routingIndex = requestIndex("/v2/daemon/heartbeat");
         QVERIFY(routingIndex >= 0 && routingIndex < ackIndex);
         QVERIFY(!relay.bodies[routingIndex].contains(canonical.toUtf8()));
+        QCOMPARE(QJsonDocument::fromJson(relay.bodies[routingIndex])
+                     .object()
+                     .value("capabilities")
+                     .toArray(),
+                 (QJsonArray{"transport.webrtc/1", "teams.remote/1", "session.prepare/1",
+                             "runner.relay/1", "events.forward_only/1"}));
         const int keyIndex = requestIndex("/v2/session-keys:append");
         if (routingStatus != 202 || !creatorAvailable) {
             QCOMPARE(keyIndex, -1);
