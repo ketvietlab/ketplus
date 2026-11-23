@@ -12,6 +12,7 @@
 #include <QJsonArray>
 #include <QJsonDocument>
 #include <QLocalSocket>
+#include <QSet>
 #include <QUuid>
 
 #include <iostream>
@@ -351,7 +352,7 @@ DaemonCall withMutationCredential(DaemonCall call, QString credential) {
 }
 
 QJsonObject handleMessage(const QJsonObject& message, const DaemonCall& call,
-                          const bool advertiseMutation) {
+                          const bool advertiseMutation, bool preloadDeveloperTools) {
     const QString method = message.value(QStringLiteral("method")).toString();
     const QJsonValue id = message.value(QStringLiteral("id"));
     if (id.isUndefined() || id.isNull())
@@ -393,6 +394,20 @@ QJsonObject handleMessage(const QJsonObject& message, const DaemonCall& call,
         if (call(QStringLiteral("agents.whoami"), {}).contains(QStringLiteral("team")))
             for (const auto& tool : teamTools())
                 listed.append(tool);
+        if (preloadDeveloperTools) {
+            static const QSet<QString> eager{
+                QStringLiteral("team_task_update"), QStringLiteral("team_tasks"),
+                QStringLiteral("team_wait"),        QStringLiteral("agents_send"),
+                QStringLiteral("work_report"),      QStringLiteral("agents_inbox")};
+            for (qsizetype index = 0; index < listed.size(); ++index) {
+                auto tool = listed.at(index).toObject();
+                auto meta = tool.value(QStringLiteral("_meta")).toObject();
+                meta.insert(QStringLiteral("anthropic/alwaysLoad"),
+                            eager.contains(tool.value(QStringLiteral("name")).toString()));
+                tool.insert(QStringLiteral("_meta"), meta);
+                listed[index] = tool;
+            }
+        }
         return result(id, {{QStringLiteral("tools"), listed}});
     }
     if (method == QStringLiteral("tools/call")) {
@@ -430,6 +445,8 @@ int run() {
             return daemon.call(operation, payload);
         },
         mutationCredential);
+    const bool preloadDeveloperTools =
+        qEnvironmentVariableIntValue(agent_tools::preloadVariable) == 1;
     std::string line;
     while (std::getline(std::cin, line)) {
         QJsonParseError parseError;
@@ -441,7 +458,8 @@ int run() {
         if (parseError.error != QJsonParseError::NoError || !document.isObject())
             answer = error(QJsonValue::Null, -32700, QStringLiteral("Parse error."));
         else
-            answer = handleMessage(document.object(), call, advertiseMutation);
+            answer =
+                handleMessage(document.object(), call, advertiseMutation, preloadDeveloperTools);
         if (answer.isEmpty())
             continue;
         std::cout << QJsonDocument(answer).toJson(QJsonDocument::Compact).toStdString() << '\n'

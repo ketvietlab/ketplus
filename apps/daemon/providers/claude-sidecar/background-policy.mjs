@@ -32,3 +32,14 @@ export function backgroundOptions(env = process.env, hooks = {}, settings = {}) 
     },
   };
 }
+
+const claudeTeamRestrictions = {
+  developer: ["ReportFindings", "AskUserQuestion", "ScheduleWakeup"],
+  reviewer: ["ReportFindings", "AskUserQuestion", "ScheduleWakeup"],
+  leader: ["ReportFindings", "ScheduleWakeup"],
+};
+
+export function teamDisallowedTools(provider, role) {
+  if (provider !== "claude" || !Object.hasOwn(claudeTeamRestrictions, role)) return [];
+  return claudeTeamRestrictions[role];
+}

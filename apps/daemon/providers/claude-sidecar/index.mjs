@@ -8,7 +8,7 @@ import { ProcessBarrier, refreshWithin } from "./process-barrier.mjs";
 import { BackgroundTasks } from "./tasks.mjs";
 import { ensureResumable } from "./resume.mjs";
 import { reviewDecision, reviewOptions, reviewProfile } from "./review-guard.mjs";
-import { backgroundDecision, backgroundOptions } from "./background-policy.mjs";
+import { backgroundDecision, backgroundOptions, teamDisallowedTools } from "./background-policy.mjs";
 import { open, readFile } from "node:fs/promises";
 import path from "node:path";
 import { createInterface } from "node:readline";
@@ -629,15 +629,19 @@ async function startRun(messageId, params, prompt, images) {
     run.input = new TurnInput(firstPrompt, Boolean(epoch));
     if (params.resume) await ensureResumable(params.resume, run.cwd).catch(() => false);
     const authentication = authenticationOptions(params.authentication);
+    const teamRestrictions = teamDisallowedTools("claude", params.teamRole);
     const appended = [typeof params.browserInstructions === "string" ? params.browserInstructions : "",
       review?.instructions || ""].filter(Boolean).join("\n\n");
+    const background = backgroundOptions({ ...(authentication.env || process.env), ...review?.env },
+      review?.hooks, authentication.settings);
     const q = queryFn({
       prompt: run.input,
       options: {
         ...authentication,
         // Keep credentials and review caches while enforcing native background
         // blocking for every query, including full-access and resumed sessions.
-        ...backgroundOptions({ ...(authentication.env || process.env), ...review?.env }, review?.hooks, authentication.settings),
+        ...background,
+        disallowedTools: [...background.disallowedTools, ...teamRestrictions],
         ...(epoch ? { spawnClaudeCodeProcess: barrier.spawn } : {}),
         cwd: run.cwd,
         mcpServers,

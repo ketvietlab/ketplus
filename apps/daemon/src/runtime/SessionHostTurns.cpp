@@ -257,11 +257,15 @@ void SessionHost::beginClaudeTurn(const QString& sessionId, const qint64 generat
         params.insert(QStringLiteral("compactWindow"), window);
     if (!it->stored.threadId.isEmpty())
         params.insert(QStringLiteral("resume"), it->stored.threadId);
+    const QString teamRole = teamMembership(sessionId).value(QStringLiteral("role")).toString();
     if (const auto launch = agentLaunch(sessionId, generation)) {
-        params.insert(QStringLiteral("agentMcpServer"), agent_tools::claudeServer(*launch));
+        params.insert(QStringLiteral("agentMcpServer"),
+                      agent_tools::claudeServer(*launch, teamRole == QStringLiteral("developer")));
         params.insert(QStringLiteral("managedTransportEpoch"), launch->transportEpoch);
         params.insert(QStringLiteral("agentInstructions"), agentInstructions(*it));
     }
+    if (!teamRole.isEmpty())
+        params.insert(QStringLiteral("teamRole"), teamRole);
     claude->call(
         QStringLiteral("turn/start"), params,
         [this, sessionId, generation, epoch = params.value("managedTransportEpoch").toString()](

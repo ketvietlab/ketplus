@@ -402,6 +402,10 @@ includes `review-guard.test.mjs` and `review-profile.test.mjs`, and the daemon's
 `ketplus_agent_messaging_tests`. The sidecar tests use a fake SDK that runs every
 command and edit the guard allows, so a wrong allow changes the test checkout.
 
+Claude team tool exposure uses the sidecar `team-tool-policy.test.mjs` and
+`ketplus_team_agent_tools_tests`. The latter checks per-tool eager-loading metadata
+and compares the advertised operations and schemas with their ordinary listing.
+
 Bounded review policy changes additionally cover `ketplus_team_review_policy_tests`,
 `ketplus_team_finding_resolution_tests`, `ketplus_team_finding_routing_tests`,
 `ketplus_team_verdict_tests`,
