@@ -1,11 +1,12 @@
 #include "git/GitService.h"
 
 #include "git/GitParser.h"
+#include "git/GitProcessEnvironment.h"
 
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QProcess>
-#include <QProcessEnvironment>
 #include <QStandardPaths>
 #include <QTimer>
 
@@ -24,6 +25,14 @@ struct CommandState final {
     bool timedOut{false};
     bool outputTooLarge{false};
 };
+
+QString gitPath(QByteArray output) {
+    // Git terminates each raw path with a newline. Whitespace in the path is significant.
+    if (output.endsWith('\n')) {
+        output.chop(1);
+    }
+    return QFile::decodeName(output);
+}
 
 QString normalizedPath(const QString& path) {
     if (path.isEmpty()) {
@@ -111,40 +120,71 @@ void GitService::setWorkspacePath(const QString& path) {
     watchGitState();
     snapshot_ = {};
     worktrees_.clear();
-    ++workspaceGeneration_;
+    const quint64 generation = ++workspaceGeneration_;
     ++diffGeneration_;
     ++refreshGeneration_;
     emit snapshotChanged(snapshot_);
-
-    if (!isAvailable() || workspacePath_.isEmpty()) {
-        emit worktreesChanged(worktrees_);
+    if (generation != workspaceGeneration_) {
+        return;
+    }
+    emit worktreesChanged(worktrees_);
+    if (generation != workspaceGeneration_ || !isAvailable() || workspacePath_.isEmpty()) {
         return;
     }
 
-    const quint64 generation = workspaceGeneration_;
-    runGit({QStringLiteral("-C"), workspacePath_, QStringLiteral("rev-parse"),
-            QStringLiteral("--show-toplevel"), QStringLiteral("--absolute-git-dir")},
-           workspacePath_,
-           [this, generation](const int exitCode, const QByteArray& output, const QByteArray&,
-                              const bool completedNormally) {
-               if (generation != workspaceGeneration_ || !completedNormally || exitCode != 0) {
-                   if (generation == workspaceGeneration_) {
-                       emit worktreesChanged(worktrees_);
-                   }
-                   return;
-               }
-               const QStringList lines =
-                   QString::fromUtf8(output).split(QLatin1Char('\n'), Qt::SkipEmptyParts);
-               const QString root = lines.value(0).trimmed();
-               if (root.isEmpty()) {
-                   emit worktreesChanged(worktrees_);
-                   return;
-               }
-               repositoryRoot_ = normalizedPath(root);
-               gitDirectory_ = normalizedPath(lines.value(1).trimmed());
-               watchGitState();
-               refresh();
-           });
+    const QString workspace = workspacePath_;
+    runGit(
+        {QStringLiteral("rev-parse"), QStringLiteral("--show-toplevel")}, workspace,
+        [this, workspace, generation](int exitCode, const QByteArray& output,
+                                      const QByteArray& error, bool completedNormally) {
+            if (generation != workspaceGeneration_) {
+                return;
+            }
+            if (!completedNormally || exitCode != 0) {
+                if (!completedNormally ||
+                    (!error.startsWith("fatal: not a git repository") &&
+                     !error.startsWith("fatal: this operation must be run in a work tree"))) {
+                    emit errorOccurred(QString::fromUtf8(error).trimmed());
+                }
+                return;
+            }
+            const QString root = normalizedPath(gitPath(output));
+            if (root.isEmpty() || !isInside(workspace, root)) {
+                emit errorOccurred(tr("Git resolved an unrelated worktree for the open folder."));
+                return;
+            }
+            runGit({QStringLiteral("rev-parse"), QStringLiteral("--show-toplevel"),
+                    QStringLiteral("--absolute-git-dir")},
+                   workspace,
+                   [this, root, generation,
+                    rootLine = output](int dirExitCode, const QByteArray& dirOutput,
+                                       const QByteArray& dirError, bool dirCompleted) {
+                       if (generation != workspaceGeneration_) {
+                           return;
+                       }
+                       if (!dirCompleted || dirExitCode != 0) {
+                           emit errorOccurred(QString::fromUtf8(dirError).trimmed());
+                           return;
+                       }
+                       const QString directory = gitPath(dirOutput.mid(rootLine.size()));
+                       // The checkout can disappear during discovery. Git would then resolve
+                       // both paths against a parent repo, which must not supply our index.
+                       if (!dirOutput.startsWith(rootLine) || !QDir::isAbsolutePath(directory)) {
+                           emit errorOccurred(tr("The Git repository changed during discovery."));
+                           return;
+                       }
+                       repositoryRoot_ = root;
+                       gitDirectory_ = normalizedPath(directory);
+                       watchGitState();
+                       refresh();
+                   });
+        });
+}
+
+QStringList GitService::repositoryArguments() const {
+    // Do not let Git fall back to an enclosing repository if the checkout disappears.
+    return {QStringLiteral("--git-dir"), gitDirectory_, QStringLiteral("--work-tree"),
+            repositoryRoot_};
 }
 
 void GitService::refresh() {
@@ -155,9 +195,10 @@ void GitService::refresh() {
     const QString root = repositoryRoot_;
     const quint64 workspaceGeneration = workspaceGeneration_;
     const quint64 refreshGeneration = ++refreshGeneration_;
-    runGit({QStringLiteral("-C"), root, QStringLiteral("status"), QStringLiteral("--porcelain=v2"),
-            QStringLiteral("-z"), QStringLiteral("--branch"),
-            QStringLiteral("--untracked-files=all")},
+    const auto repository = repositoryArguments();
+    runGit(repository + QStringList{QStringLiteral("status"), QStringLiteral("--porcelain=v2"),
+                                    QStringLiteral("-z"), QStringLiteral("--branch"),
+                                    QStringLiteral("--untracked-files=all")},
            root,
            [this, root, workspaceGeneration,
             refreshGeneration](const int exitCode, const QByteArray& output,
@@ -174,14 +215,18 @@ void GitService::refresh() {
                emit snapshotChanged(snapshot_);
            });
 
-    runGit({QStringLiteral("-C"), root, QStringLiteral("worktree"), QStringLiteral("list"),
-            QStringLiteral("--porcelain"), QStringLiteral("-z")},
+    runGit(repository + QStringList{QStringLiteral("worktree"), QStringLiteral("list"),
+                                    QStringLiteral("--porcelain"), QStringLiteral("-z")},
            root,
            [this, root, workspaceGeneration,
-            refreshGeneration](const int exitCode, const QByteArray& output, const QByteArray&,
-                               const bool completedNormally) {
+            refreshGeneration](const int exitCode, const QByteArray& output,
+                               const QByteArray& error, const bool completedNormally) {
                if (workspaceGeneration != workspaceGeneration_ ||
-                   refreshGeneration != refreshGeneration_ || !completedNormally || exitCode != 0) {
+                   refreshGeneration != refreshGeneration_) {
+                   return;
+               }
+               if (!completedNormally || exitCode != 0) {
+                   emit errorOccurred(QString::fromUtf8(error).trimmed());
                    return;
                }
                worktrees_ = git_parser::parseWorktrees(output, root);
@@ -204,7 +249,7 @@ void GitService::requestDiff(const QString& filePath, const GitDiffMode mode) {
     }
 
     const QString absolutePath = entryPath(filePath);
-    if (!isInside(absolutePath, repositoryRoot_)) {
+    if (absolutePath.isEmpty() || !isInside(absolutePath, repositoryRoot_)) {
         emit diffReady(filePath, mode, {},
                        QStringLiteral("The file is outside the active repository."));
         return;
@@ -212,8 +257,9 @@ void GitService::requestDiff(const QString& filePath, const GitDiffMode mode) {
 
     const QString root = repositoryRoot_;
     const QString relativePath = QDir(root).relativeFilePath(absolutePath);
-    QStringList arguments{QStringLiteral("-C"), root, QStringLiteral("diff"),
-                          QStringLiteral("--no-ext-diff"), QStringLiteral("--no-color")};
+    QStringList arguments = repositoryArguments();
+    arguments.append({QStringLiteral("diff"), QStringLiteral("--no-ext-diff"),
+                      QStringLiteral("--no-color"), QStringLiteral("--submodule=short")});
     int acceptedDifferenceExitCode = 0;
     // Before the first commit, the working tree is compared with nothing: an entry on disk is
     // entirely new, and one that is only in the index has no combined change. A symlink counts
@@ -226,7 +272,7 @@ void GitService::requestDiff(const QString& filePath, const GitDiffMode mode) {
         emit diffReady(filePath, mode, {}, {});
         return;
     }
-    if (isUntracked(relativePath) ||
+    if ((mode != GitDiffMode::Staged && isUntracked(relativePath)) ||
         (combinedWithoutHead && (entry.isSymLink() || entry.isFile()))) {
         arguments.append(
             {QStringLiteral("--no-index"), QStringLiteral("--"), nullDeviceForGit(), absolutePath});
@@ -243,7 +289,12 @@ void GitService::requestDiff(const QString& filePath, const GitDiffMode mode) {
         arguments.append(QStringLiteral("--"));
 
         for (const auto& file : snapshot_.files) {
-            if (file.path == relativePath && !file.originalPath.isEmpty()) {
+            const bool includesRename =
+                mode != GitDiffMode::Unstaged && file.indexCode == QLatin1Char('R');
+            const bool includesWorkingRename =
+                mode != GitDiffMode::Staged && file.worktreeCode == QLatin1Char('R');
+            if (file.path == relativePath && !file.originalPath.isEmpty() &&
+                (includesRename || includesWorkingRename)) {
                 arguments.append(literalPathspec(file.originalPath));
                 break;
             }
@@ -281,11 +332,7 @@ void GitService::runGit(const QStringList& arguments, const QString& workingDire
     auto state = std::make_shared<CommandState>();
     timeout->setSingleShot(true);
 
-    QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
-    environment.insert(QStringLiteral("GIT_OPTIONAL_LOCKS"), QStringLiteral("0"));
-    environment.insert(QStringLiteral("GIT_PAGER"), QStringLiteral("cat"));
-    environment.insert(QStringLiteral("LC_ALL"), QStringLiteral("C"));
-    process->setProcessEnvironment(environment);
+    process->setProcessEnvironment(gitProcessEnvironment());
     process->setWorkingDirectory(workingDirectory);
     process->setProgram(gitExecutable_);
     process->setArguments(arguments);
@@ -318,10 +365,16 @@ void GitService::runGit(const QStringList& arguments, const QString& workingDire
             state->error = QByteArray("Git command timed out.");
         } else if (state->outputTooLarge) {
             state->error = QByteArray("Git output exceeded the 8 MiB safety limit.");
+        } else if (state->error.trimmed().isEmpty()) {
+            if (!completedNormally) {
+                state->error = process->errorString().toUtf8();
+            } else if (exitCode != 0) {
+                state->error = QStringLiteral("Git exited with code %1.").arg(exitCode).toUtf8();
+            }
         }
+        process->deleteLater();
         callback(exitCode, state->output, state->error,
                  completedNormally && !state->timedOut && !state->outputTooLarge);
-        process->deleteLater();
     };
 
     connect(process, &QProcess::finished, this,
@@ -335,8 +388,8 @@ void GitService::runGit(const QStringList& arguments, const QString& workingDire
                 }
             });
 
-    process->start();
     timeout->start(timeoutMilliseconds);
+    process->start();
 }
 
 void GitService::watchGitState() {

@@ -5,8 +5,10 @@
 #include "KetAppearance.h"
 #include "KetControlRecipes.h"
 #include "KetSurfaceRecipes.h"
+#include <QAction>
 #include <QImage>
 #include <QLabel>
+#include <QMenu>
 #include <QScrollBar>
 #include <QSignalSpy>
 #include <QTreeWidget>
@@ -19,6 +21,7 @@ class GitChangesPanelTest final : public QObject {
     void rendersRepositoryAndGroupedFiles();
     void keepsSelectionAcrossRefreshes();
     void aFilesIconSitsUnderItsGroupsTitle();
+    void contextMenuKeepsItsTargetAcrossRefresh();
 };
 
 void GitChangesPanelTest::rendersRepositoryAndGroupedFiles() {
@@ -182,6 +185,34 @@ void GitChangesPanelTest::aFilesIconSitsUnderItsGroupsTitle() {
         QCOMPARE(columns.fileIcon, columns.groupText);
     }
     appearance.setZoom(zoom);
+}
+
+void GitChangesPanelTest::contextMenuKeepsItsTargetAcrossRefresh() {
+    ketplus::GitChangesPanel panel;
+    ketplus::GitSnapshot snapshot;
+    snapshot.repositoryRoot = QStringLiteral("/tmp/ketplus-refresh");
+    snapshot.files = {{QStringLiteral("one.txt"), {}, QLatin1Char('.'), QLatin1Char('M')}};
+    panel.setSnapshot(snapshot);
+    panel.resize(320, 480);
+    panel.show();
+    auto* tree = panel.findChild<QTreeWidget*>(QStringLiteral("sourceControlFiles"));
+    QVERIFY(tree);
+    const QPoint position = tree->visualItemRect(tree->topLevelItem(0)->child(0)).center();
+    QSignalSpy requested(&panel, &ketplus::GitChangesPanel::diffRequested);
+    QTimer::singleShot(0, &panel, [&] {
+        auto* menu = qobject_cast<QMenu*>(QApplication::activePopupWidget());
+        if (!menu) {
+            QApplication::closeAllWindows();
+            return;
+        }
+        snapshot.files.first().path = QStringLiteral("two.txt");
+        panel.setSnapshot(snapshot);
+        menu->actions().first()->trigger();
+        menu->close();
+    });
+    emit tree->customContextMenuRequested(position);
+    QTRY_COMPARE(requested.size(), 1);
+    QCOMPARE(requested.first().at(0).toString(), QStringLiteral("/tmp/ketplus-refresh/one.txt"));
 }
 
 QTEST_MAIN(GitChangesPanelTest)

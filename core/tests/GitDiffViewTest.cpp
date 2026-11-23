@@ -17,6 +17,7 @@ class GitDiffViewTest final : public QObject {
   private slots:
     void rendersStructuredInlineDiff();
     void schemeUpdatePreservesModelAndSelection();
+    void treatsHeaderLikeHunkLinesAsContent();
 };
 
 void GitDiffViewTest::rendersStructuredInlineDiff() {
@@ -157,6 +158,35 @@ void GitDiffViewTest::schemeUpdatePreservesModelAndSelection() {
     QCOMPARE(model->index(2, 3).data(Qt::BackgroundRole).value<QColor>().rgba(),
              QColor(50, 60, 70).rgba());
     QCOMPARE(model->index(1, 3).data(Qt::BackgroundRole).value<QColor>(), QColor(20, 40, 60));
+}
+
+void GitDiffViewTest::treatsHeaderLikeHunkLinesAsContent() {
+    const QString patch = QStringLiteral("diff --git a/symbols.txt b/symbols.txt\n"
+                                         "--- a/symbols.txt\n"
+                                         "+++ b/symbols.txt\n"
+                                         "@@ -5,2 +5,2 @@\n"
+                                         "--- before\n"
+                                         "+++ after\n"
+                                         " int unchanged;\n"
+                                         "diff --git a/second.txt b/second.txt\n"
+                                         "--- a/second.txt\n"
+                                         "+++ b/second.txt\n"
+                                         "@@ -1 +1 @@\n"
+                                         "--- second before\n"
+                                         "+++ second after\n");
+    ketplus::GitDiffView view;
+    view.setDiff(QStringLiteral("/repo/symbols.txt"), ketplus::GitDiffMode::Combined, patch,
+                 ketplus::currentThemePalette());
+    auto* table = view.findChild<QTableView*>();
+    QVERIFY(table);
+    const auto* model = table->model();
+    QCOMPARE(model->rowCount(), 7);
+    QCOMPARE(model->index(1, 3).data().toString(), QStringLiteral("-- before"));
+    QCOMPARE(model->index(2, 3).data().toString(), QStringLiteral("++ after"));
+    QCOMPARE(model->index(3, 0).data().toString(), QStringLiteral("6"));
+    QCOMPARE(model->index(3, 1).data().toString(), QStringLiteral("6"));
+    QCOMPARE(model->index(5, 3).data().toString(), QStringLiteral("-- second before"));
+    QCOMPARE(model->index(6, 3).data().toString(), QStringLiteral("++ second after"));
 }
 
 QTEST_MAIN(GitDiffViewTest)

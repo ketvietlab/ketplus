@@ -183,6 +183,7 @@ class GitDiffModel final : public QAbstractTableModel {
             QStringLiteral(R"(^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@)"));
         int oldLine = 0;
         int newLine = 0;
+        bool inHunk = false;
         const QStringList sourceLines = diff.split(QLatin1Char('\n'));
         for (qsizetype index = 0; index < sourceLines.size(); ++index) {
             const QString& source = sourceLines.at(index);
@@ -191,15 +192,23 @@ class GitDiffModel final : public QAbstractTableModel {
             }
 
             const auto match = hunkExpression.match(source);
+            if (source.startsWith(QStringLiteral("diff --"))) {
+                inHunk = false;
+                continue;
+            }
             if (match.hasMatch()) {
+                inHunk = true;
                 oldLine = match.captured(1).toInt();
                 newLine = match.captured(2).toInt();
                 parsedLines.append({.kind = DiffLineKind::Hunk, .text = source});
-            } else if (source.startsWith(QStringLiteral("diff --git ")) ||
-                       source.startsWith(QStringLiteral("index ")) ||
-                       source.startsWith(QStringLiteral("--- ")) ||
-                       source.startsWith(QStringLiteral("+++ "))) {
-                continue;
+            } else if (!inHunk) {
+                // Only file metadata may be hidden. A hunk can add or remove lines
+                // whose text begins with the same characters as a file header.
+                if (!source.startsWith(QStringLiteral("index ")) &&
+                    !source.startsWith(QStringLiteral("--- ")) &&
+                    !source.startsWith(QStringLiteral("+++ "))) {
+                    parsedLines.append({.kind = DiffLineKind::Meta, .text = source});
+                }
             } else if (source.startsWith(QLatin1Char('+'))) {
                 parsedLines.append({.kind = DiffLineKind::Addition,
                                     .newLine = newLine++,

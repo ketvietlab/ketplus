@@ -5,13 +5,16 @@ namespace ketplus {
 void GitService::stageFile(const QString& path) { mutateFile(path, true); }
 void GitService::unstageFile(const QString& path) { mutateFile(path, false); }
 void GitService::mutateFile(const QString& path, bool stage) {
-    const QString relative = QDir(repositoryRoot_).relativeFilePath(canonicalEntryPath(path));
-    const auto found =
-        std::find_if(snapshot_.files.cbegin(), snapshot_.files.cend(),
-                     [&](const GitFileStatus& file) { return file.path == relative; });
+    const QString absolutePath = canonicalEntryPath(path);
+    const QString relative = QDir(repositoryRoot_).relativeFilePath(absolutePath);
+    const auto found = std::find_if(
+        snapshot_.files.cbegin(), snapshot_.files.cend(), [&](const GitFileStatus& file) {
+            return file.path == relative &&
+                   (stage ? file.hasUnstagedChange() : file.hasStagedChange());
+        });
     const QString operation = stage ? QStringLiteral("stage") : QStringLiteral("unstage");
-    if (repositoryRoot_.isEmpty() || QDir::isAbsolutePath(relative) || relative == ".." ||
-        relative.startsWith("../") || found == snapshot_.files.cend()) {
+    if (repositoryRoot_.isEmpty() || absolutePath.isEmpty() || QDir::isAbsolutePath(relative) ||
+        relative == ".." || relative.startsWith("../") || found == snapshot_.files.cend()) {
         emit mutationFinished(operation, false,
                               tr("Refresh Source Control before changing this file."));
         return;
@@ -21,7 +24,8 @@ void GitService::mutateFile(const QString& path, bool stage) {
                        : unborn ? QStringList{"rm", "--cached", "--ignore-unmatch"}
                                 : QStringList{"restore", "--staged"};
     args << "--" << QStringLiteral(":(literal)%1").arg(relative);
-    if (!found->originalPath.isEmpty())
+    const QChar renameSide = stage ? found->worktreeCode : found->indexCode;
+    if (renameSide == QLatin1Char('R') && !found->originalPath.isEmpty())
         args << QStringLiteral(":(literal)%1").arg(found->originalPath);
     runMutation(operation, args);
 }
@@ -41,12 +45,11 @@ void GitService::runMutation(const QString& operation, const QStringList& argume
                               tr("Git is unavailable or another Git action is running."));
         return;
     }
-    mutationRunning_ = true;
-    emit mutationRunningChanged(true);
     const quint64 generation = workspaceGeneration_;
     const QString root = repositoryRoot_;
-    QStringList args{"-C", root};
-    args.append(arguments);
+    const QStringList args = repositoryArguments() + arguments;
+    mutationRunning_ = true;
+    emit mutationRunningChanged(true);
     runGit(
         args, root,
         [this, generation, operation](int exitCode, const QByteArray&, const QByteArray& error,

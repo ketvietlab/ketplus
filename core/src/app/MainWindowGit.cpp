@@ -78,10 +78,10 @@ void MainWindow::requestFileDiff(const QString& filePath, const GitDiffMode mode
 }
 
 void MainWindow::showDiff(const QString& filePath, const GitDiffMode mode, const QString& diff) {
-    const QString absolutePath = normalizedPath(filePath);
+    const QString absolutePath = GitService::canonicalEntryPath(filePath);
     for (int index = 0; index < tabs_->count(); ++index) {
         auto* existing = qobject_cast<GitDiffView*>(tabs_->widget(index));
-        if (existing != nullptr && normalizedPath(existing->filePath()) == absolutePath &&
+        if (existing != nullptr && existing->filePath() == absolutePath &&
             existing->mode() == mode) {
             existing->setDiff(absolutePath, mode, diff, theme_.palette());
             existing->applyColorScheme(theme_.colorScheme());
