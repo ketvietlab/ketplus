@@ -177,6 +177,11 @@ class CloudPrivacyTestAccess {
         client.negotiatePeerTransport(answer);
     }
     static bool eventsForwardOnly(CloudControlClient& client) { return client.eventsForwardOnly(); }
+    // A journaled event announced by the host: releases retention for its own session only.
+    static void noteEvent(CloudControlClient& client, qint64 cursor,
+                          const QString& session = "session-synthetic", qint64 generation = 1) {
+        client.noteForwardOnlyEvent(session, generation, cursor);
+    }
     static void forgetForwardOnly(CloudControlClient& client) { client.eventsForwardOnly_.reset(); }
     static qint64 uploadedCursor(CloudControlClient& client,
                                  const QString& session = "session-synthetic",
