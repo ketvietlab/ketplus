@@ -456,6 +456,7 @@ QJsonObject toJson(const Team& team) {
         {QStringLiteral("automatic_turns"), team.automaticTurns},
         {QStringLiteral("context_reset"), team.contextReset},
         {QStringLiteral("context_reset_turns"), team.contextResetTurns},
+        {QStringLiteral("context_reset_idle_minutes"), team.contextResetIdleMinutes},
         {QStringLiteral("contexts"), contexts},
         {QStringLiteral("plan_approved"), team.planApproved},
         {QStringLiteral("leader_started"), team.leaderStarted},
@@ -530,6 +531,13 @@ Team teamFromJson(const QJsonObject& json) {
                                                  resetTurns <= context_reset::maximumTurns)
                                  ? resetTurns
                                  : context_reset::defaultTurns;
+    const int idleMinutes = json.value(QStringLiteral("context_reset_idle_minutes"))
+                                .toInt(context_reset::defaultIdleMinutes);
+    team.contextResetIdleMinutes =
+        idleMinutes == 0 || (idleMinutes >= context_reset::minimumIdleMinutes &&
+                             idleMinutes <= context_reset::maximumIdleMinutes)
+            ? idleMinutes
+            : context_reset::defaultIdleMinutes;
     const QJsonObject contexts = json.value(QStringLiteral("contexts")).toObject();
     for (auto it = contexts.constBegin(); it != contexts.constEnd(); ++it) {
         const QJsonObject mark = it.value().toObject();

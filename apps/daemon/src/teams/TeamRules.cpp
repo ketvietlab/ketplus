@@ -94,6 +94,20 @@ std::optional<TeamError> validContextResetTurns(const QJsonValue& value, int* tu
     return std::nullopt;
 }
 
+std::optional<TeamError> validContextResetIdleMinutes(const QJsonValue& value, int* minutes) {
+    const double number = value.toDouble(-1);
+    if (!value.isDouble() || number != std::floor(number) ||
+        (number != 0 && (number < context_reset::minimumIdleMinutes ||
+                         number > context_reset::maximumIdleMinutes)))
+        return refusal(QStringLiteral("invalid_payload"),
+                       QStringLiteral("The context reset idle time is 0 (off) or a whole number "
+                                      "of minutes from %1 to %2.")
+                           .arg(context_reset::minimumIdleMinutes)
+                           .arg(context_reset::maximumIdleMinutes));
+    *minutes = static_cast<int>(number);
+    return std::nullopt;
+}
+
 std::optional<TeamError> validReviewRounds(const QJsonValue& value, int* rounds) {
     const double number = value.toDouble(-1);
     if (!value.isDouble() || number != std::floor(number) || number < 1 ||

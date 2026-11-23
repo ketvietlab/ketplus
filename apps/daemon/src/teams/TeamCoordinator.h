@@ -402,9 +402,11 @@ class TeamCoordinator : public QObject {
         QString task;
         QString briefing;
     };
-    std::optional<ContextResetPlan> planContextReset(const QString& sessionId,
-                                                     const QString& taskHint, const QString& thread,
-                                                     qint64 turnSequence);
+    // `activity` is what the daemon knows of the thread: when its last turn ended, how large
+    // its context was, and now (the cache_cold reason; see context_reset::ThreadActivity).
+    std::optional<ContextResetPlan>
+    planContextReset(const QString& sessionId, const QString& taskHint, const QString& thread,
+                     qint64 turnSequence, const context_reset::ThreadActivity& activity = {});
     // The fresh context of a plan began: its turn is turn `turnSequence` + 1.
     void noteContextReset(const QString& sessionId, const QString& task, qint64 turnSequence);
     // The repository of a worktree the team made for one of its tasks; nothing for another
@@ -661,7 +663,8 @@ class TeamCoordinator : public QObject {
     // new one leaves turns. The turns used stay counted.
     std::optional<TeamError> changeTurnBudget(Team& team, const QJsonValue& value,
                                               QList<Update>& updates);
-    // T-1: context_reset and context_reset_turns from team.update, each when present.
+    // T-1: context_reset, context_reset_turns and context_reset_idle_minutes from team.update,
+    // each when present.
     std::optional<TeamError> changeContextReset(Team& team, const QJsonObject& changes,
                                                 QList<Update>& updates);
     // T-90 (ADR 0123), in TeamCoordinatorRepository.cpp: moves the team to another

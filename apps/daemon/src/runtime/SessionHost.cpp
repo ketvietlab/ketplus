@@ -2728,6 +2728,17 @@ bool SessionHost::journalEvent(Session& session, const QString& type, const QJso
     if (type == QStringLiteral("user.message")) {
         ++session.stored.currentTurnSequence;
     }
+    // T-10: the thread's cache is as warm as its last request, so a turn's end (not the user's
+    // last message) starts the rest, and the context size is the latest the provider named.
+    if (type == QStringLiteral("turn.completed") || type == QStringLiteral("runtime.stopped"))
+        session.lastTurnEnded = clock_();
+    else if (type == QStringLiteral("usage.context"))
+        session.contextTokens = payload.value(QStringLiteral("tokenUsage"))
+                                    .toObject()
+                                    .value(QStringLiteral("last"))
+                                    .toObject()
+                                    .value(QStringLiteral("totalTokens"))
+                                    .toInteger(-1);
     const QJsonArray stored =
         journal_->eventsAfter(session.stored.id, session.stored.generation, cursor - 1, 1);
     if (!stored.isEmpty()) {

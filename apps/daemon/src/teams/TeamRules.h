@@ -71,6 +71,10 @@ inline constexpr qsizetype maximumMentionTitleCharacters = 80;
 // maximumTurns.
 [[nodiscard]] std::optional<TeamError> validContextReset(const QJsonValue& value, QString* mode);
 [[nodiscard]] std::optional<TeamError> validContextResetTurns(const QJsonValue& value, int* turns);
+// The minutes a thread rests before a woken member may start fresh: 0 (off) or a whole number
+// from context_reset::minimumIdleMinutes to maximumIdleMinutes.
+[[nodiscard]] std::optional<TeamError> validContextResetIdleMinutes(const QJsonValue& value,
+                                                                    int* minutes);
 // T-56: a team's language is one team_language supports.
 [[nodiscard]] std::optional<TeamError> validLanguage(const QString& language);
 // ADR 0116 §4: a change that carries `expected_revision` is refused with stale_team when the

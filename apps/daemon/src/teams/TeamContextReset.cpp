@@ -47,8 +47,17 @@ QString memberTask(const Team& team, const Member& member, const QString& hint) 
     return {};
 }
 
+bool cacheWentCold(const Team& team, const ThreadActivity& activity) {
+    if (team.contextResetIdleMinutes <= 0 || !activity.lastTurnEnded.isValid() ||
+        !activity.now.isValid() || activity.contextTokens < minimumColdContextTokens)
+        return false;
+    return activity.lastTurnEnded.msecsTo(activity.now) >=
+           qint64(team.contextResetIdleMinutes) * 60 * 1000;
+}
+
 QString decide(const Team& team, const Member& member, std::optional<ContextMark>& mark,
-               const QString& task, const QString& thread, const qint64 turnSequence) {
+               const QString& task, const QString& thread, const qint64 turnSequence,
+               const ThreadActivity& activity) {
     if (team.contextReset == never)
         return {};
     // A context the team has not seen: a member's first, or one a provider handoff began.
@@ -67,6 +76,8 @@ QString decide(const Team& team, const Member& member, std::optional<ContextMark
     }
     if (team.contextResetTurns > 0 && turnSequence - mark->since >= team.contextResetTurns)
         return thresholdReached;
+    if (cacheWentCold(team, activity))
+        return cacheCold;
     return {};
 }
 

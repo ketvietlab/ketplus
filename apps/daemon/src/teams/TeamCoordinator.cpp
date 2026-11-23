@@ -40,6 +40,7 @@ void stampChanges(Team& team, const Team& before) {
                           one.provider,
                           one.contextReset,
                           one.contextResetTurns,
+                          one.contextResetIdleMinutes,
                           one.executionPolicy};
     };
     team.settingsRevision =

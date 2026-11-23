@@ -1,6 +1,6 @@
 # 0021: Provider-native economic compact window
 
-Status: accepted (explicit session policy; automatic cache-aware selection remains planned)
+Status: accepted (explicit session policy; a team member woken after its cache went cold starts a fresh context, ADR 0114 §11; automatic cache-aware compact-window selection remains planned)
 Date: 2026-10-07
 
 ## Context
@@ -159,7 +159,12 @@ native threshold, and expected next-request headroom.
    be presented as an observed cache miss. Subscription limits are not API USD.
 
 The current protocol implements the explicit request, not this automatic
-scheduler. It does not infer a payer from the device, hard-code a shared TTL,
+scheduler. One cache-aware rule exists outside it: a turn that a team starts for a
+member (ADR 0114 §11) begins a fresh native context, not a different compact window,
+when the thread rested at least the team's `context_reset_idle_minutes` (60 by default),
+counted from the end of its last turn, and its last recorded context size is 50,000
+tokens or more. It reads no payer, retention or model; a thread whose time or size is not
+known keeps its context. It does not infer a payer from the device, hard-code a shared TTL,
 call a summarizer, or trigger an additional compaction request.
 
 ### Boundaries and observation
