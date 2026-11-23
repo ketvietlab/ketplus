@@ -35,7 +35,7 @@ void CloudControlClient::initializePeerTransport() {
                         for (const auto& row : devices) {
                             const auto keys = row.toObject();
                             if (keys.value("id") == device &&
-                                keys.value("keyVersion").toInt() == version &&
+                                (version == 0 || keys.value("keyVersion").toInt() == version) &&
                                 (!keys.contains("status") || keys.value("status") == "active")) {
                                 callback(keys);
                                 return;
@@ -63,7 +63,11 @@ void CloudControlClient::initializePeerTransport() {
             return;
         signaling_->receive(message);
     });
+    signaling_->setRelaySender(
+        [this](const QJsonObject& message) { return wakeups_.send(message); });
     connect(&wakeups_, &RelayWakeups::openChanged, this, [this](bool open) {
+        if (!open)
+            signaling_->relayLost();
         if (open && relayOpened_)
             relayOpened_();
     });
@@ -105,6 +109,7 @@ void CloudControlClient::negotiatePeerTransport(const QJsonValue& heartbeat) {
         heartbeat.toObject().value("compatibility").toObject().value("capabilities").toArray();
     signaling_->configure(workspaceId_, machineId_, machineKeyVersion_,
                           capabilities.contains("transport.webrtc/1"));
+    signaling_->setForwardOnly(capabilities.contains("events.forward_only/1"));
     runnerRelayAvailable_ = capabilities.contains("runner.relay/1");
 }
 

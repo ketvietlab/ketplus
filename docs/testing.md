@@ -1695,7 +1695,7 @@ running daemon.
 
 ### WebRTC host phase 3
 
-Build `ketplus_daemon_peer_transport_tests`, `ketplus_peer_link_tests`, `ketplus_daemon_relay_wakeups_tests`,
+Build `ketplus_daemon_peer_transport_tests`, `ketplus_daemon_relay_peer_link_tests`, `ketplus_peer_link_tests`, `ketplus_daemon_relay_wakeups_tests`,
 `ketplus_daemon_cloud_privacy_tests`, `ketplus_cloud_trust_lifecycle_tests`,
 `ketplus_sender_key_cache_tests` and
 `ketplus_daemon_context_relay_tests` in a
@@ -1704,6 +1704,14 @@ SDP, in-memory credentials, temporary SQLite and a fake provider that is never
 started. It covers transfer caps/order/expiry, strict send priority, grants,
 revocation, supersede/epochs, subscriptions, cloud-safe encryption and the same
 command retried over both paths. No user daemon or provider account is accessed.
+`ketplus_daemon_relay_peer_link_tests` needs no network: the relay frame envelope, the 4 KiB
+client and 64 KiB host caps, page trimming, `gap` on a full live queue and for an oversized event,
+`session.reset`, links closed by refused frames, drops, socket loss and revocation, and expiry
+10 minutes after the last `subscribe` on a test clock, with `gap` for each subscription first,
+and a frame within 64 KiB whose envelope is not. `ketplus_daemon_peer_transport_tests`
+checks, with real pins, that a listed but unpinned device gets no relay link, and that replacing the
+pin (pairing again), a device list with another key version and the client's revoke path each close
+it before any refresh.
 Physical devices/TURN require a separate explicitly configured local test stack.
 `ketplus_peer_link_tests` links only `ketplus_peer_link`: a `WebRtcPeerLink` offerer against an
 answerer over loopback carries frames on all three channels both ways, a transfer of exactly

@@ -23,9 +23,26 @@ class RemotePeers final : public QObject {
     Q_OBJECT
   public:
     using Reader = std::function<EventPage(const QString&, qint64, qint64)>;
+    using Clock = std::function<qint64()>;
     explicit RemotePeers(Reader reader, QObject* parent = nullptr);
+    // Milliseconds since the epoch; tests drive grant and relay expiry with their own clock.
+    void setClock(Clock clock) { clock_ = std::move(clock); }
     bool accept(const QString& id, const QString& device, int keyVersion, const QJsonObject& grant,
                 PeerLink* link, qint64 epoch);
+    // A device reached through the relay socket, admitted by the caller only once its keys match
+    // its pin on this host. The link may read sessions (session.read) and nothing else: no hello,
+    // no commands. Its authorization ends relayAuthorizationMs after the latest subscribe; each
+    // subscription then gets gap before the link closes.
+    static constexpr qint64 relayAuthorizationMs = 10 * 60'000;
+    static QString relayId(const QString& device) { return "relay:" + device; }
+    bool acceptRelay(const QString& device, int keyVersion, PeerLink* link, qint64 epoch);
+    // Closes relay links whose device is not in `activeDevices` (device id -> key version) or
+    // whose key version differs from the one it was admitted with.
+    void retainRelay(const QHash<QString, int>& activeDevices);
+    // Closes the device's relay link now, as its pin was removed or replaced.
+    void closeRelay(const QString& device);
+    void closeRelay();
+    PeerLink* link(const QString& id) const;
     bool renew(const QString& id, const QJsonObject& grant);
     void revoke(const QString& device);
     void closeAll();
@@ -66,6 +83,8 @@ class RemotePeers final : public QObject {
         qint64 inputWindow{0};
         int inputFrames{0};
         bool hello{false};
+        bool relay{false};
+        qint64 relayUntil{0};
         FrameCodec codec;
         SendQueue queue;
         QHash<QString, Subscription> subscriptions;
@@ -73,7 +92,13 @@ class RemotePeers final : public QObject {
         quint64 nextTransfer{1};
     };
     void receive(const QString& id, Channel channel, const QByteArray& bytes, bool binary);
+    bool current(const QString& id, const Peer& peer) const;
+    void expireRelay(const QString& id, Peer& peer);
+    void attach(const QString& id, const std::shared_ptr<Peer>& peer, PeerLink* link);
+    void publish(const QString& id, Peer& peer, const QString& session, Subscription& sub);
+    qint64 now() const { return clock_(); }
     Reader reader_;
+    Clock clock_;
     QHash<QString, std::shared_ptr<Peer>> peers_;
     QTimer timer_;
 };
