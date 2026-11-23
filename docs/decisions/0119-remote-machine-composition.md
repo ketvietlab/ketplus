@@ -68,7 +68,7 @@ a consumer parses one shape, with two exceptions where the routes differ:
   so its pages carry no references and its `transcriptLargeEvent` fails.
 
 Each backend has a `machineId` (see "Machine identity") and a `Route`:
-`Local`, `Hosted` or `Ssh`.
+`Local`, `Relay` (the route through the hosted service) or `Ssh`.
 
 Three implementations:
 
@@ -88,7 +88,7 @@ Three implementations:
   route turns a missing local daemon install into Offline; the SSH route
   reports its own reasons (host unreachable, key changed, not installed on the
   host).
-- **Hosted service** — `RelayMachineBackend` over `ControlV2Client`, which turns each
+- **Hosted service route** (`Relay` in the code) — `RelayMachineBackend` over `ControlV2Client`, which turns each
   operation into an encrypted Control v2 command and each authenticated,
   decrypted event page into `eventReceived` (scope item 2 of #419, see "hosted service
   backend"). Each event is re-shaped into the local daemon's `session.event`
