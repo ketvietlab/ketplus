@@ -4,6 +4,7 @@
 #include "teams/TeamReviewPolicy.h"
 #include "teams/TeamRiskPolicy.h"
 
+#include <QDateTime>
 #include <QHash>
 #include <QJsonArray>
 #include <QJsonObject>
@@ -106,7 +107,8 @@ inline constexpr int maximumTurnBudget = 200;
 // T-1: when a turn the team starts gets a fresh native context, so a member's context does
 // not grow with every wake. "task_and_threshold": a developer or reviewer woken for another
 // task than its context's, and every member past the turn threshold; "threshold": only the
-// threshold; "never". A threshold of 0 turns the threshold off.
+// threshold; "never". A threshold of 0 turns the threshold off. Either policy also starts
+// fresh when the provider's cache has gone cold (context_reset_idle_minutes); 0 turns that off.
 namespace context_reset {
 inline const QString taskAndThreshold = QStringLiteral("task_and_threshold");
 inline const QString threshold = QStringLiteral("threshold");
@@ -114,6 +116,21 @@ inline const QString never = QStringLiteral("never");
 inline constexpr int defaultTurns = 12;
 inline constexpr int minimumTurns = 4;
 inline constexpr int maximumTurns = 100;
+// A member woken after its thread rested this many minutes (0: never) may start fresh when the
+// provider's cache has gone cold; see context_reset::decide.
+inline constexpr int defaultIdleMinutes = 60;
+inline constexpr int minimumIdleMinutes = 5;
+inline constexpr int maximumIdleMinutes = 1440;
+
+// What the daemon knows of a member's native thread when a turn the team starts is about to
+// begin: when its last turn ended and how large its context was then (-1: not known), and
+// the time now. Without the first two (a daemon that has not seen the thread work, a provider
+// that reports no usage) the cache is never judged cold.
+struct ThreadActivity final {
+    QDateTime lastTurnEnded;
+    qint64 contextTokens{-1};
+    QDateTime now;
+};
 } // namespace context_reset
 
 // T-1: what a member's current native context began with: the task it was for (empty: none
@@ -314,6 +331,7 @@ struct Team final {
     int automaticTurns{0};
     QString contextReset{context_reset::taskAndThreshold};
     int contextResetTurns{context_reset::defaultTurns};
+    int contextResetIdleMinutes{context_reset::defaultIdleMinutes};
     // T-1: each member's current context, by session id. Bookkeeping, not a setting.
     QHash<QString, ContextMark> contexts;
     bool planApproved{false};

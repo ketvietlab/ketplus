@@ -521,14 +521,32 @@ conversation never reaches that point.
 
 - `context_reset` is a team setting: `task_and_threshold` (the default), `threshold` or
   `never`. `context_reset_turns` is the threshold: 12 by default, 4 to 100, or 0 for none.
-  Both are in the team's document (and so in `team_get`), change through `team.update`,
-  are validated there (`invalid_payload`) and read as the defaults from a document that
-  holds anything else.
+  `context_reset_idle_minutes` is how long a thread must have rested for a cold cache
+  (below): 60 by default, 5 to 1440, or 0 for none. All three are in the team's document
+  (and so in `team_get`), change through `team.update`, are validated there
+  (`invalid_payload`) and read as the defaults from a document that holds anything else
+  or lacks them. The desktop has no control for `context_reset_turns`, so none was added
+  for the idle either.
 - A developer or reviewer starts fresh when the turn is about another task than its
   context's (`task_changed`): the task the team's message named, else the developer's task
   in progress or the task the reviewer reviews now. The leader works across tasks and only
   has the threshold. Every role starts fresh when its context already holds at least the
   threshold's turns (`threshold`); user turns on that thread count too.
+- Every role, the leader included, also starts fresh when the provider's cache of the
+  thread has gone cold (`cache_cold`), under `task_and_threshold` and `threshold` alike
+  (not under `never`, nor with an idle of 0), and only when both hold: the thread rested
+  `context_reset_idle_minutes` or more, counted from the end of its last turn (not from the
+  last message, so a long turn that has just ended is not rested) to the start of this one;
+  and the context size the daemon last recorded for it (`usage.context`) is at least
+  50,000 tokens (`context_reset::minimumColdContextTokens`). A thread whose size or turn end
+  this daemon has not seen, such as after a restart or from a provider that reports no usage,
+  is never judged cold. Rewriting a cold cache of that size costs more than the briefing
+  that replaces it: in three days of local transcripts, 184 of 243 Claude requests after more
+  than an hour of rest rewrote about 190 thousand tokens each (35.4 million in all, about
+  29% of the cache written), and Codex's cached share of input fell from 99.3% (under five
+  minutes) to 48.2% (over an hour). The reasons are tried in the order `task_changed`,
+  `threshold`, `cache_cold`, and the first that holds is journaled. The user's turns never
+  reset; neither does a busy conversation.
 - The team keeps each member's context mark (`contexts`: its task, its native thread, and
   the conversation's turn count when it began) in the team document. Clients and `team_get`
   do not need it; `team_get` leaves it out. A thread the team has not seen, such as one a
@@ -748,8 +766,9 @@ with; `team.create` sets it when every member runs on one provider. Updates
 `provider_set` and `provider_switched` record the change and each member's move.
 The phone sends the same request (ADR 0116 §4) and reads the results.
 
-`team.update` takes `context_reset` (`task_and_threshold`, `threshold` or `never`) and
-`context_reset_turns` (0 or 4 to 100), and the team's document returns both (§11). They are
+`team.update` takes `context_reset` (`task_and_threshold`, `threshold` or `never`),
+`context_reset_turns` (0 or 4 to 100) and `context_reset_idle_minutes` (0 or 5 to 1440), and
+the team's document returns all three (§11). They are
 local commands; the phone's `team.update` is unchanged.
 
 `team.create` and `team.update` take `max_rounds` (1 to 5; 2 when absent) and

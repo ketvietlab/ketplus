@@ -10,6 +10,7 @@
 #include <QProcess>
 #include <QStandardPaths>
 #include <QTest>
+#include <QTimeZone>
 
 using namespace ketplus::daemon;
 using namespace team_test;
@@ -57,6 +58,17 @@ class TeamContextResetTest final : public QObject {
         const auto planned = teams_->planContextReset(session, hint, thread, turn);
         return planned ? planned->reason : QString{};
     }
+    // The thread's activity `idleMinutes` after its last turn ended, with `tokens` of context.
+    static context_reset::ThreadActivity activity(const qint64 idleMinutes, const qint64 tokens) {
+        const QDateTime now(QDate(2026, 1, 1), QTime(12, 0), QTimeZone::UTC);
+        return {
+            .lastTurnEnded = now.addSecs(-idleMinutes * 60), .contextTokens = tokens, .now = now};
+    }
+    QString coldReason(const QString& session, const QString& hint, const QString& thread,
+                       const qint64 turn, const context_reset::ThreadActivity& when) {
+        const auto planned = teams_->planContextReset(session, hint, thread, turn, when);
+        return planned ? planned->reason : QString{};
+    }
     void load() {
         teams_ = std::make_unique<TeamCoordinator>(journal_.get(), &host_);
         teams_->setQuietPeriod(60 * 60 * 1000);
@@ -91,6 +103,8 @@ class TeamContextResetTest final : public QObject {
         const QJsonObject json = teams_->teamJson(team());
         QCOMPARE(json.value("context_reset").toString(), QStringLiteral("task_and_threshold"));
         QCOMPARE(json.value("context_reset_turns").toInt(), 12);
+        QCOMPARE(team().contextResetIdleMinutes, 60);
+        QCOMPARE(json.value("context_reset_idle_minutes").toInt(), 60);
     }
 
     // A developer woken for another task starts fresh; the first sight of a context only
@@ -186,6 +200,104 @@ class TeamContextResetTest final : public QObject {
         const Team read = teamFromJson(json);
         QCOMPARE(read.contextReset, QStringLiteral("task_and_threshold"));
         QCOMPARE(read.contextResetTurns, 12);
+    }
+
+    // T-10: a member woken after its thread rested an hour, with a large context, starts fresh
+    // for any role. The first sight of a thread only records it.
+    void aColdCacheStartsEveryRoleFresh() {
+        const auto cold = activity(61, 60000);
+        for (const QString& session : QStringList{"lead", "dev1", "rev"}) {
+            const QString thread = session + "-thread";
+            QCOMPARE(coldReason(session, first_, thread, 1, cold), QString{});
+            const auto planned = teams_->planContextReset(session, first_, thread, 2, cold);
+            QVERIFY2(planned, qPrintable(session));
+            QCOMPARE(planned->reason, QStringLiteral("cache_cold"));
+            QVERIFY(!planned->briefing.isEmpty());
+        }
+    }
+
+    // Both must hold: an idle at least the team's setting, and a known context of 50,000
+    // tokens or more.
+    void aColdCacheNeedsTheIdleAndTheSize() {
+        QCOMPARE(coldReason("lead", first_, "t", 1, activity(90, 90000)), QString{});
+        const auto reasonFor = [&](const qint64 minutes, const qint64 tokens) {
+            return coldReason("lead", first_, "t", 2, activity(minutes, tokens));
+        };
+        QCOMPARE(reasonFor(60, 50000), QStringLiteral("cache_cold"));
+        QCOMPARE(reasonFor(59, 90000), QString{});
+        QCOMPARE(reasonFor(90, 49999), QString{});
+        QCOMPARE(reasonFor(90, 0), QString{});
+        // A size the provider never reported (or none yet on this thread).
+        QCOMPARE(reasonFor(90, -1), QString{});
+        auto unknownEnd = activity(90, 90000);
+        unknownEnd.lastTurnEnded = {};
+        QCOMPARE(coldReason("lead", first_, "t", 2, unknownEnd), QString{});
+        QCOMPARE(coldReason("lead", first_, "t", 2, {}), QString{});
+        // The team's own setting is the idle.
+        QVERIFY(teams_->update(team_, {{"context_reset_idle_minutes", 5}}, "user").ok());
+        QCOMPARE(reasonFor(5, 60000), QStringLiteral("cache_cold"));
+        QCOMPARE(reasonFor(4, 60000), QString{});
+        QVERIFY(teams_->update(team_, {{"context_reset_idle_minutes", 1440}}, "user").ok());
+        QCOMPARE(reasonFor(1439, 60000), QString{});
+        QCOMPARE(reasonFor(1440, 60000), QStringLiteral("cache_cold"));
+    }
+
+    // Off with a zero idle and with "never"; it also works under "threshold".
+    void aColdCacheIsOffForNeverAndAZeroIdle() {
+        const auto cold = activity(300, 90000);
+        QCOMPARE(coldReason("dev1", first_, "t", 1, cold), QString{});
+        QCOMPARE(coldReason("dev1", first_, "t", 2, cold), QStringLiteral("cache_cold"));
+        QVERIFY(teams_->update(team_, {{"context_reset_idle_minutes", 0}}, "user").ok());
+        QCOMPARE(coldReason("dev1", first_, "t", 2, cold), QString{});
+        QVERIFY(teams_->update(team_, {{"context_reset_idle_minutes", 60}}, "user").ok());
+        QVERIFY(teams_->update(team_, {{"context_reset", "never"}}, "user").ok());
+        QCOMPARE(coldReason("dev1", first_, "t", 2, cold), QString{});
+        QCOMPARE(coldReason("lead", first_, "t2", 1, cold), QString{});
+        QCOMPARE(coldReason("lead", first_, "t2", 2, cold), QString{});
+        QVERIFY(teams_->update(team_, {{"context_reset", "threshold"}}, "user").ok());
+        QCOMPARE(coldReason("dev1", first_, "t", 2, cold), QStringLiteral("cache_cold"));
+    }
+
+    // The older reasons keep their order, and their behaviour without activity is unchanged.
+    void aColdCacheYieldsToTheOlderReasons() {
+        const auto cold = activity(300, 90000);
+        QCOMPARE(coldReason("dev1", first_, "t", 1, cold), QString{});
+        QCOMPARE(coldReason("dev1", second_, "t", 2, cold), QStringLiteral("task_changed"));
+        QCOMPARE(coldReason("dev1", first_, "t", 13, cold), QStringLiteral("threshold"));
+        QCOMPARE(coldReason("dev1", first_, "t", 13, {}), QStringLiteral("threshold"));
+    }
+
+    void theIdleSettingIsValidatedAndKept() {
+        for (const QJsonValue& bad : {QJsonValue(4), QJsonValue(1441), QJsonValue(-1),
+                                      QJsonValue(7.5), QJsonValue("60"), QJsonValue(true)}) {
+            const auto refused =
+                teams_->update(team_, {{"context_reset_idle_minutes", bad}}, "user");
+            QVERIFY(!refused.ok());
+            QCOMPARE(refused.error->code, QStringLiteral("invalid_payload"));
+        }
+        QCOMPARE(team().contextResetIdleMinutes, 60);
+        for (const int good : {5, 1440, 0, 90}) {
+            QVERIFY(teams_->update(team_, {{"context_reset_idle_minutes", good}}, "user").ok());
+            QCOMPARE(team().contextResetIdleMinutes, good);
+        }
+        // One refused value undoes the others in the same command.
+        QVERIFY(!teams_
+                     ->update(team_,
+                              {{"context_reset_turns", 5}, {"context_reset_idle_minutes", 2}},
+                              "user")
+                     .ok());
+        QCOMPARE(team().contextResetTurns, 12);
+        load();
+        QCOMPARE(team().contextResetIdleMinutes, 90);
+        QCOMPARE(teams_->teamJson(team()).value("context_reset_idle_minutes").toInt(), 90);
+        // A document from before the setting, and a hand-edited one, read as the default.
+        QJsonObject json = toJson(team());
+        json.remove("context_reset_idle_minutes");
+        QCOMPARE(teamFromJson(json).contextResetIdleMinutes, 60);
+        json.insert("context_reset_idle_minutes", 3);
+        QCOMPARE(teamFromJson(json).contextResetIdleMinutes, 60);
+        json.insert("context_reset_idle_minutes", 0);
+        QCOMPARE(teamFromJson(json).contextResetIdleMinutes, 0);
     }
 
     void theBriefingStaysWithinFourKilobytes() {
@@ -318,6 +430,111 @@ class TeamContextResetTest final : public QObject {
         // The next team turn counts them, and starts fresh.
         wake(100);
         QCOMPARE(fixture.count(leader, "session.context_reset"), 2);
+    }
+
+    // T-10, through the daemon: a leader woken after an hour of rest, with the 85,000 tokens
+    // the fake provider reports, starts fresh with reason cache_cold; the user's turns, a wake
+    // of an hour of rest too short, a zero idle and "never" do not. The rest is timed from the
+    // end of the last turn, even a long one.
+    void aColdCacheStartsAWokenLeaderFresh() {
+        agent_test::Fixture fixture;
+        QVERIFY(fixture.open());
+        const QDateTime base(QDate(2026, 1, 1), QTime(9, 0), QTimeZone::UTC);
+        qint64 offsetMinutes = 0;
+        fixture.host->setClockForTest([&] { return base.addSecs(offsetMinutes * 60); });
+        const auto command = [&](const QString& type, const QJsonObject& payload) {
+            return fixture.host->handleCommand(agent_test::request(type, payload), "desktop-test");
+        };
+        const QJsonObject created =
+            command("team.create", {{"repository", fixture.directory.path()},
+                                    {"name", "Cold"},
+                                    {"goal", "Ship it"},
+                                    {"integration_branch", "integration"},
+                                    {"plan", plan()}});
+        QVERIFY2(created.value("ok").toBool(), qPrintable(agent_test::text(created)));
+        const QJsonValue teamId = created.value("team").toObject().value("id");
+        const QJsonArray members = created.value("team").toObject().value("members").toArray();
+        const QString leader = members.at(0).toObject().value("session_id").toString();
+        const QString developer = members.at(1).toObject().value("session_id").toString();
+        const auto ready = [&] {
+            const auto session = storedSession(*fixture.journal, leader);
+            return session && session->state == QStringLiteral("ready");
+        };
+        // The minutes the leader's next turn adds to the clock before it ends (a long turn).
+        qint64 turnMinutes = 0;
+        QObject::connect(
+            fixture.host.get(), &SessionHost::eventReady, [&](const QJsonObject& event) {
+                if (event.value("event_type").toString() == QStringLiteral("usage.context") &&
+                    event.value("session_id").toString() == leader)
+                    offsetMinutes += std::exchange(turnMinutes, 0);
+            });
+        const auto wake = [&](const QString& text) {
+            const int turns = fixture.count(leader, "turn.completed");
+            const QJsonObject sent =
+                fixture.agents(developer, "agents.send", {{"to", "leader"}, {"text", text}});
+            QVERIFY2(sent.value("ok").toBool(), qPrintable(agent_test::text(sent)));
+            QTRY_VERIFY_WITH_TIMEOUT(fixture.count(leader, "turn.completed") > turns, 5000);
+            QTRY_VERIFY_WITH_TIMEOUT(ready(), 5000);
+        };
+        const auto resets = [&] { return fixture.count(leader, "session.context_reset"); };
+        QTRY_VERIFY_WITH_TIMEOUT(fixture.count(leader, "turn.completed") >= 1, 5000);
+        QTRY_VERIFY_WITH_TIMEOUT(ready(), 5000);
+        const QString firstThread = storedSession(*fixture.journal, leader)->threadId;
+        QVERIFY(!firstThread.isEmpty());
+
+        // Rested 59 minutes: the cache is warm.
+        offsetMinutes = 59;
+        wake("Early");
+        QCOMPARE(resets(), 0);
+        // The user's turn after three hours is never reset.
+        offsetMinutes += 180;
+        QVERIFY(!fixture.start("claude", "hello", leader).isEmpty());
+        QTRY_VERIFY_WITH_TIMEOUT(fixture.count(leader, "turn.completed") >= 3, 5000);
+        QTRY_VERIFY_WITH_TIMEOUT(ready(), 5000);
+        QCOMPARE(resets(), 0);
+        // A long turn: it takes two hours, and ends five minutes before the next wake. The
+        // rest is five minutes, not the two hours since the message.
+        turnMinutes = 120;
+        wake("Long");
+        offsetMinutes += 5;
+        wake("Soon after");
+        QCOMPARE(resets(), 0);
+
+        // A zero idle and "never" keep the thread however long it rested.
+        QVERIFY(command("team.update", {{"team_id", teamId}, {"context_reset_idle_minutes", 0}})
+                    .value("ok")
+                    .toBool());
+        offsetMinutes += 600;
+        wake("Zero");
+        QCOMPARE(resets(), 0);
+        QVERIFY(command("team.update", {{"team_id", teamId},
+                                        {"context_reset_idle_minutes", 60},
+                                        {"context_reset", "never"}})
+                    .value("ok")
+                    .toBool());
+        offsetMinutes += 600;
+        wake("Never");
+        QCOMPARE(resets(), 0);
+
+        // Back on: an hour of rest and a large context start a fresh thread, with the briefing.
+        QVERIFY(
+            command("team.update", {{"team_id", teamId}, {"context_reset", "task_and_threshold"}})
+                .value("ok")
+                .toBool());
+        offsetMinutes += 61;
+        wake("Late");
+        QCOMPARE(resets(), 1);
+        const QJsonObject reset = fixture.payloads(leader, "session.context_reset").first();
+        QCOMPARE(reset.value("reason").toString(), QStringLiteral("cache_cold"));
+        const auto session = storedSession(*fixture.journal, leader);
+        QVERIFY(session->providerThreads.contains(firstThread));
+        QVERIFY(session->threadId != firstThread);
+        QVERIFY(QFileInfo::exists(
+            QDir(fixture.directory.filePath("handoff/" + leader)).filePath("transcript.md")));
+        QVERIFY(agent_test::logText(fixture.claudeLog).contains("[KetPlus team briefing]"));
+        // The fresh thread has not rested: the next wake continues it.
+        wake("Right after");
+        QCOMPARE(resets(), 1);
     }
 
     // A transcript that cannot be written keeps the thread: the turn runs on it.

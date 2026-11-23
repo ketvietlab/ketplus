@@ -17,7 +17,9 @@ std::optional<SessionHost::FreshContextUndo> SessionHost::startFreshContext(Sess
     FreshContextUndo undo{.adapter = session.stored.adapter,
                           .threadId = session.stored.threadId,
                           .providerThreads = session.stored.providerThreads,
-                          .attachedToProvider = session.attachedToProvider};
+                          .attachedToProvider = session.attachedToProvider,
+                          .lastTurnEnded = session.lastTurnEnded,
+                          .contextTokens = session.contextTokens};
     QJsonObject threads = QJsonDocument::fromJson(session.stored.providerThreads.toUtf8()).object();
     provider_handoff::rememberThread(threads, undo.adapter, undo.threadId);
     *transcript = provider_handoff::writeTranscript(
@@ -34,6 +36,9 @@ std::optional<SessionHost::FreshContextUndo> SessionHost::startFreshContext(Sess
     session.stored.providerThreads =
         QString::fromUtf8(QJsonDocument(threads).toJson(QJsonDocument::Compact));
     session.attachedToProvider = false;
+    // The fresh thread has no history yet: nothing is cold about it.
+    session.lastTurnEnded = {};
+    session.contextTokens = -1;
     return undo;
 }
 
@@ -42,6 +47,8 @@ void SessionHost::undoFreshContext(Session& session, const FreshContextUndo& und
     session.stored.threadId = undo.threadId;
     session.stored.providerThreads = undo.providerThreads;
     session.attachedToProvider = undo.attachedToProvider;
+    session.lastTurnEnded = undo.lastTurnEnded;
+    session.contextTokens = undo.contextTokens;
     if (!undo.threadId.isEmpty())
         sessionsByThread_.insert(undo.threadId, session.stored.id);
 }
@@ -78,7 +85,10 @@ void SessionHost::resetTeamContext(Session& session, const QString& hint) {
     if (!teams_)
         return;
     const auto plan = teams_->planContextReset(sessionId, hint, session.stored.threadId,
-                                               session.stored.currentTurnSequence);
+                                               session.stored.currentTurnSequence,
+                                               {.lastTurnEnded = session.lastTurnEnded,
+                                                .contextTokens = session.contextTokens,
+                                                .now = clock_()});
     if (!plan)
         return;
     QString transcript;

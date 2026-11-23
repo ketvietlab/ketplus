@@ -57,6 +57,8 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     ~SessionHost() override;
 
     void setClaudeAccountUsage(ClaudeAccountUsage* usage) { claudeAccountUsage_ = usage; }
+    // T-10: replaces the wall clock that times how long a thread rested, for tests.
+    void setClockForTest(std::function<QDateTime()> clock) { clock_ = std::move(clock); }
     // ADR 0110: the provider's credential changed, so its reported failures no longer apply.
     void forgetProviderFailure(const QString& provider) { readiness_.forget(provider); }
 
@@ -212,6 +214,11 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
         // T-1: the note that points a fresh context of the same provider at the transcript,
         // with the team's briefing; kept, like handoffFrom, until the provider takes a turn.
         QString contextResetNote;
+        // T-10: what this daemon saw of the native thread: when its last turn ended and the
+        // context size its last usage.context named (-1: none since the thread began). Not
+        // stored: a thread this daemon has not seen work is never judged to have a cold cache.
+        QDateTime lastTurnEnded;
+        qint64 contextTokens{-1};
         // Set when the running turn called a KetPlus browser tool; its end closes the sessions.
         bool browserUsedThisTurn{false};
         // Last `provider.runtime` warning journaled for this session in this daemon.
@@ -706,6 +713,8 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
         QString threadId;
         QString providerThreads;
         bool attachedToProvider{false};
+        QDateTime lastTurnEnded;
+        qint64 contextTokens{-1};
     };
     // The one way a conversation leaves its native thread, for a provider handoff and a team's
     // context reset alike: writes the transcript (its path in `transcript`), keeps the thread
@@ -718,6 +727,8 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     // (TeamCoordinator::planContextReset); sets contextResetNote when it does. A failure keeps
     // the current thread and the turn runs on it.
     void resetTeamContext(Session& session, const QString& taskHint);
+    // T-10: the clock the cold-cache reason reads; tests set a fake one.
+    std::function<QDateTime()> clock_{[] { return QDateTime::currentDateTimeUtc(); }};
     // T-1: the task a team message names, kept by the message's id until the turn it is
     // delivered in starts (a team wake reads it) or it is delivered otherwise.
     struct TeamWakeTask final {
