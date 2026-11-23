@@ -7,6 +7,8 @@
 #include <QDir>
 #include <QMessageAuthenticationCode>
 #include <QProcess>
+#include <QScopeGuard>
+#include <QStandardPaths>
 
 #include <QFile>
 #include <QJsonDocument>
@@ -202,6 +204,107 @@ class WorktreeContextRelayTest final : public QObject {
         QCOMPARE(journal.sessions().first().contextRevision, kind.endsWith("switch") ? 2 : 1);
         QCOMPARE(QFileInfo(journal.sessions().first().worktreePath).canonicalFilePath(),
                  QFileInfo(kind.endsWith("switch") ? b : a).canonicalFilePath());
+    }
+
+    // The listing's git runs off the daemon thread: while it waits on a barrier the test opens,
+    // the host still answers another command, and the page is acknowledged only after git ends.
+    // The wrapper's own wait is bounded, so a daemon that blocks here fails the test instead of
+    // hanging it.
+    void catalogGitDoesNotBlockTheDaemonThread() {
+        QTemporaryDir dir;
+        const auto a = dir.filePath("repo");
+        const auto b = dir.filePath("feature");
+        QVERIFY(QDir().mkpath(a));
+        QCOMPARE(QProcess::execute("git", {"-C", a, "init", "-q"}), 0);
+        QCOMPARE(QProcess::execute("git", {"-C", a, "-c", "user.name=Fixture", "-c",
+                                           "user.email=fixture@example.invalid", "-c",
+                                           "commit.gpgsign=false", "commit", "--allow-empty", "-qm",
+                                           "initial"}),
+                 0);
+        QCOMPARE(QProcess::execute("git", {"-C", a, "worktree", "add", "-b", "feature", b}), 0);
+        LocalJournal journal(dir.filePath("journal.sqlite"));
+        StoredSession session;
+        session.id = "synthetic-conversation";
+        session.worktreePath = a;
+        session.adapter = "codex";
+        session.state = "ready";
+        QVERIFY(journal.upsertSession(session));
+        QVERIFY(journal.rememberWorktree(QFileInfo(b).canonicalFilePath()));
+        CodexAdapter provider(dir.filePath("never-start-provider"));
+        SessionHost host(&journal, &provider);
+        LoopbackRelay server;
+        QVERIFY(server.listen(QHostAddress::LocalHost, 0));
+        LoopbackOnlyTransport network(server.serverPort());
+        CloudControlClient client(&journal, &host);
+        Access::configure(client, network,
+                          QUrl(QString("http://127.0.0.1:%1").arg(server.serverPort())));
+        Access::machineKeyVersion(client, 1);
+        const QByteArray salt(32, 's');
+        Access::pathSalt(client, salt);
+        server.acceptHeartbeat = true;
+        Access::pinDevice(client, "phone", 1, Access::crypto(client).publicKeys());
+        server.senderKeys =
+            QJsonDocument(QJsonObject{{"keys", Access::crypto(client).publicKeys()}})
+                .toJson(QJsonDocument::Compact);
+        QJsonObject command{{"id", "context-files"},
+                            {"sessionId", session.id},
+                            {"sessionGeneration", 1},
+                            {"kind", "session.worktrees"},
+                            {"attempt", 1},
+                            {"claimToken", "synthetic-claim"},
+                            {"workspaceId", "workspace-synthetic"},
+                            {"machineId", "machine-synthetic"},
+                            {"repositoryId", "unused"},
+                            {"worktreeId", "unused"}};
+        const QJsonObject payload{{"expected_context_revision", 1}, {"limit", 1}};
+        command.insert("content",
+                       Access::crypto(client).encrypt("{}", "seed", session.id, 1, 1, "phone", 1));
+        command.insert("content",
+                       Access::crypto(client).encrypt(
+                           QJsonDocument(payload).toJson(QJsonDocument::Compact),
+                           Access::commandAad(client, command), session.id, 1, 1, "phone", 1));
+        Access::validCredential(client);
+        QObject::disconnect(&host, nullptr, &client, nullptr);
+
+        // A git first on PATH that waits for the gate file, then runs the real one.
+        const QString bin = dir.filePath("bin");
+        const QString started = dir.filePath("started");
+        const QString gate = dir.filePath("gate");
+        const QString real = QStandardPaths::findExecutable("git");
+        QVERIFY(!real.isEmpty() && QDir().mkpath(bin));
+        QFile script(bin + "/git");
+        QVERIFY(script.open(QIODevice::WriteOnly));
+        script.write("#!/bin/sh\n: > '" + started.toUtf8() + "'\nn=0\nwhile [ ! -f '" +
+                     gate.toUtf8() + "' ] && [ $n -lt 1000 ]; do sleep 0.01; n=$((n+1)); done\n" +
+                     "exec '" + real.toUtf8() + "' \"$@\"\n");
+        script.close();
+        QVERIFY(script.setPermissions(QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner));
+        const QByteArray oldPath = qgetenv("PATH");
+        const auto restore = qScopeGuard([&] {
+            QFile open(gate);
+            (void)open.open(QIODevice::WriteOnly);
+            qputenv("PATH", oldPath);
+        });
+        qputenv("PATH", bin.toUtf8() + ':' + oldPath);
+
+        Access::execute(client, command);
+        QTRY_VERIFY_WITH_TIMEOUT(QFileInfo::exists(started), 10000);
+        // Git is waiting; the daemon thread is free to answer, and nothing was acknowledged.
+        const auto other = host.handleCommand({{"protocol_version", 0},
+                                               {"message_id", "other"},
+                                               {"message_type", "session.list"},
+                                               {"sent_at", "2026-01-01T00:00:00.000Z"},
+                                               {"payload", QJsonObject{}}},
+                                              "cloud-control-v2");
+        QVERIFY(other.value("ok").toBool());
+        QVERIFY2(server.body.isEmpty(), "The page was acknowledged before git ended.");
+        QFile open(gate);
+        QVERIFY(open.open(QIODevice::WriteOnly));
+        open.close();
+        QTRY_VERIFY_WITH_TIMEOUT(!server.body.isEmpty(), 10000);
+        const auto ack = QJsonDocument::fromJson(server.body).object();
+        QCOMPARE(ack.value("resultCode").toString(), "ok");
+        QVERIFY(!ack.value("encryptedResult").toObject().isEmpty());
     }
 
     void explicitHistoricalContextReadsOriginalRoot_data() {
