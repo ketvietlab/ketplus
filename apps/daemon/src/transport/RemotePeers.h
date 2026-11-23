@@ -23,7 +23,10 @@ class RemotePeers final : public QObject {
     Q_OBJECT
   public:
     using Reader = std::function<EventPage(const QString&, qint64, qint64)>;
+    using Clock = std::function<qint64()>;
     explicit RemotePeers(Reader reader, QObject* parent = nullptr);
+    // Milliseconds since the epoch; tests drive grant and relay expiry with their own clock.
+    void setClock(Clock clock) { clock_ = std::move(clock); }
     bool accept(const QString& id, const QString& device, int keyVersion, const QJsonObject& grant,
                 PeerLink* link, qint64 epoch);
     // A device reached through the relay socket. The relay authorized the device's frame; the
@@ -88,7 +91,9 @@ class RemotePeers final : public QObject {
     bool current(const QString& id, const Peer& peer) const;
     void attach(const QString& id, const std::shared_ptr<Peer>& peer, PeerLink* link);
     void publish(const QString& id, Peer& peer, const QString& session, Subscription& sub);
+    qint64 now() const { return clock_(); }
     Reader reader_;
+    Clock clock_;
     QHash<QString, std::shared_ptr<Peer>> peers_;
     QTimer timer_;
 };

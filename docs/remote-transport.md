@@ -316,7 +316,11 @@ not depend on Control v2 HTTP internals:
   carries the same frames over the relay socket.
 - **`RelayPeerLink`** (daemon behaviour): while the heartbeat answer lists
   `events.forward_only/1`, a `subscribe` arriving as `{"type":"frame","deviceId",…,"frame"}` opens
-  one link per device, after the device is found active in the host's device list.
+  one link per device. The device list the relay returns is only a hint: the link opens only for
+  a device pinned on this host whose keys match its pin, through the same pinned-device check as
+  WebRTC admission, and closes when the pin is removed.
+  - Event pages are the same `SessionEvent` envelopes as on WebRTC: sealed under the session key,
+    which is wrapped only for pinned devices. The relay sees only routing metadata.
   - The link needs no `hello` and authorizes `session.read` only, for 10 minutes after each
     `subscribe`. It accepts `subscribe` and `unsubscribe` of at most 4 KiB; any other frame closes it.
   - It sends only `events`, `event`, `gap` and `session.reset`, each one message of at most 64 KiB:

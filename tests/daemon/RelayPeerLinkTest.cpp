@@ -40,7 +40,9 @@ struct Relay {
                         },
                         [](const QByteArray&) { return QByteArray(64, 's'); }};
     QList<QJsonObject> outgoing;
+    qint64 time{1'000'000'000};
     Relay() {
+        peers.setClock([this] { return time; });
         signaling.configure("workspace", "machine", 1, true);
         signaling.setForwardOnly(true);
         signaling.setRelaySender([this](const QJsonObject& message) {
@@ -233,6 +235,31 @@ class RelayPeerLinkTest final : public QObject {
         relay.signaling.setForwardOnly(false);
         QCOMPARE(relay.peers.size(), 0);
         QVERIFY(relay.outgoing.isEmpty()); // no signal.end for relay links
+    }
+
+    void authorizationExpiresTenMinutesAfterTheLastSubscribe() {
+        Relay relay;
+        relay.frame(subscribe());
+        relay.time += RemotePeers::relayAuthorizationMs - 1;
+        relay.peers.tick();
+        QCOMPARE(relay.peers.size(), 1);
+        relay.frame(subscribe()); // renews
+        relay.time += RemotePeers::relayAuthorizationMs - 1;
+        relay.peers.tick();
+        QCOMPARE(relay.peers.size(), 1);
+        relay.frame({{"type", "unsubscribe"}, {"sessionId", "session"}}); // does not renew
+        relay.time += 2;
+        QSignalSpy ended(&relay.peers, &RemotePeers::ended);
+        relay.peers.tick();
+        QCOMPARE(relay.peers.size(), 0);
+        QCOMPARE(ended.size(), 1);
+        QCOMPARE(ended.first().at(1).toString(), QStringLiteral("peer_expired"));
+
+        relay.frame(subscribe());
+        relay.time += RemotePeers::relayAuthorizationMs;
+        relay.frame(subscribe()); // a frame after expiry closes instead of renewing
+        QCOMPARE(relay.peers.size(), 0);
+        QVERIFY(!relay.peers.send(RemotePeers::relayId("device"), {{"type", "gap"}}));
     }
 
     void revocationClosesTheDevicesRelayLink() {

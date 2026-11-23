@@ -1706,7 +1706,9 @@ revocation, supersede/epochs, subscriptions, cloud-safe encryption and the same
 command retried over both paths. No user daemon or provider account is accessed.
 `ketplus_daemon_relay_peer_link_tests` needs no network: the relay frame envelope, the 4 KiB
 client and 64 KiB host caps, page trimming, `gap` on a full live queue and for an oversized event,
-`session.reset`, and links closed by refused frames, drops, socket loss and revocation.
+`session.reset`, links closed by refused frames, drops, socket loss and revocation, and expiry
+10 minutes after the last `subscribe` on a test clock. `ketplus_daemon_peer_transport_tests`
+checks that a listed but unpinned device gets no relay link and that removing the pin closes it.
 Physical devices/TURN require a separate explicitly configured local test stack.
 `ketplus_peer_link_tests` links only `ketplus_peer_link`: a `WebRtcPeerLink` offerer against an
 answerer over loopback carries frames on all three channels both ways, a transfer of exactly

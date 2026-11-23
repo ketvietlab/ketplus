@@ -8,13 +8,13 @@
 
 namespace ketplus::daemon::transport {
 namespace {
-qint64 now() { return QDateTime::currentMSecsSinceEpoch(); }
 qint64 timeOf(const QJsonValue& value) {
     return QDateTime::fromString(value.toString(), Qt::ISODateWithMs).toMSecsSinceEpoch();
 }
 } // namespace
 RemotePeers::RemotePeers(Reader reader, QObject* parent)
-    : QObject(parent), reader_(std::move(reader)) {
+    : QObject(parent), reader_(std::move(reader)),
+      clock_([] { return QDateTime::currentMSecsSinceEpoch(); }) {
     timer_.setInterval(50);
     connect(&timer_, &QTimer::timeout, this, &RemotePeers::tick);
 }

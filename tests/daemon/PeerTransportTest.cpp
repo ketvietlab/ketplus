@@ -465,6 +465,53 @@ class PeerTransportTest final : public QObject {
         QVERIFY(Access::peerEvents(cloud, "session", 2, 0).reset);
         peers.closeAll();
     }
+    // The relay's device list is only a hint: a relay link opens for a pinned device alone, and
+    // closes when the pin goes away.
+    void relayLinksOpenOnlyForPinnedDevices() {
+        QTemporaryDir dir;
+        LocalJournal journal(dir.filePath("journal.sqlite"));
+        CodexAdapter provider(dir.filePath("never-run-provider"));
+        SessionHost host(&journal, &provider);
+        r03::Transport network;
+        CloudControlClient cloud(&journal, &host);
+        Access::configure(cloud, network);
+        CredentialStore deviceStore("relay-device");
+        CloudCrypto device(&deviceStore);
+        const auto keys = device.publicKeys();
+        const QJsonArray listed{
+            QJsonObject{{"id", "device"}, {"keyVersion", 1}, {"status", "active"}, {"keys", keys}}};
+        network.statusForPath.insert("/v2/devices", 200);
+        network.responseForPath.insert("/v2/devices", QJsonDocument(listed).toJson());
+        auto& signaling = Access::signaling(cloud);
+        auto& peers = Access::peers(cloud);
+        signaling.configure("workspace-synthetic", "machine-synthetic", 1, true);
+        signaling.setForwardOnly(true);
+        const QJsonObject frame{{"type", "frame"},
+                                {"deviceId", "device"},
+                                {"frame", QJsonObject{{"type", "subscribe"},
+                                                      {"sessionId", "session"},
+                                                      {"sessionGeneration", 1},
+                                                      {"afterCursor", 0}}}};
+        const auto lookups = [&] {
+            int count = 0;
+            for (const auto& request : std::as_const(network.requests))
+                count += request.url().path() == "/v2/devices";
+            return count;
+        };
+        // A second lookup starts only once the first answered, so the refusal is settled.
+        QTRY_VERIFY_WITH_TIMEOUT((signaling.receive(frame), lookups() >= 2), 3000);
+        QCOMPARE(peers.size(), 0);
+
+        Access::pinDevice(cloud, "device", 1, keys);
+        QTRY_VERIFY_WITH_TIMEOUT((signaling.receive(frame), peers.size() == 1), 3000);
+        QVERIFY(peers.link(RemotePeers::relayId("device")));
+
+        QVERIFY(Access::pins(cloud).unpin("device"));
+        const auto before = lookups();
+        Access::distributeKeys(cloud);
+        QTRY_VERIFY_WITH_TIMEOUT(lookups() > before, 3000);
+        QTRY_COMPARE_WITH_TIMEOUT(peers.size(), 0, 3000);
+    }
     void largeItemsReachThePeerWithTheirChunks() {
         QTemporaryDir dir;
         LocalJournal journal(dir.filePath("journal.sqlite"));
