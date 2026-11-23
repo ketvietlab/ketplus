@@ -11,6 +11,10 @@ class QTimer;
 
 namespace ketplus::remote {
 class ControlV2Client;
+class RelayEventStream;
+class RelayFrameLink;
+// A Relay event, once opened, in the local daemon's session.event shape.
+QJsonObject relayLocalEvent(const QJsonObject& relay);
 
 // ADR 0119 "Relay": one paired Linux machine reached through the KetPlus Relay (Control v2).
 // Reads come from ControlV2Client's host-verified projection and transcript windows. Writes are
@@ -25,6 +29,8 @@ class RelayMachineBackend final : public MachineBackend {
         // The outbox file; one per machine, owner-only.
         QString outboxFile;
         int eventPollMilliseconds{1000};
+        // A window that could not be read for a reload is tried again after this long.
+        int reloadRetryMilliseconds{3000};
         int commandPollMilliseconds{250};
         int initialBackoffMilliseconds{1000};
         int maximumBackoffMilliseconds{30000};
@@ -49,6 +55,7 @@ class RelayMachineBackend final : public MachineBackend {
     [[nodiscard]] Route route() const override { return Route::Relay; }
     [[nodiscard]] ConnectionState connectionState() const override { return state_; }
     [[nodiscard]] QString connectionReason() const override { return reason_; }
+    [[nodiscard]] bool hostReachable() const override;
     // Commands still waiting in the outbox.
     [[nodiscard]] QStringList pendingCommands() const;
 
@@ -139,6 +146,14 @@ class RelayMachineBackend final : public MachineBackend {
     void poll(const CommandOutbox::Entry& entry);
     void finish(const QString& id, const QJsonObject& command, const QString& error);
     void pollEvents();
+    // Following a conversation's events: polled (stored events) or, when the host forwards
+    // them (events.forward_only/1), read from frames. RelayMachineStream.cpp.
+    void watch(const QString& sessionId, qint64 cursor);
+    void applyForwardOnly(bool forwardOnly);
+    void beginStreaming(const QString& sessionId, qint64 cursor);
+    void deliverForwarded(const QString& sessionId, const QJsonArray& events);
+    void reloadConversation(const QString& sessionId);
+    void updateReachability();
     void discardRecoveredPreparation(const QString& id, const QJsonObject& command);
 
     QPointer<ControlV2Client> client_;
@@ -179,6 +194,12 @@ class RelayMachineBackend final : public MachineBackend {
     // Sessions whose events are followed, with the last cursor seen.
     QHash<QString, qint64> watched_;
     bool pollingEvents_{false};
+    // The forwarded-frame reader of this machine while its host forwards events.
+    RelayEventStream* stream_{nullptr};
+    QPointer<RelayFrameLink> link_;
+    bool reachableReported_{true};
+    // The key each followed conversation's forwarded events are verified with.
+    QHash<QString, QByteArray> signing_;
     // Bumped with each fence: an events poll of an earlier round never settles this one.
     quint64 eventsRound_{0};
 };

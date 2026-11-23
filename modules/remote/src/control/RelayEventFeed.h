@@ -86,6 +86,9 @@ class RelayEventFeed final {
     QByteArray follow(const QString& sessionId, qint64 generation);
     // Subscribes the conversations whose stored cursor could not be read, as far as it can now.
     QList<QByteArray> retryStored();
+    // Starts following after a cursor the caller read from the host's newest window, instead of
+    // the stored one; the stored cursor is replaced by it.
+    QByteArray followFrom(const QString& sessionId, qint64 generation, qint64 cursor);
     QByteArray unfollow(const QString& sessionId);
     // A connection is open: one subscribe after each cursor.
     QList<QByteArray> connected();
@@ -101,6 +104,10 @@ class RelayEventFeed final {
     [[nodiscard]] qint64 cursor(const QString& sessionId) const;
     [[nodiscard]] bool reloading(const QString& sessionId) const;
     [[nodiscard]] bool awaitingStore(const QString& sessionId) const;
+    [[nodiscard]] QStringList followedConversations() const { return followed_.keys(); }
+    // A conversation whose event could not be opened reloads its window like after a reset;
+    // false when it is not followed or already reloading.
+    bool requestReload(const QString& sessionId);
     bool flush();
 
   private:

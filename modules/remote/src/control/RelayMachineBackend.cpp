@@ -1,5 +1,6 @@
 #include "control/RelayMachineBackend.h"
 #include "control/ControlV2Client.h"
+#include "control/RelayEventStream.h"
 #include <QDateTime>
 #include <QTimer>
 #include <climits>
@@ -95,6 +96,8 @@ void RelayMachineBackend::disconnectFromRelay() {
 
 void RelayMachineBackend::fence(const QString& reason) {
     ++generation_;
+    if (stream_)
+        stream_->flush();
     ++eventsRound_;
     pollingEvents_ = false;
     retry_->stop();
@@ -145,19 +148,27 @@ void RelayMachineBackend::probe() {
                 guarded([this, generation](const QJsonValue& machines, const QString& failure) {
                     if (generation != generation_)
                         return;
+                    bool forwardOnly = false;
                     if (failure.isEmpty() && machines.isArray())
                         for (const auto& entry : machines.toArray()) {
                             const auto row = entry.toObject();
-                            if (row.value("id").toString() == relayMachineId_)
+                            if (row.value("id").toString() == relayMachineId_) {
+                                const auto capabilities = row.value("capabilities").toArray();
                                 preparationSupported_ =
-                                    row.value("capabilities")
-                                        .toArray()
-                                        .contains(QStringLiteral("session.prepare/1"));
+                                    capabilities.contains(QStringLiteral("session.prepare/1"));
+                                forwardOnly =
+                                    capabilities.contains(QStringLiteral("events.forward_only/1"));
+                            }
                         }
+                    // Tell the relay what this device reads, so a host it shares with other
+                    // devices can stop storing events once every device does. A failure is
+                    // retried at the next connection.
+                    client_->syncCapabilities(ControlV2Client::desktopCapabilities(),
+                                              [](const QJsonValue&, const QString&) {});
                     attempts_ = 0;
                     everConnected_ = true;
                     setState(ConnectionState::Connected, {});
-                    events_->start();
+                    applyForwardOnly(forwardOnly);
                     resume();
                     releaseWaiters();
                 }));
@@ -380,9 +391,8 @@ void RelayMachineBackend::transcriptWindow(const QString& sessionId, qint64 gene
                                   const auto page = value.toObject();
                                   // Follow the conversation's events from the snapshot the window
                                   // was read at.
-                                  if (error.isEmpty() && !watched_.contains(sessionId))
-                                      watched_.insert(sessionId,
-                                                      page.value("snapshot_cursor").toInteger());
+                                  if (error.isEmpty())
+                                      watch(sessionId, page.value("snapshot_cursor").toInteger());
                                   done(page, error);
                               }));
 }
@@ -391,6 +401,8 @@ void RelayMachineBackend::conversationClosed(const QString& sessionId) {
     // Events are polled only for open conversations; opening it again follows it from the
     // cursor of that read.
     watched_.remove(sessionId);
+    if (stream_)
+        stream_->unfollow(sessionId);
 }
 
 void RelayMachineBackend::transcriptPage(const QString& sessionId, qint64 generation,

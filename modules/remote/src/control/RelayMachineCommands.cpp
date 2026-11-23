@@ -42,6 +42,8 @@ bool linkFailure(const QString& error) {
 }
 } // namespace
 
+QJsonObject relayLocalEvent(const QJsonObject& relay) { return localEvent(relay); }
+
 void RelayMachineBackend::sessionCommand(const QString& kind, const QString& sessionId,
                                          qint64 generation, const QJsonObject& plaintext,
                                          Callback callback, bool durable) {
@@ -61,8 +63,8 @@ void RelayMachineBackend::sessionCommand(const QString& kind, const QString& ses
         callback({}, QStringLiteral("This attachment draft is not an active conversation."));
         return;
     }
-    if (durable && !prepared_.contains(sessionId) && !watched_.contains(sessionId))
-        watched_.insert(sessionId, row.value("lastEventCursor").toInteger());
+    if (durable && !prepared_.contains(sessionId))
+        watch(sessionId, row.value("lastEventCursor").toInteger());
     const auto token = QUuid::createUuid().toString(QUuid::Id128);
     const QJsonObject intent{{"id", "command_" + token},
                              {"idempotencyKey", "command_idempotency_" + token},
@@ -329,7 +331,7 @@ void RelayMachineBackend::finish(const QString& id, const QJsonObject& command,
         if (kind == "session.start_turn" && prepared_.contains(session) &&
             result.value("ok").toBool()) {
             sessions_.insert(session, prepared_.take(session));
-            watched_.insert(session, 0);
+            watch(session, 0);
         }
     }
     emit commandCompleted(id, result, failure);

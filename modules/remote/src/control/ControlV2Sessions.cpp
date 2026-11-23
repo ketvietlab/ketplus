@@ -149,6 +149,51 @@ void ControlV2Client::sessionKeys(const QJsonObject& session,
             done({}, QString::fromLatin1(control_v2::noSessionKeyGrant));
         });
 }
+QJsonObject ControlV2Client::openEvent(const QJsonObject& session, const QByteArray& signing,
+                                       QJsonObject event, QString* error) {
+    const auto id = session.value("id").toString();
+    const auto generation = session.value("generation").toInteger();
+    const auto content = event.value("content").toObject();
+    const auto fail = [error](const QString& reason) {
+        if (error)
+            *error = reason;
+        return QJsonObject{};
+    };
+    if (event.value("workspaceId") != session.value("workspaceId") ||
+        event.value("sessionId").toString() != id ||
+        event.value("sessionGeneration").toInteger() != generation ||
+        event.value("cursor").toInteger() < 1 ||
+        content.value("senderDeviceId") != session.value("machineId") ||
+        !validContent(content, id, generation, 256 * 1024))
+        return fail("Invalid event routing metadata.");
+    QJsonArray fields{"ketplus",
+                      2,
+                      "event",
+                      event.value("workspaceId"),
+                      id,
+                      generation,
+                      event.value("cursor"),
+                      event.value("turnSequence"),
+                      event.value("eventType")};
+    if (!signedByVerifiedKey(id, generation, content))
+        return fail("The host signing key changed; pair this host again.");
+    for (const auto& field : contentScope(content))
+        fields.append(field);
+    QString decryptError;
+    const auto plaintext = crypto_.decrypt(content, daemon::CloudCrypto::canonical(fields), signing,
+                                           id, generation, &decryptError);
+    QJsonParseError parse;
+    const auto json = QJsonDocument::fromJson(plaintext, &parse);
+    if (!decryptError.isEmpty() || parse.error != QJsonParseError::NoError || !json.isObject())
+        return fail(decryptError.isEmpty() ? "Invalid encrypted event payload." : decryptError);
+    event.remove("content");
+    event.insert("payload", json.object());
+    return event;
+}
+void ControlV2Client::eventKeys(const QJsonObject& session,
+                                std::function<void(const QByteArray&, const QString&)> done) {
+    sessionKeys(session, std::move(done));
+}
 void ControlV2Client::events(const QJsonObject& session, qint64 after, Callback done) {
     if (after < 0) {
         done({}, "Invalid event cursor.");
@@ -162,75 +207,47 @@ void ControlV2Client::events(const QJsonObject& session, qint64 after, Callback 
         }
         const auto id = session.value("id").toString();
         const auto generation = session.value("generation").toInteger();
-        authorized(
-            "GET",
-            "/v2/mobile/sessions/" + segment(id) +
-                "/events?generation=" + QString::number(generation) +
-                "&afterCursor=" + QString::number(after) + "&limit=100&waitSeconds=0",
-            {},
-            [this, session, id, generation, after, signing,
-             done = std::move(done)](const QJsonValue& value, const QString& failure) {
-                if (!failure.isEmpty()) {
-                    done({}, failure);
-                    return;
-                }
-                auto page = value.toObject();
-                if (page.value("sessionId").toString() != id ||
-                    page.value("sessionGeneration").toInteger() != generation ||
-                    page.value("afterCursor").toInteger() != after ||
-                    page.value("nextCursor").toInteger() < after) {
-                    done({}, "Event page scope changed.");
-                    return;
-                }
-                QJsonArray decoded;
-                auto cursor = after;
-                for (const auto& item : page.value("events").toArray()) {
-                    auto event = item.toObject();
-                    const auto content = event.value("content").toObject();
-                    if (event.value("workspaceId") != session.value("workspaceId") ||
-                        event.value("sessionId").toString() != id ||
-                        event.value("sessionGeneration").toInteger() != generation ||
-                        event.value("cursor").toInteger() <= cursor ||
-                        event.value("cursor").toInteger() > page.value("nextCursor").toInteger() ||
-                        content.value("senderDeviceId") != session.value("machineId") ||
-                        !validContent(content, id, generation, 256 * 1024)) {
-                        done({}, "Invalid event routing metadata.");
-                        return;
-                    }
-                    QJsonArray fields{"ketplus",
-                                      2,
-                                      "event",
-                                      event.value("workspaceId"),
-                                      id,
-                                      generation,
-                                      event.value("cursor"),
-                                      event.value("turnSequence"),
-                                      event.value("eventType")};
-                    if (!signedByVerifiedKey(id, generation, content)) {
-                        done({}, "The host signing key changed; pair this host again.");
-                        return;
-                    }
-                    for (const auto& field : contentScope(content))
-                        fields.append(field);
-                    QString error;
-                    const auto plaintext =
-                        crypto_.decrypt(content, daemon::CloudCrypto::canonical(fields), signing,
-                                        id, generation, &error);
-                    QJsonParseError parse;
-                    const auto json = QJsonDocument::fromJson(plaintext, &parse);
-                    if (!error.isEmpty() || parse.error != QJsonParseError::NoError ||
-                        !json.isObject()) {
-                        done({}, error.isEmpty() ? "Invalid encrypted event payload." : error);
-                        return;
-                    }
-                    event.remove("content");
-                    event.insert("payload", json.object());
-                    decoded.append(event);
-                    cursor = event.value("cursor").toInteger();
-                }
-                page.insert("events", decoded);
-                done(page, {});
-            });
+        authorized("GET",
+                   "/v2/mobile/sessions/" + segment(id) +
+                       "/events?generation=" + QString::number(generation) +
+                       "&afterCursor=" + QString::number(after) + "&limit=100&waitSeconds=0",
+                   {},
+                   [this, session, id, generation, after, signing,
+                    done = std::move(done)](const QJsonValue& value, const QString& failure) {
+                       if (!failure.isEmpty()) {
+                           done({}, failure);
+                           return;
+                       }
+                       auto page = value.toObject();
+                       if (page.value("sessionId").toString() != id ||
+                           page.value("sessionGeneration").toInteger() != generation ||
+                           page.value("afterCursor").toInteger() != after ||
+                           page.value("nextCursor").toInteger() < after) {
+                           done({}, "Event page scope changed.");
+                           return;
+                       }
+                       QJsonArray decoded;
+                       auto cursor = after;
+                       for (const auto& item : page.value("events").toArray()) {
+                           const auto envelope = item.toObject();
+                           if (envelope.value("cursor").toInteger() <= cursor ||
+                               envelope.value("cursor").toInteger() >
+                                   page.value("nextCursor").toInteger()) {
+                               done({}, "Invalid event routing metadata.");
+                               return;
+                           }
+                           QString error;
+                           const auto event = openEvent(session, signing, envelope, &error);
+                           if (event.isEmpty()) {
+                               done({}, error);
+                               return;
+                           }
+                           decoded.append(event);
+                           cursor = event.value("cursor").toInteger();
+                       }
+                       page.insert("events", decoded);
+                       done(page, {});
+                   });
     });
 }
 void ControlV2Client::prepareCommand(const QJsonObject& intent, const QJsonObject& plaintext,
