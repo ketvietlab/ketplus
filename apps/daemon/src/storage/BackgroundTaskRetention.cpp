@@ -66,13 +66,15 @@ QJsonObject BackgroundTaskLedger::prune(qint64 nowMs) {
         if (!query.exec())
             return fail(query.lastError().text());
         query.prepare("DELETE FROM managed_job_wakes WHERE event_id IN (SELECT event_id FROM "
-                      "managed_job_outbox WHERE task_id=?)");
+                      "managed_job_outbox WHERE task_id=? UNION SELECT event_id FROM "
+                      "managed_job_notices WHERE task_id=?)");
+        query.addBindValue(item.id);
         query.addBindValue(item.id);
         if (!query.exec())
             return fail(query.lastError().text());
         // The compact child link remains an ownership/dedup fence after the
         // parent's metadata expires. A worker cannot become a new root by aging.
-        for (const auto& table : {"managed_job_outbox", "managed_jobs"}) {
+        for (const auto& table : {"managed_job_outbox", "managed_job_notices", "managed_jobs"}) {
             query.prepare(QStringLiteral("DELETE FROM %1 WHERE task_id=?").arg(table));
             query.addBindValue(item.id);
             if (!query.exec())

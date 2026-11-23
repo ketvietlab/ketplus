@@ -20,6 +20,17 @@ bool currentOwner(QSqlDatabase database, const BackgroundTaskOwner& owner) {
 
 QJsonObject BackgroundTaskLedger::acceptCompletion(const QString& eventId,
                                                    const BackgroundTaskOwner& owner) {
+    return accept(QStringLiteral("managed_job_outbox"), eventId, owner);
+}
+
+QJsonObject BackgroundTaskLedger::acceptNotice(const QString& eventId,
+                                               const BackgroundTaskOwner& owner) {
+    return accept(QStringLiteral("managed_job_notices"), eventId, owner);
+}
+
+// `table` is one of the two event tables above, never caller input.
+QJsonObject BackgroundTaskLedger::accept(const QString& table, const QString& eventId,
+                                         const BackgroundTaskOwner& owner) {
     if (!database_.transaction())
         return failure("storage_error", database_.lastError().text());
     const auto fail = [&](const QString& code, const QString& message) {
@@ -38,8 +49,9 @@ QJsonObject BackgroundTaskLedger::acceptCompletion(const QString& eventId,
     if (query.next())
         return fail("owner_held", query.value(0).toString());
     query.finish();
-    query.prepare("SELECT payload,status,owner_session_id,owner_generation FROM managed_job_outbox "
-                  "WHERE event_id=?");
+    query.prepare(QStringLiteral("SELECT payload,status,owner_session_id,owner_generation FROM %1 "
+                                 "WHERE event_id=?")
+                      .arg(table));
     query.addBindValue(eventId);
     if (!query.exec())
         return fail("storage_error", query.lastError().text());
@@ -64,7 +76,7 @@ QJsonObject BackgroundTaskLedger::acceptCompletion(const QString& eventId,
     if (!query.exec())
         return fail("storage_error", query.lastError().text());
     const bool duplicate = query.numRowsAffected() == 0;
-    query.prepare("UPDATE managed_job_outbox SET status='delivered' WHERE event_id=?");
+    query.prepare(QStringLiteral("UPDATE %1 SET status='delivered' WHERE event_id=?").arg(table));
     query.addBindValue(eventId);
     if (!query.exec())
         return fail("storage_error", query.lastError().text());

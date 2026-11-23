@@ -4,6 +4,7 @@
 #include <QSqlDatabase>
 #include <QString>
 #include <QStringList>
+#include <algorithm>
 #include <optional>
 
 namespace ketplus::daemon {
@@ -66,6 +67,13 @@ struct BackgroundTaskEffects final {
 // come from the session runtime. This class never launches a process or inference.
 class BackgroundTaskLedger final {
   public:
+    // Execution slots one root owner session/generation may hold at once.
+    static constexpr int rootSlotLimit = 4;
+    // How long an approved job may wait in the queue before its owner is told why: half its
+    // timeout, at most two minutes, so the notice always comes well before the timeout.
+    static constexpr qint64 queuedNoticeAfterMs(qint64 timeoutMs) {
+        return std::clamp<qint64>(timeoutMs / 2, 1, 120000);
+    }
     explicit BackgroundTaskLedger(QSqlDatabase database);
     // The registry's database, for stores that keep rows beside its tasks.
     [[nodiscard]] QSqlDatabase database() const { return database_; }
@@ -87,6 +95,8 @@ class BackgroundTaskLedger final {
                                  const QJsonObject& identity);
     // Reserve an immutable child address before creating its conversation/inference.
     QJsonObject reserveChild(const QString& taskId, qint64 expectedRevision);
+    // Whether `owner` has a queued, starting, running or stopping job; runtime only.
+    [[nodiscard]] bool ownsLiveJobs(const BackgroundTaskOwner& owner) const;
     // Runtime-only recovery scan; callers must apply authorization to every API projection.
     [[nodiscard]] QJsonObject nonterminal() const;
     // The IPC layer permits this only for an authenticated local user action.
@@ -102,6 +112,17 @@ class BackgroundTaskLedger final {
     [[nodiscard]] QJsonObject runtimeTask(const QString& taskId) const { return task(taskId); }
     [[nodiscard]] QJsonObject linkedTask(const QString& childSessionId, qint64 generation) const;
     [[nodiscard]] QJsonObject deliveryPage(bool acceptedWakes, qint64 after = 0) const;
+    // Owner notices (BackgroundTaskNotices.cpp): events that wake the owner while a job is
+    // still nonterminal. They share the wake table and fences with completions but keep
+    // their own rows, so the completion outbox stays one event per task.
+    // One notice per job that has waited in the queue past queuedNoticeAfterMs, naming why.
+    // `queued` in the reply says whether the job has such a notice now; idempotent.
+    QJsonObject noticeQueued(const QString& taskId, qint64 nowMs);
+    [[nodiscard]] QJsonObject noticePage(qint64 after = 0) const;
+    QJsonObject acceptNotice(const QString& eventId, const BackgroundTaskOwner& owner);
+    // Whether a notice still describes its job: its job has not moved on since.
+    [[nodiscard]] bool noticeCurrent(const QJsonObject& turnRecord) const;
+    // Suppresses a completion or a notice and its accepted wake.
     QJsonObject suppressCompletion(const QString& eventId, const QString& reason);
     QJsonObject finishWake(const QString& eventId, const QString& state);
     QJsonObject recoverDispatchingWakes();
@@ -118,6 +139,13 @@ class BackgroundTaskLedger final {
                                            const BackgroundTaskOwner& owner) const;
 
   private:
+    QJsonObject accept(const QString& table, const QString& eventId,
+                       const BackgroundTaskOwner& owner);
+    // Inside applyTransition's transaction: the needs_attention notice, and suppressing the
+    // pending notices of a job that ends.
+    QJsonObject noticeAttention(const QString& taskId, const QJsonObject& record,
+                                const QString& previousState);
+    QJsonObject supersedeNotices(const QString& taskId);
     QJsonObject changeImpl(const QString& taskId, qint64 expectedRevision,
                            const BackgroundTaskChange& change, const QString& userClientId);
     QJsonObject task(const QString& taskId) const;

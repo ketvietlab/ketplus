@@ -207,9 +207,10 @@ Only a user may invoke `session.task.resolve_cleanup` with `task_id` and revisio
 CAS `needs_attention -> interrupted(reason=cleanup_acknowledged)` with a durable
 audit whose source is `user`. Acknowledgement is a user statement, not kernel
 cleanup evidence; keep the assurance level visible. Agents cannot invoke this
-action on the user's behalf. Neither `needs_attention` nor acknowledgement wakes
-an agent; publish a UI notice only. Permission, outbox, dedup and owner fences
-remain unchanged.
+action on the user's behalf. Acknowledgement wakes no agent. Entering
+`needs_attention` shows the UI warning and also queues one owner notice (§7a) that says
+cleanup is unverified and that only the user acknowledges it. Permission, outbox, dedup
+and owner fences remain unchanged.
 
 ### 5. Supervisor, launch and restart safety
 
@@ -303,7 +304,8 @@ contains `task_id`, terminal `state`, a summary and an output reference. The
 notation `task_id + terminal_revision` means a stable, unambiguous compound
 identity, not an invitation to concatenate ambiguous strings.
 
-Only terminal transitions create completion wakes; progress creates none.
+Only terminal transitions create completion wakes; progress creates none. The owner
+notices of §7a are separate events with their own rows, not completions.
 The dispatcher retries at least once until delivery or explicit suppression.
 Accepting/enqueuing an owner turn and recording deduplication by `event_id` must
 be durable together. A crash after enqueue but before the dispatcher sees the
@@ -330,7 +332,9 @@ message-only routing cannot replace it.
 | User Stop or pause | Keep pending; only explicit Resume releases it |
 | Closed/deleted owner or replaced generation | Suppress with a recorded reason |
 | Job cancelled by Stop or session close | Suppress; cancellation must not restart the agent |
-| Native cleanup needs attention or is user-acknowledged | UI notice only; no auto-wake |
+| Job enters `needs_attention` | UI warning and one owner notice (§7a); suppressed for a cancelled job |
+| Approved job still queued at its notice threshold | One owner notice naming why (§7a) |
+| Cleanup acknowledged by the user | Completion suppressed; no auto-wake |
 | Permission denied after job acceptance | `failed` with `reason=permission_denied`; suppress completion with the same reason |
 
 Delivery is rechecked at acceptance and dispatch, including generation and Stop
@@ -344,6 +348,60 @@ without automatically retrying the command.
 Stopping a foreground agent turn preserves daemon process jobs under the existing
 user behavior, but blocks their auto-wakes until explicit Resume. Stopping a job
 cancels only that job. These controls must not be conflated.
+
+### 7a. Owner notices of nonterminal jobs
+
+Amendment, 2026-11-23. Agents guessed how long to wait for jobs. Only terminal states
+woke the owner, so a job that entered `needs_attention`, or that sat queued behind its
+root's full slots, told it nothing until the job's timeout, if ever. Team members also
+set `team_wait` timers for builds that a managed job would have reported by itself.
+
+**Decision.** A nonterminal job queues an owner notice in two cases, at most once each:
+
+| Notice | When | Event identity |
+| --- | --- | --- |
+| `needs_attention` | The transition that enters `needs_attention`; a later update of the same incident adds none | `(task_id, revision that entered it)` |
+| `queued` | The job is still `queued`, its permission approved, `queuedNoticeAfterMs(timeout)` after its creation: half its timeout, at most two minutes | `(task_id, "queued")` |
+
+The queued notice names `queue_reason`: `root_slot_limit` with `slot_limit` and the
+`slot_holders` (task id, title, state) of its root, `waiting_for_runner` for a job that
+runs on a runner, or `awaiting_admission` otherwise. A job waiting for its permission
+request gets none: the request is the user's and the UI shows it. The attention notice
+carries the retained exit code and manual guidance; its prompt tells the owner that
+cleanup is unverified, not to start the job again or assume its processes are gone, and
+that only the user acknowledges cleanup. A job its owner or the user cancelled queues the
+attention notice already suppressed, as its completion would be.
+
+**Mechanism.** Notices are rows of `managed_job_notices`, written in the transition's
+transaction (attention) or by the runtime's pump through one idempotent ledger call
+(queued). `INSERT OR IGNORE` on the event identity makes a repeated write harmless,
+including after a restart. They are not added to the completion outbox: that table keeps
+one event per task, which its `completion` projection, retention and child-continuation
+checks rely on. From acceptance on, a notice follows the completion path unchanged: the
+same durable acceptance into `managed_job_wakes`, owner generation and Stop/pause/decision
+fences, idle dispatch, and the logical `turn_id=background-wake:<event_id>`. A notice is
+stale once its job has moved on (started, ended, acknowledged): dispatch suppresses it
+with `superseded`, and a terminal transition suppresses the job's pending notices and
+their accepted wakes in its own transaction, so retention is never held by them. The
+wake's origin kind is `background_task_notice`.
+
+A team member woken by a job's completion or notice no longer has a pending `team_wait`:
+the delivered wake ends it, instead of a timer starting a second turn to check again. The
+team watchdog counts a member that owns a queued, starting, running or stopping job as at
+work, so ending a turn on a job is a valid way to wait. Agent and team instructions say to
+start long builds and tests as jobs and end the turn rather than guess minutes;
+`team_wait` stays for what KetPlus does not track, such as a deployment or another
+conversation's answer.
+
+**Not covered.** A running job that makes no progress gets no notice. The daemon has no
+reliable progress signal (output growth is not one), so the job's own timeout remains its
+bound.
+
+**Alternatives.** Reusing the completion outbox for notices needs a table rebuild to drop
+its one-row-per-task constraint and changes every reader of that projection. A periodic
+"still running" heartbeat would bring back the guessing this removes. `team_wait` with a
+background task id would tie a wait to one job, but a delivered wake ending any wait gives
+the same result for every job without a second registry lookup.
 
 ### 8. Queries, output, retention and admission limits
 

@@ -1,6 +1,7 @@
 // ADR 0114 §8: what a member waits for outside the team. team_wait records the wait, keeps
 // the watchdog off the member and wakes it to check again; a message to a conversation
-// outside the team that failed is reported to its sender. The coordinator runs on a real
+// outside the team that failed is reported to its sender, and a managed background job's
+// wake ends a wait and keeps the watchdog off its owner. The coordinator runs on a real
 // journal with a fake runtime. No provider is started.
 #include "TeamFakeHost.h"
 #include "storage/LocalJournal.h"
@@ -257,6 +258,27 @@ class TeamWaitTest final : public QObject {
         teams_->outsideMessageFailed("dev2", "#4629", "no_reply");
         teams_->outsideMessageFailed("stranger", "#4629", "no_reply");
         QCOMPARE(host_.messages.size(), 2);
+    }
+
+    // ADR 0127 §7a: a managed background job wakes its owner when it ends or needs something,
+    // so a member that ends its turn on one is at work, and the job's wake ends a team_wait it
+    // set instead of a second turn starting when the timer runs out.
+    void aBackgroundJobKeepsTheWatchdogOffAndItsWakeEndsTheWait() {
+        (void)inProgress();
+        host_.conversations["dev1"].backgroundJobs = true;
+        teams_->checkStall(team_);
+        QVERIFY(host_.messages.isEmpty());
+
+        QVERIFY(teams_->wait(team_, "dev1", 1, "the build").ok());
+        teams_->endWait("dev1");
+        QVERIFY(!teams_->isWaiting("dev1"));
+        QTest::qWait(60);
+        QVERIFY(host_.of("wait").isEmpty());
+        teams_->endWait("dev2"); // a member with no wait: nothing to end
+
+        host_.conversations["dev1"].backgroundJobs = false;
+        teams_->checkStall(team_);
+        QCOMPARE(kinds(), QStringList{"nudge>dev1"});
     }
 };
 

@@ -349,9 +349,18 @@ void ManagedTaskRuntime::pump() {
         }
         if (!live || live->record.value("state") == "needs_attention")
             continue;
-        if (now >= live->record.value("created_at").toInteger() +
-                       live->record.value("timeout_ms").toInteger())
+        const qint64 createdAt = live->record.value("created_at").toInteger();
+        const qint64 timeoutMs = live->record.value("timeout_ms").toInteger();
+        if (now >= createdAt + timeoutMs) {
             stopTask(id, "timed_out");
+            continue;
+        }
+        // An approved job still queued well before its timeout: tell its owner once, and why,
+        // instead of leaving it to guess (ADR 0127 §7a).
+        if (!live->queuedNoticed && live->record.value("state") == "queued" &&
+            live->record.value("permission_approved").toBool() &&
+            now >= createdAt + BackgroundTaskLedger::queuedNoticeAfterMs(timeoutMs))
+            live->queuedNoticed = ledger_.noticeQueued(id, now).value("queued").toBool();
     }
     // Bounds the work of one pump; claims that remain eligible start on the next one.
     for (int admitted = 0; admitted < 16; ++admitted) {

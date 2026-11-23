@@ -178,11 +178,13 @@ QJsonArray teamTools() {
               {QStringLiteral("branch_slug"), branchSlug}},
              {QStringLiteral("task_id")}),
         tool(QStringLiteral("team_wait"),
-             QStringLiteral("Leader and developers: you wait for something outside the team (a "
-                            "build, a deployment, another conversation's answer). Records it "
-                            "for the team and starts your turn again after `minutes` so you "
-                            "check. Call it, then end your turn; do not poll and do not end "
-                            "the turn without it."),
+             QStringLiteral("Leader and developers: you wait for something outside the team "
+                            "that KetPlus does not track (a deployment, another conversation's "
+                            "answer). Records it for the team and starts your turn again after "
+                            "`minutes` so you check. Call it, then end your turn; do not poll and "
+                            "do not end the turn without it. For a build or test, start it with "
+                            "background_task_start and end your turn instead: its result wakes "
+                            "you and ends a wait you set."),
              {{QStringLiteral("reason"), text(QStringLiteral("What you wait for."))},
               {QStringLiteral("minutes"),
                QJsonObject{{QStringLiteral("type"), QStringLiteral("integer")},

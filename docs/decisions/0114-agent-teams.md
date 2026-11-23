@@ -403,9 +403,12 @@ leader the user stopped is not woken, so step 3 follows at once. A member's next
 that ends by itself lifts that, and "Wake the leader again" lifts it for the leader only.
 A worker that exits without a new turn changes nothing.
 
-**Waiting for something outside the team.** A leader or developer that waits for a
-build, a deployment or another conversation calls `team_wait` with what it waits for and
-1 to 60 minutes, then ends its turn. The wait is an entry in Updates. Until it ends the
+**Waiting for something outside the team.** A build or test runs as a managed
+background job and its completion or notice wakes the member (ADR 0127 §7a): the member
+ends its turn on the job, the watchdog counts it as at work while it owns a job that has
+not ended, and that wake ends a wait it set. For what KetPlus does not track, such as a
+deployment or another conversation, a leader or developer calls `team_wait` with what it
+waits for and 1 to 60 minutes, then ends its turn. The wait is an entry in Updates. Until it ends the
 watchdog treats that member as at work: it is not nudged and the leader is not woken on
 its account. When it ends an idle member is woken to check (message kind `wait`), an
 automatic turn counted against the budget and held while the team is paused; a member

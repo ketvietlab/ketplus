@@ -35,6 +35,9 @@ struct TeamConversation final {
     QString worktree;
     QString executionPolicy;
     bool idle{false};
+    // It owns a managed background job that has not ended (ADR 0127): the job's completion or
+    // notice starts its next turn, so it is at work while it waits.
+    bool backgroundJobs{false};
 };
 
 // A task's own branch and worktree, cut from the integration branch (ADR 0114, point 1).
@@ -531,6 +534,9 @@ class TeamCoordinator : public QObject {
     [[nodiscard]] bool isWaiting(const QString& sessionId) const {
         return waits_.contains(sessionId);
     }
+    // A managed background job's wake started the member's turn: the wait it set is over and
+    // its timer would only start a second turn to check again.
+    void endWait(const QString& sessionId) { cancelWait(sessionId); }
     void setWaitMinuteForTesting(int milliseconds) { waitMinuteMs_ = milliseconds; }
     // A message the member sent to `peer`, a conversation outside its team, failed or was
     // never answered (`reason`, the broker's): the member is woken to decide what to do.

@@ -357,6 +357,58 @@ class ManagedTaskHostTest final : public QObject {
         QCOMPARE(messages, 1);
     }
 
+    // ADR 0127 §7a: a job held behind its root's full slots wakes its idle owner once with a
+    // notice that names why, before the job's timeout and through the durable wake path.
+    void queuedJobWakesItsOwnerOnceWithANoticeBeforeItsTimeout() {
+        QTemporaryDir directory;
+        const auto cwd = QFileInfo(directory.path()).canonicalFilePath();
+        const auto log = directory.filePath("provider.log");
+        QVERIFY(writeFakeCodex(directory.filePath(fixtureName("fake-codex")), log));
+        LocalJournal journal(directory.filePath("journal.sqlite"));
+        QVERIFY(seed(journal, cwd));
+        CodexAdapter adapter(directory.filePath(fixtureName("fake-codex")));
+        SessionHost host(&journal, &adapter);
+        const auto cleanup = qScopeGuard([&] { adapter.stop(); });
+        QStringList holders;
+        for (int i = 0; i < BackgroundTaskLedger::rootSlotLimit; ++i) {
+            auto input = process(cwd, {"/bin/sleep", "30"});
+            input.insert("client_request_id", "holder" + QString::number(i));
+            input.insert("timeout_ms", 60000);
+            const auto started = command(host, "session.task.start", input);
+            QVERIFY2(started.value("ok").toBool(),
+                     qPrintable(started.value("error_message").toString()));
+            holders.append(started.value("task").toObject().value("task_id").toString());
+        }
+        for (const auto& id : holders)
+            QTRY_COMPARE_WITH_TIMEOUT(task(host, id).value("state"), "running", 6000);
+        auto input = process(cwd, {"/usr/bin/printf", "late"});
+        input.insert("client_request_id", "queued");
+        input.insert("timeout_ms", 4000);
+        const auto started = command(host, "session.task.start", input);
+        QVERIFY(started.value("ok").toBool());
+        const auto id = started.value("task").toObject().value("task_id").toString();
+        const auto event = id + ":queued";
+        const auto noticeTurns = [&] {
+            int count = 0;
+            for (const auto value : journal.eventsAfter("owner", 1, 0)) {
+                const auto row = value.toObject();
+                if (row.value("event_type") == "user.message" &&
+                    row.value("payload").toObject().value("background_task_event_id") == event)
+                    ++count;
+            }
+            return count;
+        };
+        QTRY_COMPARE_WITH_TIMEOUT(noticeTurns(), 1, 3800);
+        QCOMPARE(task(host, id).value("state"), "queued");
+        QTRY_COMPARE_WITH_TIMEOUT(turns(log), 1, 6000);
+        QTRY_COMPARE_WITH_TIMEOUT(task(host, id).value("state"), "timed_out", 6000);
+        QCOMPARE(noticeTurns(), 1);
+        for (const auto& holder : holders)
+            QVERIFY(command(host, "session.task.stop", {{"task_id", holder}}).value("ok").toBool());
+        for (const auto& holder : holders)
+            QTRY_COMPARE_WITH_TIMEOUT(task(host, holder).value("state"), "cancelled", 6000);
+    }
+
     void stoppedOwnerKeepsProcessAndHoldsWakeUntilExplicitUserTurn() {
         QTemporaryDir directory;
         const auto cwd = QFileInfo(directory.path()).canonicalFilePath();

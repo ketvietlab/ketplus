@@ -59,6 +59,8 @@ class ManagedTaskRuntime final : public QObject {
         QPointer<executor::NativeJobClient> executor;
         QJsonObject pendingExecutorEvent;
         QString persistenceError;
+        // The ledger holds this job's queued notice; it is not asked again.
+        bool queuedNoticed{false};
     };
     bool apply(const QString& taskId, const BackgroundTaskChange& change);
     void pump();

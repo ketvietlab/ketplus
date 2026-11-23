@@ -123,6 +123,24 @@ bool noTurnEvents(const QSignalSpy& events) {
     }
     return true;
 }
+// ADR 0127 §7a: entering needs_attention wakes the owner with one notice. True when that
+// notice started exactly one turn and no other message started one.
+bool onlyTheAttentionNoticeWoke(const QSignalSpy& events, const QString& id) {
+    int notices = 0;
+    for (const auto& values : events) {
+        const auto event = values.first().toJsonObject();
+        if (event.value("event_type") != "user.message")
+            continue;
+        if (!event.value("payload")
+                 .toObject()
+                 .value("background_task_event_id")
+                 .toString()
+                 .startsWith(id + ":attention:"))
+            return false;
+        ++notices;
+    }
+    return notices == 1;
+}
 bool preservesOutput(const QJsonObject& page, const QJsonObject& before) {
     if (!page.value("ok").toBool() || !before.value("ok").toBool())
         return false;
@@ -430,7 +448,8 @@ class ManagedTaskAttentionRecoveryTest final : public QObject {
                 output = outputPage.value("output").toString().toUtf8();
             }
             QVERIFY(preservesOutput(afterFaultOutput, outputPage));
-            QVERIFY(noTurnEvents(events));
+            // One notice wakes the owner; a restart below must not deliver it again.
+            QTRY_VERIFY_WITH_TIMEOUT(onlyTheAttentionNoticeWoke(events, id), 6000);
         } // Both Host/runtime and the file-backed journal connection really close.
 
         {

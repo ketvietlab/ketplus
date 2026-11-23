@@ -1365,9 +1365,15 @@ and temporary journals; they consume no account quota. They cover independent
 child sessions/output/approval, foreground Stop fencing without cancelling process
 jobs, busy-owner durable enqueue without steering, duplicate completion/start
 requests, actual IPC token authentication, owner forgery, retired-generation
-local administration, complete registry pagination beyond 16 rows, and an owner job
+local administration, complete registry pagination beyond 16 rows, an owner job
 summary in `tasks.changed` and the session catalog that counts all 17 live jobs and
-returns to `{live_jobs: 0}` once they end. The ledger
+returns to `{live_jobs: 0}` once they end, and that a job
+queued behind its root's full slots wakes its idle owner once with a notice before its
+timeout (ADR 0127 §7a). The attention recovery suite checks that entering
+`needs_attention` wakes the owner exactly once, also across restarts. The ledger and
+runtime suites cover each notice's idempotence, reason and suppression once the job
+moves on, and `ketplus_team_wait_tests` that a delivered wake ends a `team_wait` and that
+a member owning a live job is not nudged. The ledger
 suite also injects prune failure and reopens tombstones to verify expired requests
 cannot execute again after defaults change.
 

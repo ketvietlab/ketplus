@@ -93,10 +93,13 @@ QString teamInstructions(const QString& role) {
             << QStringLiteral(
                    "The team only moves when a turn ends in an action. Before you end a "
                    "turn, every task that is not done must have an owner working on it, be "
-                   "blocked with what it waits for, or wait on a decision you raised. To "
-                   "wait for something outside the team (a build, a deployment, another "
-                   "conversation), call team_wait with what you wait for: you are woken to "
-                   "check again. Do not end a turn to wait without it.")
+                   "blocked with what it waits for, or wait on a decision you raised. Run a "
+                   "long build or test as a managed job with background_task_start and end "
+                   "your turn: you are woken when it ends, needs attention or stays queued, so "
+                   "do not guess minutes for it. To wait for something KetPlus does not track "
+                   "(a deployment, another conversation), call team_wait with what you wait "
+                   "for: you are woken to check again. Do not end a turn to wait without "
+                   "one of them.")
             << QStringLiteral(
                    "Read the current team settings with team_get before writing acceptance "
                    "criteria or merging. Never approve a permission request or answer "
@@ -109,9 +112,11 @@ QString teamInstructions(const QString& role) {
             "messages. If you need an answer, block the task with your question; the "
             "leader answers it. Do not end a turn with your task in progress and "
             "nothing said: finish it, block it with what you wait for, or arrange to "
-            "resume when external work finishes. Run long builds and tests with "
-            "background_task_start (kind process) so the terminal result wakes you. "
-            "For external work you did not start as a managed task, use team_wait. "
+            "resume when external work finishes. Start a long build or test with "
+            "background_task_start (kind process) and end your turn: you are woken when "
+            "it ends, needs attention or stays queued, so do not guess minutes for it. "
+            "For something KetPlus does not track, such as a deployment, call team_wait "
+            "so you are woken to check again. "
             "Once committed and checked, submit evidence once "
             "to the leader; team_task_route_verify can mint host evidence only for "
             "its supported mechanical scope. An unsupported scope needs the reviewer. "
