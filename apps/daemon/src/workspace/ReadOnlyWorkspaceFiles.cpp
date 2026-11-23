@@ -2,6 +2,7 @@
 #include "workspace/WorkspaceExposure.h"
 
 #include <QCryptographicHash>
+#include <QDateTime>
 #include <QDir>
 #include <QDirIterator>
 #include <QElapsedTimer>
@@ -9,7 +10,6 @@
 #include <QFileInfo>
 #include <QHash>
 #include <QJsonArray>
-#include <QDateTime>
 #include <QMetaObject>
 #include <QPointer>
 #include <QProcess>
@@ -58,10 +58,10 @@ OpenResult openBeneath(const QString& root, const QString& clean, QFile* file, q
         const int next = ::openat(directory, name.constData(), flags);
         if (next < 0) {
             const int openError = errno;
-            struct stat link {};
-            const bool symlink = ::fstatat(directory, name.constData(), &link,
-                                           AT_SYMLINK_NOFOLLOW) == 0 &&
-                                 S_ISLNK(link.st_mode);
+            struct stat link{};
+            const bool symlink =
+                ::fstatat(directory, name.constData(), &link, AT_SYMLINK_NOFOLLOW) == 0 &&
+                S_ISLNK(link.st_mode);
             ::close(directory);
             if (symlink)
                 return OpenResult::Symlink;
@@ -72,7 +72,7 @@ OpenResult openBeneath(const QString& root, const QString& clean, QFile* file, q
         ::close(directory);
         directory = next;
     }
-    struct stat status {};
+    struct stat status{};
     if (::fstat(directory, &status) != 0) {
         ::close(directory);
         return OpenResult::Failed;
@@ -236,23 +236,42 @@ QByteArray ReadOnlyWorkspaceFiles::git(const QStringList& arguments, const int m
     process.setArguments(hardenedGitArguments(canonicalRoot_) + arguments);
     process.setProcessEnvironment(*environment);
     process.setProcessChannelMode(QProcess::SeparateChannels);
+    process.setStandardErrorFile(QProcess::nullDevice());
     process.start(QIODevice::ReadOnly);
-    if (!process.waitForStarted(2'000) || !process.waitForFinished(10'000)) {
-        process.kill();
-        process.waitForFinished();
+    if (!process.waitForStarted(2'000)) {
         if (errorCode)
             *errorCode = QStringLiteral("unavailable");
         return {};
     }
-    QByteArray output = process.readAllStandardOutput();
+    QElapsedTimer deadline;
+    deadline.start();
+    QByteArray output;
+    for (;;) {
+        output += process.read(maximumBytes + 1 - output.size());
+        if (output.size() > maximumBytes) {
+            if (process.state() != QProcess::NotRunning) {
+                process.kill();
+                process.waitForFinished();
+            }
+            if (errorCode)
+                *errorCode = QStringLiteral("oversized");
+            return {};
+        }
+        if (process.state() == QProcess::NotRunning)
+            break;
+        const qint64 remaining = 10'000 - deadline.elapsed();
+        if (remaining <= 0) {
+            process.kill();
+            process.waitForFinished();
+            if (errorCode)
+                *errorCode = QStringLiteral("unavailable");
+            return {};
+        }
+        process.waitForReadyRead(int(remaining));
+    }
     if (process.exitStatus() != QProcess::NormalExit || process.exitCode() != 0) {
         if (errorCode)
             *errorCode = QStringLiteral("unavailable");
-        return {};
-    }
-    if (output.size() > maximumBytes) {
-        if (errorCode)
-            *errorCode = QStringLiteral("oversized");
         return {};
     }
     return output;
@@ -542,6 +561,9 @@ QJsonObject ReadOnlyWorkspaceFiles::tree(const QJsonObject& request) const {
                 continue;
             const QByteArray state = record.first(2);
             const QString relative = QString::fromUtf8(record.sliced(3));
+            // Porcelain -z emits the original path as the next NUL record for rename/copy.
+            if ((state.contains('R') || state.contains('C')) && index + 1 < records.size())
+                ++index;
             QString pathError;
             const QString absolute = resolved(relative, &pathError);
             if (relative.isEmpty() || absolute.isEmpty())
@@ -554,9 +576,8 @@ QJsonObject ReadOnlyWorkspaceFiles::tree(const QJsonObject& request) const {
             else if (state.contains('R') || state.contains('C'))
                 kind = QStringLiteral("renamed");
             changeKinds.insert(absolute, kind);
-            // Porcelain -z emits the original path as the next NUL record for rename/copy.
-            if ((state.contains('R') || state.contains('C')) && index + 1 < records.size())
-                ++index;
+            if (changeKinds.size() > maximumTreeCandidates)
+                return failure(QStringLiteral("oversized"));
         }
         for (const QString& path : changeKinds.keys())
             entries.append(QFileInfo(path));
@@ -565,8 +586,18 @@ QJsonObject ReadOnlyWorkspaceFiles::tree(const QJsonObject& request) const {
                       return left.absoluteFilePath() < right.absoluteFilePath();
                   });
     } else {
-        entries = QDir(directory).entryInfoList(
-            QDir::AllEntries | QDir::Hidden | QDir::NoDotAndDotDot, QDir::DirsFirst | QDir::Name);
+        QDirIterator iterator(directory, QDir::AllEntries | QDir::Hidden | QDir::NoDotAndDotDot);
+        while (iterator.hasNext()) {
+            if (entries.size() >= maximumTreeCandidates)
+                return failure(QStringLiteral("oversized"));
+            entries.append(iterator.nextFileInfo());
+        }
+        std::stable_sort(entries.begin(), entries.end(),
+                         [](const QFileInfo& left, const QFileInfo& right) {
+                             if (left.isDir() != right.isDir())
+                                 return left.isDir();
+                             return left.fileName() < right.fileName();
+                         });
     }
     entries.erase(
         std::remove_if(

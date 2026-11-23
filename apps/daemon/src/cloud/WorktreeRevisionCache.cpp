@@ -55,6 +55,38 @@ void addStamp(QByteArray* out, const QString& path) {
     out->append('\0');
 }
 
+QByteArray readMarker(const QString& path) {
+    if (!QFileInfo(path).isFile())
+        return {};
+    QFile file(path);
+    return file.open(QIODevice::ReadOnly) ? file.readLine(4096).trimmed() : QByteArray{};
+}
+
+void addHead(QByteArray* out, const QDir& git) {
+    QByteArray head = readMarker(git.filePath(QStringLiteral("HEAD")));
+    out->append(head);
+    out->append('\0');
+    if (!head.startsWith("ref: refs/"))
+        return;
+
+    const QString commonMarker = QString::fromUtf8(readMarker(git.filePath("commondir")));
+    const QDir common(commonMarker.isEmpty() ? git.absolutePath()
+                                             : git.absoluteFilePath(commonMarker));
+    // A ref can itself be symbolic. Bound the walk just as Git does.
+    for (int depth = 0; depth < 5 && head.startsWith("ref: refs/"); ++depth) {
+        const QString ref = QString::fromUtf8(head.mid(5));
+        if (QDir::cleanPath(ref) != ref || ref.contains(u'\\') || ref.contains(u'\0'))
+            break;
+        head = readMarker(common.filePath(ref));
+        out->append(head);
+        out->append('\0');
+    }
+    // Packing or deleting a branch may leave no loose ref to read.
+    addStamp(out, common.filePath(QStringLiteral("packed-refs")));
+    out->append(readMarker(common.filePath(QStringLiteral("reftable/tables.list"))));
+    out->append('\0');
+}
+
 } // namespace
 
 QByteArray WorktreeRevisionCache::fingerprint(const QString& worktreePath,
@@ -79,11 +111,11 @@ QByteArray WorktreeRevisionCache::fingerprint(const QString& worktreePath,
     if (git.isEmpty()) {
         out.append(QFileInfo(worktreePath).isDir() ? "no-git" : "no-worktree");
     } else {
-        // HEAD changes on checkout; its reflog on every move of HEAD, also one that leaves the
-        // index alone (a commit with nothing staged, reset --soft); the index on staging.
-        addStamp(&out, QDir(git).filePath(QStringLiteral("HEAD")));
-        addStamp(&out, QDir(git).filePath(QStringLiteral("logs/HEAD")));
-        addStamp(&out, QDir(git).filePath(QStringLiteral("index")));
+        const QDir metadata(git);
+        // A ref can move even when HEAD, its reflog and the index are all unchanged.
+        addHead(&out, metadata);
+        addStamp(&out, metadata.filePath(QStringLiteral("logs/HEAD")));
+        addStamp(&out, metadata.filePath(QStringLiteral("index")));
     }
     return out;
 }

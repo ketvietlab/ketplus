@@ -1,7 +1,10 @@
 #include "cloud/WorktreeRevisionCache.h"
+#include "cloud/WorktreeBranches.h"
 
 #include <QDir>
 #include <QFile>
+#include <QFileInfo>
+#include <QProcess>
 #include <QTemporaryDir>
 #include <QtTest>
 
@@ -132,6 +135,55 @@ class WorktreeRevisionCacheTest final : public QObject {
         const QByteArray before = WorktreeRevisionCache::fingerprint(worktree, sessions);
         write(QDir(gitDir).filePath(QStringLiteral("HEAD")), "0123456789abcdef\n");
         QVERIFY(WorktreeRevisionCache::fingerprint(worktree, sessions) != before);
+    }
+
+    void linkedWorktreeInvalidatesWhenSharedBranchMovesOrDisappears() {
+        QTemporaryDir dir;
+        const QString worktree = dir.filePath(QStringLiteral("checkout"));
+        const QString git = dir.filePath(QStringLiteral("repo/.git/worktrees/checkout"));
+        const QString branch = dir.filePath(QStringLiteral("repo/.git/refs/heads/topic"));
+        QVERIFY(QDir().mkpath(worktree));
+        QVERIFY(QDir().mkpath(git));
+        QVERIFY(QDir().mkpath(QFileInfo(branch).absolutePath()));
+        write(QDir(worktree).filePath(QStringLiteral(".git")), "gitdir: " + git.toUtf8() + "\n");
+        write(QDir(git).filePath(QStringLiteral("commondir")), "../..\n");
+        write(QDir(git).filePath(QStringLiteral("HEAD")), "ref: refs/heads/topic\n");
+        write(branch, QByteArray(40, 'a') + '\n');
+
+        WorktreeRevisionCache cache;
+        const auto compute = [&branch](const QString&) {
+            QFile file(branch);
+            return file.open(QIODevice::ReadOnly) ? QString::fromLatin1(file.readAll().trimmed())
+                                                  : QString();
+        };
+        QCOMPARE(cache.revision(worktree, {}, 0, compute), QString(40, u'a'));
+        write(branch, QByteArray(40, 'b') + '\n');
+        QCOMPARE(cache.revision(worktree, {}, 1, compute), QString(40, u'b'));
+        QVERIFY(QFile::remove(branch));
+        QVERIFY(cache.revision(worktree, {}, 2, compute).isEmpty());
+    }
+
+    void branchListingReflectsExternalDeletion() {
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const auto git = [&dir](const QStringList& arguments) {
+            QProcess process;
+            process.setWorkingDirectory(dir.path());
+            process.start(QStringLiteral("git"), arguments);
+            QVERIFY(process.waitForFinished());
+            QCOMPARE(process.exitCode(), 0);
+        };
+        git({"init", "-q", "-b", "main"});
+        git({"-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "-c",
+             "commit.gpgsign=false", "commit", "--allow-empty", "-qm", "Initial commit"});
+        git({"branch", "review-topic"});
+        const auto before = readRepositoryBranches(dir.path());
+        QVERIFY(before.ok);
+        QVERIFY(before.local.contains(QStringLiteral("review-topic")));
+        git({"branch", "-d", "review-topic"});
+        const auto after = readRepositoryBranches(dir.path());
+        QVERIFY(after.ok);
+        QVERIFY(!after.local.contains(QStringLiteral("review-topic")));
     }
 
     void sessionOrderDoesNotMatterAndUnusedWorktreesAreForgotten() {

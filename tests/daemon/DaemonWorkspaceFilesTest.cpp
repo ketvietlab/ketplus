@@ -56,6 +56,7 @@ class DaemonWorkspaceFilesTest final : public QObject {
 
   private slots:
     void readOnlyOperationsAreRevisionFencedAndBounded();
+    void treeBoundsEnumerationAndKeepsPageOrder();
     void rejectsScopeTraversalSymlinkBinaryOversizedAndStale();
     void searchHasBoundedDeadlineAndHonestTruncation();
     void revisionFingerprintsLargeDirtyFilesByMetadata();
@@ -500,6 +501,47 @@ void DaemonWorkspaceFilesTest::readOnlyOperationsAreRevisionFencedAndBounded() {
                 .contains(QStringLiteral("new file mode")));
 }
 
+void DaemonWorkspaceFilesTest::treeBoundsEnumerationAndKeepsPageOrder() {
+    QTemporaryDir root;
+    QVERIFY(root.isValid());
+    QVERIFY(QDir(root.path()).mkdir(QStringLiteral("z-folder")));
+    const QString unicodeName = QStringLiteral("tệp-雪.txt");
+    writeFile(root.filePath(unicodeName), "hello");
+    const ReadOnlyWorkspaceFiles files(scopeFor(root.path()),
+                                       ReadOnlyWorkspaceFiles::RevisionFence::Published);
+    QJsonObject query = request(QStringLiteral("published-revision"));
+    query.insert(QStringLiteral("limit"), 1);
+    const QJsonObject first = files.tree(query);
+    QVERIFY(first.value(QStringLiteral("ok")).toBool());
+    QCOMPARE(first.value(QStringLiteral("entries")).toArray().at(0).toObject().value("name"),
+             QJsonValue(QStringLiteral("z-folder")));
+    QCOMPARE(first.value(QStringLiteral("next_offset")).toInt(), 1);
+    query.insert(QStringLiteral("offset"), 1);
+    const QJsonObject second = files.tree(query);
+    QCOMPARE(second.value(QStringLiteral("entries")).toArray().at(0).toObject().value("name"),
+             QJsonValue(unicodeName));
+    QCOMPARE(second.value(QStringLiteral("next_offset")).toInt(), -1);
+    QCOMPARE(
+        files.file(request(QStringLiteral("published-revision"), unicodeName)).value("content"),
+        QJsonValue(QStringLiteral("hello")));
+
+    for (int index = 0; index < ReadOnlyWorkspaceFiles::maximumTreeCandidates - 2; ++index) {
+        QFile candidate(root.filePath(QStringLiteral("entry-%1").arg(index)));
+        QVERIFY(candidate.open(QIODevice::WriteOnly));
+    }
+    query.remove(QStringLiteral("offset"));
+    query.insert(QStringLiteral("limit"), 100'000);
+    const QJsonObject atLimit = files.tree(query);
+    QCOMPARE(atLimit.value(QStringLiteral("entries")).toArray().size(),
+             ReadOnlyWorkspaceFiles::maximumTreeEntries);
+
+    writeFile(root.filePath(QStringLiteral("overflow.txt")), {});
+    query.insert(QStringLiteral("limit"), 1);
+    const QJsonObject oversized = files.tree(query);
+    QCOMPARE(oversized.value(QStringLiteral("error_code")).toString(), QStringLiteral("oversized"));
+    QVERIFY(!oversized.contains(QStringLiteral("entries")));
+}
+
 void DaemonWorkspaceFilesTest::searchHasBoundedDeadlineAndHonestTruncation() {
     QTemporaryDir root;
     QVERIFY(root.isValid());
@@ -556,6 +598,16 @@ void DaemonWorkspaceFilesTest::rejectsScopeTraversalSymlinkBinaryOversizedAndSta
     wrong.insert(QStringLiteral("machine_id"), QStringLiteral("other"));
     QCOMPARE(files.file(wrong).value(QStringLiteral("error_code")).toString(),
              QStringLiteral("scope_forbidden"));
+    for (const auto& key : {QStringLiteral("repository_id"), QStringLiteral("worktree_id")}) {
+        QJsonObject unknown = request(revision, QStringLiteral("safe.txt"));
+        unknown.insert(key, QStringLiteral("unregistered"));
+        QCOMPARE(files.file(unknown).value(QStringLiteral("error_code")).toString(),
+                 QStringLiteral("scope_forbidden"));
+    }
+    QCOMPARE(files.file(request(revision, root.filePath(QStringLiteral("safe.txt"))))
+                 .value(QStringLiteral("error_code"))
+                 .toString(),
+             QStringLiteral("invalid_path"));
     QCOMPARE(files.file(request(revision, QStringLiteral("../secret.txt")))
                  .value(QStringLiteral("error_code"))
                  .toString(),
