@@ -153,7 +153,8 @@ class CloudControlClient final : public QObject {
         QString workspace;
     };
     void sendHeartbeatBatches(const QList<QJsonArray>& batches, qsizetype index,
-                              const AccountFence& account);
+                              const AccountFence& account,
+                              const std::optional<QJsonArray>& catalog = std::nullopt);
     void uploadEvents();
     // events.forward_only/1 in a heartbeat answer: events reach clients only as live frames and
     // host pages, so nothing is uploaded. Withdrawing it resumes uploads from the journal head.
