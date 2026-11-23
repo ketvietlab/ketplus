@@ -69,8 +69,12 @@ QString MainWindow::worktreeRemovalBlocker(const QString& target) const {
         }
     }
     // A conversation can run in a checkout other than the one it was started in.
-    if (agentManager_->runningCheckoutPaths().contains(target))
-        reasons.append(tr("an agent is running in it"));
+    for (const auto& checkout : agentManager_->runningCheckoutPaths()) {
+        if (contains(checkout)) {
+            reasons.append(tr("an agent is running in it"));
+            break;
+        }
+    }
     return reasons.join(QStringLiteral("; "));
 }
 
@@ -79,7 +83,10 @@ void MainWindow::showAgentWorktreeContextMenu(const QString& path) {
 }
 
 void MainWindow::showWorktreeMenu(const QString& path, const QPoint& globalPosition) {
-    const auto target = QFileInfo(path).canonicalFilePath();
+    const QFileInfo candidate(path);
+    if (!candidate.isAbsolute() || candidate.isSymLink())
+        return;
+    const auto target = candidate.canonicalFilePath();
     bool known = false;
     for (const auto& tree : worktrees_)
         if (!tree.bare && !tree.prunable && QFileInfo(tree.path).canonicalFilePath() == target)
@@ -152,8 +159,8 @@ void MainWindow::showWorktreeMenu(const QString& path, const QPoint& globalPosit
     const auto confirmation = QMessageBox::warning(
         this, tr("Delete worktree"),
         tr("Permanently delete this linked worktree directory?\n%1\n\nThe branch and archived "
-           "conversation history will be kept. Git will refuse dirty, untracked, or locked "
-           "worktrees.")
+           "conversation history will be kept. Worktrees in use or with uncommitted changes, "
+           "untracked files, or unpushed commits are kept.")
             .arg(QDir::toNativeSeparators(target)),
         QMessageBox::Ok | QMessageBox::Cancel, QMessageBox::Cancel);
     if (confirmation != QMessageBox::Ok)

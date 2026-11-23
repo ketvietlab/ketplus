@@ -507,12 +507,27 @@ class TeamStorageTest final : public QObject {
         QVERIFY(git(root.path(), {"init", "--bare", remote}) != "<failed>");
         QVERIFY(git(root.path(), {"clone", remote, main}) != "<failed>");
         QVERIFY(write(main + "/a.txt", "a\n"));
-        QVERIFY(git(main, {"add", "a.txt"}) != "<failed>");
+        QVERIFY(write(main + "/.gitignore", "ignored.txt\n"));
+        QVERIFY(git(main, {"add", "a.txt", ".gitignore"}) != "<failed>");
         QVERIFY(git(main, {"commit", "-m", "a"}) != "<failed>");
         QVERIFY(git(main, {"push", "origin", "HEAD:main"}) != "<failed>");
         QVERIFY(git(main, {"worktree", "add", "-b", "team/1/T-1", worktree}) != "<failed>");
 
         QVERIFY(team_git::removeWorktree(main, main).contains("main checkout"));
+
+        QVERIFY(write(worktree + "/a.txt", "dirty\n"));
+        QVERIFY(team_git::removeWorktree(main, worktree).contains("uncommitted"));
+        QVERIFY(git(worktree, {"restore", "a.txt"}) != "<failed>");
+
+        QVERIFY(write(worktree + "/ignored.txt", "keep\n"));
+        QVERIFY(team_git::removeWorktree(main, worktree).contains("ignored files"));
+        QVERIFY(QFile::remove(worktree + "/ignored.txt"));
+
+        QVERIFY(git(worktree, {"update-index", "--assume-unchanged", "a.txt"}) != "<failed>");
+        QVERIFY(write(worktree + "/a.txt", "keep despite the index flag\n"));
+        QVERIFY(team_git::removeWorktree(main, worktree).contains("excludes files"));
+        QVERIFY(git(worktree, {"update-index", "--no-assume-unchanged", "a.txt"}) != "<failed>");
+        QVERIFY(git(worktree, {"restore", "a.txt"}) != "<failed>");
 
         QVERIFY(write(worktree + "/new.txt", "untracked\n"));
         QString refused = team_git::removeWorktree(main, worktree);
@@ -527,6 +542,19 @@ class TeamStorageTest final : public QObject {
         QVERIFY(QFileInfo(worktree).isDir());
 
         QVERIFY(git(worktree, {"push", "origin", "team/1/T-1"}) != "<failed>");
+#if defined(Q_OS_LINUX) || defined(Q_OS_MACOS)
+        const QString nested = QDir(worktree).filePath("nested");
+        QVERIFY(QDir().mkpath(nested));
+        QProcess active;
+        active.setWorkingDirectory(nested);
+        active.start("sleep", {"30"});
+        QVERIFY(active.waitForStarted());
+        refused = team_git::removeWorktree(main, worktree);
+        active.kill();
+        QVERIFY(active.waitForFinished());
+        QVERIFY2(refused.contains("working directory"), qPrintable(refused));
+        QVERIFY(QDir(nested).exists());
+#endif
         QVERIFY(git(main, {"worktree", "lock", worktree}) != "<failed>");
         refused = team_git::removeWorktree(main, worktree);
         QVERIFY2(refused.startsWith("git worktree remove failed"), qPrintable(refused));

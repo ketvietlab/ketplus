@@ -207,21 +207,25 @@ QJsonObject SessionHost::resolveResource(const QJsonObject& request) {
 // A conversation outlives its checkout. Use the recorded repository only to list
 // replacements; never silently change where a user's next turn executes.
 QString SessionHost::worktreeCatalogRoot(const Session& session) const {
-    if (QFileInfo(session.stored.worktreePath).isDir()) {
-        const auto common = commonDirectory(session.stored.worktreePath);
+    const auto path = session.stored.worktreePath;
+    const auto recorded = journal_->worktreeRepositories().value(path);
+    const auto common = QFileInfo(path).isDir() ? commonDirectory(path) : QString{};
+    if (!common.isEmpty() &&
+        (recorded.isEmpty() || common == QDir(recorded).filePath(QStringLiteral(".git")))) {
         if (QFileInfo(common).fileName() == ".git") {
-            journal_->rememberWorktree(session.stored.worktreePath);
-            journal_->rememberWorktreeRepository(session.stored.worktreePath,
-                                                 QFileInfo(common).absolutePath());
+            journal_->rememberWorktree(path);
+            journal_->rememberWorktreeRepository(path, QFileInfo(common).absolutePath());
         }
-        return session.stored.worktreePath;
+        return path;
     }
-    const auto root = journal_->worktreeRepositories().value(session.stored.worktreePath);
-    return !root.isEmpty() && !commonDirectory(root).isEmpty() ? root : QString{};
+    return !recorded.isEmpty() &&
+                   commonDirectory(recorded) == QDir(recorded).filePath(QStringLiteral(".git"))
+               ? recorded
+               : QString{};
 }
 
 void SessionHost::rememberRepositoryIdentity(const QString& worktree) {
-    if (!QFileInfo(worktree).isDir() || journal_->worktreeRepositories().contains(worktree))
+    if (!QFileInfo(worktree).isDir() || !journal_->worktreeRepositories().value(worktree).isEmpty())
         return;
     QThreadPool::globalInstance()->start([guard = QPointer<SessionHost>(this), worktree] {
         const QString common = commonDirectory(worktree);
@@ -298,14 +302,21 @@ SessionHost::WorktreeListing SessionHost::readWorktreeListing(const QString& ses
     listing.requested = requested;
     listing.sessionExists = QFileInfo(sessionWorktree).isDir();
     // worktreeCatalogRoot, without the journal: a conversation outlives its checkout.
-    if (listing.sessionExists) {
+    if (listing.sessionExists)
         listing.sessionCommon = commonDirectory(sessionWorktree);
+    // A different repository can occupy the same directory after a move or removal.
+    if (!recordedRoot.isEmpty() &&
+        listing.sessionCommon != QDir(recordedRoot).filePath(QStringLiteral(".git")))
+        listing.sessionExists = false;
+    if (listing.sessionExists) {
         listing.sessionCatalogRoot = sessionWorktree;
         listing.sessionCatalogCommon = listing.sessionCommon;
     } else if (!recordedRoot.isEmpty()) {
         listing.sessionCatalogCommon = commonDirectory(recordedRoot);
-        if (!listing.sessionCatalogCommon.isEmpty())
+        if (listing.sessionCatalogCommon == QDir(recordedRoot).filePath(QStringLiteral(".git")))
             listing.sessionCatalogRoot = recordedRoot;
+        else
+            listing.sessionCatalogCommon.clear();
     }
     listing.catalogRoot =
         requested.isEmpty() ? listing.sessionCatalogRoot : normalizedWorktree(requested);
@@ -323,8 +334,7 @@ QJsonObject SessionHost::sessionWorktrees(const QJsonObject& request) {
         return rejected;
     const auto payload = request.value("payload").toObject();
     const auto worktree = session->stored.worktreePath;
-    const auto recorded =
-        QFileInfo(worktree).isDir() ? QString{} : journal_->worktreeRepositories().value(worktree);
+    const auto recorded = journal_->worktreeRepositories().value(worktree);
     const auto requested = payload.value("repository_path").toString();
     // A listing read before the conversation moved describes another checkout.
     const auto* prefetched = prefetchedWorktreeListing_;
@@ -342,8 +352,7 @@ void SessionHost::sessionWorktreesDeferred(const QJsonObject& request, const QSt
         return;
     }
     const auto worktree = session->stored.worktreePath;
-    const auto recorded =
-        QFileInfo(worktree).isDir() ? QString{} : journal_->worktreeRepositories().value(worktree);
+    const auto recorded = journal_->worktreeRepositories().value(worktree);
     const auto requested = request.value("payload").toObject().value("repository_path").toString();
     // Git lists the worktrees on the pool; handleCommand then answers with every check it
     // makes for any other command, using that listing when the conversation has not moved.
@@ -360,9 +369,7 @@ void SessionHost::sessionWorktreesDeferred(const QJsonObject& request, const QSt
                     guard->sessions_.constFind(request.value("session_id").toString());
                 if (current != guard->sessions_.cend()) {
                     const auto now = current->stored.worktreePath;
-                    const auto recordedNow =
-                        QFileInfo(now).isDir() ? QString{}
-                                               : guard->journal_->worktreeRepositories().value(now);
+                    const auto recordedNow = guard->journal_->worktreeRepositories().value(now);
                     if (now != listing.sessionWorktree || recordedNow != listing.recordedRoot) {
                         guard->sessionWorktreesDeferred(request, clientId, std::move(done));
                         return;
@@ -429,7 +436,8 @@ QJsonObject SessionHost::worktreePage(Session& current, const QJsonObject& paylo
         // The repository's main worktree, marked "Main" in the picker.
         entry.insert("main", !repositoryRoot.isEmpty() &&
                                  path == QFileInfo(repositoryRoot).canonicalFilePath());
-        if (path == QFileInfo(session->stored.worktreePath).canonicalFilePath())
+        if (listing.sessionExists &&
+            path == QFileInfo(session->stored.worktreePath).canonicalFilePath())
             currentBranch = entry.value("branch").toString();
         if (search.isEmpty() || (branch + " " + path).contains(search, Qt::CaseInsensitive))
             ranked.append(entry);
@@ -632,6 +640,12 @@ QJsonObject SessionHost::moveSessionWorktree(Session& session, const QString& ta
         journal_->switchSessionWorktree(session.stored, target, messageId, result, &error);
     if (cursor < 0)
         return failure("journal_error", error);
+    if (const auto repository = sidebarRepositoryAtCreation(target);
+        repository && !repository->isEmpty() &&
+        QFileInfo(QDir(*repository).filePath(QStringLiteral(".git"))).isDir()) {
+        journal_->rememberWorktree(target);
+        journal_->rememberWorktreeRepository(target, *repository);
+    }
     session.stored.worktreePath = target;
     session.stored.contextRevision = revision;
     session.stored.lastCursor = cursor;
@@ -646,12 +660,15 @@ QJsonObject SessionHost::moveSessionWorktree(Session& session, const QString& ta
 }
 
 QString SessionHost::executionDirectory(const Session& session) const {
-    if (QFileInfo(session.stored.worktreePath).isDir())
-        return session.stored.worktreePath;
+    const auto checkout = session.stored.worktreePath;
+    const auto recorded = journal_->worktreeRepositories().value(checkout);
+    if (QFileInfo(checkout).isDir() &&
+        (recorded.isEmpty() || sidebarRepositoryAtCreation(checkout) == recorded))
+        return checkout;
     const auto root = worktreeCatalogRoot(session);
     if (!root.isEmpty())
         return root;
-    QString path = session.stored.worktreePath;
+    QString path = QFileInfo(checkout).absolutePath();
     while (!path.isEmpty() && !QFileInfo(path).isDir()) {
         const auto parent = QFileInfo(path).absolutePath();
         if (parent == path)

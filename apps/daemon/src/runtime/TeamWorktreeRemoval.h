@@ -15,9 +15,8 @@ namespace ketplus::daemon::team_git {
 
 // The bytes the folder takes on disk, without following links out of it.
 [[nodiscard]] qint64 sizeOnDisk(const QString& folder);
-// Refuses a main checkout, a worktree with uncommitted or untracked changes and one with
-// commits on no remote branch; otherwise runs `git worktree remove` without force and then
-// `git worktree prune` in `repository`. The error in words, or empty when it was removed.
+// Checks and removes an unused, clean and pushed linked checkout.
+// The error in words, or empty once Git removes the directory.
 [[nodiscard]] QString removeWorktree(const QString& repository, const QString& worktree);
 // T-23: removeWorktree on a thread of `pool`, so deleting several gigabytes holds no event
 // loop; `done` is called with its answer on the thread `receiver` lives on, and not at all

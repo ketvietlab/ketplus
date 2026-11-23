@@ -106,7 +106,6 @@ class AgentConversationDeleteDialog final : public QWidget {
                                            const QString& reference = {},
                                            QWidget* parent = nullptr);
     [[nodiscard]] bool deleteLinkedWorktree() const;
-    [[nodiscard]] bool forceDeleteWorktree() const;
     // As AgentWorktreeDialog::present.
     ket::Dialog* present(QWidget* anchor);
 
@@ -115,10 +114,7 @@ class AgentConversationDeleteDialog final : public QWidget {
     void archiveRequested();
 
   private:
-    void updateConfirm();
-
     QCheckBox* deleteLinked_{nullptr};
-    QCheckBox* force_{nullptr};
     QPointer<ket::Button> confirm_;
 };
 

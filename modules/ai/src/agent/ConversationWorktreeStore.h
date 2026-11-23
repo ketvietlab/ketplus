@@ -12,6 +12,7 @@ struct ConversationWorktreeRecord final {
     QString path;
     QString role;
     bool hidden{false};
+    QString gitIdentity;
 };
 
 // Desktop-owned SQLite map from conversation id to Git worktrees that conversation
@@ -30,6 +31,7 @@ class ConversationWorktreeStore final {
     [[nodiscard]] QVector<ConversationWorktreeRecord> list(const QString& conversationId) const;
     [[nodiscard]] QStringList visiblePaths(const QString& conversationId) const;
     [[nodiscard]] QStringList allPaths(const QString& conversationId) const;
+    [[nodiscard]] QStringList removablePaths(const QString& conversationId) const;
     [[nodiscard]] bool containsPath(const QString& path,
                                     const QString& exceptConversationId = {}) const;
 

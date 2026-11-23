@@ -242,7 +242,7 @@ AgentSessionManager::conversationOwnedWorktreePaths(const QString& worktreePath,
     Q_UNUSED(worktreePath);
     if (!worktreeStore_ || conversationId.isEmpty())
         return {};
-    return worktreeStore_->allPaths(conversationId);
+    return worktreeStore_->removablePaths(conversationId);
 }
 
 void AgentSessionManager::claimConversationWorktree(const QString& worktreePath,

@@ -86,10 +86,10 @@ Qt application shell
 - `core/src/git` owns read-only repository discovery, status/diff requests, porcelain
   parsing, and linked-worktree discovery. It never stages, commits, or changes
   the checkout. The Pro desktop shell separately owns the Agent Workspace's
-  narrowly scoped `git worktree add -b` and `git worktree remove` (force only
-  when the user opts in from conversation deletion of stored linked worktrees)
-  processes, including bounded output and a
-  timeout; this does not expand the public Git service's mutation surface.
+  narrowly scoped `git worktree add -b` process, including bounded output and a
+  timeout. Pro desktop and daemon use the same linked-worktree removal checks
+  before running `git worktree remove` and then `git worktree prune`. The public
+  Git service remains read-only.
 - `core/src/terminal` owns the embedded terminal surface, VT state, scrollback, and
   process transport. `PtyProcess` keeps one public API and delegates to a
   `PtyBackend`: `PtyBackendPosix.cpp` (forkpty) or `PtyBackendWindows.cpp` (ConPTY, chosen by

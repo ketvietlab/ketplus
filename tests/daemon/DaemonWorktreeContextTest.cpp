@@ -756,6 +756,49 @@ class DaemonWorktreeContextTest final : public QObject {
         QCOMPARE(f.journal->sessions().first().worktreePath,
                  QFileInfo(foreignFeature).canonicalFilePath());
     }
+    void movedCheckoutKeepsItsRecordedRepositoryWhenTheOldPathIsReused() {
+        Fixture f;
+        QVERIFY(f.initialize());
+        QVERIFY(f.move(f.b, 1, "switch").value("ok").toBool());
+        QCOMPARE(f.journal->worktreeRepositories().value(f.b), f.a);
+        const QString moved = f.directory.filePath("moved-feature");
+        QVERIFY(git(f.a, {"worktree", "move", f.b, moved}));
+
+        QVERIFY(QDir().mkpath(f.b));
+        QVERIFY(git(f.b, {"init", "-b", "unrelated"}));
+        QVERIFY(
+            git(f.b, {"-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid", "-c",
+                      "commit.gpgsign=false", "commit", "--allow-empty", "-m", "foreign"}));
+        const auto page = f.call("session.worktrees", "after-move");
+        QVERIFY(page.value("ok").toBool());
+        QCOMPARE(page.value("repository_path").toString(), f.a);
+        QCOMPARE(page.value("worktree_path").toString(), f.b);
+        QVERIFY(page.value("current_branch").toString().isEmpty());
+        QJsonObject deferred;
+        f.host->handleCommandDeferred(request("session.worktrees", "after-move-deferred"),
+                                      "isolated-context-test",
+                                      [&](const QJsonObject& result) { deferred = result; });
+        QTRY_VERIFY_WITH_TIMEOUT(!deferred.isEmpty(), 5000);
+        QCOMPARE(deferred.value("repository_path"), page.value("repository_path"));
+        QCOMPARE(deferred.value("worktrees"), page.value("worktrees"));
+        const auto entries = page.value("worktrees").toArray();
+        QCOMPARE(entries.size(), 2);
+        for (const auto& value : entries)
+            QVERIFY(value.toObject().value("worktree_path").toString() != f.b);
+        QCOMPARE(f.journal->sessions().first().worktreePath, f.b);
+        QVERIFY(f.call("session.start_turn", "after-reuse",
+                       {{"prompt", "hello"}, {"expected_context_revision", 2}})
+                    .value("ok")
+                    .toBool());
+        QTRY_COMPARE_WITH_TIMEOUT(f.journal->sessions().first().state, "ready", 5000);
+        const auto encodedPath = [](const QString& path) {
+            const auto json = QJsonDocument(QJsonArray{path}).toJson(QJsonDocument::Compact);
+            return json.mid(1, json.size() - 2);
+        };
+        QVERIFY(f.output().contains("cwd:" + encodedPath(f.a)));
+        QVERIFY(!f.output().contains("cwd:" + encodedPath(f.b)));
+    }
+
     // #405 review: with the conversation's checkout gone, browsing a repository that holds
     // the daemon's working directory still does not enrol it.
     void browsingWithAMissingCheckoutDoesNotEnrol() {

@@ -17,6 +17,9 @@ void runGit(QObject* owner, const QString& directory, const QStringList& argumen
     auto* process = new QProcess(owner);
     process->setWorkingDirectory(directory);
     auto environment = QProcessEnvironment::systemEnvironment();
+    for (const auto& key : environment.keys())
+        if (key.startsWith(QStringLiteral("GIT_"), Qt::CaseInsensitive))
+            environment.remove(key);
     environment.insert(QStringLiteral("GIT_TERMINAL_PROMPT"), QStringLiteral("0"));
     if (!indexFile.isEmpty())
         environment.insert(QStringLiteral("GIT_INDEX_FILE"), indexFile);

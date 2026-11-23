@@ -1,9 +1,13 @@
 #include "app/AgentWorktreeCreator.h"
 
+#include "LinkedWorktreeRemoval.h"
+
 #include <QDir>
 #include <QFileInfo>
+#include <QFutureWatcher>
 #include <QProcessEnvironment>
 #include <QStandardPaths>
+#include <QtConcurrentRun>
 
 namespace ketplus {
 namespace {
@@ -62,7 +66,8 @@ void AgentWorktreeCreator::create(const QString& repositoryPath, const QString& 
     }
 
     branchName_ = branchName.trimmed();
-    if (baseBranch.trimmed().isEmpty() || baseBranch.startsWith('-')) {
+    const QString base = baseBranch.trimmed();
+    if (base.isEmpty() || base.startsWith('-')) {
         emit failed(QStringLiteral("Select a valid base branch."));
         return;
     }
@@ -77,20 +82,35 @@ void AgentWorktreeCreator::create(const QString& repositoryPath, const QString& 
         return;
     }
 
-    targetPath_ = worktreePath(primaryWorktreePath, branchName_);
-    if (QFileInfo::exists(targetPath_)) {
+    const QFileInfo primary(primaryWorktreePath);
+    const QFileInfo repository(repositoryPath);
+    if (!primary.isAbsolute() || !primary.isDir() || !repository.isAbsolute() ||
+        !repository.isDir()) {
+        emit failed(QStringLiteral("The repository or primary worktree is unavailable."));
+        return;
+    }
+    targetPath_ = worktreePath(primary.canonicalFilePath(), branchName_);
+    const QFileInfo target(targetPath_);
+    if (target.absolutePath() != primary.canonicalPath() ||
+        branchName_.contains(QLatin1Char('\\')) || branchName_.contains(QChar(u'\0'))) {
+        emit failed(QStringLiteral("Enter a valid branch name."));
+        return;
+    }
+    if (target.exists() || target.isSymLink()) {
         emit failed(QStringLiteral("The inferred worktree path already exists:\n%1")
                         .arg(QDir::toNativeSeparators(targetPath_)));
         return;
     }
 
     output_.clear();
-    removing_ = false;
     pruning_ = false;
     timedOut_ = false;
     active_ = true;
 
     QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
+    for (const auto& key : environment.keys())
+        if (key.startsWith(QStringLiteral("GIT_"), Qt::CaseInsensitive))
+            environment.remove(key);
     environment.insert(QStringLiteral("GIT_TERMINAL_PROMPT"), QStringLiteral("0"));
     environment.insert(QStringLiteral("GIT_PAGER"), QStringLiteral("cat"));
     process_.setProcessEnvironment(environment);
@@ -98,7 +118,7 @@ void AgentWorktreeCreator::create(const QString& repositoryPath, const QString& 
     process_.setProgram(git);
     process_.setArguments({QStringLiteral("-c"), QStringLiteral("color.ui=false"),
                            QStringLiteral("worktree"), QStringLiteral("add"), QStringLiteral("-b"),
-                           branchName_, QStringLiteral("--"), targetPath_, baseBranch});
+                           branchName_, QStringLiteral("--"), targetPath_, base});
     process_.start();
     timeout_.start(creationTimeoutMs);
 }
@@ -121,8 +141,6 @@ void AgentWorktreeCreator::finish(const bool succeeded, const QString& fallbackE
     if (succeeded) {
         if (pruning_)
             emit pruned();
-        else if (removing_)
-            emit removed(targetPath_);
         else
             emit created(targetPath_, branchName_);
         return;
@@ -139,42 +157,24 @@ void AgentWorktreeCreator::finish(const bool succeeded, const QString& fallbackE
 }
 
 void AgentWorktreeCreator::remove(const QString& repositoryPath, const QString& worktreePath,
-                                  const bool force) {
+                                  const QString& expectedIdentity) {
     if (active_) {
         emit failed(QStringLiteral("A worktree operation is already running."));
         return;
     }
-    const auto target = QFileInfo(worktreePath).canonicalFilePath();
-    if (target.isEmpty() || target == QFileInfo(repositoryPath).canonicalFilePath() ||
-        !QFileInfo(QDir(target).filePath(".git")).isFile()) {
-        emit failed(QStringLiteral("Only an inactive linked worktree can be removed."));
-        return;
-    }
-    const QString git = QStandardPaths::findExecutable(QStringLiteral("git"));
-    if (git.isEmpty()) {
-        emit failed(QStringLiteral("Git was not found on PATH."));
-        return;
-    }
-    output_.clear();
-    targetPath_ = target;
-    timedOut_ = false;
-    removing_ = true;
-    pruning_ = false;
     active_ = true;
-    auto environment = QProcessEnvironment::systemEnvironment();
-    environment.insert(QStringLiteral("GIT_TERMINAL_PROMPT"), QStringLiteral("0"));
-    environment.insert(QStringLiteral("GIT_PAGER"), QStringLiteral("cat"));
-    process_.setProcessEnvironment(environment);
-    process_.setWorkingDirectory(repositoryPath);
-    process_.setProgram(git);
-    QStringList arguments{QStringLiteral("-c"), QStringLiteral("color.ui=false"),
-                          QStringLiteral("worktree"), QStringLiteral("remove")};
-    if (force)
-        arguments.append(QStringLiteral("--force"));
-    arguments << QStringLiteral("--") << target;
-    process_.setArguments(arguments);
-    process_.start();
-    timeout_.start(creationTimeoutMs);
+    auto* watcher = new QFutureWatcher<QString>(this);
+    connect(watcher, &QFutureWatcher<QString>::finished, this, [this, watcher, worktreePath] {
+        const QString error = watcher->result();
+        watcher->deleteLater();
+        active_ = false;
+        if (error.isEmpty())
+            emit removed(worktreePath);
+        else
+            emit failed(error);
+    });
+    watcher->setFuture(QtConcurrent::run(git::removeLinkedWorktree, repositoryPath, worktreePath,
+                                         expectedIdentity));
 }
 
 void AgentWorktreeCreator::prune(const QString& repositoryPath) {
@@ -195,10 +195,12 @@ void AgentWorktreeCreator::prune(const QString& repositoryPath) {
     output_.clear();
     targetPath_.clear();
     timedOut_ = false;
-    removing_ = false;
     pruning_ = true;
     active_ = true;
     auto environment = QProcessEnvironment::systemEnvironment();
+    for (const auto& key : environment.keys())
+        if (key.startsWith(QStringLiteral("GIT_"), Qt::CaseInsensitive))
+            environment.remove(key);
     environment.insert(QStringLiteral("GIT_TERMINAL_PROMPT"), QStringLiteral("0"));
     environment.insert(QStringLiteral("GIT_PAGER"), QStringLiteral("cat"));
     process_.setProcessEnvironment(environment);

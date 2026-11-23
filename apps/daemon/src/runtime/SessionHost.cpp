@@ -1402,7 +1402,8 @@ QJsonObject SessionHost::startTurn(const QJsonObject& request, bool localClient,
             QStringLiteral("KetPlus could not turn off computer use for this remote turn."));
     // Persist repository identity before a checkout is removed; git runs off this thread.
     rememberRepositoryIdentity(it->stored.worktreePath);
-    const bool worktreeMissing = !QFileInfo(it->stored.worktreePath).isDir();
+    const QString turnDirectory = executionDirectory(*it);
+    const bool worktreeMissing = turnDirectory != it->stored.worktreePath;
     noteWorktreesBeforeTurn(*it);
     QJsonArray input = payload.value(QStringLiteral("input")).toArray();
     if (input.isEmpty()) {
@@ -1561,7 +1562,7 @@ QJsonObject SessionHost::startTurn(const QJsonObject& request, bool localClient,
     turnOptions.insert(QStringLiteral("compactWindow"),
                        context_harness::compactWindowJson(it->stored.compactWindow));
     if (it->stored.contextRevision > 1) {
-        const QJsonObject context{{"worktree_path", it->stored.worktreePath},
+        const QJsonObject context{{"worktree_path", turnDirectory},
                                   {"context_revision", it->stored.contextRevision}};
         input.append(QJsonObject{
             {"type", "text"},
@@ -1574,10 +1575,10 @@ QJsonObject SessionHost::startTurn(const QJsonObject& request, bool localClient,
     if (worktreeMissing)
         input.append(QJsonObject{
             {"type", "text"},
-            {"text", QStringLiteral("KetPlus: this conversation's worktree %1 no longer exists, so "
-                                    "this turn runs in %2. If you recreate a worktree for this "
-                                    "work, KetPlus moves the conversation to it after the turn.")
-                         .arg(it->stored.worktreePath, executionDirectory(*it))}});
+            {"text", QStringLiteral("KetPlus: the saved checkout at %1 is unavailable. This turn "
+                                    "runs in %2. Use the worktree picker to choose a different "
+                                    "checkout.")
+                         .arg(it->stored.worktreePath, turnDirectory)}});
     if (agentOrigin.isEmpty()) {
         addAgentContext(*it, displayText, input, true);
     } else {

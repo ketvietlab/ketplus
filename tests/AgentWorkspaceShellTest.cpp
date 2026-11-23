@@ -743,13 +743,11 @@ class AgentWorkspaceShellTest final : public QObject {
             QVERIFY(dialog && confirm);
             auto* linked =
                 dialog->findChild<QCheckBox*>(QStringLiteral("deleteLinkedWorktreeCheck"));
-            auto* force = dialog->findChild<QCheckBox*>(QStringLiteral("forceDeleteWorktreeCheck"));
-            QVERIFY(linked && force);
-            QVERIFY(!linked->isEnabled());
-            QVERIFY(!force->isEnabled());
+            QVERIFY(linked && !linked->isEnabled());
+            QVERIFY(!dialog->findChild<QCheckBox*>(QStringLiteral("forceDeleteWorktreeCheck")));
             // The mock's card: nothing to remove, so no worktree choices, and Archive instead.
             QCOMPARE(card->title(), QStringLiteral("Delete conversation?"));
-            QVERIFY(linked->isHidden() && force->isHidden());
+            QVERIFY(linked->isHidden());
             auto* message = dialog->findChild<QLabel*>(QStringLiteral("conversationDeleteMessage"));
             QVERIFY(message);
             QVERIFY(message->text().contains(QStringLiteral("Its worktree and files stay.")));
@@ -1615,20 +1613,8 @@ class AgentWorkspaceShellTest final : public QObject {
             auto* paths = dialog->findChild<QLabel*>(QStringLiteral("linkedWorktreePaths"));
             QVERIFY(paths);
             QVERIFY(paths->text().contains(QFileInfo(linkedPath).fileName()));
-            // Forcing shows what is lost next to the choice, not only in a tooltip.
-            auto* force = dialog->findChild<QCheckBox*>(QStringLiteral("forceDeleteWorktreeCheck"));
-            auto* warning =
-                dialog->findChild<QLabel*>(QStringLiteral("forceDeleteWorktreeWarning"));
-            QVERIFY(force && warning);
-            QVERIFY(force->text().contains(QStringLiteral("discarding")));
+            QVERIFY(!dialog->findChild<QCheckBox*>(QStringLiteral("forceDeleteWorktreeCheck")));
             linked->setChecked(true);
-            QVERIFY(force->isEnabled());
-            QVERIFY(!warning->isVisibleTo(dialog));
-            force->setChecked(true);
-            QVERIFY(warning->isVisibleTo(dialog));
-            QCOMPARE(confirm->text(), QStringLiteral("Delete and Discard Changes"));
-            force->setChecked(false);
-            QVERIFY(!warning->isVisibleTo(dialog));
             QCOMPARE(confirm->text(), QStringLiteral("Delete"));
             card->reject();
         }
@@ -2104,7 +2090,8 @@ class AgentWorkspaceShellTest final : public QObject {
         QCOMPARE(failed.count(), 0);
 
         const QString expectedPath = directory.filePath(QStringLiteral("ketplus-feature-agent-ui"));
-        QCOMPARE(created.constFirst().at(0).toString(), expectedPath);
+        QCOMPARE(created.constFirst().at(0).toString(),
+                 QFileInfo(expectedPath).canonicalFilePath());
         QVERIFY(QFileInfo::exists(QDir(expectedPath).filePath(QStringLiteral("README.md"))));
 
         QProcess branch;
@@ -2138,23 +2125,26 @@ class AgentWorkspaceShellTest final : public QObject {
         QVERIFY(!QFileInfo::exists(expectedPath));
         QVERIFY(git({"show-ref", "--verify", "refs/heads/feature/agent-ui"}));
         creator.remove(repository, repository);
-        QCOMPARE(failed.count(), 3);
+        QTRY_COMPARE(failed.count(), 3);
+        QVERIFY(failed.last().first().toString().contains("main checkout"));
 
-        creator.create(repository, repository, QStringLiteral("feature/force-delete"),
+        creator.create(repository, repository, QStringLiteral("feature/keep-local"),
                        QStringLiteral("HEAD"));
         QTRY_COMPARE_WITH_TIMEOUT(created.count(), 2, 5000);
-        const QString forcePath =
-            directory.filePath(QStringLiteral("ketplus-feature-force-delete"));
-        QFile dirty(QDir(forcePath).filePath(QStringLiteral("dirty.txt")));
+        const QString localPath = directory.filePath(QStringLiteral("ketplus-feature-keep-local"));
+        QFile dirty(QDir(localPath).filePath(QStringLiteral("dirty.txt")));
         QVERIFY(dirty.open(QIODevice::WriteOnly));
         dirty.write("keep");
         dirty.close();
-        creator.remove(repository, forcePath);
+        creator.remove(repository, localPath);
         QTRY_COMPARE(failed.count(), 4);
-        QVERIFY(QFileInfo::exists(forcePath));
-        creator.remove(repository, forcePath, true);
-        QTRY_COMPARE_WITH_TIMEOUT(removed.count(), 2, 5000);
-        QVERIFY(!QFileInfo::exists(forcePath));
+        QVERIFY(dirty.exists());
+        QVERIFY(dirty.remove());
+        creator.remove(repository, localPath);
+        QTRY_COMPARE(failed.count(), 5);
+        QVERIFY(failed.last().first().toString().contains("no remote branch"));
+        QCOMPARE(removed.count(), 1);
+        QVERIFY(QFileInfo::exists(localPath));
     }
 
     // A changed file that has since been committed has no diff. With the status bar hidden

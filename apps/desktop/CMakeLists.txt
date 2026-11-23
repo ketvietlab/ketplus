@@ -278,6 +278,7 @@ target_link_libraries(ketplus_desktop_shell PUBLIC
     Qt6::Network
     Qt6::Widgets
     ketplus_ai
+    ketplus_tool_locations
     ketplus_app_updater
     ketplus_computer_tools
     ketplus_atlas
