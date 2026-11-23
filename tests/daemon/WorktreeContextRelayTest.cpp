@@ -29,6 +29,7 @@ class LoopbackRelay final : public QTcpServer {
     QByteArray body;
     QByteArray senderKeys;
     bool acceptHeartbeat{false};
+    int heartbeats{0};
     LoopbackRelay() {
         connect(this, &QTcpServer::newConnection, this, [this] {
             while (auto* socket = nextPendingConnection()) {
@@ -50,6 +51,7 @@ class LoopbackRelay final : public QTcpServer {
                         return;
                     }
                     if (buffer->startsWith("POST /v2/daemon/heartbeat HTTP/1.1\r\n")) {
+                        ++heartbeats;
                         socket->write(acceptHeartbeat
                                           ? "HTTP/1.1 202 Accepted\r\nContent-Length: "
                                             "2\r\nConnection: close\r\n\r\n{}"
@@ -305,6 +307,72 @@ class WorktreeContextRelayTest final : public QObject {
         const auto ack = QJsonDocument::fromJson(server.body).object();
         QCOMPARE(ack.value("resultCode").toString(), "ok");
         QVERIFY(!ack.value("encryptedResult").toObject().isEmpty());
+    }
+
+    // A page that cannot be listed is acknowledged with the host's own error, as before, and no
+    // catalog heartbeat follows it: the error is answered ahead of that step.
+    void catalogErrorsAreAcknowledgedWithoutAHeartbeat_data() {
+        QTest::addColumn<QString>("sessionId");
+        QTest::addColumn<int>("generation");
+        QTest::addColumn<QString>("code");
+        QTest::newRow("unknown-session") << "ghost-conversation" << 1 << "session_not_found";
+        QTest::newRow("wrong-generation") << "synthetic-conversation" << 2 << "stale_generation";
+    }
+    void catalogErrorsAreAcknowledgedWithoutAHeartbeat() {
+        QFETCH(QString, sessionId);
+        QFETCH(int, generation);
+        QFETCH(QString, code);
+        QTemporaryDir dir;
+        const auto a = dir.filePath("repo");
+        QVERIFY(QDir().mkpath(a));
+        QCOMPARE(QProcess::execute("git", {"-C", a, "init", "-q"}), 0);
+        LocalJournal journal(dir.filePath("journal.sqlite"));
+        StoredSession session;
+        session.id = "synthetic-conversation";
+        session.worktreePath = a;
+        session.adapter = "codex";
+        session.state = "ready";
+        QVERIFY(journal.upsertSession(session));
+        CodexAdapter provider(dir.filePath("never-start-provider"));
+        SessionHost host(&journal, &provider);
+        LoopbackRelay server;
+        QVERIFY(server.listen(QHostAddress::LocalHost, 0));
+        LoopbackOnlyTransport network(server.serverPort());
+        CloudControlClient client(&journal, &host);
+        Access::configure(client, network,
+                          QUrl(QString("http://127.0.0.1:%1").arg(server.serverPort())));
+        Access::machineKeyVersion(client, 1);
+        Access::pathSalt(client, QByteArray(32, 's'));
+        server.acceptHeartbeat = true;
+        Access::pinDevice(client, "phone", 1, Access::crypto(client).publicKeys());
+        server.senderKeys =
+            QJsonDocument(QJsonObject{{"keys", Access::crypto(client).publicKeys()}})
+                .toJson(QJsonDocument::Compact);
+        QJsonObject command{{"id", "context-files"},
+                            {"sessionId", sessionId},
+                            {"sessionGeneration", generation},
+                            {"kind", "session.worktrees"},
+                            {"attempt", 1},
+                            {"claimToken", "synthetic-claim"},
+                            {"workspaceId", "workspace-synthetic"},
+                            {"machineId", "machine-synthetic"},
+                            {"repositoryId", "unused"},
+                            {"worktreeId", "unused"}};
+        const QJsonObject payload{{"expected_context_revision", 1}, {"limit", 1}};
+        command.insert("content", Access::crypto(client).encrypt("{}", "seed", sessionId,
+                                                                 generation, 1, "phone", 1));
+        command.insert("content", Access::crypto(client).encrypt(
+                                      QJsonDocument(payload).toJson(QJsonDocument::Compact),
+                                      Access::commandAad(client, command), sessionId, generation, 1,
+                                      "phone", 1));
+        Access::validCredential(client);
+        QObject::disconnect(&host, nullptr, &client, nullptr);
+        Access::execute(client, command);
+        QTRY_VERIFY_WITH_TIMEOUT(!server.body.isEmpty(), 10000);
+        const auto ack = QJsonDocument::fromJson(server.body).object();
+        QCOMPARE(ack.value("status").toString(), "rejected");
+        QCOMPARE(ack.value("resultCode").toString(), code);
+        QCOMPARE(server.heartbeats, 0);
     }
 
     void explicitHistoricalContextReadsOriginalRoot_data() {
