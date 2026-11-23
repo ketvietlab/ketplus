@@ -181,6 +181,23 @@ ketplus_add_daemon_test(ketplus_heartbeat_worktree_catalog_tests cloud-privacy/H
 target_sources(ketplus_heartbeat_worktree_catalog_tests PRIVATE cloud-privacy/MemoryCredentials.cpp)
 ketplus_add_daemon_test(ketplus_daemon_forward_only_upload_tests cloud-privacy/ForwardOnlyUploadTest.cpp)
 target_sources(ketplus_daemon_forward_only_upload_tests PRIVATE cloud-privacy/MemoryCredentials.cpp)
+
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    set(heartbeat_snapshot_symbol _ZNK7ketplus6daemon18CloudControlClient17worktreeSnapshotsEv)
+    add_executable(ketplus_heartbeat_worktree_catalog_benchmark EXCLUDE_FROM_ALL
+        ../../benchmarks/HeartbeatWorktreeCatalogBenchmark.cpp
+        ../../benchmarks/HeartbeatCatalogCallTiming.cpp
+        cloud-privacy/MemoryCredentials.cpp)
+    target_include_directories(ketplus_heartbeat_worktree_catalog_benchmark PRIVATE
+        cloud-privacy)
+    target_link_libraries(ketplus_heartbeat_worktree_catalog_benchmark PRIVATE ketplus_daemon_core)
+    target_compile_definitions(ketplus_heartbeat_worktree_catalog_benchmark PRIVATE
+        KETPLUS_SNAPSHOT_SYMBOL="${heartbeat_snapshot_symbol}")
+    target_link_options(ketplus_heartbeat_worktree_catalog_benchmark PRIVATE
+        "LINKER:--wrap=${heartbeat_snapshot_symbol}")
+    ketplus_enable_warnings(ketplus_heartbeat_worktree_catalog_benchmark)
+endif()
+
 ketplus_add_daemon_test(ketplus_runner_relay_tests RunnerRelayTest.cpp)
 target_sources(ketplus_runner_relay_tests PRIVATE cloud-privacy/MemoryCredentials.cpp)
 ketplus_add_daemon_test(ketplus_runner_pairing_daemon_tests RunnerPairingDaemonTest.cpp)

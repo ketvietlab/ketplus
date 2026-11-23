@@ -79,6 +79,10 @@ class CloudPrivacyTestAccess {
         return client.knownUploadedCursors_.value(key, -1);
     }
     static void publishHeartbeat(CloudControlClient& client) { client.heartbeat(); }
+    static void startIdleTimers(CloudControlClient& client) {
+        client.syncTimer_.start();
+        client.commandTimer_.start();
+    }
     // Sends one heartbeat batch per entry, as the heartbeat timer does after its snapshot.
     static void heartbeat(CloudControlClient& client, const QList<QJsonArray>& batches) {
         client.heartbeatInFlight_ = true;
