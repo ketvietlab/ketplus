@@ -74,6 +74,9 @@ class SyntheticRelay {
     // PUT /v2/mobile/device/capabilities: how often, and the last set.
     int capabilityPuts{0};
     QJsonArray lastCapabilities;
+    // The next this many PUTs of capabilities are answered 503.
+    int failCapabilityPuts{0};
+    int failedCapabilityPuts{0};
     QHash<QString, int> eventPolls;
     // Answers transcript.restore_window for its session when set (a transcript read).
     RestoreHost* restore{nullptr};
@@ -148,6 +151,11 @@ class SyntheticRelay {
             return std::pair{0, QJsonObject{}};
         }
         if (method == "PUT" && path == "/v2/mobile/device/capabilities") {
+            if (failCapabilityPuts > 0) {
+                --failCapabilityPuts;
+                ++failedCapabilityPuts;
+                return std::pair{503, QJsonObject{{"code", "unavailable"}}};
+            }
             const auto sent = QJsonDocument::fromJson(bytes).object().value("capabilities");
             ++capabilityPuts;
             lastCapabilities = sent.toArray();

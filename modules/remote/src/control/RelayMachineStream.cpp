@@ -12,6 +12,31 @@ bool RelayMachineBackend::hostReachable() const {
     return stream_->hostReachable() && link_->state() == RelayFrameLink::State::Open;
 }
 
+void RelayMachineBackend::listCapabilities() {
+    if (!client_)
+        return;
+    capabilityRetry_->stop();
+    const auto epoch = generation_;
+    client_->syncCapabilities(
+        ControlV2Client::desktopCapabilities(), [self = QPointer<RelayMachineBackend>(this),
+                                                 epoch](const QJsonValue&, const QString& error) {
+            if (!self)
+                return;
+            if (error.isEmpty()) {
+                self->capabilityFailures_ = 0;
+                return;
+            }
+            // The set is sent again with the next connection too; this keeps trying meanwhile.
+            qWarning("Listing this device's capabilities failed: %s", qUtf8Printable(error));
+            if (epoch != self->generation_ || self->fatal(error))
+                return;
+            const int wait = int(qMin<qint64>(qint64(self->options_.capabilityRetryMilliseconds)
+                                                  << qMin(self->capabilityFailures_++, 16),
+                                              self->options_.maximumCapabilityRetryMilliseconds));
+            self->capabilityRetry_->start(wait);
+        });
+}
+
 void RelayMachineBackend::updateReachability() {
     const bool reachable = hostReachable();
     if (reachable == reachableReported_)
@@ -84,10 +109,16 @@ void RelayMachineBackend::beginStreaming(const QString& sessionId, const qint64 
 }
 
 void RelayMachineBackend::deliverForwarded(const QString& sessionId, const QJsonArray& events) {
+    if (!stream_)
+        return;
     const auto row = sessions_.value(sessionId);
     const auto signing = signing_.value(sessionId);
-    if (row.isEmpty() || signing.isEmpty() || !client_ || !stream_)
+    if (row.isEmpty() || signing.isEmpty() || !client_) {
+        // The feed already moved its cursor past these events: without the key to open them,
+        // the conversation reloads its window rather than lose them.
+        stream_->eventRejected(sessionId);
         return;
+    }
     for (const auto& item : events) {
         QString error;
         const auto opened = client_->openEvent(row, signing, item.toObject(), &error);
@@ -119,12 +150,20 @@ void RelayMachineBackend::reloadConversation(const QString& sessionId) {
                     self->failed(error);
                     return;
                 }
-                QTimer::singleShot(self->options_.reloadRetryMilliseconds, self, [self, sessionId] {
+                // Tried again after a wait that doubles up to a ceiling, for as long as the
+                // conversation stays open.
+                const int failures = self->reloadFailures_.value(sessionId, 0);
+                self->reloadFailures_.insert(sessionId, failures + 1);
+                const int wait = int(qMin<qint64>(qint64(self->options_.reloadRetryMilliseconds)
+                                                      << qMin(failures, 16),
+                                                  self->options_.maximumReloadRetryMilliseconds));
+                QTimer::singleShot(wait, self, [self, sessionId] {
                     if (self)
                         self->reloadConversation(sessionId);
                 });
                 return;
             }
+            self->reloadFailures_.remove(sessionId);
             const auto window = value.toObject();
             const auto snapshot = window.value("snapshot_cursor").toInteger();
             self->watched_.insert(sessionId, snapshot);

@@ -31,6 +31,11 @@ class RelayMachineBackend final : public MachineBackend {
         int eventPollMilliseconds{1000};
         // A window that could not be read for a reload is tried again after this long.
         int reloadRetryMilliseconds{3000};
+        int maximumReloadRetryMilliseconds{60000};
+        // Listing this device's capabilities is tried again after this long, doubling to
+        // maximumCapabilityRetryMilliseconds, while it keeps failing.
+        int capabilityRetryMilliseconds{5000};
+        int maximumCapabilityRetryMilliseconds{300000};
         int commandPollMilliseconds{250};
         int initialBackoffMilliseconds{1000};
         int maximumBackoffMilliseconds{30000};
@@ -154,6 +159,8 @@ class RelayMachineBackend final : public MachineBackend {
     void deliverForwarded(const QString& sessionId, const QJsonArray& events);
     void reloadConversation(const QString& sessionId);
     void updateReachability();
+    // Tells the relay what this device supports; a failure is logged and tried again later.
+    void listCapabilities();
     void discardRecoveredPreparation(const QString& id, const QJsonObject& command);
 
     QPointer<ControlV2Client> client_;
@@ -200,6 +207,11 @@ class RelayMachineBackend final : public MachineBackend {
     bool reachableReported_{true};
     // The key each followed conversation's forwarded events are verified with.
     QHash<QString, QByteArray> signing_;
+    // Failed window reads per conversation, for the wait before the next try.
+    QHash<QString, int> reloadFailures_;
+    QTimer* capabilityRetry_{nullptr};
+    int capabilityFailures_{0};
+    friend class RelayMachineBackendTestAccess;
     // Bumped with each fence: an events poll of an earlier round never settles this one.
     quint64 eventsRound_{0};
 };

@@ -34,6 +34,12 @@ MachineConversationSession::MachineConversationSession(remote::MachineBackend* b
             &MachineConversationSession::applyEvent);
     connect(backend, &remote::MachineBackend::commandCompleted, this,
             &MachineConversationSession::commandCompleted);
+    // The route's host stopped answering, or answers again: the view says which.
+    connect(backend, &remote::MachineBackend::hostReachabilityChanged, this,
+            &MachineConversationSession::changed);
+    // The route restarted this conversation's events from its newest window.
+    connect(backend, &remote::MachineBackend::conversationReloaded, this,
+            &MachineConversationSession::applyReloaded);
     connect(backend, &remote::MachineBackend::connectionStateChanged, this,
             [this](const State state, const QString&) {
                 const State previous = lastState_;
@@ -62,6 +68,13 @@ void MachineConversationSession::setRunning(const bool running) {
         return;
     running_ = running;
     emit changed();
+}
+
+QString MachineConversationSession::hostStatus() const {
+    if (backend_ == nullptr || backend_->hostReachable())
+        return {};
+    return tr("This machine's host cannot be reached. The conversation is shown as it was last "
+              "received, and updates when the host answers again.");
 }
 
 bool MachineConversationSession::canAct() const {
@@ -110,26 +123,42 @@ void MachineConversationSession::load() {
                 finishWindow();
                 return;
             }
-            remote::resolveLargeEvents(
-                backend_, sessionId_, generation_, window,
-                guarded([this, load](const QJsonObject& result, const QString& resolveError) {
-                    if (load != windowLoad_)
-                        return;
-                    if (!resolveError.isEmpty()) {
-                        fail(resolveError);
-                        finishWindow();
-                        return;
-                    }
-                    lastError_.clear();
-                    transcript_.reset(result.value(QLatin1String("events")).toArray());
-                    snapshotCursor_ = result.value(QLatin1String("snapshot_cursor")).toInteger();
-                    hasOlder_ = result.value(QLatin1String("has_more_before")).toBool() &&
-                                transcript_.firstCursor() > 1;
-                    emit changed();
-                    finishWindow();
-                }));
+            acceptWindow(load, window);
         }));
     loadApprovals();
+}
+
+void MachineConversationSession::acceptWindow(const quint64 load, const QJsonObject& window) {
+    remote::resolveLargeEvents(
+        backend_, sessionId_, generation_, window,
+        guarded([this, load](const QJsonObject& result, const QString& resolveError) {
+            if (load != windowLoad_)
+                return;
+            if (!resolveError.isEmpty()) {
+                fail(resolveError);
+                finishWindow();
+                return;
+            }
+            lastError_.clear();
+            transcript_.reset(result.value(QLatin1String("events")).toArray());
+            snapshotCursor_ = result.value(QLatin1String("snapshot_cursor")).toInteger();
+            hasOlder_ = result.value(QLatin1String("has_more_before")).toBool() &&
+                        transcript_.firstCursor() > 1;
+            emit changed();
+            finishWindow();
+        }));
+}
+
+void MachineConversationSession::applyReloaded(const QString& sessionId,
+                                               const QJsonObject& window) {
+    if (sessionId != sessionId_ || !open_ || backend_ == nullptr)
+        return;
+    // The route read the newest window itself: it replaces what is shown, like a load, and the
+    // events that follow it are applied by their cursor.
+    const quint64 load = ++windowLoad_;
+    loadingOlder_ = false;
+    windowLoading_ = true;
+    acceptWindow(load, window);
 }
 
 void MachineConversationSession::finishWindow() {

@@ -434,6 +434,12 @@ bool ControlV2Client::acceptPairing(const QJsonObject& ticket, QString* error) {
     keyVersion_ = device.value("keyVersion").toInt();
     pairingClaims_.clear();
     pairingHosts_.clear();
+    // The relay learns what this device supports as soon as it is paired. A failure leaves the
+    // set unrecorded, so the next connection sends it again.
+    syncCapabilities(desktopCapabilities(), [](const QJsonValue&, const QString& failure) {
+        if (!failure.isEmpty())
+            qWarning("Listing this device's capabilities failed: %s", qUtf8Printable(failure));
+    });
     return true;
 }
 } // namespace ketplus::remote

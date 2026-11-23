@@ -140,6 +140,16 @@ class FakeMachineBackend final : public remote::MachineBackend {
     }
 
     void conversationClosed(const QString& sessionId) override { closed.append(sessionId); }
+    // Whether the host answers; changing it is announced like a route does.
+    bool reachable{true};
+    [[nodiscard]] bool hostReachable() const override { return reachable; }
+    void setReachable(bool value) {
+        reachable = value;
+        emit hostReachabilityChanged(value);
+    }
+    void reload(const QString& sessionId, const QJsonObject& window) {
+        emit conversationReloaded(sessionId, window);
+    }
     QStringList closed;
 
     // The conversation operations this machine offers; the others use the base reason.

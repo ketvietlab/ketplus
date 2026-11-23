@@ -33,6 +33,9 @@ RelayMachineBackend::RelayMachineBackend(ControlV2Client* client, QString relayM
     : MachineBackend(parent), client_(client), relayMachineId_(std::move(relayMachineId)),
       options_(std::move(options)), outbox_(options_.outboxFile), retry_(new QTimer(this)),
       events_(new QTimer(this)) {
+    capabilityRetry_ = new QTimer(this);
+    capabilityRetry_->setSingleShot(true);
+    connect(capabilityRetry_, &QTimer::timeout, this, &RelayMachineBackend::listCapabilities);
     retry_->setSingleShot(true);
     connect(retry_, &QTimer::timeout, this, &RelayMachineBackend::probe);
     events_->setInterval(options_.eventPollMilliseconds);
@@ -101,6 +104,7 @@ void RelayMachineBackend::fence(const QString& reason) {
     ++eventsRound_;
     pollingEvents_ = false;
     retry_->stop();
+    capabilityRetry_->stop();
     events_->stop();
     delivering_.clear();
     recoveringPreparations_.clear();
@@ -160,11 +164,7 @@ void RelayMachineBackend::probe() {
                                     capabilities.contains(QStringLiteral("events.forward_only/1"));
                             }
                         }
-                    // Tell the relay what this device reads, so a host it shares with other
-                    // devices can stop storing events once every device does. A failure is
-                    // retried at the next connection.
-                    client_->syncCapabilities(ControlV2Client::desktopCapabilities(),
-                                              [](const QJsonValue&, const QString&) {});
+                    listCapabilities();
                     attempts_ = 0;
                     everConnected_ = true;
                     setState(ConnectionState::Connected, {});
@@ -401,6 +401,7 @@ void RelayMachineBackend::conversationClosed(const QString& sessionId) {
     // Events are polled only for open conversations; opening it again follows it from the
     // cursor of that read.
     watched_.remove(sessionId);
+    reloadFailures_.remove(sessionId);
     if (stream_)
         stream_->unfollow(sessionId);
 }

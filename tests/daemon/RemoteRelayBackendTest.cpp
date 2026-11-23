@@ -12,6 +12,13 @@
 #include <QTemporaryDir>
 
 // ADR 0119 Relay backend against the loopback relay of SyntheticRelay.h.
+namespace ketplus::remote {
+class RelayMachineBackendTestAccess {
+  public:
+    static void dropSigningKeys(RelayMachineBackend& backend) { backend.signing_.clear(); }
+};
+} // namespace ketplus::remote
+
 namespace {
 struct Answer {
     bool done{false};
@@ -1371,6 +1378,91 @@ class RemoteRelayBackendTest final : public QObject {
         QTest::qWait(100);
         QCOMPARE(received.size(), 3);
         QVERIFY(relay.eventPolls.isEmpty());
+    }
+
+    void aForwardedEventWithoutItsKeyReloadsTheWindowInsteadOfBeingLost() {
+        QTemporaryDir dir;
+        FixtureTransport network;
+        ControlV2Client client(QUrl{origin});
+        FakeFrameSockets sockets;
+        client.setFrameSocketFactory(sockets.factory());
+        EncryptedFixture fixture(client, network);
+        SyntheticRelay relay(network, fixture, client);
+        machineCapabilities(network, QJsonArray{"session.prepare/1", "events.forward_only/1"});
+        auto options = fastOptions(dir.filePath("outbox.json"));
+        options.reloadRetryMilliseconds = 60'000;
+        RelayMachineBackend backend(&client, "linux-host", options);
+        connectAndWait(backend);
+        QTRY_VERIFY(sockets.last());
+        sockets.last()->accept();
+        Answer answer;
+        backend.listConversations({}, answer.callback());
+        QTRY_VERIFY(answer.done);
+        backend.startTurn("opaque-session", 3, {{"prompt", "hi"}}, answer.callback());
+        QTRY_VERIFY(answer.done);
+        QTRY_COMPARE(subscribes(sockets.last()).size(), 1);
+        QSignalSpy received(&backend, &MachineBackend::eventReceived);
+        const int before = readsOf(relay, "transcript.restore_window");
+        RelayMachineBackendTestAccess::dropSigningKeys(backend);
+        sockets.last()->forward("linux-host", forwardedPage({fixture.event(10)}));
+        // Nothing is shown from an event that cannot be opened, and nothing is silently dropped:
+        // the conversation asks for its newest window.
+        QTRY_VERIFY(readsOf(relay, "transcript.restore_window") > before);
+        QCOMPARE(received.size(), 0);
+        QVERIFY(relay.eventPolls.isEmpty());
+    }
+
+    void aForwardedEventThatFailsVerificationReloadsAnOpenConversation() {
+        QTemporaryDir dir;
+        FixtureTransport network;
+        ControlV2Client client(QUrl{origin});
+        FakeFrameSockets sockets;
+        client.setFrameSocketFactory(sockets.factory());
+        EncryptedFixture fixture(client, network);
+        SyntheticRelay relay(network, fixture, client);
+        machineCapabilities(network, QJsonArray{"session.prepare/1", "events.forward_only/1"});
+        auto options = fastOptions(dir.filePath("outbox.json"));
+        options.reloadRetryMilliseconds = 60'000;
+        RelayMachineBackend backend(&client, "linux-host", options);
+        connectAndWait(backend);
+        QTRY_VERIFY(sockets.last());
+        sockets.last()->accept();
+        Answer answer;
+        backend.listConversations({}, answer.callback());
+        QTRY_VERIFY(answer.done);
+        backend.startTurn("opaque-session", 3, {{"prompt", "hi"}}, answer.callback());
+        QTRY_VERIFY(answer.done);
+        QTRY_COMPARE(subscribes(sockets.last()).size(), 1);
+        QSignalSpy received(&backend, &MachineBackend::eventReceived);
+        const int before = readsOf(relay, "transcript.restore_window");
+        auto forged = fixture.event(10);
+        forged.insert("cursor", 11);
+        sockets.last()->forward("linux-host", forwardedPage({forged}));
+        QTRY_VERIFY(readsOf(relay, "transcript.restore_window") > before);
+        QCOMPARE(received.size(), 0);
+    }
+
+    void listingCapabilitiesIsRetriedAfterAFailure() {
+        QTemporaryDir dir;
+        FixtureTransport network;
+        ControlV2Client client(QUrl{origin});
+        FakeFrameSockets sockets;
+        client.setFrameSocketFactory(sockets.factory());
+        EncryptedFixture fixture(client, network);
+        SyntheticRelay relay(network, fixture, client);
+        relay.failCapabilityPuts = 2;
+        machineCapabilities(network, QJsonArray{"events.forward_only/1"});
+        auto options = fastOptions(dir.filePath("outbox.json"));
+        options.capabilityRetryMilliseconds = 20;
+        options.maximumCapabilityRetryMilliseconds = 40;
+        RelayMachineBackend backend(&client, "linux-host", options);
+        connectAndWait(backend);
+        QTRY_COMPARE_WITH_TIMEOUT(relay.capabilityPuts, 1, 5000);
+        QCOMPARE(relay.lastCapabilities, (QJsonArray{"events.forward_only/1"}));
+        QVERIFY(relay.failedCapabilityPuts >= 2);
+        // Once accepted it is not sent again.
+        QTest::qWait(150);
+        QCOMPARE(relay.capabilityPuts, 1);
     }
 
     void theDeviceListsItsCapabilitiesOnceAndNeverClaimsPeerConnections() {

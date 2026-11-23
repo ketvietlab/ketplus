@@ -350,9 +350,10 @@ A Desktop paired as a remote client has no peer connection, so it never lists
 `transport.webrtc/1`; it reads events through the relay path. It lists `events.forward_only/1`
 (`ControlV2Client::desktopCapabilities()`).
 
-- **Capabilities.** After it pairs, and at each connection where the set it last had accepted
-  differs from what it supports now, the device sends its set (`updateCapabilities`,
-  `syncCapabilities`). An unchanged set sends nothing.
+- **Capabilities.** Right after it pairs, and at each connection where the set it last had
+  accepted differs from what it supports now, the device sends its set (`updateCapabilities`,
+  `syncCapabilities`). An unchanged set sends nothing. A send that fails is tried again after a
+  wait that doubles (5 s up to 5 min) while the connection stays up.
 - **Reading mode.** `RelayMachineBackend` chooses per connection from the machine's own
   capabilities. Without `events.forward_only/1` it polls stored events as before. With it, it
   never reads stored events: `RelayFrameLink` holds the device's `/v2/relay` socket, and
@@ -371,13 +372,16 @@ A Desktop paired as a remote client has no peer connection, so it never lists
   over when events arrive), so a host that is offline or a refused subscription never loops.
 - **Verification.** A forwarded event is the host's sealed event: the desktop authenticates and
   decrypts it with the same session key and checks as a stored event (`openEvent`). One that
-  fails is not shown; only the reason is logged, never the event. The conversation then reloads
-  its newest window, like after `session.reset`, and `conversationReloaded` carries that window.
+  fails, or one that arrives without its conversation's key, is not shown; only the reason is
+  logged, never the event. The conversation then reloads its newest window, like after
+  `session.reset`, and `conversationReloaded` carries that window. A failed reload is tried again
+  after a wait that doubles (up to 60 s) for as long as the conversation stays open.
 - **Offline.** `hostReachable()` is false while the socket is down or the host is reported
   offline, and true again once frames of that machine arrive.
   `hostReachabilityChanged` reports each change. While it is false the desktop shows only what
   its encrypted cache and the last window hold; it fetches nothing in their place, and commands
-  keep their own retry path.
+  keep their own retry path. The conversation view says so in the composer's reason line, and a
+  reloaded window replaces the transcript rows shown.
 
 ## Relay path
 

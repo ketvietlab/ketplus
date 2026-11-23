@@ -101,7 +101,12 @@ class RemoteControlClientTest final : public QObject {
         auto foreign = ticket;
         foreign.insert("machineId", "another-host");
         QVERIFY(!client.acceptPairing(foreign));
+        network.paths.clear();
+        network.replies.insert(prefix + "/v2/mobile/device/capabilities",
+                               QJsonObject{{"capabilities", QJsonArray{"events.forward_only/1"}}});
         QVERIFY(client.acceptPairing(ticket));
+        // Pairing lists the device's capabilities at once.
+        QTRY_VERIFY(network.paths.contains(prefix + "/v2/mobile/device/capabilities"));
         // The host's keys from the QR code are pinned with the pairing.
         QCOMPARE(RemoteControlTestAccess::hostPins(client).value("linux-host/1"),
                  host.value("fingerprint"));

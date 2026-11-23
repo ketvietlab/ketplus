@@ -8,6 +8,7 @@
 
 #include <QFrame>
 #include <QJsonArray>
+#include <QLabel>
 #include <QLineEdit>
 #include <QPlainTextEdit>
 #include <QPushButton>
@@ -114,6 +115,44 @@ class MachineConversationTest final : public QObject {
         QCOMPARE(transcriptRows(view), (QStringList{"Deploy", "Deployed."}));
         relay.deliver(relayEvent("relay-1", 4, "turn.completed", {}));
         QTRY_COMPARE(relay.calls("listConversations").size(), listings + 1);
+    }
+
+    void anUnreachableHostIsShownAndAReloadedWindowReplacesTheTranscript() {
+        bool verified = true;
+        FakeMachineBackend relay("fp-relay", Route::Relay);
+        auto base = relayHost(&verified);
+        relay.answer = [&](const FakeMachineBackend::Call& call, QJsonObject* result,
+                           QString* error) {
+            if (call.operation == "transcriptWindow")
+                *result = {{"events", QJsonArray{relayEvent(call.sessionId, 1, "user.message",
+                                                            {{"text", "Deploy"}})}}};
+            else
+                base(call, result, error);
+        };
+        MachineCatalog catalog;
+        MachineWorkspaceView view(&catalog);
+        catalog.setBackend(&relay);
+        QTRY_COMPARE(catalog.conversations().size(), 1);
+        view.openConversation("relay-1");
+        QTRY_COMPARE(transcriptRows(view), (QStringList{"Deploy"}));
+        auto* reason = view.findChild<QLabel*>("machineComposerReason");
+        QVERIFY(reason != nullptr);
+        QVERIFY(!reason->text().contains("cannot be reached"));
+
+        relay.setReachable(false);
+        QTRY_VERIFY(reason->text().contains("cannot be reached"));
+        // What was received stays shown.
+        QCOMPARE(transcriptRows(view), (QStringList{"Deploy"}));
+
+        relay.setReachable(true);
+        QTRY_VERIFY(!reason->text().contains("cannot be reached"));
+
+        relay.reload("relay-1", {{"events", QJsonArray{relayEvent("relay-1", 5, "user.message",
+                                                                  {{"text", "After reset"}})}}});
+        QTRY_COMPARE(transcriptRows(view), (QStringList{"After reset"}));
+        // A window of another conversation changes nothing.
+        relay.reload("other", {{"events", QJsonArray{}}});
+        QCOMPARE(transcriptRows(view), (QStringList{"After reset"}));
     }
 
     // T-19: live events in the shape DaemonClient and RelayMachineBackend deliver them,
