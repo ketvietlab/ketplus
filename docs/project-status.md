@@ -701,9 +701,11 @@ Linux store policy, signed upgrade prompts and platform release acceptance remai
   three bounded ordered channels, cursor subscriptions and encrypted command
   results. peer transport and mailbox dispatch share the journal's command deduplication
   and the cloud-safe encrypted event projection. Native clients remain phase 4;
-  the event-forwarding capability, frame-only delivery and removal of legacy event
-  upload remain gated for the later migration. The current mobile app keeps its
-  Control v2 path. See `remote-clients.md` for what the daemon does.
+  removal of legacy event upload remains gated for the later migration. The current
+  mobile app keeps its Control v2 path. The daemon lists `events.forward_only/1` in each
+  heartbeat and follows the answer: while the answer lists it, events reach clients as frames
+  and content-free notices instead of uploads, and withdrawing it resumes uploads after the
+  journal head. See `remote-clients.md` for what the daemon does.
 
 - Async assistant questions expire with their originating turn (completion, provider stop,
   or a new turn). Canonical expiry receipts hide live and replayed unanswered question

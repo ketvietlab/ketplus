@@ -138,9 +138,11 @@ class ForwardOnlyUploadTest final : public QObject {
         QCoreApplication::processEvents();
         QCOMPARE(c.requestsTo(eventsPath), 0);
         QCOMPARE(c.requestsTo("/v2/daemon/heartbeat"), 1);
-        // The heartbeat itself does not advertise the capability.
+        // The heartbeat lists the capability next to the others the daemon serves.
         const auto body = QJsonDocument::fromJson(c.transport.bodies.first()).object();
-        QVERIFY(!body.value("capabilities").toArray().contains("events.forward_only/1"));
+        QCOMPARE(body.value("capabilities").toArray(),
+                 (QJsonArray{"transport.webrtc/1", "teams.remote/1", "session.prepare/1",
+                             "runner.relay/1", "events.forward_only/1"}));
         // Without the capability, the next heartbeat answer resumes uploads.
         c.transport.responseForPath.insert("/v2/daemon/heartbeat", R"({"ok":true})");
         Access::heartbeat(*c.client, {QJsonArray{}});

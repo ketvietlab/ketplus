@@ -70,8 +70,7 @@ void CloudControlClient::publishPreparedSession(const QJsonObject& command,
         snapshot.insert(QLatin1String(key), scope.value(QLatin1String(key)));
     const QJsonObject body{{"machineId", machineId_},
                            {"daemonVersion", KETPLUS_PRODUCT_VERSION},
-                           {"capabilities", QJsonArray{"transport.webrtc/1", "teams.remote/1",
-                                                       "session.prepare/1", "runner.relay/1"}},
+                           {"capabilities", cloud_control::daemonCapabilities()},
                            {"worktrees", QJsonArray{}},
                            {"sessions", QJsonArray{snapshot}}};
     request(
