@@ -6,6 +6,7 @@
 #include "teams/TeamRemoteView.h"
 #include "teams/TeamRules.h"
 
+#include <QJsonArray>
 #include <QPointer>
 #include <QSet>
 
@@ -52,10 +53,11 @@ const QHash<QString, QSet<QString>>& allowedFields() {
           QStringLiteral("risk_acknowledged"), QStringLiteral("plan"),
           QStringLiteral("turn_budget"), QStringLiteral("language")}},
         // T-10: an older phone may still send a lane's `paths`; it is accepted and ignored.
+        // T-18: `developers` adds several at once, as a local client does (T-4).
         {QStringLiteral("team.member.add"),
          {QStringLiteral("team_id"), QStringLiteral("name"), QStringLiteral("lane"),
-          QStringLiteral("paths"), QStringLiteral("provider"), QStringLiteral("model"),
-          QStringLiteral("effort"), QStringLiteral("expected_revision")}},
+          QStringLiteral("paths"), QStringLiteral("developers"), QStringLiteral("provider"),
+          QStringLiteral("model"), QStringLiteral("effort"), QStringLiteral("expected_revision")}},
         {QStringLiteral("team.member.remove"),
          {QStringLiteral("team_id"), QStringLiteral("session_id"),
           QStringLiteral("expected_revision")}},
@@ -71,6 +73,38 @@ const QHash<QString, QSet<QString>>& allowedFields() {
          {QStringLiteral("team_id"), QStringLiteral("task_id"), QStringLiteral("owner"),
           QStringLiteral("reason"), QStringLiteral("expected_revision")}}};
     return fields;
+}
+
+// T-18: the shape of `developers` the contract allows: one to five {name, lane?}, and never
+// beside a single `name`, `lane` or `paths`. Names, lanes and room are checked as for a local
+// client, before any conversation starts.
+std::optional<QJsonObject> developersRefusal(const QJsonObject& payload) {
+    if (!payload.contains(QStringLiteral("developers")))
+        return std::nullopt;
+    if (payload.contains(QStringLiteral("name")) || payload.contains(QStringLiteral("lane")) ||
+        payload.contains(QStringLiteral("paths")))
+        return invalid(QStringLiteral("Name the developers to add in developers, or one "
+                                      "developer with name."));
+    const QJsonValue value = payload.value(QStringLiteral("developers"));
+    const QJsonArray developers = value.toArray();
+    if (!value.isArray() || developers.isEmpty() || developers.size() > teams::maximumDevelopers)
+        return invalid(QStringLiteral("Name one to five developers to add."));
+    for (const QJsonValue& entry : developers) {
+        const QJsonObject developer = entry.toObject();
+        const QJsonValue lane = developer.value(QStringLiteral("lane"));
+        if (!entry.isObject() || !developer.value(QStringLiteral("name")).isString() ||
+            (!lane.isUndefined() && !lane.isString()))
+            return invalid(QStringLiteral("Each developer to add has a name and may have a lane."));
+        for (auto it = developer.constBegin(); it != developer.constEnd(); ++it)
+            if (it.key() != QStringLiteral("name") && it.key() != QStringLiteral("lane"))
+                return invalid(QStringLiteral("A paired device cannot send a developer with %1.")
+                                   .arg(it.key()));
+        if (!lane.toString().trimmed().isEmpty())
+            if (const auto refused =
+                    teams::rules::validName(lane.toString(), QStringLiteral("a lane")))
+                return refusal(refused->code, refused->message);
+    }
+    return std::nullopt;
 }
 
 bool pageLimit(const QJsonObject& payload, const QString& key) {
@@ -128,6 +162,9 @@ std::optional<QJsonObject> payloadRefusal(const QString& type, const QJsonObject
         payload.value(QStringLiteral("confirmation")).toString() != QStringLiteral("DELETE"))
         return refusal(QStringLiteral("confirmation_required"),
                        QStringLiteral("Confirm the deletion with DELETE."));
+    if (type == QStringLiteral("team.member.add"))
+        if (const auto refused = developersRefusal(payload))
+            return refused;
     if (type == QStringLiteral("team.task.handover")) {
         const QString reason = payload.value(QStringLiteral("reason")).toString().trimmed();
         if (reason.isEmpty() || reason.size() > 500)

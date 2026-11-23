@@ -191,12 +191,18 @@ describes them.
 | Language | `team.update` | `team_id`, `language` (`en` or `vi`, ADR 0125), `expected_revision` | settings | `invalid_payload` |
 | Delete the team (its conversations stay) | `team.delete` | `team_id`, `confirmation: "DELETE"`, `expected_revision` | settings and members | `confirmation_required` |
 | New team | `team.create` | envelope `repositoryId` and `expectedCatalogRevision`; `name`, `goal`, `integration_branch`, `merge_policy`, `leader_writes_requirements`, `execution_policy`, `risk_acknowledged`, `plan {leader, developers {count, members?}, reviewer}`, each agent being `{provider, model?, effort?}`, `turn_budget?`, `language?` (`auto`, `en` or `vi`, [T30](2026-11-18-english-ui-team-content.md); without it a new team follows the prompt) (without `turn_budget`, the team takes the global value of Settings → Teams, which the phone reads from `team.list`'s `settings`; an older phone that does not read it shows "The Mac's default (Settings → Teams)" for an empty field) | the worktree catalog | `repository_not_found`, `invalid_repository`, `team_full`, `last_developer`, `provider_unavailable`, `reviewer_unsupported`, `member_unavailable`, `execution_policy_denied` |
-| Add a developer (a new conversation) | `team.member.add` | `team_id`, `name`, `lane?`, `provider`, `model?`, `effort?`, `expected_revision` (an older phone's `paths` is ignored, T-10) | members | `team_full`, `provider_unavailable`, `member_unavailable` |
+| Add a developer (a new conversation) | `team.member.add` | `team_id`, `name`, `lane?`, `provider`, `model?`, `effort?`, `expected_revision` (an older phone's `paths` is ignored, T-10); or, for several at once (T-18), `developers: [{name, lane?}]` (1 to 5) in place of `name`, `lane` and `paths`, never beside them | members | `team_full`, `provider_unavailable`, `member_unavailable`, `invalid_payload` |
 | Remove a member | `team.member.remove` | `team_id`, `session_id`, `expected_revision` | members | `not_member`, `last_developer`, `role_required` |
 | Add an existing conversation to a team | `team.member.join` | `team_id`, `session_id`, `lane?`, `expected_revision` (an older phone's `paths` is ignored, T-10) | members | `session_not_found`, `already_member`, `other_repository`, `team_full` |
 | Change the team's agent (T-2, ADR 0114 "Protocol") | `team.provider.set` | `team_id`, `provider`, `model?`, `effort?`, `members?` (session ids; every member when absent), `execution_policy?` (only `full`, to give the team Full access for a Codex reviewer, T-3) with `risk_acknowledged`, `expected_revision`; the answer adds `results`, one per chosen member | settings and members | `invalid_payload`, `provider_unavailable`, `provider_not_ready`, `not_member`, `reviewer_unsupported`, `execution_policy_denied` |
 | Hand a task over | `team.task.handover` | `team_id`, `task_id`, `owner` (a developer's or the leader's `session_id`), `reason` (1 to 500 characters), `expected_revision` | that task | `task_not_found`, `not_member`, `role_forbidden`, `invalid_transition`, `worktree_unavailable` |
 
+- `developers` (T-18) is checked as a local client's (ADR 0114 "Protocol", T-4): each
+  `{name, lane?}` with nothing else, a name of 1 to 120 bytes, a lane of at most 120 that
+  takes the name when empty; a name the team or the request already has, or a lane a
+  developer has, is refused with `invalid_payload`, more than the room left with
+  `team_full`. A conversation that cannot start leaves none of them: `member_unavailable`
+  says whose. Otherwise all join in one change of the members.
 - A phone may change only the `team.update` fields listed above. Any other field is
   refused with `invalid_payload`. Changing the name, the goal, the branch or the review
   rounds from the phone is not in the mock.
