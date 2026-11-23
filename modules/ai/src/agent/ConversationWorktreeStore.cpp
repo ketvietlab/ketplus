@@ -1,5 +1,7 @@
 #include "agent/ConversationWorktreeStore.h"
 
+#include "LinkedWorktreeRemoval.h"
+
 #include <QDateTime>
 #include <QDir>
 #include <QFileInfo>
@@ -7,6 +9,7 @@
 #include <QSqlDatabase>
 #include <QSqlError>
 #include <QSqlQuery>
+#include <QSqlRecord>
 #include <QStandardPaths>
 #include <QUuid>
 #include <QtDebug>
@@ -36,7 +39,13 @@ class Connection final {
                                                "role TEXT NOT NULL, "
                                                "hidden INTEGER NOT NULL DEFAULT 0, "
                                                "created_at INTEGER NOT NULL, "
+                                               "git_identity TEXT NOT NULL DEFAULT '', "
                                                "PRIMARY KEY (conversation_id, path))"));
+            if (ready_ && !hasGitIdentity())
+                ready_ = query.exec(
+                             QStringLiteral("ALTER TABLE conversation_worktrees "
+                                            "ADD COLUMN git_identity TEXT NOT NULL DEFAULT ''")) ||
+                         hasGitIdentity();
         } else
             ready_ = true;
     }
@@ -45,6 +54,11 @@ class Connection final {
         if (!name_.isEmpty())
             QSqlDatabase::removeDatabase(name_);
     }
+    [[nodiscard]] bool hasGitIdentity() const {
+        return db_.record(QStringLiteral("conversation_worktrees"))
+            .contains(QStringLiteral("git_identity"));
+    }
+
     QSqlDatabase db_;
     bool ready_{false};
 
@@ -103,13 +117,16 @@ void ConversationWorktreeStore::save(const QString& conversationId, const QStrin
         return;
     QSqlQuery query(connection.db_);
     query.prepare(QStringLiteral(
-        "INSERT INTO conversation_worktrees(conversation_id, path, role, hidden, created_at) "
-        "VALUES(?, ?, ?, 0, ?) "
-        "ON CONFLICT(conversation_id, path) DO UPDATE SET role=excluded.role, hidden=0"));
+        "INSERT INTO conversation_worktrees(conversation_id, path, role, hidden, created_at, "
+        "git_identity) VALUES(?, ?, ?, 0, ?, ?) "
+        "ON CONFLICT(conversation_id, path) DO UPDATE SET role=excluded.role, hidden=0, "
+        "git_identity=excluded.git_identity"));
     query.addBindValue(id);
     query.addBindValue(worktree);
     query.addBindValue(role.isEmpty() ? QString::fromLatin1(kRoleAgent) : role);
     query.addBindValue(QDateTime::currentSecsSinceEpoch());
+    const auto identity = git::linkedWorktreeIdentity(worktree);
+    query.addBindValue(identity.isEmpty() ? QStringLiteral("") : identity);
     execOrWarn(query, "save");
 }
 
@@ -140,24 +157,36 @@ void ConversationWorktreeStore::removeConversation(const QString& conversationId
 QVector<ConversationWorktreeRecord>
 ConversationWorktreeStore::list(const QString& conversationId) const {
     const auto cached = cache_.constFind(conversationId);
-    if (cached != cache_.constEnd())
-        return *cached;
     QVector<ConversationWorktreeRecord> result;
-    Connection connection(databasePath_, false);
-    if (!connection.ready_)
-        return result;
-    QSqlQuery query(connection.db_);
-    query.prepare(QStringLiteral("SELECT conversation_id, path, role, hidden FROM "
-                                 "conversation_worktrees WHERE conversation_id=? "
-                                 "ORDER BY created_at ASC"));
-    query.addBindValue(conversationId);
-    if (!query.exec())
-        return result;
-    while (query.next()) {
-        result.append({query.value(0).toString(), query.value(1).toString(),
-                       query.value(2).toString(), query.value(3).toBool()});
+    if (cached != cache_.constEnd()) {
+        result = *cached;
+    } else {
+        Connection connection(databasePath_, false);
+        if (!connection.ready_)
+            return result;
+        QSqlQuery query(connection.db_);
+        const auto identity =
+            connection.hasGitIdentity() ? QStringLiteral("git_identity") : QStringLiteral("''");
+        query.prepare(QStringLiteral("SELECT conversation_id, path, role, hidden, %1 FROM "
+                                     "conversation_worktrees WHERE conversation_id=? "
+                                     "ORDER BY created_at ASC")
+                          .arg(identity));
+        query.addBindValue(conversationId);
+        if (!query.exec())
+            return result;
+        while (query.next()) {
+            result.append({query.value(0).toString(), query.value(1).toString(),
+                           query.value(2).toString(), query.value(3).toBool(),
+                           query.value(4).toString()});
+        }
+        cache_.insert(conversationId, result);
     }
-    cache_.insert(conversationId, result);
+    // Keep a missing path in the history. If another checkout takes its place,
+    // the old row must never display or offer to delete the replacement.
+    result.removeIf([](const auto& record) {
+        return !record.gitIdentity.isEmpty() && QFileInfo::exists(record.path) &&
+               git::linkedWorktreeIdentity(record.path) != record.gitIdentity;
+    });
     return result;
 }
 
@@ -177,6 +206,16 @@ QStringList ConversationWorktreeStore::allPaths(const QString& conversationId) c
     return paths;
 }
 
+QStringList ConversationWorktreeStore::removablePaths(const QString& conversationId) const {
+    QStringList paths;
+    for (const auto& record : list(conversationId)) {
+        if (!record.gitIdentity.isEmpty() &&
+            git::linkedWorktreeIdentity(record.path) == record.gitIdentity)
+            paths.append(record.path);
+    }
+    return paths;
+}
+
 bool ConversationWorktreeStore::containsPath(const QString& path,
                                              const QString& exceptConversationId) const {
     const QString worktree = cleanPath(path);
@@ -186,13 +225,20 @@ bool ConversationWorktreeStore::containsPath(const QString& path,
     if (!connection.ready_)
         return false;
     QSqlQuery query(connection.db_);
-    query.prepare(
-        QStringLiteral("SELECT conversation_id FROM conversation_worktrees WHERE path=? LIMIT 8"));
+    const auto identityColumn =
+        connection.hasGitIdentity() ? QStringLiteral("git_identity") : QStringLiteral("''");
+    query.prepare(QStringLiteral("SELECT conversation_id, %1 FROM conversation_worktrees "
+                                 "WHERE path=?")
+                      .arg(identityColumn));
     query.addBindValue(worktree);
     if (!query.exec())
         return false;
+    const bool exists = QFileInfo::exists(worktree);
+    const QString identity = exists ? git::linkedWorktreeIdentity(worktree) : QString{};
     while (query.next()) {
-        if (query.value(0).toString() != exceptConversationId)
+        const QString recorded = query.value(1).toString();
+        if (query.value(0).toString() != exceptConversationId &&
+            (!exists || recorded.isEmpty() || recorded == identity))
             return true;
     }
     return false;

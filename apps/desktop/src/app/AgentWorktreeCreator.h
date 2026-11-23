@@ -19,7 +19,8 @@ class AgentWorktreeCreator final : public QObject {
 
     void create(const QString& repositoryPath, const QString& primaryWorktreePath,
                 const QString& branchName, const QString& baseBranch = QStringLiteral("HEAD"));
-    void remove(const QString& repositoryPath, const QString& worktreePath, bool force = false);
+    void remove(const QString& repositoryPath, const QString& worktreePath,
+                const QString& expectedIdentity = {});
     void prune(const QString& repositoryPath);
 
   signals:
@@ -39,7 +40,6 @@ class AgentWorktreeCreator final : public QObject {
     QString branchName_;
     bool active_{false};
     bool timedOut_{false};
-    bool removing_{false};
     bool pruning_{false};
 };
 

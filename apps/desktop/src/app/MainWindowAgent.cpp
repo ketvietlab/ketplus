@@ -464,8 +464,7 @@ void MainWindow::ensureAgentWorkspace() {
                     auto* notice = new QMessageBox(
                         QMessageBox::Warning, tr("Unable to delete worktree"),
                         tr("The conversation was deleted, but a linked worktree could not be "
-                           "removed:\n%1\n\nEnable force delete if Git refused a dirty, untracked, "
-                           "or locked worktree.")
+                           "removed:\n%1")
                             .arg(error),
                         QMessageBox::Ok, this);
                     notice->setObjectName(QStringLiteral("worktreeDeletionError"));
@@ -850,8 +849,8 @@ void MainWindow::syncAgentWorkspaceContext(const bool loadTranscript) {
 void MainWindow::clearPendingWorktreeDeletion() {
     pendingDeleteConversationPath_.clear();
     pendingDeleteWorktreePaths_.clear();
+    pendingDeleteWorktreeIdentities_.clear();
     pendingDeleteWorktreeRepository_.clear();
-    pendingDeleteWorktreeForce_ = false;
     pendingDeleteWorktreeSkipped_.clear();
 }
 
@@ -876,7 +875,8 @@ void MainWindow::removeNextPendingLinkedWorktree() {
         if (normalizedPath(worktree) == normalizedPath(workspaceRoot_) &&
             normalizedPath(primary) != normalizedPath(worktree))
             switchToWorktree(primary);
-        agentWorktreeCreator_->remove(repository, worktree, pendingDeleteWorktreeForce_);
+        agentWorktreeCreator_->remove(repository, worktree,
+                                      pendingDeleteWorktreeIdentities_.value(worktree));
         return;
     }
     if (!pendingDeleteWorktreeSkipped_.isEmpty()) {

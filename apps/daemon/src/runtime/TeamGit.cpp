@@ -13,12 +13,25 @@
 #include <QSet>
 
 namespace ketplus::daemon::team_git {
+namespace {
+
+QProcessEnvironment gitEnvironment() {
+    auto environment = QProcessEnvironment::systemEnvironment();
+    for (const auto& key : environment.keys())
+        if (key.startsWith(QStringLiteral("GIT_"), Qt::CaseInsensitive))
+            environment.remove(key);
+    environment.insert(QStringLiteral("GIT_TERMINAL_PROMPT"), QStringLiteral("0"));
+    return environment;
+}
+
+} // namespace
 
 std::optional<QString> output(const QString& directory, const QStringList& arguments) {
     if (directory.isEmpty())
         return std::nullopt;
     QProcess process;
     process.setWorkingDirectory(directory);
+    process.setProcessEnvironment(gitEnvironment());
     process.start(QStringLiteral("git"),
                   QStringList{QStringLiteral("--no-optional-locks")} + arguments);
     if (!process.waitForFinished(15000) || process.exitStatus() != QProcess::NormalExit ||
@@ -30,6 +43,7 @@ std::optional<QString> output(const QString& directory, const QStringList& argum
 QString repositoryOf(const QString& worktreePath) {
     QProcess process;
     process.setWorkingDirectory(worktreePath);
+    process.setProcessEnvironment(gitEnvironment());
     process.start(QStringLiteral("git"),
                   {QStringLiteral("--no-optional-locks"), QStringLiteral("rev-parse"),
                    QStringLiteral("--path-format=absolute"), QStringLiteral("--git-common-dir")});
@@ -253,31 +267,44 @@ std::optional<QSet<QString>> branchNames(const QString& repository) {
 teams::WorktreeAnswer createWorktree(const teams::Team& whole, const teams::Task& task) {
     // T-90: the task's repository and integration branch, when it has its own.
     const teams::Team team = teams::taskScope(whole, task);
+    const QFileInfo source(team.repository);
+    const QString root = source.canonicalFilePath();
+    if (!source.isAbsolute() || !source.isDir() || root.isEmpty() || repositoryOf(root) != root)
+        return {.worktree = std::nullopt,
+                .error = QStringLiteral("An existing main repository checkout is required.")};
     const QString base =
         team.integrationBranch.isEmpty() ? QStringLiteral("HEAD") : team.integrationBranch;
-    const auto commit = output(
-        team.repository, {QStringLiteral("rev-parse"), QStringLiteral("--verify"),
-                          QStringLiteral("--end-of-options"), base + QStringLiteral("^{commit}")});
+    const auto commit =
+        output(root, {QStringLiteral("rev-parse"), QStringLiteral("--verify"),
+                      QStringLiteral("--end-of-options"), base + QStringLiteral("^{commit}")});
     if (!commit)
         return {.worktree = std::nullopt,
                 .error = QStringLiteral("The integration branch %1 does not exist in %2.")
                              .arg(base, team.repository)};
     const QString branch = teams::branch_names::plannedBranch(team.id, task);
-    const QFileInfo repository(team.repository);
-    const QString path = QDir::cleanPath(repository.dir().filePath(
-        teams::branch_names::plannedWorktreeName(repository.fileName(), team.id, task)));
-    if (QFileInfo::exists(path))
+    const QFileInfo repository(root);
+    const QString name =
+        teams::branch_names::plannedWorktreeName(repository.fileName(), team.id, task);
+    if (name.contains(QLatin1Char('/')) || name.contains(QLatin1Char('\\')) ||
+        name.contains(QChar(u'\0')))
+        return {.worktree = std::nullopt, .error = QStringLiteral("Invalid worktree name.")};
+    const QString path = repository.dir().filePath(name);
+    const QFileInfo destination(path);
+    if (destination.exists() || destination.isSymLink())
         return {.worktree = std::nullopt,
                 .error = QStringLiteral("The worktree path %1 already exists.").arg(path)};
     // Made since the task was named: the leader renames it (team_task_update branch_slug).
-    if (branchTaken(team.repository, branch) == std::optional<bool>(true))
+    const auto taken = branchTaken(root, branch);
+    if (!taken)
+        return {.worktree = std::nullopt,
+                .error = QStringLiteral("Existing Git branches could not be checked.")};
+    if (*taken)
         return {.worktree = std::nullopt,
                 .error = QStringLiteral("The branch %1 already exists in %2: rename the task's "
                                         "branch with team_task_update (branch_slug).")
                              .arg(branch, team.repository)};
-    if (!output(team.repository,
-                {QStringLiteral("worktree"), QStringLiteral("add"), QStringLiteral("-b"), branch,
-                 QStringLiteral("--"), path, commit->trimmed()}))
+    if (!output(root, {QStringLiteral("worktree"), QStringLiteral("add"), QStringLiteral("-b"),
+                       branch, QStringLiteral("--"), path, commit->trimmed()}))
         return {
             .worktree = std::nullopt,
             .error =
@@ -285,7 +312,7 @@ teams::WorktreeAnswer createWorktree(const teams::Team& whole, const teams::Task
     return {.worktree = teams::TaskWorktree{.branch = branch,
                                             .worktree = QFileInfo(path).canonicalFilePath(),
                                             .baseCommit = commit->trimmed(),
-                                            .repository = team.repository,
+                                            .repository = root,
                                             .integrationBranch = team.integrationBranch},
             .error = {}};
 }

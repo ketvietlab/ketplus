@@ -5,10 +5,13 @@
 #include "AgentTestFixture.h"
 #include "TeamFakeHost.h"
 #include "TestPaths.h"
+#include "runtime/TeamGit.h"
 
 #include <QDir>
+#include <QFileInfo>
 #include <QProcess>
 #include <QStandardPaths>
+#include <QTemporaryDir>
 #include <QTest>
 #include <QTimer>
 
@@ -104,6 +107,43 @@ class TeamTaskGitTest final : public QObject {
     }
 
   private slots:
+    void createsBesideTheCanonicalRepositoryAndRefusesCollisions() {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString repository = directory.filePath("repo with ' and $");
+        QVERIFY(QDir().mkpath(repository));
+        git(repository, {"init", "-b", "main"});
+        git(repository, {"-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+                         "-c", "commit.gpgsign=false", "commit", "--allow-empty", "-m", "initial"});
+        Team team = standardTeam();
+        team.repository = repository;
+        team.integrationBranch = "main";
+        Task task;
+        task.id = "T-7";
+        task.branchType = "fix";
+        task.branchSlug = "checkout";
+        const auto made = team_git::createWorktree(team, task);
+        QVERIFY2(made.worktree.has_value(), qPrintable(made.error));
+        QCOMPARE(made.worktree->branch, QStringLiteral("fix/checkout-t7"));
+        QCOMPARE(QFileInfo(made.worktree->worktree).fileName(),
+                 QStringLiteral("repo with ' and $-fix-checkout-t7"));
+        QVERIFY(team_git::createWorktree(team, task).error.contains("path"));
+
+        task.id = "T-8";
+        git(repository, {"branch", "fix/checkout-t8"});
+        QVERIFY(team_git::createWorktree(team, task).error.contains("branch"));
+
+#ifndef Q_OS_WIN
+        task.id = "T-9";
+        const auto dangling = directory.filePath("repo with ' and $-fix-checkout-t9");
+        QVERIFY(QFile::link(directory.filePath("missing"), dangling));
+        QVERIFY(team_git::createWorktree(team, task).error.contains("already exists"));
+        QVERIFY(QFileInfo(dangling).isSymLink());
+#endif
+        team.repository = "relative";
+        QVERIFY(!team_git::createWorktree(team, task).worktree.has_value());
+    }
+
     void initTestCase() { QStandardPaths::setTestModeEnabled(true); }
 
     void init() {

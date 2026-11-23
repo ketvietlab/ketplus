@@ -32,8 +32,23 @@ conversation as if they were work of their own.
 - A conversation switches its worktree with the execution picker
   (`session.worktree.switch`, ADR 0105). The editor's Git > Switch Worktree menu
   still lists the linked worktrees.
-- A worktree is removed with its conversation (the delete card's linked-worktree
-  options) or outside KetPlus.
+- A worktree can be removed with its conversation, from the worktree menu, or
+  outside KetPlus. The desktop delete actions and daemon team cleanup refuse
+  main checkouts, dirty checkouts (including ignored files and index flags
+  that suppress change detection), and HEAD commits absent from the local
+  remote-tracking refs. They check for processes using the checkout or its
+  descendants immediately before Git removes it without force. Linux sees the
+  cwd data exposed by procfs. macOS uses the current user's visible cwd entries.
+  Windows relies on the operating system refusing to remove a process's cwd.
+  These checks cannot prevent an external process from entering the folder after
+  the check or see processes hidden by host permissions or namespaces.
+- Conversation worktree ownership records the identity of the linked checkout.
+  A missing checkout can remain visible as history. A checkout that replaces it
+  at the same path does not inherit that ownership. Older records without an
+  identity can still be shown, but cannot authorize deletion from a conversation.
+  After a move, the execution picker can list the last recorded repository so
+  the user can choose a new checkout without silently changing the conversation's
+  execution path.
 
 ## Consequences
 
@@ -42,6 +57,7 @@ conversation as if they were work of their own.
 - `AgentWorktreeCreator::prune` stays, but no UI calls it. A missing worktree
   folder still shows in its conversation (the missing-worktree state), but its
   stale Git entry is not cleaned up: `git worktree add` to the same path fails
-  until `git worktree prune` runs.
+  until `git worktree prune` runs. Successful in-app removal attempts to prune
+  stale registrations, and a later prune error is logged separately.
 - Worktrees made outside KetPlus with no conversation do not appear anywhere
   except Git > Switch Worktree and the New conversation base list.

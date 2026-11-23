@@ -520,8 +520,8 @@ class MainWindow final : public QMainWindow {
     qint64 pickerWorktreeRevision_{0};
     QString pendingDeleteConversationPath_;
     QStringList pendingDeleteWorktreePaths_;
+    QHash<QString, QString> pendingDeleteWorktreeIdentities_;
     QString pendingDeleteWorktreeRepository_;
-    bool pendingDeleteWorktreeForce_{false};
     QStringList pendingDeleteWorktreeSkipped_;
     QStringList sidebarRepositoryRoots_;
     QHash<QString, QString> sidebarRepositoryByPath_;

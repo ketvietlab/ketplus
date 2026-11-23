@@ -1,18 +1,23 @@
 #include "app/ExecutionWorktreeDialog.h"
 #include "KetDialog.h"
 #include "KetToast.h"
+#include "app/AgentWorktreeCreator.h"
 #include "ui/Theme.h"
 #include <QAbstractButton>
+#include <QDir>
+#include <QFile>
 #include <QGuiApplication>
 #include <QJsonArray>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
 #include <QPointer>
+#include <QProcess>
 #include <QPushButton>
 #include <QQuickView>
 #include <QScreen>
 #include <QScrollBar>
+#include <QTemporaryDir>
 #include <QVBoxLayout>
 #include <QtTest>
 
@@ -21,6 +26,98 @@
 class ExecutionWorktreeDialogTest final : public QObject {
     Q_OBJECT
   private slots:
+    void creationKeepsBranchAndPathAsLiteralArguments() {
+        QTemporaryDir temp;
+        QVERIFY(temp.isValid());
+        const QString repository = temp.filePath(QStringLiteral("repo with ' and $"));
+        QVERIFY(QDir().mkpath(repository));
+        const auto git = [&](const QStringList& arguments) {
+            QProcess process;
+            process.setWorkingDirectory(repository);
+            process.start(QStringLiteral("git"), arguments);
+            return process.waitForFinished(5000) && process.exitStatus() == QProcess::NormalExit &&
+                   process.exitCode() == 0;
+        };
+        QVERIFY(git({"init", "-b", "main"}));
+        QVERIFY(git({"-c", "user.email=fixture@example.invalid", "-c", "user.name=Fixture", "-c",
+                     "commit.gpgsign=false", "commit", "--allow-empty", "-m", "initial"}));
+
+        ketplus::AgentWorktreeCreator creator;
+        QSignalSpy created(&creator, &ketplus::AgentWorktreeCreator::created);
+        QSignalSpy failed(&creator, &ketplus::AgentWorktreeCreator::failed);
+        const auto branch = QStringLiteral("feature/literal;branch");
+        creator.create(repository, repository, branch);
+        QTRY_COMPARE(created.size(), 1);
+        const auto args = created.takeFirst();
+        const QString target = args.first().toString();
+        QCOMPARE(args.at(1).toString(), branch);
+        QCOMPARE(QFileInfo(target).fileName(),
+                 QStringLiteral("repo with ' and $-feature-literal;branch"));
+        QVERIFY(git({"show-ref", "--verify", "refs/heads/" + branch}));
+
+        creator.create(repository, repository, QStringLiteral("feature-literal;branch"));
+        QCOMPARE(failed.size(), 1);
+        QVERIFY(failed.takeFirst().first().toString().contains("already exists"));
+
+        QVERIFY(git({"branch", "duplicate"}));
+        creator.create(repository, repository, QStringLiteral("duplicate"));
+        QTRY_COMPARE(failed.size(), 1);
+        failed.clear();
+        QVERIFY(!QFileInfo::exists(
+            ketplus::AgentWorktreeCreator::worktreePath(repository, "duplicate")));
+
+#ifndef Q_OS_WIN
+        const auto dangling = ketplus::AgentWorktreeCreator::worktreePath(repository, "dangling");
+        QVERIFY(QFile::link(temp.filePath("missing"), dangling));
+        creator.create(repository, repository, QStringLiteral("dangling"));
+        QCOMPARE(failed.size(), 1);
+        QVERIFY(failed.takeFirst().first().toString().contains("already exists"));
+        QVERIFY(QFileInfo(dangling).isSymLink());
+#endif
+        creator.create(repository, QStringLiteral("relative-repository"),
+                       QStringLiteral("relative"));
+        QCOMPARE(failed.size(), 1);
+        QVERIFY(!git({"show-ref", "--verify", "refs/heads/relative"}));
+        QCOMPARE(created.size(), 0);
+    }
+
+    void desktopRemovalChecksRemoteTrackingRefs() {
+        QTemporaryDir temp;
+        QVERIFY(temp.isValid());
+        const QString repository = temp.filePath("repo");
+        const QString remote = temp.filePath("remote.git");
+        const QString linked = temp.filePath("linked");
+        const auto git = [&](const QStringList& arguments) {
+            QProcess process;
+            process.setWorkingDirectory(temp.path());
+            process.start(QStringLiteral("git"), arguments);
+            return process.waitForFinished(5000) && process.exitStatus() == QProcess::NormalExit &&
+                   process.exitCode() == 0;
+        };
+        QVERIFY(git({"init", "--bare", "-b", "main", remote}));
+        QVERIFY(git({"clone", remote, repository}));
+        QVERIFY(git({"-C", repository, "-c", "user.email=test@example.invalid", "-c",
+                     "user.name=Fixture", "-c", "commit.gpgsign=false", "commit", "--allow-empty",
+                     "-m", "local commit"}));
+        QVERIFY(git({"-C", repository, "worktree", "add", "-b", "local", linked}));
+
+        ketplus::AgentWorktreeCreator creator;
+        QSignalSpy removed(&creator, &ketplus::AgentWorktreeCreator::removed);
+        QSignalSpy failed(&creator, &ketplus::AgentWorktreeCreator::failed);
+        creator.remove(repository, linked);
+        QTRY_COMPARE(failed.size(), 1);
+        QVERIFY(failed.takeFirst().first().toString().contains("no remote branch"));
+        QCOMPARE(removed.size(), 0);
+        QVERIFY(QDir(linked).exists());
+
+        QVERIFY(git({"-C", linked, "push", "origin", "local"}));
+        creator.remove(repository, linked);
+        QTRY_COMPARE(removed.size(), 1);
+        QCOMPARE(failed.size(), 0);
+        QVERIFY(!QDir(linked).exists());
+        QVERIFY(git({"-C", repository, "show-ref", "--verify", "refs/heads/local"}));
+    }
+
     // The Agent Workspace is a QQuickView in a window container, a native child window. A
     // dialog card drawn into the window's own surface would sit beneath it.
     void pickerStaysAboveTheAgentWorkspace() {

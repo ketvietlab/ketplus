@@ -2,6 +2,8 @@
 # started, including Windows' npm `.cmd` shims. Shared by modules/ai and modules/atlas
 # (modules/browser has its own node probes for now); Qt Core only.
 add_library(ketplus_tool_locations STATIC
+    src/LinkedWorktreeRemoval.cpp
+    src/LinkedWorktreeRemoval.h
     src/ToolLocations.cpp
     src/ToolLocations.h
 )

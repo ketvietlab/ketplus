@@ -641,9 +641,7 @@ AgentConversationDeleteDialog::AgentConversationDeleteDialog(const QStringList& 
                                            "", static_cast<int>(linkedWorktreePaths.size()))
                                       : tr("Do you want to delete worktrees linked to this "
                                            "conversation?"),
-                                  this)),
-      force_(
-          new QCheckBox(tr("Force delete, discarding uncommitted and untracked changes"), this)) {
+                                  this)) {
     const int linkedWorktreeCount = static_cast<int>(linkedWorktreePaths.size());
     setObjectName(QStringLiteral("conversationDeleteDialog"));
     auto* layout = new QVBoxLayout(this);
@@ -686,15 +684,12 @@ AgentConversationDeleteDialog::AgentConversationDeleteDialog(const QStringList& 
     deleteLinked_->setEnabled(linkedWorktreeCount > 0);
     if (linkedWorktreeCount <= 0)
         deleteLinked_->setToolTip(tr("This conversation is not linked to a dedicated worktree."));
-    force_->setObjectName(QStringLiteral("forceDeleteWorktreeCheck"));
-    force_->setEnabled(false);
-    force_->setToolTip(tr("Removes the worktree even with uncommitted or untracked changes, which "
-                          "are lost. Required when Git refuses a dirty, untracked, or locked "
-                          "worktree."));
+    if (linkedWorktreeCount > 0)
+        deleteLinked_->setToolTip(tr("Worktrees in use or with uncommitted changes, untracked "
+                                     "files, or unpushed commits are kept."));
     layout->addWidget(deleteLinked_);
     // Nothing to remove: the mock's card, without the worktree choices.
     deleteLinked_->setVisible(linkedWorktreeCount > 0);
-    force_->setVisible(linkedWorktreeCount > 0);
     if (linkedWorktreeCount > 0) {
         auto* paths = new QLabel(QStringList(linkedWorktreePaths).join(QLatin1Char('\n')), this);
         paths->setObjectName(QStringLiteral("linkedWorktreePaths"));
@@ -703,17 +698,6 @@ AgentConversationDeleteDialog::AgentConversationDeleteDialog(const QStringList& 
         paths->setContentsMargins(22, 0, 0, 0);
         layout->addWidget(paths);
     }
-    layout->addWidget(force_);
-    // The consequence stays visible next to the choice instead of only in a tooltip.
-    auto* forceWarning =
-        new QLabel(tr("Uncommitted and untracked files in these worktrees are permanently "
-                      "deleted. Commit or stash anything you want to keep first."),
-                   this);
-    forceWarning->setObjectName(QStringLiteral("forceDeleteWorktreeWarning"));
-    forceWarning->setWordWrap(true);
-    forceWarning->setContentsMargins(22, 0, 0, 0);
-    forceWarning->setVisible(false);
-    layout->addWidget(forceWarning);
     // Return confirms, as the dialog's default button did.
     for (const auto key : {Qt::Key_Return, Qt::Key_Enter}) {
         auto* confirm = new QShortcut(QKeySequence(key), this);
@@ -723,20 +707,6 @@ AgentConversationDeleteDialog::AgentConversationDeleteDialog(const QStringList& 
                 confirm_->click();
         });
     }
-    connect(deleteLinked_, &QCheckBox::toggled, this, [this](const bool checked) {
-        force_->setEnabled(checked);
-        if (!checked)
-            force_->setChecked(false);
-    });
-    connect(force_, &QCheckBox::toggled, this, [this, forceWarning](const bool checked) {
-        forceWarning->setVisible(checked);
-        updateConfirm();
-    });
-}
-
-void AgentConversationDeleteDialog::updateConfirm() {
-    if (confirm_ != nullptr)
-        confirm_->setText(force_->isChecked() ? tr("Delete and Discard Changes") : tr("Delete"));
 }
 
 ket::Dialog* AgentConversationDeleteDialog::present(QWidget* anchor) {
@@ -755,7 +725,6 @@ ket::Dialog* AgentConversationDeleteDialog::present(QWidget* anchor) {
     });
     confirm_ = card->addButton(tr("Delete"), ket::ButtonVariant::Danger);
     confirm_->setObjectName(QStringLiteral("conversationDeleteConfirm"));
-    updateConfirm();
     connect(cancel, &QAbstractButton::clicked, card, &ket::Dialog::reject);
     connect(confirm_, &QAbstractButton::clicked, card, &ket::Dialog::accept);
     card->open();
@@ -766,6 +735,5 @@ bool AgentConversationDeleteDialog::deleteLinkedWorktree() const {
     return deleteLinked_->isChecked();
 }
 
-bool AgentConversationDeleteDialog::forceDeleteWorktree() const { return force_->isChecked(); }
 
 } // namespace ketplus

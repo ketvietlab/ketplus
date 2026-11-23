@@ -1,3 +1,4 @@
+#include "LinkedWorktreeRemoval.h"
 #include "app/MainWindow.h"
 
 #include "agent/AgentSessionManager.h"
@@ -152,10 +153,18 @@ void MainWindow::deleteAgentConversation(const QString& worktreePath,
         return;
     const QString path = worktreePath;
     const QString id = conversationId;
-    QStringList owned = agentManager_->conversationOwnedWorktreePaths(path, id);
-    const bool hasLinkedWorktree = agentManager_->conversationOwnsWorktree(path, id);
-    if (hasLinkedWorktree && owned.isEmpty())
-        owned = QStringList{path};
+    const QStringList owned = agentManager_->conversationOwnedWorktreePaths(path, id);
+    QHash<QString, QString> identities;
+    for (const auto& worktree : owned) {
+        const auto identity = git::linkedWorktreeIdentity(worktree);
+        if (!identity.isEmpty())
+            identities.insert(worktree, identity);
+    }
+    const auto stillOwned = agentManager_->conversationOwnedWorktreePaths(path, id);
+    QStringList linkedPaths;
+    for (const auto& worktree : owned)
+        if (identities.contains(worktree) && stillOwned.contains(worktree))
+            linkedPaths.append(worktree);
     QString reference;
     for (const QVariant& value : agentManager_->conversations(path)) {
         const QVariantMap conversation = value.toMap();
@@ -166,17 +175,16 @@ void MainWindow::deleteAgentConversation(const QString& worktreePath,
             break;
         }
     }
-    auto* form =
-        new AgentConversationDeleteDialog(hasLinkedWorktree ? owned : QStringList{}, reference);
+    auto* form = new AgentConversationDeleteDialog(linkedPaths, reference);
     connect(form, &AgentConversationDeleteDialog::archiveRequested, this,
             [this, path, id] { archiveAgentConversation(path, id); });
     connect(form->present(this), &ket::Dialog::accepted, this,
-            [this, form, path, id, owned, hasLinkedWorktree] {
+            [this, form, path, id, linkedPaths, identities] {
                 if (agentManager_ == nullptr)
                     return;
                 clearPendingWorktreeDeletion();
                 if (form->deleteLinkedWorktree()) {
-                    if (!hasLinkedWorktree) {
+                    if (linkedPaths.isEmpty()) {
                         auto* notice = new QMessageBox(
                             QMessageBox::Warning, tr("Unable to delete worktree"),
                             tr("This conversation is not linked to a dedicated worktree."),
@@ -187,9 +195,9 @@ void MainWindow::deleteAgentConversation(const QString& worktreePath,
                         return;
                     }
                     pendingDeleteConversationPath_ = path;
-                    pendingDeleteWorktreePaths_ = owned;
+                    pendingDeleteWorktreePaths_ = linkedPaths;
+                    pendingDeleteWorktreeIdentities_ = identities;
                     pendingDeleteWorktreeRepository_ = primaryWorktreePath();
-                    pendingDeleteWorktreeForce_ = form->forceDeleteWorktree();
                 }
                 agentManager_->deleteConversation(path, id);
             });
