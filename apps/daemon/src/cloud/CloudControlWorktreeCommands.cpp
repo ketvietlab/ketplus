@@ -35,7 +35,7 @@
 #include <utility>
 
 // Commands scoped to a catalog worktree rather than a session: creating a conversation and
-// reading branches or configuration.
+// reading branches or configuration, and the page of worktrees a conversation can switch to.
 
 namespace ketplus::daemon {
 using cloud_control::sourceContext;
@@ -261,6 +261,52 @@ void CloudControlClient::startCreatedConversation(const QJsonObject& command,
              {QStringLiteral("options"), payload.value(QStringLiteral("options")).toObject()}}}};
     acknowledgeCommand(command, host_->handleCommand(local, QStringLiteral("cloud-control-v2")),
                        senderAgreementKey);
+}
+
+void CloudControlClient::answerWorktrees(const QJsonObject& command, QJsonObject result) {
+    const auto current =
+        sourceContext(result.value("worktree_path").toString(), ensurePathIdSalt());
+    result.insert("current_worktree_id", current.value("worktreeId"));
+    QJsonArray entries;
+    for (const auto& v : result.value("worktrees").toArray()) {
+        auto entry = v.toObject();
+        const auto path = entry.take("worktree_path").toString();
+        const auto scope = sourceContext(path, ensurePathIdSalt());
+        entry.insert("worktree_id", scope.value("worktreeId"));
+        entry.insert("repository_id", scope.value("repositoryId"));
+        entry.insert("folder", QFileInfo(path).fileName());
+        entries.append(entry);
+    }
+    result.insert("worktrees", entries);
+    result.remove("contexts");
+    result.remove("repositories");
+    result.remove("repository_path");
+    result.remove("worktree_path");
+    if (!result.value("ok").toBool()) {
+        acknowledgeCommand(command, result);
+        return;
+    }
+    // Publish discovered opaque targets before returning the picker page, so
+    // a newly created Git worktree already has a catalog/grant at selection.
+    const auto account = accountFence();
+    const QJsonObject heartbeatBody{
+        {"machineId", machineId_},
+        {"controlProtocolVersion", 2},
+        {"localProtocolVersion", 0},
+        {"daemonVersion", QStringLiteral(KETPLUS_PRODUCT_VERSION)},
+        {"observedAt", QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs)},
+        {"sessions", QJsonArray{}},
+        {"worktrees", worktreeSnapshots()}};
+    request("POST", "/v2/daemon/heartbeat", heartbeatBody, daemonToken_, {},
+            [this, command, result, account](int status, const QJsonValue&, const QString& error) {
+                if (!accountCurrent(account))
+                    return;
+                acknowledgeCommand(
+                    command, status == 202 && error.isEmpty()
+                                 ? result
+                                 : QJsonObject{{"ok", false},
+                                               {"error_code", "worktree_catalog_unavailable"}});
+            });
 }
 
 } // namespace ketplus::daemon

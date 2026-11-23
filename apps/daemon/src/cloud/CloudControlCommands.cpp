@@ -675,59 +675,23 @@ void CloudControlClient::executeCommand(const QJsonObject& command) {
                     // Repository browsing by path is a trusted local IPC feature only.
                     auto listPayload = decoded.object();
                     listPayload.remove("repository_path");
-                    auto result = host_->handleCommand({{"protocol_version", 0},
-                                                        {"message_id", command.value("id")},
-                                                        {"message_type", kind},
-                                                        {"session_id", sessionId},
-                                                        {"session_generation", generation},
-                                                        {"sent_at", protocol::timestamp()},
-                                                        {"payload", listPayload}},
-                                                       "cloud-control-v2");
-                    const auto current =
-                        sourceContext(result.value("worktree_path").toString(), ensurePathIdSalt());
-                    result.insert("current_worktree_id", current.value("worktreeId"));
-                    QJsonArray entries;
-                    for (const auto& v : result.value("worktrees").toArray()) {
-                        auto entry = v.toObject();
-                        const auto path = entry.take("worktree_path").toString();
-                        const auto scope = sourceContext(path, ensurePathIdSalt());
-                        entry.insert("worktree_id", scope.value("worktreeId"));
-                        entry.insert("repository_id", scope.value("repositoryId"));
-                        entry.insert("folder", QFileInfo(path).fileName());
-                        entries.append(entry);
-                    }
-                    result.insert("worktrees", entries);
-                    result.remove("contexts");
-                    result.remove("repositories");
-                    result.remove("repository_path");
-                    result.remove("worktree_path");
-                    if (!result.value("ok").toBool()) {
-                        acknowledgeCommand(command, result);
-                        return;
-                    }
-                    // Publish discovered opaque targets before returning the picker page, so
-                    // a newly created Git worktree already has a catalog/grant at selection.
+                    // Git lists the worktrees off this thread, as for a local client; the
+                    // answer is built here once it is read, unless the account changed meanwhile.
                     const auto account = accountFence();
-                    const QJsonObject heartbeatBody{
-                        {"machineId", machineId_},
-                        {"controlProtocolVersion", 2},
-                        {"localProtocolVersion", 0},
-                        {"daemonVersion", QStringLiteral(KETPLUS_PRODUCT_VERSION)},
-                        {"observedAt", QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs)},
-                        {"sessions", QJsonArray{}},
-                        {"worktrees", worktreeSnapshots()}};
-                    request("POST", "/v2/daemon/heartbeat", heartbeatBody, daemonToken_, {},
-                            [this, command, result, account](int status, const QJsonValue&,
-                                                             const QString& error) {
-                                if (!accountCurrent(account))
-                                    return;
-                                acknowledgeCommand(
-                                    command, status == 202 && error.isEmpty()
-                                                 ? result
-                                                 : QJsonObject{{"ok", false},
-                                                               {"error_code",
-                                                                "worktree_catalog_unavailable"}});
-                            });
+                    const QPointer<CloudControlClient> guard(this);
+                    host_->handleCommandDeferred(
+                        {{"protocol_version", 0},
+                         {"message_id", command.value("id")},
+                         {"message_type", kind},
+                         {"session_id", sessionId},
+                         {"session_generation", generation},
+                         {"sent_at", protocol::timestamp()},
+                         {"payload", listPayload}},
+                        "cloud-control-v2", [guard, command, account](const QJsonObject& listed) {
+                            if (!guard || !guard->accountCurrent(account))
+                                return;
+                            guard->answerWorktrees(command, listed);
+                        });
                     return;
                 }
                 if (kind == QStringLiteral("session.worktree.switch")) {

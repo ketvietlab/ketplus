@@ -199,6 +199,9 @@ class CloudControlClient final : public QObject {
                                                                        const QJsonObject& manifest);
     void uploadRestoreResponses(const QJsonObject& command, const QJsonArray& responses,
                                 const QJsonObject& localResult);
+    // session.worktrees: the opaque, paged answer for `listed`, which the host read off this
+    // thread, after the discovered targets reach the catalog.
+    void answerWorktrees(const QJsonObject& command, QJsonObject listed);
     void acknowledgeCommand(const QJsonObject& command, const QJsonObject& localResult,
                             const QByteArray& recipientAgreementKey = {});
     [[nodiscard]] QJsonObject status() const;

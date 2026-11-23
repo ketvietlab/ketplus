@@ -618,7 +618,9 @@ first on `PATH` to show that a tool call's worktree activity runs no git process
 adding or removing a linked worktree is seen on the next tool call, and that a local
 `session.worktrees` waits for its git off the daemon thread (POSIX only);
 `ketplus_daemon_context_relay_tests` uses production hosted service encryption/serialization
-against in-memory and private loopback hosted service fixtures, with in-memory credentials. It never
+against in-memory and private loopback hosted service fixtures, with in-memory credentials. A
+paired phone's `session.worktrees` is also held at a gated git on `PATH` (POSIX only) to show
+the daemon thread keeps answering and the page is acknowledged only after git ends. It never
 attaches to the user's running daemon or hosted service. Do not install/restart the app or
 enable live-provider flags when running this lane. UI changes require updating
 the corresponding Atlas mock first.
