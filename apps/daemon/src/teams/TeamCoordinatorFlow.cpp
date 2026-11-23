@@ -35,8 +35,16 @@ TeamMessage heldMessage(const Team& team, const QJsonObject& json) {
             .pointAt = json.value(QStringLiteral("point_at")).toString()};
 }
 
-// Every update since the last digest, grouped by task, the actionable ones marked.
-QString digestText(const Team& team, const QList<TeamUpdateRecord>& updates) {
+// T-9: what the leader's own session did needs nothing from it. The user's, a developer's, a
+// reviewer's and the daemon's updates stay actionable, as does a former leader's after a
+// handover: only the leader at the time of sending is skipped.
+bool needsLeader(const TeamUpdateRecord& update, const QString& leaderSession) {
+    return update.actionable && (leaderSession.isEmpty() || update.actor != leaderSession);
+}
+
+// Every update since the last digest, grouped by task, the ones that need the leader marked.
+QString digestText(const Team& team, const QList<TeamUpdateRecord>& updates,
+                   const QString& leaderSession) {
     // T-39: a member's wait replaces its earlier one, so only the latest wait of each member is
     // listed; the earlier ones would only repeat it.
     QHash<QString, qint64> latestWait;
@@ -64,9 +72,10 @@ QString digestText(const Team& team, const QList<TeamUpdateRecord>& updates) {
                              task ? task->state : QStringLiteral("team"));
             }
         }
-        lines[key].append(QStringLiteral("%1 %2").arg(
-            update.actionable ? QStringLiteral("- [needs you]") : QStringLiteral("-"),
-            text.left(400)));
+        lines[key].append(QStringLiteral("%1 %2").arg(needsLeader(update, leaderSession)
+                                                          ? QStringLiteral("- [needs you]")
+                                                          : QStringLiteral("-"),
+                                                      text.left(400)));
     }
     QStringList text{
         QStringLiteral("Team %1: what changed since your last digest.").arg(team.name)};
@@ -379,9 +388,11 @@ void TeamCoordinator::sendDigest(const qint64 teamId) {
     // A wait is shown, but it is never the reason for a digest (T-39): a digest that would only
     // repeat waits, the leader's own or a developer's, is not sent and starts no turn. The
     // waits stay undigested and ride along with the next digest that has something to act on.
+    // The same holds for what the leader itself did (T-9): closing, assigning or creating a task
+    // is context for the next digest, never a reason to start a turn.
     const bool actionable =
-        std::any_of(updates.cbegin(), updates.cend(), [](const TeamUpdateRecord& update) {
-            return update.actionable && update.kind != QStringLiteral("wait");
+        std::any_of(updates.cbegin(), updates.cend(), [leader](const TeamUpdateRecord& update) {
+            return needsLeader(update, leader->sessionId) && update.kind != QStringLiteral("wait");
         });
     if (!actionable)
         return;
@@ -392,7 +403,7 @@ void TeamCoordinator::sendDigest(const qint64 teamId) {
                  .teamName = team->name,
                  .toSession = leader->sessionId,
                  .kind = QStringLiteral("digest"),
-                 .body = digestText(*team, updates)});
+                 .body = digestText(*team, updates, leader->sessionId)});
 }
 
 void TeamCoordinator::memberTurnEnded(const QString& sessionId,

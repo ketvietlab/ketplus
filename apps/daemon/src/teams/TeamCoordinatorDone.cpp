@@ -260,7 +260,8 @@ void TeamCoordinator::noteGoalReached(const Team& team, QList<Update>& updates) 
                                         "Team", "Every task is done. Report to the user once what "
                                                 "%1 contains; merging it onward is the user's."))
                                     .arg(team.integrationBranch),
-                        .actionable = true});
+                        .actionable = true,
+                        .actor = QStringLiteral("daemon")});
 }
 
 } // namespace ketplus::daemon::teams

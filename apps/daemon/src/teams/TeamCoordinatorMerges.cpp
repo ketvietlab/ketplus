@@ -61,7 +61,8 @@ void TeamCoordinator::offerMerges(Team& team, QList<Update>& updates) {
                      say(team.language, QT_TRANSLATE_NOOP("Team", "%1 can be merged into %2: %3."))
                          .arg(task.id, taskScope(team, task).integrationBranch, task.branch),
                  .taskId = task.id,
-                 .actionable = true});
+                 .actionable = true,
+                 .actor = QStringLiteral("daemon")});
         }
     }
 }

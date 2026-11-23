@@ -324,6 +324,20 @@ one, so a digest lists only the latest wait of each member; a leader that renews
 does not read it back several times. The wake-up when a wait's minutes are over (§8) is
 unchanged.
 
+**The leader's own actions are no reason for a digest (T-9, decided 2026-11-23).** An
+update whose *actor* is the leader at the time of sending (closing a task, assigning,
+creating a task, changing criteria) needs nothing from the leader. It is not counted as
+actionable for the digest and carries no `[needs you]` mark. The actor of an update is its
+source, not the caller of the command that stored it: what the daemon works out inside a
+leader's command (a developer left with no task, a task now ready to merge, the goal
+reached, a round limit) names the daemon as actor and stays actionable. When the only
+undigested updates are the leader's own and waits, no digest is sent and no turn starts;
+they stay undigested and are listed as ordinary lines in the next digest that has something
+real in it. Updates by the user, the daemon (a developer with no task left, a merge seen
+outside the app, a stall), a developer or a reviewer stay actionable as before, even when
+they follow from what the leader did. After a handover only the current leader's updates are
+skipped; the former leader's are actionable like any member's.
+
 **A command is answered before what it sets off (decided 2026-11-12).** A wake is
 decided when its cause is committed: the budget check, a hold while paused and the turn
 it counts. The message, and for an assignment the worktree its owner is pointed at, go
