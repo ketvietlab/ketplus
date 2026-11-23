@@ -10,6 +10,7 @@ QString failWritesTo;
 QString failReadsOf;
 QString failRemovalsOf;
 int rewrites = 0;
+QStringList reads;
 void resetCredentials() {
     credentials.clear();
     failWrites = false;
@@ -18,6 +19,7 @@ void resetCredentials() {
     failReadsOf.clear();
     failRemovalsOf.clear();
     rewrites = 0;
+    reads.clear();
 }
 } // namespace r03
 namespace ketplus::daemon {
@@ -32,6 +34,7 @@ QByteArray CredentialStore::read(const QString& account, QString* error) const {
         error->clear();
     if (stagedAccounts_)
         return stagedAccounts_->value(account);
+    r03::reads.append(account);
     return r03::credentials.value(service_ + '/' + account);
 }
 bool CredentialStore::write(const QString& account, const QByteArray& value, QString* error) const {

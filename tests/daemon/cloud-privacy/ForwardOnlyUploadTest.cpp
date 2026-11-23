@@ -190,6 +190,67 @@ class ForwardOnlyUploadTest final : public QObject {
         QVERIFY(!r03::credentials.contains("events-forward-only"));
     }
 
+    void withdrawingAdvancesEverySessionInOneCommit() {
+        QTemporaryDir dir;
+        Context c(dir.filePath("sessions.sqlite"));
+        for (const QString id : {"session-second", "session-third"})
+            QVERIFY(c.journal.upsertSession(
+                {id, "synthetic-worktree", "codex", "thread-" + id, {}, "ready", 1, 0, 1}));
+        c.start();
+        c.answer(true);
+        QHash<QString, qint64> heads;
+        for (const QString id : {"session-synthetic", "session-second", "session-third"}) {
+            QString error;
+            for (int i = 0; i < 2; ++i)
+                heads[id] = c.journal.appendEvent(id, 1, "user.message", {{"text", id}}, &error);
+            QVERIFY2(heads[id] > 0, qPrintable(error));
+        }
+        const int before = r03::rewrites;
+        c.answer(false);
+        QCOMPARE(r03::rewrites - before, 1);
+        QVERIFY(!Access::eventsForwardOnly(*c.client));
+        for (auto head = heads.cbegin(); head != heads.cend(); ++head)
+            QCOMPARE(Access::knownUploadedCursor(*c.client, head.key() + ":1"), head.value());
+        QVERIFY(!r03::credentials.contains("events-forward-only"));
+        for (auto head = heads.cbegin(); head != heads.cend(); ++head)
+            QCOMPARE(Access::uploadedCursor(*c.client, head.key()), head.value());
+    }
+
+    void aFailedCommitAdvancesNothing() {
+        QTemporaryDir dir;
+        Context c(dir.filePath("failed.sqlite"));
+        c.start();
+        c.answer(true);
+        c.append(2);
+        r03::failWrites = true;
+        c.answer(false);
+        r03::failWrites = false;
+        QVERIFY(Access::eventsForwardOnly(*c.client));
+        QCOMPARE(Access::knownUploadedCursor(*c.client), -1);
+        c.answer(false);
+        QVERIFY(!Access::eventsForwardOnly(*c.client));
+        QCOMPARE(Access::knownUploadedCursor(*c.client), 2);
+    }
+
+    void aChunkDoesNotReadTheCredentialStore() {
+        QTemporaryDir dir;
+        Context c(dir.filePath("reads.sqlite"));
+        c.start();
+        c.acceptThrough(1);
+        c.append();
+        Access::uploadAll(*c.client);
+        QTRY_VERIFY(Access::idle(*c.client));
+        c.acceptThrough(3);
+        c.append(2);
+        r03::reads.clear();
+        Access::uploadAll(*c.client);
+        QTRY_VERIFY(Access::idle(*c.client));
+        QCOMPARE(c.uploaded(), (QList<qint64>{1, 2, 3}));
+        // Sealing reads keys; the upload cursor comes from what this process already knows.
+        for (const QString& account : std::as_const(r03::reads))
+            QVERIFY2(!account.startsWith("uploaded-cursor-"), qPrintable(account));
+    }
+
     void anUploadInFlightAcrossForwardOnlyDoesNotRewindTheCursor() {
         QTemporaryDir dir;
         Context c(dir.filePath("inflight.sqlite"));

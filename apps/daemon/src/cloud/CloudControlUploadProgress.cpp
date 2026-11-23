@@ -55,10 +55,13 @@ void CloudControlClient::uploadEvents() {
         if (const auto backoff = eventUploadBackoff_.constFind(key);
             backoff != eventUploadBackoff_.cend() && !backoff->retryAt.hasExpired())
             continue;
-        if (const auto known = knownUploadedCursors_.constFind(key);
-            known != knownUploadedCursors_.cend() && *known >= session.lastCursor)
+        const auto known = knownUploadedCursors_.constFind(key);
+        if (known != knownUploadedCursors_.cend() && *known >= session.lastCursor)
             continue;
-        const qint64 cursor = uploadedCursor(session.id, session.generation);
+        // A cursor this process already knows needs no credential read.
+        const qint64 cursor = known != knownUploadedCursors_.cend()
+                                  ? *known
+                                  : uploadedCursor(session.id, session.generation);
         if (cursor < 0)
             return;
         if (cursor < session.lastCursor)

@@ -27,32 +27,45 @@ void CloudControlClient::followEventsForwardOnly(const bool forwardOnly) {
     // them. The journal itself is kept. On failure the next answer tries again.
     if (!advanceUploadCursorsToHead())
         return;
-    if (!credentials_.remove(forwardOnlyAccount, &error)) {
-        lastError_ = error;
-        return;
-    }
     eventsForwardOnly_ = false;
 }
 
 // Only the upload cursor moves: acknowledging the head for journal retention here would delete
-// events the host still serves as pages. Retention follows the next acknowledged upload.
+// events the host still serves as pages. Retention follows the next acknowledged upload. Every
+// session's cursor and the forward-only record change in one credential commit.
 bool CloudControlClient::advanceUploadCursorsToHead() {
-    for (const StoredSession& session : journal_->sessions()) {
-        const qint64 cursor = uploadedCursor(session.id, session.generation);
-        if (cursor < 0)
-            return false;
-        if (session.lastCursor <= cursor)
-            continue;
-        QString error;
-        if (!storeString(
-                QStringLiteral("uploaded-cursor-%1-%2").arg(session.id).arg(session.generation),
-                QString::number(session.lastCursor), &error)) {
-            lastError_ = error;
-            return false;
-        }
-        knownUploadedCursors_.insert(
-            QStringLiteral("%1:%2").arg(session.id).arg(session.generation), session.lastCursor);
+    const QString scope = uploadScope();
+    const QList<StoredSession> sessions = journal_->sessions();
+    QHash<QString, qint64> advanced;
+    QString error;
+    const bool committed = credentials_.batch(
+        [&](CredentialStore& view, QString* failure) {
+            for (const StoredSession& session : sessions) {
+                const qint64 durable =
+                    journal_->cloudUploadCursor(scope, session.id, session.generation);
+                if (durable < 0) {
+                    *failure = journal_->errorString();
+                    return false;
+                }
+                const QString account =
+                    QStringLiteral("uploaded-cursor-%1-%2").arg(session.id).arg(session.generation);
+                const qint64 cursor = qMax(durable, view.read(account).toLongLong());
+                if (session.lastCursor <= cursor)
+                    continue;
+                if (!view.write(account, QByteArray::number(session.lastCursor), failure))
+                    return false;
+                advanced.insert(QStringLiteral("%1:%2").arg(session.id).arg(session.generation),
+                                session.lastCursor);
+            }
+            return view.remove(forwardOnlyAccount, failure);
+        },
+        &error);
+    if (!committed) {
+        lastError_ = error;
+        return false;
     }
+    for (auto entry = advanced.cbegin(); entry != advanced.cend(); ++entry)
+        knownUploadedCursors_.insert(entry.key(), entry.value());
     return true;
 }
 

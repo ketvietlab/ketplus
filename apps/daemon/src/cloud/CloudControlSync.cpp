@@ -254,11 +254,17 @@ void CloudControlClient::uploadSessionEvents(const QString& sessionId, const qin
         lastError_ = journal_->errorString();
         return;
     }
-    // The stored cursor also counts the head forward-only was withdrawn at.
-    afterCursor = std::max(
-        {afterCursor, durable,
-         storedString(QStringLiteral("uploaded-cursor-%1-%2").arg(sessionId).arg(generation))
-             .toLongLong()});
+    // The known cursor also counts the head forward-only was withdrawn at; it is read from the
+    // credential store only when this process has not cached it yet.
+    {
+        const QString key = QStringLiteral("%1:%2").arg(sessionId).arg(generation);
+        const auto known = knownUploadedCursors_.constFind(key);
+        const qint64 cached =
+            known != knownUploadedCursors_.cend() ? *known : uploadedCursor(sessionId, generation);
+        if (cached < 0)
+            return;
+        afterCursor = std::max({afterCursor, durable, cached});
+    }
     const QString uploadKey = QStringLiteral("%1:%2").arg(sessionId).arg(generation);
     if (eventUploadsInFlight_.contains(uploadKey))
         return;
@@ -450,16 +456,18 @@ void CloudControlClient::uploadSessionEvents(const QString& sessionId, const qin
                     eventUploadLimits_.insert(uploadKey, limit * 2);
             }
             if (accepted > 0) {
-                knownUploadedCursors_.insert(uploadKey, accepted);
+                // The cursor this process knows, cached so a chunk does not read the credential
+                // store. An upload in flight across forward-only must not move it back behind the
+                // head it was advanced to.
+                const auto known = knownUploadedCursors_.constFind(uploadKey);
+                const qint64 previous = known != knownUploadedCursors_.cend()
+                                            ? *known
+                                            : uploadedCursor(sessionId, generation);
+                knownUploadedCursors_.insert(uploadKey, qMax(previous, accepted));
                 QString storageError;
                 if (!journal_->acknowledgeCloudEventUpload(scope, sessionId, generation, cloud,
                                                            accepted) ||
-                    // An upload in flight across forward-only must not move the cursor back
-                    // behind the head it was advanced to.
-                    (accepted >
-                         storedString(
-                             QStringLiteral("uploaded-cursor-%1-%2").arg(sessionId).arg(generation))
-                             .toLongLong() &&
+                    (accepted > previous &&
                      !storeString(
                          QStringLiteral("uploaded-cursor-%1-%2").arg(sessionId).arg(generation),
                          QString::number(accepted), &storageError)) ||
