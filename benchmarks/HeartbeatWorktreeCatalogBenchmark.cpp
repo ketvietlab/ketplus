@@ -166,43 +166,67 @@ QJsonArray instrumentedSnapshots(LocalJournal& journal, Phases& phases, bool tra
         if (trace)
             std::fputs("ketplus-phase:end\n", stderr);
     };
-    QStringList catalog;
-    record(Sql, [&] { catalog = journal.worktreePaths(); });
+    constexpr int pageSize = 128;
     QStringList paths;
-    QStringList repositories;
-    const auto add = [&](const QString& path) {
-        QString canonical;
-        bool isDir = false;
-        record(CanonicalStat, [&] {
-            canonical = QFileInfo(path).canonicalFilePath();
-            isDir = !canonical.isEmpty() && QFileInfo(canonical).isDir();
-        });
-        if (!isDir)
-            return;
-        bool known = false;
-        record(Contains, [&] { known = paths.contains(canonical); });
-        if (!known && paths.size() < pageLimit)
-            paths.append(canonical);
+    QSet<QString> included;
+    QSet<QString> expandedRepositories;
+    const auto contains = [&](const QSet<QString>& set, const QString& path) {
+        bool found = false;
+        record(Contains, [&] { found = set.contains(path); });
+        return found;
     };
-    for (const QString& path : catalog) {
-        add(path);
+    const auto add = [&](const QString& path) {
+        if (contains(included, path))
+            return;
         QString canonical;
         record(CanonicalStat, [&] { canonical = QFileInfo(path).canonicalFilePath(); });
-        if (canonical.isEmpty())
-            continue;
-        QString repository;
-        record(Repository, [&] { repository = worktreeRepository(canonical); });
-        bool known = false;
-        record(Contains, [&] { known = repositories.contains(repository); });
-        if (!known)
-            repositories.append(repository);
-    }
-    for (const QString& repository : std::as_const(repositories)) {
-        QStringList checkouts;
-        record(Checkouts, [&] { checkouts = repositoryCheckouts(repository); });
-        for (const QString& checkout : std::as_const(checkouts))
-            add(checkout);
-    }
+        if (canonical.isEmpty() || contains(included, canonical))
+            return;
+        bool isDir = false;
+        record(CanonicalStat, [&] { isDir = QFileInfo(canonical).isDir(); });
+        if (isDir) {
+            included.insert(canonical);
+            paths.append(canonical);
+        }
+    };
+    const auto addJournalPages = [&](bool conversationsOnly) {
+        QString after = QStringLiteral("");
+        while (paths.size() < pageLimit) {
+            QStringList page;
+            record(Sql,
+                   [&] { page = journal.worktreePathsAfter(after, pageSize, conversationsOnly); });
+            for (const auto& path : page) {
+                add(path);
+                if (paths.size() == pageLimit)
+                    return;
+            }
+            if (page.size() < pageSize)
+                return;
+            after = page.constLast();
+        }
+    };
+    const auto expandRepositories = [&](QStringList seeds) {
+        for (const auto& seed : seeds) {
+            if (paths.size() == pageLimit)
+                return;
+            QString repository;
+            record(Repository, [&] { repository = worktreeRepository(seed); });
+            if (contains(expandedRepositories, repository))
+                continue;
+            expandedRepositories.insert(repository);
+            QStringList checkouts;
+            record(Checkouts, [&] { checkouts = repositoryCheckouts(repository); });
+            for (const auto& checkout : checkouts) {
+                add(checkout);
+                if (paths.size() == pageLimit)
+                    return;
+            }
+        }
+    };
+    addJournalPages(true);
+    expandRepositories(paths);
+    addJournalPages(false);
+    expandRepositories(paths);
     QJsonArray result;
     for (const QString& path : std::as_const(paths)) {
         record(Source, [&] {
@@ -400,8 +424,8 @@ int main(int argc, char** argv) {
         beginCatalogCallTiming();
         const Duration time = measure([&] { publish(client); });
         const Duration catalog = catalogDuration();
-        if (batches(transport) != expectedBatches || catalog.calls != expectedBatches)
-            qFatal("Unexpected number of heartbeat batches");
+        if (batches(transport) != expectedBatches || catalog.calls != 1)
+            qFatal("Expected one catalog build across all heartbeat batches");
         return HeartbeatSample{time, catalog};
     };
     if (mode == "all" || mode == "snapshot") {
@@ -485,8 +509,9 @@ int main(int argc, char** argv) {
         });
         const Duration catalog = catalogDuration();
         const qsizetype batchCount = batches(transport);
-        if (!batchCount || catalog.calls != batchCount)
-            qFatal("Catalog timing missed an idle heartbeat batch");
+        const qsizetype heartbeats = (batchCount + expectedBatches - 1) / expectedBatches;
+        if (heartbeats == 0 || catalog.calls != heartbeats)
+            qFatal("Expected one catalog build per idle heartbeat");
         out << "# idle_wall_seconds=" << double(idle.wall) / 1'000'000'000
             << ",idle_process_cpu_ms=" << ms(idle.cpu) << ",idle_batches=" << batchCount
             << ",catalog_cpu_ms=" << ms(catalog.cpu)
