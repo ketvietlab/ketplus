@@ -2384,25 +2384,23 @@ ordered MCP tool list through the real session-bound agent command handler.
 Provider-generated context, deferred-tool ordering, and cache read and creation
 counts require real provider usage records.
 
-### Reset briefing cost fixture
+### Offline reset briefing measurement
 
-The offline fixture models one reset per session. It starts at 35,000 context
-units, budgets 3,500 units for each discovery request and 250 for each subsequent
-task request. The baseline makes 12 discovery requests. The enriched briefing
-scenario makes four targeted requests and charges the full 4 KiB briefing as
-1,024 additional units, using four bytes per unit. At request `n`, add
-`min(n, discovery) * 3500 + max(0, n - discovery) * 250` to the starting
-context and the briefing charge.
+A local audit covered 19 existing Markdown handoffs. The export records
+conversation turns and selected tool activity. It omits provider request
+boundaries, structured reset markers, and per-request context telemetry.
+The baseline discovery requests per reset session and context at requests
+#10 and #20 were therefore unavailable from this sample. Conversation turns
+and tool activity counts cannot substitute for those values.
 
-| Scenario | Discovery requests per session | Context at request #10 | Context at request #20 |
-| --- | ---: | ---: | ---: |
-| Baseline fixture | 12 | 70,000 | 79,000 |
-| Enriched briefing fixture | 4 | 51,524 | 54,024 |
-| Difference per session | −8 | −18,476 | −24,976 |
-
-These values describe the scripted workload and its byte-to-unit approximation.
-The discovery counts are scenario inputs. Actual request counts and context
-tokens depend on the task and provider and require usage records.
+On Linux with Qt 6.11.1, calling the production briefing renderer for a
+synthetic developer task produced **502 UTF-8 bytes** and **four file hints**.
+The fixture used one description with two inline paths and one criterion with
+a repeated path and one new path. The four hints include `AGENTS.md`.
+This measures the generated briefing for one reset. The renderer caps the
+briefing at 4,096 bytes, and the context reset suite covers multibyte
+truncation. Live request counts and context measurements require a separate
+provider usage sample.
 
 ## English chrome and multilingual team content (T30)
 
