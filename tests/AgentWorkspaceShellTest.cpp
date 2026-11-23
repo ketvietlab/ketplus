@@ -50,6 +50,7 @@
 #include <QSaveFile>
 #include <QScopeGuard>
 #include <QSettings>
+#include <QSignalBlocker>
 #include <QSignalSpy>
 #include <QSplitter>
 #include <QStatusBar>
@@ -1664,6 +1665,12 @@ class AgentWorkspaceShellTest final : public QObject {
                         {QStringLiteral("worktree_path"), linkedPath},
                         {QStringLiteral("state"), QStringLiteral("running")}});
         QVERIFY(manager->runningCheckoutPaths().contains(linkedPath));
+        auto* gitService = window.findChild<ketplus::GitService*>();
+        QVERIFY(gitService);
+        gitService->setWorkspacePath(linkedPath);
+        QCOMPARE(gitService->worktrees().size(), 0);
+        // Keep the refresh pending while testing the deletion guard.
+        const QSignalBlocker holdRefresh(gitService);
         QSignalSpy deleted(manager, &ketplus::AgentSessionManager::conversationDeletionFinished);
         view->requestDeleteConversation(conversationId);
         {

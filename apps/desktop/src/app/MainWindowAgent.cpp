@@ -692,13 +692,13 @@ void MainWindow::createAgentWorktree() {
 }
 
 QString MainWindow::primaryWorktreePath() const {
-    QString primary = workspaceRoot_;
     for (const GitWorktree& worktree : worktrees_) {
         if (!worktree.bare) {
             return worktree.path;
         }
     }
-    return primary;
+    // A linked checkout can be active while Git discovers its worktree list.
+    return repositoryDisplayRoot_.isEmpty() ? workspaceRoot_ : repositoryDisplayRoot_;
 }
 
 void MainWindow::startNewAgentConversation() {
