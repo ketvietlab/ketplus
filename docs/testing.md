@@ -318,7 +318,7 @@ and local/archive includes with cycles, escapes and the 16-level boundary.
 | Browser provider wiring | `ketplus_browser_provider_integration_tests` | host routing instructions for direct/daemon Codex and new/resumed Claude/Cursor, prompt/image preservation, scoped approvals, disabled/damaged/missing runtime |
 | Daemon Claude adapter | `ketplus_daemon_claude_adapter_tests` | sidecar turns, approvals, handoff |
 | Provider handoff history | `ketplus_provider_handoff_tests` | history after delivery acknowledgment, compacted cursor gaps, event/byte-limited paging, session/generation isolation |
-| Team context reset (ADR 0114 §11) | `ketplus_team_context_reset_tests` | coordinator with a fake runtime: task boundary for developers and reviewers, threshold for every role, `cache_cold` for every role (the idle and the 50,000-token size both needed, unknown size or turn end, `never`, an idle of 0, the older reasons first), `threshold` and `never`, a threshold of 0, a new thread adopted, `context_size` at and below the limit, custom and disabled limits, settings validated and kept, briefing within 4 KiB and the leader's 20 open tasks; then the scripted fake providers: the leader's team turns start fresh past the threshold with the transcript note and briefing, user turns never do, a woken leader starts fresh with `cache_cold` on a fake clock timed from the end of a long turn, and a transcript that cannot be written keeps the thread |
+| Team context reset (ADR 0114 §11) | `ketplus_team_context_reset_tests` | coordinator with a fake runtime: task boundary for developers and reviewers, threshold for every role, `cache_cold` for every role (the idle and the 50,000-token size both needed, unknown size or turn end, `never`, an idle of 0, the older reasons first), `threshold` and `never`, a threshold of 0, a new thread adopted, `context_size` at and below the limit, custom and disabled limits, settings validated and kept, briefing within 4 KiB with multibyte truncation, deduplicated task file hints and criteria excerpts, and the leader's 20 open tasks; then the scripted fake providers: the leader's team turns start fresh past the threshold with the transcript note and briefing, user turns never do, a woken leader starts fresh with `cache_cold` on a fake clock timed from the end of a long turn, and a transcript that cannot be written keeps the thread |
 | Held-message Desktop release (#130) | `ketplus_agent_messaging_tests`, `ketplus_provider_transcript_tests`; Agent Workspace `heldMessageRequiresExplicitClickAndFencesDuplicates` | scoped authorization, all three guards, whole-batch validation, busy receiver, agent/remote refusal, expiry/deletion/generation fences, command replay, recovery before/after the durable input, explicit click/retry and typed notice projection; fake providers only |
 | Agent messaging (ADR 0027) | `ketplus_agent_messaging_tests` | number allocation, uniqueness, restart stability and legacy-journal backfill; idle delivery and automatic reply from the final answer; busy receivers batched at turn end; `urgent` steering of a running turn; hop, chain and hourly holds released with the next user turn, the per-sender backlog and the per-turn delivery budget measured on the serialized message (escapes and sender title), with oversize messages refused at send, and the 24-hour request expiry; `#NNNN` references; token, number, size and reply validation; deletion quarantine and token revocation; per-provider `ketplus_agents` injection (Claude `mcpServers`, Codex dotted per-thread config, Cursor ACP); agent-token IPC scope without broadcasts; MCP tool mapping; `sent` and `replied` notices and the running automatic turn's sender in `session.list`; the number and that sender sealed into the phone's session metadata (`ketplus_daemon_cloud_privacy_tests`); Desktop notice text (`ketplus_provider_transcript_tests`) and the sidebar "from #N" label (`ketplus_workspace_tests`). Fake providers only; the one authorized live run is recorded in ADR 0027 |
 | Conversation fork | `ketplus_daemon_session_fork_tests` | `threadFork` gating, Codex/Claude native fork, transcript copy at the same cursors, idempotent retry, active source isolation and unknown refusal, next turn resumes the forked thread; a fork of an archived conversation is unarchived and outlives its source's expiry (ADR 0100) |
@@ -2383,6 +2383,26 @@ the fake providers, excluding launch environment values. It also compares the
 ordered MCP tool list through the real session-bound agent command handler.
 Provider-generated context, deferred-tool ordering, and cache read and creation
 counts require real provider usage records.
+
+### Reset briefing cost fixture
+
+The offline fixture models one reset per session. It starts at 35,000 context
+units, budgets 3,500 units for each discovery request and 250 for each subsequent
+task request. The baseline makes 12 discovery requests. The enriched briefing
+scenario makes four targeted requests and charges the full 4 KiB briefing as
+1,024 additional units, using four bytes per unit. At request `n`, add
+`min(n, discovery) * 3500 + max(0, n - discovery) * 250` to the starting
+context and the briefing charge.
+
+| Scenario | Discovery requests per session | Context at request #10 | Context at request #20 |
+| --- | ---: | ---: | ---: |
+| Baseline fixture | 12 | 70,000 | 79,000 |
+| Enriched briefing fixture | 4 | 51,524 | 54,024 |
+| Difference per session | −8 | −18,476 | −24,976 |
+
+These values describe the scripted workload and its byte-to-unit approximation.
+The discovery counts are scenario inputs. Actual request counts and context
+tokens depend on the task and provider and require usage records.
 
 ## English chrome and multilingual team content (T30)
 

@@ -1,5 +1,6 @@
 #include "teams/TeamContextReset.h"
 
+#include <QRegularExpression>
 #include <QStringList>
 
 namespace ketplus::daemon::teams::context_reset {
@@ -15,7 +16,7 @@ QString withinBytes(const QString& text, const qsizetype bytes) {
     if (text.toUtf8().size() <= bytes)
         return text;
     static const QString tail =
-        QStringLiteral("\n(briefing shortened; read the rest with team_get and team_tasks)");
+        QStringLiteral("\n(briefing shortened; read the rest with team_get and team_tasks)\n\n");
     QString cut = text;
     const qsizetype room = bytes - tail.toUtf8().size();
     while (!cut.isEmpty() && cut.toUtf8().size() > room)
@@ -23,6 +24,27 @@ QString withinBytes(const QString& text, const qsizetype bytes) {
     if (!cut.isEmpty() && cut.back().isHighSurrogate())
         cut.chop(1);
     return cut + tail;
+}
+
+QStringList readingList(const Task& task) {
+    // Inline-code paths in task requirements are explicit hints supplied by the team.
+    static const QRegularExpression path(QStringLiteral(
+        R"(`((?:[A-Za-z0-9_-][A-Za-z0-9_.-]*/)*[A-Za-z0-9_-][A-Za-z0-9_.-]*\.[A-Za-z0-9]+)`)"));
+    QStringList sources{task.description};
+    for (const Criterion& criterion : task.criteria)
+        sources << criterion.text;
+    QStringList files{QStringLiteral("AGENTS.md")};
+    for (const QString& source : sources) {
+        auto matches = path.globalMatch(source);
+        while (matches.hasNext()) {
+            const QString file = matches.next().captured(1);
+            if (file.size() <= 120 && !files.contains(file))
+                files << file;
+            if (files.size() == 8)
+                return files;
+        }
+    }
+    return files;
 }
 
 QString memberName(const Team& team, const QString& sessionId) {
@@ -84,11 +106,12 @@ QString decide(const Team& team, const Member& member, std::optional<ContextMark
 }
 
 QString briefing(const Team& team, const Member& member, const QString& taskId) {
-    QStringList text{QStringLiteral("[KetPlus team briefing] Team \"%1\".").arg(team.name),
-                     QStringLiteral("Goal: %1").arg(line(team.goal, 600))};
+    QStringList text{
+        QStringLiteral("[KetPlus team briefing] Team \"%1\".").arg(line(team.name, 160)),
+        QStringLiteral("Goal: %1").arg(line(team.goal, 600))};
     QString you = QStringLiteral("You are the %1").arg(member.role);
     if (!member.lane.isEmpty())
-        you += QStringLiteral(" of lane \"%1\"").arg(member.lane);
+        you += QStringLiteral(" of lane \"%1\"").arg(line(member.lane, 120));
     text << you + QLatin1Char('.');
     if (const Task* task = taskId.isEmpty() ? nullptr : team.task(taskId)) {
         text << QString{}
@@ -98,13 +121,21 @@ QString briefing(const Team& team, const Member& member, const QString& taskId) 
                     .arg(memberName(team, task->owner));
         if (!task->worktree.isEmpty())
             text << QStringLiteral("Worktree: %1").arg(task->worktree);
+        text << QStringLiteral("Files to read in the task worktree:");
+        for (const QString& file : readingList(*task))
+            text << QStringLiteral("- %1").arg(file);
+        if (!task->description.isEmpty())
+            text << QStringLiteral("Task summary: %1").arg(line(task->description, 360));
         if (!task->criteria.isEmpty()) {
-            text << QStringLiteral("Criteria:");
+            text << QStringLiteral("Acceptance criteria (summary):");
             for (const Criterion& criterion : task->criteria)
                 text << QStringLiteral("- [%1] %2")
                             .arg(criterion.met ? QStringLiteral("x") : QStringLiteral(" "),
                                  line(criterion.text, 240));
         }
+        text << QStringLiteral(
+                    "Read the full task with team_tasks task_id=%1, the team with team_get.")
+                    .arg(task->id);
         const qsizetype first = std::max<qsizetype>(0, task->history.size() - briefingHistory);
         if (first < task->history.size()) {
             text << QStringLiteral("Last history entries:");
@@ -115,10 +146,6 @@ QString briefing(const Team& team, const Member& member, const QString& taskId) 
                                  line(entry.text, 280));
             }
         }
-        text << QString{}
-             << QStringLiteral("Read the description and the whole history with team_tasks "
-                               "task_id=%1, the team with team_get.")
-                    .arg(task->id);
     } else if (member.role == role::leader) {
         QStringList open;
         qsizetype total = 0;

@@ -632,10 +632,14 @@ conversation never reaches that point.
   the turn runs on it.
 - The first prompt of the fresh context begins with a note that points at `transcript.md`,
   to read when needed and never to replay, and a team briefing of at most 4 KiB of UTF-8:
-  the goal, the member's role and lane, its task (state, round, criteria and the last five
-  history entries) or, for the leader, the first 20 open tasks, and `team_get` and
+  the goal, the member's role and lane, its task (state, round, a short description, acceptance-criteria
+  excerpts, and up to five recent history entries) or, for the leader, the first 20 open tasks, and `team_get` and
   `team_tasks` to read more. Like the handoff note, it is kept until the provider accepts
-  that turn's `turn/start`; a pending provider handoff note replaces it.
+  that turn's `turn/start`; a pending provider handoff note replaces it. The task's reading
+  list begins with `AGENTS.md` and includes up to seven unique relative file paths marked
+  as inline code in the task description or criteria. It carries path hints only and
+  never reads those files on the daemon's side. The briefing travels in the member's
+  reset turn input, outside shared team prefix construction.
 
 ## Open points, fixed here
 
