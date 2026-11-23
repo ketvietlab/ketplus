@@ -54,6 +54,18 @@ Each party advertises its own set:
 - The relay answers each heartbeat with the names it enables for that machine
   (`compatibility.capabilities`) and shows clients the same set in each `/v2/machines` entry.
 
+The daemon follows `events.forward_only/1` in each heartbeat answer, even though it does not list
+the name in its own heartbeat yet:
+
+- While the answer lists it, the daemon uploads no events and prepares no upload batches; live
+  frames, host pages, heartbeats, session metadata, session keys, the mailbox and push go on as
+  before. An upload already in flight finishes but sends no further chunk. The daemon remembers the
+  state for its enrollment, so a restart does not upload the backlog before the next answer.
+- When an answer no longer lists it, the daemon moves each session's upload cursor to the journal
+  head at that moment and uploads only events journaled afterwards. Events journaled while
+  forward-only are never uploaded and stay in the journal; retention resumes with the next
+  acknowledged upload. A late answer to an earlier upload never moves the cursor back.
+
 The desktop offers first-turn attachments only when the target daemon and relay both
 advertise `session.prepare/1`. Preparation and its cancellation use the encrypted
 mailbox; existing-session attachment commands keep their current route and format.

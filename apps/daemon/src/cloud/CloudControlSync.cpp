@@ -245,7 +245,8 @@ bool CloudControlClient::isLiveGeneration(const QString& sessionId, const qint64
 
 void CloudControlClient::uploadSessionEvents(const QString& sessionId, const qint64 generation,
                                              qint64 afterCursor) {
-    if (!isLiveGeneration(sessionId, generation))
+    // Also ends the chain of an upload that was in flight when forward-only began.
+    if (eventsForwardOnly() || !isLiveGeneration(sessionId, generation))
         return;
     const QString scope = uploadScope();
     const qint64 durable = journal_->cloudUploadCursor(scope, sessionId, generation);
@@ -253,7 +254,11 @@ void CloudControlClient::uploadSessionEvents(const QString& sessionId, const qin
         lastError_ = journal_->errorString();
         return;
     }
-    afterCursor = qMax(afterCursor, durable);
+    // The stored cursor also counts the head forward-only was withdrawn at.
+    afterCursor = std::max(
+        {afterCursor, durable,
+         storedString(QStringLiteral("uploaded-cursor-%1-%2").arg(sessionId).arg(generation))
+             .toLongLong()});
     const QString uploadKey = QStringLiteral("%1:%2").arg(sessionId).arg(generation);
     if (eventUploadsInFlight_.contains(uploadKey))
         return;
@@ -449,9 +454,15 @@ void CloudControlClient::uploadSessionEvents(const QString& sessionId, const qin
                 QString storageError;
                 if (!journal_->acknowledgeCloudEventUpload(scope, sessionId, generation, cloud,
                                                            accepted) ||
-                    !storeString(
-                        QStringLiteral("uploaded-cursor-%1-%2").arg(sessionId).arg(generation),
-                        QString::number(accepted), &storageError) ||
+                    // An upload in flight across forward-only must not move the cursor back
+                    // behind the head it was advanced to.
+                    (accepted >
+                         storedString(
+                             QStringLiteral("uploaded-cursor-%1-%2").arg(sessionId).arg(generation))
+                             .toLongLong() &&
+                     !storeString(
+                         QStringLiteral("uploaded-cursor-%1-%2").arg(sessionId).arg(generation),
+                         QString::number(accepted), &storageError)) ||
                     !journal_->acknowledgeCursor(QStringLiteral("cloud-control-v2"), sessionId,
                                                  generation, accepted) ||
                     !journal_->pruneAcknowledgedCloudEvents()) {

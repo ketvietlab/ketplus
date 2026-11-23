@@ -173,6 +173,13 @@ class CloudPrivacyTestAccess {
     static void heartbeatAnswer(CloudControlClient& client, const QJsonObject& answer) {
         client.negotiatePeerTransport(answer);
     }
+    static bool eventsForwardOnly(CloudControlClient& client) { return client.eventsForwardOnly(); }
+    static void forgetForwardOnly(CloudControlClient& client) { client.eventsForwardOnly_.reset(); }
+    static qint64 uploadedCursor(CloudControlClient& client,
+                                 const QString& session = "session-synthetic",
+                                 qint64 generation = 1) {
+        return client.uploadedCursor(session, generation);
+    }
     static void senderKeys(CloudControlClient& client, const QString& sender, int version,
                            std::function<void(const QJsonObject&, const QString&)> callback) {
         client.withSenderKeys(sender, version, std::move(callback));

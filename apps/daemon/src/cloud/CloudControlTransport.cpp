@@ -106,6 +106,7 @@ void CloudControlClient::negotiatePeerTransport(const QJsonValue& heartbeat) {
     signaling_->configure(workspaceId_, machineId_, machineKeyVersion_,
                           capabilities.contains("transport.webrtc/1"));
     runnerRelayAvailable_ = capabilities.contains("runner.relay/1");
+    followEventsForwardOnly(capabilities.contains("events.forward_only/1"));
 }
 
 QJsonObject CloudControlClient::sealEvent(const QJsonObject& event, const QString& sessionId,
