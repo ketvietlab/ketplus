@@ -3,6 +3,8 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 
+#include <cmath>
+
 namespace ketplus::remote::frames {
 namespace {
 void fail(QString* error, const QString& reason) {
@@ -14,15 +16,18 @@ bool validSessionId(const QString& id) {
     return !id.isEmpty() && id.toUtf8().size() <= sessionIdLimit;
 }
 
-// An integer JSON number that is not fractional.
+// An integer JSON number that is not fractional and that a double carries exactly (up to
+// 2^53, the range a JSON number keeps for every client); anything else, including values
+// no 64-bit integer holds, is refused before it is converted.
 std::optional<qint64> integer(const QJsonValue& value) {
+    constexpr double exactLimit = 9007199254740992.0; // 2^53
     if (!value.isDouble())
         return std::nullopt;
     const double number = value.toDouble();
-    const auto whole = static_cast<qint64>(number);
-    if (static_cast<double>(whole) != number)
+    if (!std::isfinite(number) || number < -exactLimit || number > exactLimit ||
+        number != std::trunc(number))
         return std::nullopt;
-    return whole;
+    return static_cast<qint64>(number);
 }
 
 QByteArray seal(const QJsonObject& frame, QString* error) {
@@ -54,9 +59,14 @@ bool readEvents(const QJsonArray& events, Frame* frame, QString* error) {
             return false;
         }
         previous = *cursor;
-        if (const auto generation = integer(event.value(QStringLiteral("session_generation")))) {
-            if (*generation < 1 || (frame->generation != 0 && frame->generation != *generation)) {
-                fail(error, QStringLiteral("Events of one frame disagree on the generation."));
+        // A generation that is present must be a valid number: ignoring one would take the
+        // event for the followed generation.
+        if (const auto field = event.value(QStringLiteral("session_generation"));
+            !field.isUndefined()) {
+            const auto generation = integer(field);
+            if (!generation || *generation < 1 ||
+                (frame->generation != 0 && frame->generation != *generation)) {
+                fail(error, QStringLiteral("An event generation is invalid or differs."));
                 return false;
             }
             frame->generation = *generation;
@@ -109,11 +119,14 @@ std::optional<Frame> decode(const QByteArray& bytes, QString* error) {
         fail(error, QStringLiteral("The conversation id is too long."));
         return std::nullopt;
     }
-    if (const auto generation = integer(object.value(QStringLiteral("sessionGeneration"))))
+    if (const auto field = object.value(QStringLiteral("sessionGeneration"));
+        !field.isUndefined()) {
+        const auto generation = integer(field);
+        if (!generation || *generation < 0) {
+            fail(error, QStringLiteral("The generation is invalid."));
+            return std::nullopt;
+        }
         frame.generation = *generation;
-    if (frame.generation < 0) {
-        fail(error, QStringLiteral("The generation is negative."));
-        return std::nullopt;
     }
 
     if (name == QLatin1String("frames.dropped")) {

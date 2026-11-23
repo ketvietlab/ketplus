@@ -307,13 +307,19 @@ carries no marker; the phone hides that call by its tool name once it fetches th
 side of the event frames. They own no socket: the caller sends what they return.
 
 - Outgoing `subscribe` and `unsubscribe` frames stay under 4 KiB. A received frame over 64 KiB, with
-  an unknown type, a missing or fractional cursor, cursors that do not increase, more than 100
+  an unknown type, a missing, fractional or out-of-range number (cursors and generations stay within
+  2^53, the exact range of a JSON number), cursors that do not increase, more than 100
   events or events of two generations is refused whole; the error names the reason, never event
   content, and no cursor changes.
-- The desktop keeps one cursor per conversation generation in its encrypted credential store, under
-  an account derived from a digest of the conversation id. A new connection subscribes after each
-  stored cursor. A cursor is saved after each `events` page and after every 50 live `event` frames,
-  in one write for all conversations that moved; closing the feed saves the rest.
+- Cursors persist through `EventCursorStore`, which a local encrypted cache can implement; the
+  desktop has no such event cache yet, so `CredentialEventCursors` keeps them in the encrypted credential store, in one record keyed by a
+  digest of the conversation id and generation, so the store lists no conversation ids. Store use
+  is batched: the record is read once when the feed opens, whatever the number of followed
+  conversations, and each save is one write for every cursor that changed. A cursor is saved after
+  each `events` page and after every 50 live `event` frames; closing the feed saves the rest.
+  A new connection subscribes after each stored cursor.
+- Quitting between two saves can redeliver up to 49 live events. The integrator keeps events by
+  cursor and drops one it already has, so a redelivered event changes nothing.
 - Each event is delivered once and in order. An event at or below the cursor (late or repeated) is
   dropped, and the cursor never moves back, except when a reload adopts a window.
 - `gap` and `frames.dropped` subscribe again after the cursor reached so far (`frames.dropped`

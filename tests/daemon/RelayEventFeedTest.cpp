@@ -328,8 +328,102 @@ class RelayEventFeedTest final : public QObject {
         QCOMPARE(cursors.load("session-secret-name", 1), 0);
         QCOMPARE(cursors.load("missing", 1), 0);
         QCOMPARE(r03::rewrites, 1); // both in one commit
-        for (auto it = r03::credentials.cbegin(); it != r03::credentials.cend(); ++it)
+        for (auto it = r03::credentials.cbegin(); it != r03::credentials.cend(); ++it) {
             QVERIFY(!it.key().contains("session-secret-name"));
+            QVERIFY(!it.value().contains("session-secret-name"));
+        }
+        // A new process reads what the first one saved.
+        CredentialEventCursors again(&credentials);
+        QCOMPARE(again.load("session-secret-name", 2), 9);
+        QCOMPARE(again.load("other", 1), 4);
+    }
+
+    void storeAccessDoesNotGrowWithTheNumberOfConversations_data() {
+        QTest::addColumn<int>("conversations");
+        QTest::newRow("1") << 1;
+        QTest::newRow("40") << 40;
+    }
+    void storeAccessDoesNotGrowWithTheNumberOfConversations() {
+        QFETCH(int, conversations);
+        ketplus::daemon::CredentialStore credentials("ketplus-test");
+        CredentialEventCursors cursors(&credentials);
+        RelayEventFeed feed(&cursors);
+        (void)feed.connected();
+        for (int i = 0; i < conversations; ++i)
+            (void)feed.follow(QStringLiteral("session-%1").arg(i), 1);
+        // Opening the feed reads the store once, whatever the number of conversations.
+        QCOMPARE(cursors.storeReads(), 1);
+        for (int i = 0; i < conversations; ++i)
+            (void)feed.receive(page(QStringLiteral("session-%1").arg(i), {1, 2}));
+        // Each page saves every cursor that changed in one write: pages of one conversation
+        // each, so as many writes as pages, never more than one per page.
+        QCOMPARE(r03::rewrites, conversations);
+        // A flush of many changed cursors is a single commit.
+        r03::rewrites = 0;
+        for (int i = 0; i < conversations; ++i)
+            (void)feed.receive(live(QStringLiteral("session-%1").arg(i), 3));
+        QCOMPARE(r03::rewrites, 0);
+        QVERIFY(feed.flush());
+        QCOMPARE(r03::rewrites, 1);
+        QCOMPARE(cursors.storeReads(), 1);
+    }
+
+    void eventsAfterALostSaveAreRedeliveredAndDeduplicatedByCursor() {
+        MemoryCursors store;
+        QSet<qint64> consumer; // an integrator keeps events by cursor
+        const auto take = [&consumer](const QJsonArray& events) {
+            for (const auto cursor : cursors(events))
+                consumer.insert(cursor);
+        };
+        {
+            RelayEventFeed feed(&store);
+            (void)feed.connected();
+            (void)feed.follow("a", 1);
+            take(feed.receive(page("a", {1, 2, 3})).events);
+            store.failing = true; // the app is lost before the next save
+            take(feed.receive(live("a", 4)).events);
+            take(feed.receive(live("a", 5)).events);
+        }
+        QCOMPARE(store.values.value("a:1"), 3);
+        store.failing = false;
+        RelayEventFeed again(&store);
+        (void)again.follow("a", 1);
+        QCOMPARE(parse(again.connected().first()).value("afterCursor").toInteger(), 3);
+        // The host sends from the saved cursor: 4 and 5 arrive again, once each.
+        const auto redelivered = again.receive(page("a", {4, 5, 6}, true)).events;
+        QCOMPARE(cursors(redelivered), (QList<qint64>{4, 5, 6}));
+        take(redelivered);
+        QCOMPARE(consumer, (QSet<qint64>{1, 2, 3, 4, 5, 6}));
+    }
+
+    void cursorsOutsideTheExactIntegerRangeAreRefused_data() {
+        QTest::addColumn<QByteArray>("bytes");
+        QTest::newRow("huge cursor")
+            << QByteArray(R"({"type":"events","sessionId":"s","events":[{"cursor":1e300}]})");
+        QTest::newRow("cursor above 2^53") << QByteArray(
+            R"({"type":"events","sessionId":"s","events":[{"cursor":9007199254740994}]})");
+        QTest::newRow("negative huge cursor")
+            << QByteArray(R"({"type":"events","sessionId":"s","events":[{"cursor":-1e300}]})");
+        QTest::newRow("huge generation")
+            << QByteArray(R"({"type":"session.reset","sessionId":"s","sessionGeneration":1e300})");
+        QTest::newRow("huge gap cursor")
+            << QByteArray(R"({"type":"gap","sessionId":"s","afterCursor":1e19})");
+        QTest::newRow("huge event generation")
+            << QByteArray(R"({"type":"events","sessionId":"s","events":[)"
+                          R"({"cursor":1,"session_generation":1e300}]})");
+    }
+    void cursorsOutsideTheExactIntegerRangeAreRefused() {
+        QFETCH(QByteArray, bytes);
+        QString error;
+        QVERIFY(!frames::decode(bytes, &error));
+        QVERIFY(!error.isEmpty());
+    }
+
+    void cursorsAtTheExactLimitAreAccepted() {
+        const auto frame =
+            frames::decode(R"({"type":"gap","sessionId":"s","afterCursor":9007199254740992})");
+        QVERIFY(frame);
+        QCOMPARE(frame->afterCursor, 9007199254740992);
     }
 };
 

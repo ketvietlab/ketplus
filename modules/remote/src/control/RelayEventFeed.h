@@ -27,16 +27,26 @@ class EventCursorStore {
     virtual bool save(const QList<Entry>& entries) = 0;
 };
 
-// Cursors in the desktop's encrypted credential store, one record per conversation generation
-// under an account derived from a digest, so the store lists no conversation ids.
+// Cursors in the desktop's encrypted credential store, used when no local encrypted cache holds
+// them. All cursors live in one record keyed by a digest of the conversation id and generation,
+// so the store lists no conversation ids. The record is read once, on the first load, and every
+// save is one write for all cursors that changed: the number of store accesses does not grow
+// with the number of followed conversations.
 class CredentialEventCursors final : public EventCursorStore {
   public:
     explicit CredentialEventCursors(daemon::CredentialStore* store) : store_(store) {}
     [[nodiscard]] qint64 load(const QString& sessionId, qint64 generation) const override;
     bool save(const QList<Entry>& entries) override;
+    // Reads of the store so far, for tests that bound its use.
+    [[nodiscard]] int storeReads() const { return reads_; }
 
   private:
+    void ensureLoaded() const;
+
     daemon::CredentialStore* store_;
+    mutable bool loaded_{false};
+    mutable int reads_{0};
+    mutable QHash<QString, qint64> cursors_;
 };
 
 // The frames of followed conversations as one ordered stream: it tracks a cursor per

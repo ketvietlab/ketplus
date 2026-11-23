@@ -4,31 +4,49 @@
 #include "control/RelayFrames.h"
 
 #include <QCryptographicHash>
+#include <QJsonDocument>
 #include <QJsonObject>
 
 namespace ketplus::remote {
 namespace {
-QString cursorAccount(const QString& sessionId, const qint64 generation) {
+const QString cursorsAccount = QStringLiteral("event-cursors");
+
+QString cursorKey(const QString& sessionId, const qint64 generation) {
     const auto digest =
         QCryptographicHash::hash(QStringLiteral("%1:%2").arg(sessionId).arg(generation).toUtf8(),
                                  QCryptographicHash::Sha256);
-    return QStringLiteral("event-cursor-") + QString::fromLatin1(digest.toHex().left(32));
+    return QString::fromLatin1(digest.toHex().left(32));
 }
 } // namespace
 
+void CredentialEventCursors::ensureLoaded() const {
+    if (loaded_)
+        return;
+    loaded_ = true;
+    ++reads_;
+    const auto record = QJsonDocument::fromJson(store_->read(cursorsAccount)).object();
+    for (auto it = record.begin(); it != record.end(); ++it)
+        if (it->isDouble() && it->toDouble() >= 0)
+            cursors_.insert(it.key(), static_cast<qint64>(it->toDouble()));
+}
+
 qint64 CredentialEventCursors::load(const QString& sessionId, const qint64 generation) const {
-    return qMax<qint64>(0, store_->read(cursorAccount(sessionId, generation)).toLongLong());
+    ensureLoaded();
+    return cursors_.value(cursorKey(sessionId, generation), 0);
 }
 
 bool CredentialEventCursors::save(const QList<Entry>& entries) {
-    return store_->batch([&entries](daemon::CredentialStore& view, QString* error) {
-        for (const Entry& entry : entries) {
-            const QString account = cursorAccount(entry.sessionId, entry.generation);
-            if (!view.write(account, QByteArray::number(entry.cursor), error))
-                return false;
-        }
-        return true;
-    });
+    ensureLoaded();
+    auto merged = cursors_;
+    for (const Entry& entry : entries)
+        merged.insert(cursorKey(entry.sessionId, entry.generation), entry.cursor);
+    QJsonObject record;
+    for (auto it = merged.cbegin(); it != merged.cend(); ++it)
+        record.insert(it.key(), static_cast<double>(it.value()));
+    if (!store_->write(cursorsAccount, QJsonDocument(record).toJson(QJsonDocument::Compact)))
+        return false;
+    cursors_ = std::move(merged);
+    return true;
 }
 
 QByteArray RelayEventFeed::subscribe(const QString& sessionId, const Followed& state) const {
