@@ -630,10 +630,8 @@ async function startRun(messageId, params, prompt, images) {
     if (params.resume) await ensureResumable(params.resume, run.cwd).catch(() => false);
     const authentication = authenticationOptions(params.authentication);
     const teamRestrictions = teamDisallowedTools("claude", params.teamRole);
-    const teamPolicy = teamRestrictions.length
-      ? `Claude tools disabled for this role: ${teamRestrictions.join(", ")}.` : "";
     const appended = [typeof params.browserInstructions === "string" ? params.browserInstructions : "",
-      teamPolicy, review?.instructions || ""].filter(Boolean).join("\n\n");
+      review?.instructions || ""].filter(Boolean).join("\n\n");
     const background = backgroundOptions({ ...(authentication.env || process.env), ...review?.env },
       review?.hooks, authentication.settings);
     const q = queryFn({

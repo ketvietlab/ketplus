@@ -47,7 +47,8 @@ class TeamAgentToolsTest final : public QObject {
 
     Team create(Fixture& fixture, const QString& goal = {},
                 const QString& name = QStringLiteral("Shop"),
-                const QString& provider = QStringLiteral("claude")) {
+                const QString& provider = QStringLiteral("claude"),
+                const QString& developerProvider = QStringLiteral("codex")) {
         const QString repository = fixture.directory.filePath(name.toLower());
         QDir().mkpath(repository);
         git(repository, {"init", "-q", "-b", "integration"});
@@ -63,7 +64,7 @@ class TeamAgentToolsTest final : public QObject {
               QJsonObject{{"leader", QJsonObject{{"provider", provider}}},
                           {"developers",
                            QJsonObject{{"count", 2},
-                                       {"provider", "codex"},
+                                       {"provider", developerProvider},
                                        {"members", QJsonArray{QJsonObject{{"lane", "Web"}},
                                                               QJsonObject{{"lane", "Api"}}}}}},
                           {"reviewer", QJsonObject{{"provider", "claude"}}}}}});
@@ -578,6 +579,45 @@ class TeamAgentToolsTest final : public QObject {
         const QJsonObject refused = lastCreated_;
         QCOMPARE(refused.value("error_code").toString(), QStringLiteral("invalid_payload"));
         QVERIFY(refused.value("error_message").toString().contains("bytes"));
+    }
+
+    void claudeSidecarReceivesRoleAndDeveloperOnlyPreload() {
+        Fixture fixture;
+        QVERIFY(fixture.open(true));
+        const Team team = create(fixture, "Ship the cart", "Shop", "claude", "claude");
+        QVERIFY(!team.id.isEmpty());
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(team.leader, "turn.completed"), 1, 8000);
+        QHash<QString, QString> worktrees;
+        for (const auto& session : fixture.journal->sessions())
+            worktrees.insert(session.id, session.worktreePath);
+        for (const auto& session : {team.developer, team.reviewer}) {
+            QVERIFY(!worktrees.value(session).isEmpty());
+            QCOMPARE(fixture.start("claude", "Member fixture", session, worktrees.value(session)),
+                     session);
+            QTRY_COMPARE_WITH_TIMEOUT(fixture.count(session, "turn.completed"), 1, 8000);
+        }
+
+        QHash<QString, QJsonObject> setups;
+        for (const auto& line : logText(fixture.claudeLog).split('\n')) {
+            if (line.startsWith("setup:")) {
+                const auto setup = QJsonDocument::fromJson(line.mid(6)).object();
+                setups.insert(setup.value("sessionId").toString(), setup);
+            }
+        }
+        for (const auto& [session, role] : {std::pair{team.leader, QStringLiteral("leader")},
+                                            std::pair{team.developer, QStringLiteral("developer")},
+                                            std::pair{team.reviewer, QStringLiteral("reviewer")}}) {
+            const auto setup = setups.value(session);
+            QCOMPARE(setup.value("teamRole").toString(), role);
+            const auto server =
+                setup.value("mcpServers").toObject().value("ketplus_agents").toObject();
+            QVERIFY(!server.isEmpty());
+            const bool developer = role == QStringLiteral("developer");
+            QCOMPARE(server.value("alwaysLoad").toBool(), developer);
+            QCOMPARE(
+                server.value("env").toObject().contains("KETPLUS_AGENT_PRELOAD_DEVELOPER_TOOLS"),
+                developer);
+        }
     }
 
     void claudeDeveloperEagerToolsPreserveTheAdvertisedToolList() {
