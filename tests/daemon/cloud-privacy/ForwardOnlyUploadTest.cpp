@@ -374,6 +374,34 @@ class ForwardOnlyUploadTest final : public QObject {
         QVERIFY2(c.journaled() <= bound + 1, qPrintable(QString::number(c.journaled())));
     }
 
+    // Releasing retention touches neither the credential store nor idle sessions: only a session
+    // that moved a whole step gets one journal acknowledgement, and the pass reads nothing.
+    void releasingRetentionIsLightOnTheMainThread() {
+        QTemporaryDir dir;
+        Context c(dir.filePath("light.sqlite"));
+        for (const QString id : {"session-second", "session-third"})
+            QVERIFY(c.journal.upsertSession(
+                {id, "synthetic-worktree", "codex", "thread-" + id, {}, "ready", 1, 0, 1}));
+        c.start();
+        c.answer(true);
+        for (const QString id : {"session-second", "session-third"}) {
+            QString error;
+            for (int i = 0; i < 3; ++i)
+                QVERIFY2(c.journal.appendEvent(id, 1, "user.message", {{"text", id}}, &error) > 0,
+                         qPrintable(error));
+        }
+        r03::reads.clear();
+        const int rewrites = r03::rewrites;
+        c.appendRunning(2400);
+        QCOMPARE(r03::rewrites, rewrites);
+        for (const QString& account : std::as_const(r03::reads))
+            QVERIFY2(!account.startsWith("uploaded-cursor-"), qPrintable(account));
+        // Idle sessions are never acknowledged: their cursors are still only what they hold.
+        QCOMPARE(c.journal.eventsAfter("session-second", 1, 0).size(), 3);
+        QCOMPARE(c.journal.eventsAfter("session-third", 1, 0).size(), 3);
+        QVERIFY(c.journaled() <= bound);
+    }
+
     void aChunkDoesNotReadTheCredentialStore() {
         QTemporaryDir dir;
         Context c(dir.filePath("reads.sqlite"));
