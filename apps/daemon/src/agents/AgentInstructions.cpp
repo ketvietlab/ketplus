@@ -128,6 +128,9 @@ QString teamInstructions(const QString& role) {
             "finding give the file, line, severity and a one-line summary. End with exactly "
             "one line: \"Verdict: findings\" or \"Verdict: no findings\".");
     }
+    lines << QStringLiteral(
+        "Call team_get when you need current team settings. Settings in the initial message "
+        "reflect the start of the conversation context.");
     // Content follows user intent, independently of the fixed English application chrome.
     lines << QStringLiteral(
         "The application interface is English. Team content follows the user's current prompt "

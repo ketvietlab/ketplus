@@ -2359,9 +2359,12 @@ binary mode (`BinaryStdio.h`), because the C runtime would otherwise add `\r`.
 Run `ketplus_team_agent_tools_tests`, `ketplus_team_language_tests`,
 `ketplus_agent_messaging_tests`, `ketplus_agent_urgent_delivery_tests` and the
 Claude, Cursor and Copilot adapter suites for changes to team prompt assembly.
-These offline fixtures check host instruction and MCP tool-list bytes and the
-first provider input. Cache read and creation counts require real provider
-usage records.
+The team agent tools fixture starts two leaders per provider for Claude, Codex
+and Cursor (ACP). It compares the policy and MCP server declarations captured by
+the fake providers, excluding launch environment values. It also compares the
+ordered MCP tool list through the real session-bound agent command handler.
+Provider-generated context, deferred-tool ordering, and cache read and creation
+counts require real provider usage records.
 
 ## English chrome and multilingual team content (T30)
 

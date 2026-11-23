@@ -749,10 +749,12 @@ This is KetPlus host guidance. Codex's repository `AGENTS.md` discovery is
 independent. Turn input carries dynamic deliveries and handoff material.
 [`SessionHostAgents.cpp`](../../apps/daemon/src/runtime/SessionHostAgents.cpp)
 and [`AgentInstructions.cpp`](../../apps/daemon/src/agents/AgentInstructions.cpp)
-show why the audited version cannot assume even two developers share the full
-host prefix. The conversation number appears near the start of the routing
-instructions, followed by team and member-specific text. Worktree instructions,
-tool definitions and provider context may introduce additional differences.
+now assemble the same host guidance for members of the same role. The first
+turn's input carries the conversation number and team settings. Previously the
+routing instructions included the number and team-specific text. Worktree
+instructions, tool availability and provider context can still affect reuse.
+See [the architecture notes](../architecture.md) for the lifetime of the
+settings snapshot and the ACP history-load fallback.
 
 A member switch uses the fresh native context and transcript handoff of
 `session.start_turn`, including on a switch back. A whole-team switch

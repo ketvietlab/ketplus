@@ -8,6 +8,7 @@
 #include "teams/TeamRules.h"
 
 #include <QProcess>
+#include <QScopeGuard>
 #include <QStandardPaths>
 #include <QTest>
 
@@ -44,8 +45,10 @@ class TeamAgentToolsTest final : public QObject {
         return fixture.host->handleCommand(request(type, payload), "desktop-test");
     }
 
-    Team create(Fixture& fixture, const QString& goal = {}) {
-        const QString repository = fixture.directory.filePath("shop");
+    Team create(Fixture& fixture, const QString& goal = {},
+                const QString& name = QStringLiteral("Shop"),
+                const QString& provider = QStringLiteral("claude")) {
+        const QString repository = fixture.directory.filePath(name.toLower());
         QDir().mkpath(repository);
         git(repository, {"init", "-q", "-b", "integration"});
         git(repository, {"-c", "user.email=t@example.com", "-c", "user.name=T", "commit", "-q",
@@ -53,11 +56,11 @@ class TeamAgentToolsTest final : public QObject {
         const QJsonObject created = command(
             fixture, "team.create",
             {{"repository", repository},
-             {"name", "Shop"},
+             {"name", name},
              {"goal", goal},
              {"integration_branch", "integration"},
              {"plan",
-              QJsonObject{{"leader", QJsonObject{{"provider", "claude"}}},
+              QJsonObject{{"leader", QJsonObject{{"provider", provider}}},
                           {"developers",
                            QJsonObject{{"count", 2},
                                        {"provider", "codex"},
@@ -366,6 +369,7 @@ class TeamAgentToolsTest final : public QObject {
         QVERIFY(!developer.contains("outside the lane"));
         QVERIFY(!leader.contains("team_paths_allow"));
         QVERIFY(!leader.contains("paths"));
+        QVERIFY(developer.contains("Call team_get"));
         QVERIFY(developer.contains("Report through the task"));
         QVERIFY(developer.contains("Do not merge."));
         QVERIFY(developer.contains("submit evidence once"));
@@ -373,46 +377,128 @@ class TeamAgentToolsTest final : public QObject {
         QVERIFY(
             leader.contains("Do not ask the user to approve again an action already authorized"));
         const QString reviewer = teamInstructions("reviewer");
+        QVERIFY(reviewer.contains("Call team_get"));
         QVERIFY(reviewer.contains("Verdict: no findings"));
         QVERIFY(reviewer.contains("read-only"));
     }
 
+    void memberIdentityDoesNotChangeHostPrefix_data() {
+        QTest::addColumn<QString>("provider");
+        for (const auto* provider : {"claude", "codex", "cursor"})
+            QTest::newRow(provider) << QString::fromLatin1(provider);
+    }
+
     void memberIdentityDoesNotChangeHostPrefix() {
-        using namespace agent_messaging;
-        const TeamRoleContext first{
-            .team = "Shop", .goal = "Ship the cart", .role = "developer", .lane = "Web"};
-        const TeamRoleContext second{
-            .team = "Warehouse", .goal = "Count stock", .role = "developer", .lane = "Inventory"};
-        const auto prefix = [](const TeamRoleContext& member) {
-            return (toolInstructions() + QLatin1Char('\n') + teamInstructions(member.role))
-                .toUtf8();
+        QFETCH(QString, provider);
+        const auto oldInputLog = qgetenv("KETPLUS_FAKE_CODEX_LOG_INPUT");
+        qputenv("KETPLUS_FAKE_CODEX_LOG_INPUT", "1");
+        const auto restoreInputLog = qScopeGuard([oldInputLog] {
+            if (oldInputLog.isNull())
+                qunsetenv("KETPLUS_FAKE_CODEX_LOG_INPUT");
+            else
+                qputenv("KETPLUS_FAKE_CODEX_LOG_INPUT", oldInputLog);
+        });
+        Fixture fixture;
+        QVERIFY(fixture.open(true));
+        const QString log = provider == "claude"  ? fixture.claudeLog
+                            : provider == "codex" ? fixture.codexLog
+                                                  : fixture.cursorLog;
+        const auto rows = [&](const QByteArray& prefix) {
+            QList<QJsonObject> matches;
+            for (const auto& line : logText(log).split('\n'))
+                if (line.startsWith(prefix))
+                    matches.append(QJsonDocument::fromJson(line.mid(prefix.size())).object());
+            return matches;
         };
-        QCOMPARE(prefix(first), prefix(second));
-        const auto listedTools = [](const QString& number, const TeamRoleContext& member) {
+        const Team first = create(fixture, "Ship the cart", "Shop", provider);
+        QVERIFY(!first.id.isEmpty());
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(first.leader, "turn.completed"), 1, 8000);
+        const Team second = create(fixture, "Count stock", "Warehouse", provider);
+        QVERIFY(!second.id.isEmpty());
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(second.leader, "turn.completed"), 1, 8000);
+        const QString firstNumber = fixture.number(first.leader);
+        const QString secondNumber = fixture.number(second.leader);
+        QVERIFY(!firstNumber.isEmpty());
+        QVERIFY(!secondNumber.isEmpty());
+        QVERIFY(firstNumber != secondNumber);
+
+        const bool codex = provider == "codex";
+        const auto policy = rows(codex ? "setup:" : "policy:");
+        QCOMPARE(policy.size(), 2);
+        const QString instructionKey = codex ? "developerInstructions" : "instructions";
+        const QByteArray instructions = policy.first().value(instructionKey).toString().toUtf8();
+        QVERIFY(instructions.contains("Your team role is leader."));
+        QVERIFY(instructions.contains("Call team_get"));
+        QCOMPARE(instructions, policy.last().value(instructionKey).toString().toUtf8());
+
+        // Compare the server declarations the fake provider received, excluding launch-only env.
+        const auto setups = rows(provider == "cursor" ? "browser:" : "setup:");
+        QCOMPARE(setups.size(), 2);
+        const auto servers = [&](const QJsonObject& setup) {
+            QJsonObject declarations;
+            QJsonArray acpServers;
+            if (codex) {
+                const auto config = setup.value("config").toObject();
+                for (auto it = config.begin(); it != config.end(); ++it)
+                    if (it.key().startsWith("mcp_servers.") && !it.key().endsWith(".env"))
+                        declarations.insert(it.key(), it.value());
+            } else if (provider == "claude") {
+                const auto mcp = setup.value("mcpServers").toObject();
+                for (auto it = mcp.begin(); it != mcp.end(); ++it) {
+                    auto server = it.value().toObject();
+                    server.remove("env");
+                    declarations.insert(it.key(), server);
+                }
+            } else {
+                for (const auto& value : setup.value("mcpServers").toArray()) {
+                    auto server = value.toObject();
+                    server.remove("env");
+                    acpServers.append(server);
+                }
+                declarations.insert("servers", acpServers);
+            }
+            return QJsonDocument(declarations).toJson(QJsonDocument::Compact);
+        };
+        const QByteArray serverBytes = servers(setups.first());
+        QVERIFY(serverBytes.contains("ketplus_agents"));
+        QCOMPARE(serverBytes, servers(setups.last()));
+
+        const auto listedTools = [&](const QString& session) {
             return QJsonDocument(agent_mcp::handleMessage(
                                      {{"jsonrpc", "2.0"}, {"id", 1}, {"method", "tools/list"}},
-                                     [&](const QString&, const QJsonObject&) {
-                                         return QJsonObject{
-                                             {"number", number},
-                                             {"worktree", "/fixture/" + member.team},
-                                             {"team", QJsonObject{{"role", member.role},
-                                                                  {"name", member.team}}}};
+                                     [&](const QString& method, const QJsonObject& params) {
+                                         return fixture.agents(session, method, params);
                                      }))
                 .toJson(QJsonDocument::Compact);
         };
-        const QByteArray tools = listedTools("79461", first);
-        QCOMPARE(tools, listedTools("79462", second));
-        for (const QByteArray& text : {prefix(first), tools}) {
-            QVERIFY(!text.contains("79461"));
-            QVERIFY(!text.contains("79462"));
-            QVERIFY(!text.contains("/fixture/"));
+        const auto firstIdentity = fixture.agents(first.leader, "agents.whoami");
+        const auto secondIdentity = fixture.agents(second.leader, "agents.whoami");
+        QCOMPARE(firstIdentity.value("number").toString(), firstNumber);
+        QCOMPARE(secondIdentity.value("number").toString(), secondNumber);
+        QCOMPARE(firstIdentity.value("team").toObject().value("name").toString(), "Shop");
+        QCOMPARE(secondIdentity.value("team").toObject().value("name").toString(), "Warehouse");
+        QCOMPARE(firstIdentity.value("worktree").toString(), fixture.directory.filePath("shop"));
+        QCOMPARE(secondIdentity.value("worktree").toString(),
+                 fixture.directory.filePath("warehouse"));
+        const QByteArray tools = listedTools(first.leader);
+        QVERIFY(tools.contains("team_get"));
+        QCOMPARE(tools, listedTools(second.leader));
+        for (const auto& bytes : {instructions, serverBytes, tools}) {
+            QVERIFY(!bytes.contains("Ship the cart"));
+            QVERIFY(!bytes.contains("Count stock"));
+            QVERIFY(!bytes.contains(fixture.directory.path().toUtf8()));
+            QVERIFY(!bytes.contains(("@agent/" + firstNumber).toUtf8()));
+            QVERIFY(!bytes.contains(("@agent/" + secondNumber).toUtf8()));
         }
-        const QString firstContext = conversationContext("79461", first);
-        QVERIFY(firstContext.contains("@agent/79461"));
-        QVERIFY(firstContext.contains(first.team));
-        QVERIFY(firstContext.contains(first.goal));
-        QVERIFY(firstContext.contains(first.lane));
-        QVERIFY(conversationContext("79462", second).contains(second.goal));
+        QList<QByteArray> inputs;
+        for (const auto& line : logText(log).split('\n'))
+            if (line.startsWith(codex ? "input:" : "policy:"))
+                inputs.append(line);
+        QCOMPARE(inputs.size(), 2);
+        QVERIFY(inputs.first().contains("Ship the cart"));
+        QVERIFY(inputs.last().contains("Count stock"));
+        QVERIFY(inputs.first().contains(("@agent/" + firstNumber).toUtf8()));
+        QVERIFY(inputs.last().contains(("@agent/" + secondNumber).toUtf8()));
     }
 
     void routingPromptFixturesStayConservative() {
