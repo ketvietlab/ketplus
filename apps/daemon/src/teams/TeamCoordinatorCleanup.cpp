@@ -9,6 +9,8 @@
 #include <QJsonArray>
 #include <QPointer>
 
+#include <algorithm>
+
 namespace ketplus::daemon::teams {
 namespace {
 
@@ -67,7 +69,10 @@ void TeamCoordinator::cleanupWorktrees(const qint64 teamId, const QStringList& t
     // A run that finished is replaced by the next, and its summary with it.
     if (cleanup.removing.isEmpty() && cleanup.waiting.isEmpty()) {
         cleanup = {};
-        cleanup.run = ++cleanupRuns_;
+        // Run numbers only grow, also across a restart (they start from the clock), so a
+        // desktop that dismissed an older run never hides the summary of a later one.
+        cleanup.run = cleanupRuns_ =
+            std::max(cleanupRuns_ + 1, QDateTime::currentMSecsSinceEpoch());
     }
     for (const QString& id : ids) {
         if (cleanup.removing == id || cleanup.waiting.contains(id))

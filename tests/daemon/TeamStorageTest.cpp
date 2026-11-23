@@ -466,7 +466,8 @@ class TeamStorageTest final : public QObject {
         const QString first = taskWithWorktree("Cart");
         const QString second = taskWithWorktree("Search");
         host_.holdAnswers = true;
-        QVERIFY(!cleanup({first, second}).value("active").toArray().isEmpty());
+        const QJsonObject started = cleanup({first, second});
+        QVERIFY(!started.value("active").toArray().isEmpty());
         host_.held.clear();
         teams_.reset();
         teams_ = std::make_unique<TeamCoordinator>(journal_.get(), &host_);
@@ -479,6 +480,11 @@ class TeamStorageTest final : public QObject {
         QVERIFY(storage().value("worktrees").toArray().size() == 2);
         for (const QJsonValue& row : storage().value("worktrees").toArray())
             QVERIFY(!row.toObject().contains("removal"));
+        // A run after the restart is numbered above the one before it, so a desktop that
+        // dismissed the old summary still shows the new one.
+        host_.holdAnswers = false;
+        const QJsonObject next = cleanup({first});
+        QVERIFY(next.value("run").toInteger() > started.value("run").toInteger());
     }
 
     // Review finding: a conversation that waits for an answer or an approval counts as running.

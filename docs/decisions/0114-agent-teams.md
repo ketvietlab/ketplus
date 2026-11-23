@@ -534,7 +534,9 @@ is paused, stopped or removed on its own at any level.
   asked for while a run is going joins it. `cleanup` is `{run, active: [{task_id, state:
   queued|removing}], last}`, where `last` is `null` or `{run, removed: [{task_id,
   size_bytes}], kept: [{task_id, reason}], notes: [{task_id, note}], freed_bytes,
-  freed_exact, finished_at}`; the next run replaces it. It is in `team.storage.get`'s
+  freed_exact, finished_at}`; the next run replaces it. `run` only grows, also across a daemon
+  restart (it starts from the clock), so a client that closed an older summary still shows a
+  later one. It is in `team.storage.get`'s
   `storage.cleanup`, and each of its `worktrees` the run holds has `removal`: `queued` or
   `removing`. A run's state is in memory only, so a restarted daemon has none that could stay
   "running". The daemon sends the notice `team.storage.changed` (`{team_id}`) to the local
