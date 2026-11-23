@@ -3,6 +3,7 @@
 #include "agent/AgentWorkspaceView.h"
 
 #include <QDir>
+#include <QFont>
 #include <QQuickView>
 #include <QSignalSpy>
 #include <QtTest>
@@ -214,6 +215,11 @@ void AgentWorkspaceViewTest::managedTaskOutputRetriesAfterReadError() {
     auto* output = root->findChild<QObject*>("backgroundTaskOutputText");
     QVERIFY(output);
     QTRY_COMPARE(output->property("text").toString(), "Recovered output");
+    // The opened output, not the row, names the task and its cleanup assurance.
+    auto* footer = findVisualItem(root, "backgroundTaskOutputFooter");
+    QVERIFY(footer);
+    QTRY_VERIFY(footer->isVisible());
+    QCOMPARE(footer->property("text").toString(), "Task job · Best effort cleanup complete");
 }
 
 void AgentWorkspaceViewTest::managedTaskStatesRender_data() {
@@ -267,7 +273,22 @@ void AgentWorkspaceViewTest::managedTaskStatesRender() {
         auto* card = findVisualItem(root, "backgroundTaskCard_" + id);
         QVERIFY(card);
         QVERIFY2(!card->property("meta").toString().contains("undefined"), qPrintable(id));
+        // Under a card only notes about that task, set like its meta line: no task id and
+        // no machine-wide assurance repeated per row.
+        auto* details = findVisualItem(root, "backgroundTaskDetails_" + id);
+        QVERIFY(details);
+        const auto text = details->property("text").toString();
+        QVERIFY2(!text.contains("Task " + id) && !text.contains("Native macOS"), qPrintable(id));
+        const auto recipe = card->property("recipe").toMap();
+        QVERIFY2(qAbs(details->property("font").value<QFont>().pixelSize() -
+                      recipe.value("metaPixels").toReal()) < 1.0,
+                 qPrintable(id));
     }
+    QVERIFY(!findVisualItem(root, "backgroundTaskDetails_queued-0")->isVisible());
+    auto* assurance = findVisualItem(root, "backgroundTaskAssurance");
+    QVERIFY(assurance);
+    QTRY_VERIFY(assurance->isVisible());
+    QVERIFY(assurance->property("text").toString().contains("best effort"));
     QSignalSpy pages(&view, &ketplus::AgentWorkspaceView::backgroundTasksRequested);
     auto* more = findVisualItem(root, "backgroundTasksLoadMore");
     QVERIFY(more);

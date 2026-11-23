@@ -1120,7 +1120,11 @@ already loaded output remain available. The UI does not infer permissions from
 Codex, Claude or Cursor identity.
 
 On native macOS, the bar labels the assurance as best effort, including
-`best_effort_complete`; this never claims absence of unobserved descendants.
+`best_effort_complete`; this never claims absence of unobserved descendants. The
+label is a property of the machine, so the bar states it once under the rows; the
+opened output names the task id and that task's assurance. Notes under a row are
+only about that task (cleanup warnings, acknowledgement, follow-up delivery) and
+are set like the row's meta line.
 `needs_attention` is a warning banner with `cleanup_unverified`, retained root exit
 code and manual-check guidance. A root exit code of zero does not turn that warning
 into success. Retry cleanup uses Stop without replaying the command. Only an

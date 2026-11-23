@@ -120,15 +120,19 @@ ColumnLayout {
         font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
         wrapMode: Text.Wrap
     }
+    // A note on this task, set as the card's meta line: same size and muted colour, aligned
+    // with the card's content rather than with the strip's edge.
     Text {
         objectName: "backgroundTaskDetails_" + row.modelData.task_id
         Layout.fillWidth: true
         visible: text.length > 0
+        leftPadding: taskRow.recipe.paddingStart
+        rightPadding: taskRow.recipe.paddingEnd
         text: taskBar.details(row.modelData)
         textFormat: Text.PlainText
-        color: taskBar.attention(row.modelData) ? KetTheme.t.warning : KetTheme.t.textSecondary
+        color: taskBar.attention(row.modelData) ? KetTheme.t.warning : taskRow.recipe.meta
         font.family: KetTheme.fontFamily
-        font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
+        font.pixelSize: taskRow.recipe.metaPixels
         wrapMode: Text.Wrap
     }
     Text {
