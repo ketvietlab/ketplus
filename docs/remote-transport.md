@@ -318,6 +318,10 @@ side of the event frames. They own no socket: the caller sends what they return.
   conversations, and each save is one write for every cursor that changed. A cursor is saved after
   each `events` page and after every 50 live `event` frames; closing the feed saves the rest.
   A new connection subscribes after each stored cursor.
+  When the record cannot be read (a failed read, or a damaged record), nothing is written over it
+  and a conversation without a readable cursor is followed in memory but not subscribed, because
+  subscribing from 0 would replay its history; the next connection or `retryStored()` reads the
+  store again.
 - Quitting between two saves can redeliver up to 49 live events. The integrator keeps events by
   cursor and drops one it already has, so a redelivered event changes nothing.
 - Each event is delivered once and in order. An event at or below the cursor (late or repeated) is

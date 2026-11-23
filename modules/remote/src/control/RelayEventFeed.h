@@ -6,6 +6,8 @@
 #include <QList>
 #include <QString>
 
+#include <optional>
+
 namespace ketplus::daemon {
 class CredentialStore;
 }
@@ -21,9 +23,11 @@ class EventCursorStore {
         qint64 cursor{0};
     };
     virtual ~EventCursorStore() = default;
-    // 0 when nothing is stored.
-    [[nodiscard]] virtual qint64 load(const QString& sessionId, qint64 generation) const = 0;
-    // Every entry or none.
+    // 0 when nothing is stored; nothing when the store could not be read, which must not be
+    // taken for an empty one.
+    [[nodiscard]] virtual std::optional<qint64> load(const QString& sessionId,
+                                                     qint64 generation) const = 0;
+    // Every entry or none; false, and nothing written, when the stored cursors were not read.
     virtual bool save(const QList<Entry>& entries) = 0;
 };
 
@@ -35,13 +39,15 @@ class EventCursorStore {
 class CredentialEventCursors final : public EventCursorStore {
   public:
     explicit CredentialEventCursors(daemon::CredentialStore* store) : store_(store) {}
-    [[nodiscard]] qint64 load(const QString& sessionId, qint64 generation) const override;
+    [[nodiscard]] std::optional<qint64> load(const QString& sessionId,
+                                             qint64 generation) const override;
     bool save(const QList<Entry>& entries) override;
     // Reads of the store so far, for tests that bound its use.
     [[nodiscard]] int storeReads() const { return reads_; }
 
   private:
-    void ensureLoaded() const;
+    // False while the record could not be read (or is damaged); it is read again next time.
+    [[nodiscard]] bool ensureLoaded() const;
 
     daemon::CredentialStore* store_;
     mutable bool loaded_{false};
@@ -74,7 +80,12 @@ class RelayEventFeed final {
     };
 
     // Starts following from the stored cursor; the frame to send, empty without a connection.
+    // When the store cannot be read, the conversation is followed in memory but not subscribed
+    // (subscribing from 0 would replay the history): retryStored() or the next connected()
+    // reads the store again.
     QByteArray follow(const QString& sessionId, qint64 generation);
+    // Subscribes the conversations whose stored cursor could not be read, as far as it can now.
+    QList<QByteArray> retryStored();
     QByteArray unfollow(const QString& sessionId);
     // A connection is open: one subscribe after each cursor.
     QList<QByteArray> connected();
@@ -89,6 +100,7 @@ class RelayEventFeed final {
 
     [[nodiscard]] qint64 cursor(const QString& sessionId) const;
     [[nodiscard]] bool reloading(const QString& sessionId) const;
+    [[nodiscard]] bool awaitingStore(const QString& sessionId) const;
     bool flush();
 
   private:
@@ -97,6 +109,9 @@ class RelayEventFeed final {
         qint64 cursor{0};
         int unsaved{0};
         bool reloading{false};
+        // The stored cursor could not be read yet.
+        bool unloaded{false};
+        [[nodiscard]] bool held() const { return reloading || unloaded; }
     };
     [[nodiscard]] QByteArray subscribe(const QString& sessionId, const Followed& state) const;
 

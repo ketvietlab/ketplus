@@ -7,6 +7,7 @@
 #include <QJsonDocument>
 #include <QJsonObject>
 #include <QtTest>
+#include <optional>
 
 using namespace ketplus::remote;
 namespace {
@@ -53,7 +54,10 @@ class MemoryCursors final : public EventCursorStore {
     QHash<QString, qint64> values;
     int saves{0};
     bool failing{false};
-    qint64 load(const QString& s, qint64 g) const override {
+    bool failLoad{false};
+    std::optional<qint64> load(const QString& s, qint64 g) const override {
+        if (failLoad)
+            return std::nullopt;
         return values.value(QStringLiteral("%1:%2").arg(s).arg(g));
     }
     bool save(const QList<Entry>& entries) override {
@@ -324,9 +328,9 @@ class RelayEventFeedTest final : public QObject {
         ketplus::daemon::CredentialStore credentials("ketplus-test");
         CredentialEventCursors cursors(&credentials);
         QVERIFY(cursors.save({{"session-secret-name", 2, 9}, {"other", 1, 4}}));
-        QCOMPARE(cursors.load("session-secret-name", 2), 9);
-        QCOMPARE(cursors.load("session-secret-name", 1), 0);
-        QCOMPARE(cursors.load("missing", 1), 0);
+        QCOMPARE(cursors.load("session-secret-name", 2).value_or(-1), 9);
+        QCOMPARE(cursors.load("session-secret-name", 1).value_or(-1), 0);
+        QCOMPARE(cursors.load("missing", 1).value_or(-1), 0);
         QCOMPARE(r03::rewrites, 1); // both in one commit
         for (auto it = r03::credentials.cbegin(); it != r03::credentials.cend(); ++it) {
             QVERIFY(!it.key().contains("session-secret-name"));
@@ -334,8 +338,87 @@ class RelayEventFeedTest final : public QObject {
         }
         // A new process reads what the first one saved.
         CredentialEventCursors again(&credentials);
-        QCOMPARE(again.load("session-secret-name", 2), 9);
-        QCOMPARE(again.load("other", 1), 4);
+        QCOMPARE(again.load("session-secret-name", 2).value_or(-1), 9);
+        QCOMPARE(again.load("other", 1).value_or(-1), 4);
+    }
+
+    void aFailedFirstReadNeverOverwritesTheStoredRecord() {
+        ketplus::daemon::CredentialStore credentials("ketplus-test");
+        {
+            CredentialEventCursors first(&credentials);
+            QVERIFY(first.save({{"a", 1, 9}, {"b", 1, 4}}));
+        }
+        const auto record = r03::credentials;
+        const int rewrites = r03::rewrites;
+        // A momentary read failure: nothing can be said of the stored cursors, and a save must
+        // not replace the record with one that lacks them.
+        CredentialEventCursors second(&credentials);
+        r03::failReadsOf = "event-cursors";
+        QVERIFY(!second.load("a", 1));
+        QVERIFY(!second.save({{"c", 1, 2}}));
+        QCOMPARE(r03::credentials, record);
+        QCOMPARE(r03::rewrites, rewrites);
+        // Once the store reads again, the old cursors are there and a save keeps them.
+        r03::failReadsOf.clear();
+        QCOMPARE(second.load("a", 1).value_or(-1), 9);
+        QVERIFY(second.save({{"c", 1, 2}}));
+        CredentialEventCursors third(&credentials);
+        QCOMPARE(third.load("a", 1).value_or(-1), 9);
+        QCOMPARE(third.load("b", 1).value_or(-1), 4);
+        QCOMPARE(third.load("c", 1).value_or(-1), 2);
+    }
+
+    void aDamagedRecordIsNotReplaced() {
+        ketplus::daemon::CredentialStore credentials("ketplus-test");
+        QVERIFY(credentials.write("event-cursors", "{not json"));
+        const auto record = r03::credentials;
+        CredentialEventCursors cursors(&credentials);
+        QVERIFY(!cursors.load("a", 1));
+        QVERIFY(!cursors.save({{"a", 1, 3}}));
+        QCOMPARE(r03::credentials, record);
+    }
+
+    void anUnreadableStoreDoesNotSubscribeFromZero() {
+        MemoryCursors store;
+        store.values.insert("a:1", 7);
+        store.failLoad = true;
+        RelayEventFeed feed(&store);
+        QVERIFY(feed.follow("a", 1).isEmpty());
+        QVERIFY(feed.awaitingStore("a"));
+        // Connecting subscribes nothing for it, and its frames are ignored: the history would
+        // otherwise replay from 0.
+        QVERIFY(feed.connected().isEmpty());
+        QVERIFY(feed.receive(page("a", {1, 2})).events.isEmpty());
+        QVERIFY(feed.receive(simple("gap", "a", 0)).send.isEmpty());
+        QVERIFY(feed.receive(simple("frames.dropped")).send.isEmpty());
+        QCOMPARE(feed.cursor("a"), 0);
+        QVERIFY(feed.retryStored().isEmpty()); // still unreadable
+        // The store reads again: it subscribes after the stored cursor.
+        store.failLoad = false;
+        const auto sent = feed.retryStored();
+        QCOMPARE(sent.size(), 1);
+        QCOMPARE(parse(sent.first()).value("afterCursor").toInteger(), 7);
+        QVERIFY(!feed.awaitingStore("a"));
+        QCOMPARE(cursors(feed.receive(page("a", {7, 8})).events), (QList<qint64>{8}));
+    }
+
+    void aReconnectReadsTheStoreAgainForConversationsWaitingOnIt() {
+        MemoryCursors store;
+        store.values.insert("a:1", 5);
+        store.values.insert("b:1", 2);
+        RelayEventFeed feed(&store);
+        (void)feed.connected();
+        (void)feed.follow("a", 1);
+        store.failLoad = true;
+        QVERIFY(feed.follow("b", 1).isEmpty());
+        feed.disconnected();
+        store.failLoad = false;
+        QHash<QString, qint64> after;
+        for (const auto& frame : feed.connected())
+            after.insert(parse(frame).value("sessionId").toString(),
+                         parse(frame).value("afterCursor").toInteger());
+        QCOMPARE(after.value("a"), 5);
+        QCOMPARE(after.value("b"), 2);
     }
 
     void storeAccessDoesNotGrowWithTheNumberOfConversations_data() {

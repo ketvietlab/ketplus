@@ -19,24 +19,41 @@ QString cursorKey(const QString& sessionId, const qint64 generation) {
 }
 } // namespace
 
-void CredentialEventCursors::ensureLoaded() const {
+bool CredentialEventCursors::ensureLoaded() const {
     if (loaded_)
-        return;
-    loaded_ = true;
+        return true;
     ++reads_;
-    const auto record = QJsonDocument::fromJson(store_->read(cursorsAccount)).object();
-    for (auto it = record.begin(); it != record.end(); ++it)
-        if (it->isDouble() && it->toDouble() >= 0)
-            cursors_.insert(it.key(), static_cast<qint64>(it->toDouble()));
+    QString error;
+    const QByteArray bytes = store_->read(cursorsAccount, &error);
+    if (!error.isEmpty())
+        return false;
+    QHash<QString, qint64> read;
+    if (!bytes.isEmpty()) {
+        QJsonParseError parse;
+        const auto document = QJsonDocument::fromJson(bytes, &parse);
+        // A damaged record is not an empty one: writing over it would lose what it held.
+        if (parse.error != QJsonParseError::NoError || !document.isObject())
+            return false;
+        const auto record = document.object();
+        for (auto it = record.begin(); it != record.end(); ++it)
+            if (it->isDouble() && it->toDouble() >= 0)
+                read.insert(it.key(), static_cast<qint64>(it->toDouble()));
+    }
+    cursors_ = std::move(read);
+    loaded_ = true;
+    return true;
 }
 
-qint64 CredentialEventCursors::load(const QString& sessionId, const qint64 generation) const {
-    ensureLoaded();
+std::optional<qint64> CredentialEventCursors::load(const QString& sessionId,
+                                                   const qint64 generation) const {
+    if (!ensureLoaded())
+        return std::nullopt;
     return cursors_.value(cursorKey(sessionId, generation), 0);
 }
 
 bool CredentialEventCursors::save(const QList<Entry>& entries) {
-    ensureLoaded();
+    if (!ensureLoaded())
+        return false;
     auto merged = cursors_;
     for (const Entry& entry : entries)
         merged.insert(cursorKey(entry.sessionId, entry.generation), entry.cursor);
@@ -56,12 +73,15 @@ QByteArray RelayEventFeed::subscribe(const QString& sessionId, const Followed& s
 QByteArray RelayEventFeed::follow(const QString& sessionId, const qint64 generation) {
     if (const auto known = followed_.constFind(sessionId);
         known != followed_.cend() && known->generation == generation)
-        return connected_ && !known->reloading ? subscribe(sessionId, *known) : QByteArray{};
+        return connected_ && !known->held() ? subscribe(sessionId, *known) : QByteArray{};
     Followed state;
     state.generation = generation;
-    state.cursor = store_->load(sessionId, generation);
+    if (const auto stored = store_->load(sessionId, generation))
+        state.cursor = *stored;
+    else
+        state.unloaded = true;
     followed_.insert(sessionId, state);
-    return connected_ ? subscribe(sessionId, state) : QByteArray{};
+    return connected_ && !state.held() ? subscribe(sessionId, state) : QByteArray{};
 }
 
 QByteArray RelayEventFeed::unfollow(const QString& sessionId) {
@@ -75,9 +95,32 @@ QByteArray RelayEventFeed::unfollow(const QString& sessionId) {
 QList<QByteArray> RelayEventFeed::connected() {
     connected_ = true;
     QList<QByteArray> out;
-    for (auto it = followed_.cbegin(); it != followed_.cend(); ++it)
-        if (!it->reloading)
+    for (auto it = followed_.begin(); it != followed_.end(); ++it) {
+        if (it->unloaded) {
+            if (const auto stored = store_->load(it.key(), it->generation)) {
+                it->cursor = *stored;
+                it->unloaded = false;
+            }
+        }
+        if (!it->held())
             out.append(subscribe(it.key(), *it));
+    }
+    return out;
+}
+
+QList<QByteArray> RelayEventFeed::retryStored() {
+    QList<QByteArray> out;
+    for (auto it = followed_.begin(); it != followed_.end(); ++it) {
+        if (!it->unloaded)
+            continue;
+        const auto stored = store_->load(it.key(), it->generation);
+        if (!stored)
+            continue;
+        it->cursor = *stored;
+        it->unloaded = false;
+        if (connected_ && !it->reloading)
+            out.append(subscribe(it.key(), *it));
+    }
     return out;
 }
 
@@ -90,7 +133,7 @@ RelayEventFeed::Result RelayEventFeed::receive(const QByteArray& bytes, QString*
     if (frame->type == Type::FramesDropped) {
         // The relay dropped frames for this device: every conversation, or the one it names.
         for (auto it = followed_.cbegin(); it != followed_.cend(); ++it)
-            if (!it->reloading && (frame->sessionId.isEmpty() || frame->sessionId == it.key()))
+            if (!it->held() && (frame->sessionId.isEmpty() || frame->sessionId == it.key()))
                 result.send.append(subscribe(it.key(), *it));
         return result;
     }
@@ -107,7 +150,7 @@ RelayEventFeed::Result RelayEventFeed::receive(const QByteArray& bytes, QString*
         result.reload = true;
         return result;
     }
-    if (state.reloading)
+    if (state.held())
         return result; // Until the window is adopted, events would mix old and new history.
     if (frame->type == Type::Gap) {
         result.send.append(subscribe(frame->sessionId, state));
@@ -138,6 +181,8 @@ QByteArray RelayEventFeed::adoptWindow(const QString& sessionId, const qint64 ge
     state.generation = generation;
     state.cursor = snapshotCursor;
     state.reloading = false;
+    // The window gives the cursor; whether the stored one can be read no longer matters.
+    state.unloaded = false;
     state.unsaved = 1;
     flush();
     return connected_ ? subscribe(sessionId, state) : QByteArray{};
@@ -149,6 +194,10 @@ qint64 RelayEventFeed::cursor(const QString& sessionId) const {
 
 bool RelayEventFeed::reloading(const QString& sessionId) const {
     return followed_.value(sessionId).reloading;
+}
+
+bool RelayEventFeed::awaitingStore(const QString& sessionId) const {
+    return followed_.value(sessionId).unloaded;
 }
 
 bool RelayEventFeed::flush() {
