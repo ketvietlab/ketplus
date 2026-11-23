@@ -591,8 +591,35 @@ conversation never reaches that point.
   than an hour of rest rewrote about 190 thousand tokens each (35.4 million in all, about
   29% of the cache written), and Codex's cached share of input fell from 99.3% (under five
   minutes) to 48.2% (over an hour). The reasons are tried in the order `task_changed`,
-  `threshold`, `cache_cold`, and the first that holds is journaled. The user's turns never
-  reset; neither does a busy conversation.
+  `threshold`, `context_size`, `cache_cold`, and the first that holds is journaled.
+  The size reason uses the last reported request's context size. Set
+  `context_reset_tokens` to a whole number from 0 to 10,000,000 through `team.update`.
+  The default is 150,000, which gives room before the observed 250,000-token tail,
+  and 0 disables the size reason. Both threshold modes support it.
+  The rule runs at team-initiated turn boundaries, so a single long turn can
+  exceed the threshold. Ordinary conversations keep their native threads because
+  this reset depends on team policy and a team briefing to restore working context.
+
+  The idle heuristic stays shared across providers. The Claude observations above
+  measure cache writes after an idle, and the Codex observations measure cached
+  input share. They do not establish equivalent cache lifetimes. Cursor and
+  Copilot have no comparable local hit-rate or idle measurements. That evidence
+  does not support separate idle settings by provider.
+
+  An offline replay of 26 local Claude developer sessions (deduplicated by session
+  ID, with requests deduplicated by assistant message ID) used 23,773 requests.
+  Input context includes uncached, cache-read and cache-write input. At each
+  non-meta user-message boundary excluding tool results, the model replaced the
+  next request's context with that session's first-request size when the prior
+  modeled request reached 150,000. It carried the removed context forward,
+  reducing the offset when the recorded context shrank. Median context at
+  requests 10 and 20 was 72,727 and 99,410 both before and after. The share over
+  250,000 was 28.0% recorded (6,666) and 4.6% modeled (1,104), or 256.4 and 42.5
+  requests per session. Mean total input context per session was 178.3 million
+  recorded and 114.2 million modeled. This is a sensitivity estimate: the
+  transcript boundaries approximate team wakes, the recorded trace already
+  includes provider behavior, and a real reset can change later requests and
+  cache costs.
 - The team keeps each member's context mark (`contexts`: its task, its native thread, and
   the conversation's turn count when it began) in the team document. Clients and `team_get`
   do not need it; `team_get` leaves it out. A thread the team has not seen, such as one a
@@ -854,7 +881,7 @@ with; `team.create` sets it when every member runs on one provider. Updates
 The phone sends the same request (ADR 0116 §4) and reads the results.
 
 `team.update` takes `context_reset` (`task_and_threshold`, `threshold` or `never`),
-`context_reset_turns` (0 or 4 to 100) and `context_reset_idle_minutes` (0 or 5 to 1440), and
+`context_reset_turns` (0 or 4 to 100) and `context_reset_idle_minutes` (0 or 5 to 1440), `context_reset_tokens` (0 to 10,000,000), and
 the team's document returns all three (§11). They are
 local commands; the phone's `team.update` is unchanged.
 

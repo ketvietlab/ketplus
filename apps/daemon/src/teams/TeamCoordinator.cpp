@@ -41,6 +41,7 @@ void stampChanges(Team& team, const Team& before) {
                           one.contextReset,
                           one.contextResetTurns,
                           one.contextResetIdleMinutes,
+                          one.contextResetTokens,
                           one.executionPolicy};
     };
     team.settingsRevision =
