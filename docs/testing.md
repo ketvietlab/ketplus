@@ -599,6 +599,10 @@ No network, account or provider is used.
 
 The worktree-context lane is isolated: `ketplus_daemon_worktree_context_tests`
 uses temporary repositories/journals and a fake Codex process;
+`ketplus_daemon_worktree_activity_tests` uses the same kind of fixture with a git wrapper
+first on `PATH` to show that a tool call's worktree activity runs no git process, that
+adding or removing a linked worktree is seen on the next tool call, and that a local
+`session.worktrees` waits for its git off the daemon thread (POSIX only);
 `ketplus_daemon_context_relay_tests` uses production relay encryption/serialization
 against in-memory and private loopback relay fixtures, with in-memory credentials. It never
 attaches to the user's running daemon or relay. Do not install/restart the app or

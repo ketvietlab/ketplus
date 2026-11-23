@@ -20,6 +20,7 @@ set(KETPLUS_WINDOWS_SCRIPT_FIXTURE_TESTS
     ketplus_context_harness_tests
     ketplus_provider_deletion_tests
     ketplus_daemon_worktree_context_tests
+    ketplus_daemon_worktree_activity_tests
     ketplus_daemon_claude_worktree_tests
     ketplus_daemon_lifecycle_tests
     ketplus_turn_acceptance_tests
@@ -163,6 +164,7 @@ ketplus_add_daemon_test(ketplus_daemon_media_preview_tests McpMediaPreviewTest.c
 ketplus_add_daemon_test(ketplus_context_harness_tests ContextHarnessTest.cpp)
 ketplus_add_daemon_test(ketplus_provider_deletion_tests ProviderDeletionTest.cpp)
 ketplus_add_daemon_test(ketplus_daemon_worktree_context_tests DaemonWorktreeContextTest.cpp)
+ketplus_add_daemon_test(ketplus_daemon_worktree_activity_tests DaemonWorktreeActivityTest.cpp)
 ketplus_add_daemon_test(ketplus_daemon_claude_worktree_tests ClaudeWorktreeTest.cpp)
 ketplus_add_daemon_test(ketplus_daemon_context_relay_tests WorktreeContextRelayTest.cpp)
 # Link in-memory credential symbols before the static core; never use the OS key store.
