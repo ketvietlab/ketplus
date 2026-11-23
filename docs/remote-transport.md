@@ -316,14 +316,14 @@ not depend on Control v2 HTTP internals:
   carries the same frames over the relay socket.
 - **`RelayPeerLink`** (daemon behaviour): while the heartbeat answer lists
   `events.forward_only/1`, a `subscribe` arriving as `{"type":"frame","deviceId",…,"frame"}` opens
-  one link per device. The device list the relay returns is only a hint: the link opens only for
+  one link per device. A device list fetched from the server is only a hint: the link opens only for
   a device pinned on this host whose keys match its pin, through the same pinned-device check as
   WebRTC admission, and closes when the pin is removed.
   - Event pages are the same `SessionEvent` envelopes as on WebRTC: sealed under the session key,
-    which is wrapped only for pinned devices. The relay sees only routing metadata.
+    which is wrapped only for pinned devices. Only routing metadata leaves the host in the clear.
   - The link needs no `hello` and authorizes `session.read` only, for 10 minutes after each
-    `subscribe`. It accepts `subscribe` and `unsubscribe` of at most 4 KiB; any other frame closes it.
-  - It sends only `events`, `event`, `gap` and `session.reset`, each one message of at most 64 KiB:
+    `subscribe`; when it ends, each subscription gets `gap` and the link closes. It accepts `subscribe` and `unsubscribe` of at most 4 KiB; any other frame closes it.
+  - It sends only `events`, `event`, `gap` and `session.reset`, each one message of at most 64 KiB including the envelope (a larger one closes the link):
     pages shrink to fit, and an event above the limit is skipped with `gap` after its cursor. No
     transfers, pings or command results travel this way.
   - A full 4 MiB live queue drops that subscriber's events and sends `gap` with its last cursor,

@@ -237,28 +237,54 @@ class RelayPeerLinkTest final : public QObject {
         QVERIFY(relay.outgoing.isEmpty()); // no signal.end for relay links
     }
 
+    void envelopeCountsTowardsTheMessageLimit() {
+        QList<QJsonObject> sent;
+        RelayPeerLink link("device", [&](const QJsonObject& message) {
+            sent << message;
+            return true;
+        });
+        QSignalSpy closed(&link, &PeerLink::closed);
+        // Within the limit alone, above it with the envelope: refused and closed, never retried.
+        const auto frame =
+            text({{"type", "events"}, {"pad", QString(FrameCodec::messageLimit - 40, 'x')}});
+        QVERIFY(frame.bytes.size() <= FrameCodec::messageLimit);
+        QVERIFY(!link.send(frame));
+        QVERIFY(closed.wait(1000));
+        QVERIFY(sent.isEmpty());
+    }
+
     void authorizationExpiresTenMinutesAfterTheLastSubscribe() {
         Relay relay;
         relay.frame(subscribe());
         relay.time += RemotePeers::relayAuthorizationMs - 1;
         relay.peers.tick();
         QCOMPARE(relay.peers.size(), 1);
-        relay.frame(subscribe()); // renews
+        relay.frame(subscribe("second", 9)); // renews
         relay.time += RemotePeers::relayAuthorizationMs - 1;
         relay.peers.tick();
+        relay.peers.tick();
         QCOMPARE(relay.peers.size(), 1);
-        relay.frame({{"type", "unsubscribe"}, {"sessionId", "session"}}); // does not renew
+        relay.frame({{"type", "unsubscribe"}, {"sessionId", "other"}}); // does not renew
+        relay.sent.clear();
         relay.time += 2;
         QSignalSpy ended(&relay.peers, &RemotePeers::ended);
         relay.peers.tick();
         QCOMPARE(relay.peers.size(), 0);
         QCOMPARE(ended.size(), 1);
         QCOMPARE(ended.first().at(1).toString(), QStringLiteral("peer_expired"));
+        // Each subscription learns to subscribe again after its cursor before the link closes.
+        QMap<QString, qint64> gaps;
+        for (const auto& gap : relay.frames("gap"))
+            gaps.insert(gap.value("sessionId").toString(), gap.value("afterCursor").toInteger());
+        QCOMPARE(gaps, (QMap<QString, qint64>{{"session", 0}, {"second", 9}}));
+        QCOMPARE(relay.sent.size(), 2);
 
         relay.frame(subscribe());
         relay.time += RemotePeers::relayAuthorizationMs;
+        relay.sent.clear();
         relay.frame(subscribe()); // a frame after expiry closes instead of renewing
         QCOMPARE(relay.peers.size(), 0);
+        QCOMPARE(relay.frames("gap").size(), 1);
         QVERIFY(!relay.peers.send(RemotePeers::relayId("device"), {{"type", "gap"}}));
     }
 

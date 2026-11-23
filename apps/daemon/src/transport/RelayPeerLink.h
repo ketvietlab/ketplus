@@ -7,8 +7,8 @@ namespace ketplus::daemon::transport {
 // One device's frames over the daemon's `/v2/relay` socket. Outgoing frames are wrapped as
 // {"type":"frame","deviceId":…,"frame":…}; the socket hands the device's frames to deliver().
 // Only event frames leave (events, event, gap, session.reset), each one text message of at most
-// FrameCodec::messageLimit bytes; only subscribe and unsubscribe arrive, at most 4 KiB each.
-// Everything runs on the daemon thread; the sender must not block.
+// FrameCodec::messageLimit bytes including the envelope; only subscribe and unsubscribe arrive, at
+// most 4 KiB each. Everything runs on the daemon thread; the sender must not block.
 class RelayPeerLink final : public PeerLink {
     Q_OBJECT
   public:

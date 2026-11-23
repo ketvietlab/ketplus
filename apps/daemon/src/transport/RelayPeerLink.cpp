@@ -35,7 +35,13 @@ bool RelayPeerLink::send(const Packet& packet) {
         fail();
         return false;
     }
-    return sender_ && sender_({{"type", "frame"}, {"deviceId", device_}, {"frame", frame}});
+    const QJsonObject message{{"type", "frame"}, {"deviceId", device_}, {"frame", frame}};
+    if (QJsonDocument(message).toJson(QJsonDocument::Compact).size() > FrameCodec::messageLimit) {
+        // The socket refuses it every time; the limit counts the envelope too.
+        fail();
+        return false;
+    }
+    return sender_ && sender_(message);
 }
 
 void RelayPeerLink::close() { closed_ = true; }

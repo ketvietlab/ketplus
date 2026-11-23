@@ -255,7 +255,7 @@ void Signaling::relayFrame(const QJsonObject& message) {
         return;
     const auto id = RemotePeers::relayId(device);
     if (message.value("type") == "frames.dropped") {
-        // The relay stopped passing frames to the device until it subscribes again.
+        // Frames for the device were lost: the link ends and the client subscribes again.
         pendingRelay_.remove(device);
         peers_->close(id, "relay_dropped");
         return;

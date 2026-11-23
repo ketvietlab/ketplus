@@ -29,9 +29,10 @@ class RemotePeers final : public QObject {
     void setClock(Clock clock) { clock_ = std::move(clock); }
     bool accept(const QString& id, const QString& device, int keyVersion, const QJsonObject& grant,
                 PeerLink* link, qint64 epoch);
-    // A device reached through the relay socket. The relay authorized the device's frame; the
-    // caller checked the device against the active device list. The link stays authorized for
-    // relayAuthorizationMs after each subscribe, carries only event frames, and needs no hello.
+    // A device reached through the relay socket, admitted by the caller only once its keys match
+    // its pin on this host. The link may read sessions (session.read) and nothing else: no hello,
+    // no commands. Its authorization ends relayAuthorizationMs after the latest subscribe; each
+    // subscription then gets gap before the link closes.
     static constexpr qint64 relayAuthorizationMs = 10 * 60'000;
     static QString relayId(const QString& device) { return "relay:" + device; }
     bool acceptRelay(const QString& device, int keyVersion, PeerLink* link, qint64 epoch);
@@ -89,6 +90,7 @@ class RemotePeers final : public QObject {
     };
     void receive(const QString& id, Channel channel, const QByteArray& bytes, bool binary);
     bool current(const QString& id, const Peer& peer) const;
+    void expireRelay(const QString& id, Peer& peer);
     void attach(const QString& id, const std::shared_ptr<Peer>& peer, PeerLink* link);
     void publish(const QString& id, Peer& peer, const QString& session, Subscription& sub);
     qint64 now() const { return clock_(); }

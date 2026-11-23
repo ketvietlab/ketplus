@@ -74,6 +74,19 @@ bool RemotePeers::acceptRelay(const QString& device, int version, PeerLink* link
     return true;
 }
 
+void RemotePeers::expireRelay(const QString& id, Peer& peer) {
+    // Past its authorization the link sends nothing else: each subscription gets gap, so the
+    // client subscribes again after its cursor, then the link closes.
+    for (auto it = peer.subscriptions.cbegin(); it != peer.subscriptions.cend(); ++it) {
+        const QJsonObject gap{{"type", "gap"},
+                              {"sessionId", it.key()},
+                              {"afterCursor", it->cursor},
+                              {"epoch", peer.epoch}};
+        peer.link->send({Channel::Control, QJsonDocument(gap).toJson(QJsonDocument::Compact)});
+    }
+    close(id, "peer_expired");
+}
+
 PeerLink* RemotePeers::link(const QString& id) const {
     const auto peer = peers_.value(id);
     return peer ? peer->link.data() : nullptr;
@@ -141,6 +154,10 @@ void RemotePeers::receive(const QString& id, Channel channel, const QByteArray& 
     if (!peer)
         return;
     if (!current(id, *peer)) {
+        if (peer->relay) {
+            expireRelay(id, *peer);
+            return;
+        }
         close(id, "grant_expired");
         return;
     }
@@ -267,6 +284,10 @@ void RemotePeers::tick() {
         const auto peer = peers_.value(id);
         if (!peer || !peer->link)
             continue;
+        if (peer->relay && !current(id, *peer)) {
+            expireRelay(id, *peer);
+            continue;
+        }
         if (!current(id, *peer) || (!peer->hello && now() - peer->created > 10'000) ||
             peer->codec.expire(now())) {
             close(id, "peer_expired");
@@ -275,7 +296,7 @@ void RemotePeers::tick() {
         if (!peer->hello)
             continue;
         peer->queue.flush(*peer->link);
-        // The relay socket keeps its own liveness; relay frames carry events only.
+        // Relay links carry event frames only; the socket has its own liveness check.
         if (!peer->relay && now() - peer->lastPing >= 15'000) {
             if (peer->missedPongs >= 3) {
                 close(id, "ping_timeout");
@@ -302,7 +323,7 @@ void RemotePeers::tick() {
 }
 
 namespace {
-// The relay carries no transfers: a page shrinks to the events that fit one message.
+// Relay links carry no transfers: a page shrinks to the events that fit one message.
 constexpr qsizetype relayPageBudget = FrameCodec::messageLimit - 1024;
 } // namespace
 
@@ -326,8 +347,7 @@ void RemotePeers::publish(const QString& id, Peer& peer, const QString& session,
             events.append(event);
         }
         if (events.isEmpty()) {
-            // One event above the relay's limit: the client skips past it and reads it on
-            // another path.
+            // One event above the message limit: the client resumes after it.
             const auto after = page.events.first().toObject().value("cursor").toInteger();
             peer.subscriptions.remove(session);
             send(id, {{"type", "gap"}, {"sessionId", session}, {"afterCursor", after}});
