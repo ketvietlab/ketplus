@@ -232,6 +232,41 @@ class ForwardOnlyUploadTest final : public QObject {
         QCOMPARE(Access::knownUploadedCursor(*c.client), 2);
     }
 
+    void aRestartAfterWithdrawingKeepsEventsUntilARealAcknowledgedUpload() {
+        QTemporaryDir dir;
+        const auto path = dir.filePath("retention.sqlite");
+        qint64 head = 0;
+        {
+            Context c(path);
+            c.start();
+            c.acceptThrough(2);
+            c.append(2);
+            Access::uploadAll(*c.client);
+            QTRY_VERIFY(Access::idle(*c.client));
+            QCOMPARE(c.uploaded(), (QList<qint64>{1, 2}));
+            c.answer(true);
+            head = c.append(3);
+        }
+        // The daemon restarts while forward-only, then the capability is withdrawn.
+        Context c(path);
+        c.start();
+        c.answer(false);
+        QCOMPARE(Access::uploadedCursor(*c.client), head);
+        // Registering the cloud client must not acknowledge the head for retention: the
+        // events journaled while forward-only are still served to other clients as pages.
+        Access::uploadAll(*c.client);
+        QCoreApplication::processEvents();
+        QCOMPARE(c.requestsTo(eventsPath), 0);
+        QCOMPARE(c.journal.eventsAfter("session-synthetic", 1, 2).size(), 3);
+        // The next acknowledged upload moves retention on.
+        c.acceptThrough(head + 1);
+        c.append();
+        Access::uploadAll(*c.client);
+        QTRY_VERIFY(Access::idle(*c.client));
+        QCOMPARE(c.uploaded().last(), head + 1);
+        QCOMPARE(c.journal.eventsAfter("session-synthetic", 1, 2).size(), 0);
+    }
+
     void aChunkDoesNotReadTheCredentialStore() {
         QTemporaryDir dir;
         Context c(dir.filePath("reads.sqlite"));

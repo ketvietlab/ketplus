@@ -92,8 +92,15 @@ bool CloudControlClient::registerCloudCursor(const StoredSession& session) {
             return false;
         }
     }
-    if (!journal_->acknowledgeCursor(QStringLiteral("cloud-control-v2"), session.id,
-                                     session.generation, cursor)) {
+    // Retention follows what the relay acknowledged, which the journal recorded with the upload.
+    // The cursor above also counts the head forward-only was withdrawn at; acknowledging that
+    // would delete events the host still serves as pages, so only the next acknowledged upload
+    // lets retention advance past it.
+    const qint64 acknowledged =
+        journal_->cloudUploadCursor(uploadScope(), session.id, session.generation);
+    if (acknowledged < 0 ||
+        !journal_->acknowledgeCursor(QStringLiteral("cloud-control-v2"), session.id,
+                                     session.generation, acknowledged)) {
         lastError_ = journal_->errorString();
         return false;
     }
