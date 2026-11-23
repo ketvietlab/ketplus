@@ -4,6 +4,7 @@
 #include "protocol/DaemonProtocol.h"
 #include "providers/CodexAdapter.h"
 #include "runtime/SessionHost.h"
+#include "runtime/WorktreePathCache.h"
 #include "storage/LocalJournal.h"
 
 #include <QDir>
@@ -194,11 +195,27 @@ class DaemonWorktreeActivityTest final : public QObject {
         QVERIFY(changed.open(QIODevice::WriteOnly));
         changed.close();
         QVERIFY(!f.touched().contains(f.b));
+        // A third checkout that only a file change reaches.
+        const QString editedPath = f.directory.filePath("edited");
+        QVERIFY(git(f.a, {"worktree", "add", "-b", "edited", editedPath}));
+        const QString edited = QFileInfo(editedPath).canonicalFilePath();
+        QFile editedFile(edited + "/edited.txt");
+        QVERIFY(editedFile.open(QIODevice::WriteOnly));
+        editedFile.close();
 
         const GitWrapper wrapper(f.directory.filePath("bin"), false);
         QVERIFY(wrapper.installed);
         f.command(f.b + "/src");
         QVERIFY(f.touched().contains(f.b));
+        QVERIFY(!f.touched().contains(edited));
+        const QJsonObject edit{
+            {"id", "edit"},
+            {"type", "fileChange"},
+            {"status", "completed"},
+            {"changes", QJsonArray{QJsonObject{{"path", editedFile.fileName()}}}}};
+        f.tool("item/started", edit);
+        QVERIFY(f.touched().contains(edited));
+        f.tool("item/completed", edit);
         const QJsonObject file{{"id", "file"},
                                {"type", "fileChange"},
                                {"status", "completed"},
@@ -211,6 +228,63 @@ class DaemonWorktreeActivityTest final : public QObject {
         f.command(f.directory.path());
         QCOMPARE(f.touched(), before);
         QCOMPARE(wrapper.log(), QByteArray{});
+    }
+
+    // The first entry is what `git worktree list` gives when the Git directory is not
+    // `<checkout>/.git` (a `--separate-git-dir` repository, a submodule): Git lists the Git
+    // directory itself there, and so does the cache, so no checkout changes from before.
+    void listsTheSameCheckoutsAsGitForOtherLayouts() {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const QString root = QFileInfo(directory.path()).canonicalFilePath();
+        const auto commit = [](const QString& at) {
+            return git(at, {"-c", "user.name=Fixture", "-c", "user.email=fixture@example.invalid",
+                            "-c", "commit.gpgsign=false", "commit", "--allow-empty", "-m", "x"});
+        };
+        const auto listed = [](const QString& at) {
+            QProcess process;
+            process.start("git", {"-C", at, "worktree", "list", "--porcelain"});
+            QStringList result;
+            if (!process.waitForFinished(10000))
+                return result;
+            for (const auto& line : process.readAllStandardOutput().split('\n'))
+                if (line.startsWith("worktree "))
+                    result.append(QFileInfo(QString::fromUtf8(line.mid(9))).canonicalFilePath());
+            result.sort();
+            return result;
+        };
+        const auto sameAsGit = [&](const QString& at) {
+            WorktreePathCache cache;
+            auto got = cache.checkouts(at);
+            got.sort();
+            const auto expected = listed(at);
+            QVERIFY2(!expected.isEmpty(), qPrintable(at));
+            QCOMPARE(got, expected);
+        };
+
+        const QString separate = root + "/separate";
+        QVERIFY(QDir().mkpath(separate));
+        QVERIFY(
+            git(separate, {"init", "-b", "main", "--separate-git-dir", root + "/separate.git"}));
+        QVERIFY(commit(separate));
+        QVERIFY(git(separate, {"worktree", "add", "-b", "linked", root + "/separate-linked"}));
+        sameAsGit(separate);
+        sameAsGit(root + "/separate-linked");
+
+        const QString upstream = root + "/upstream";
+        QVERIFY(QDir().mkpath(upstream));
+        QVERIFY(git(upstream, {"init", "-b", "main"}));
+        QVERIFY(commit(upstream));
+        const QString super = root + "/super";
+        QVERIFY(QDir().mkpath(super));
+        QVERIFY(git(super, {"init", "-b", "main"}));
+        QVERIFY(commit(super));
+        QVERIFY(
+            git(super, {"-c", "protocol.file.allow=always", "submodule", "add", upstream, "sub"}));
+        sameAsGit(super + "/sub");
+        QVERIFY(git(super + "/sub", {"worktree", "add", "-b", "linked", root + "/sub-linked"}));
+        sameAsGit(super + "/sub");
+        sameAsGit(root + "/sub-linked");
     }
 
     // Adding a linked worktree, or removing one, is seen on the next tool call.

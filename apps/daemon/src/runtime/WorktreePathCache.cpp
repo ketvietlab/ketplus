@@ -26,6 +26,44 @@ QString checkoutContaining(const QString& directory) {
     return {};
 }
 
+// The value of `core.<key>` in the repository's own config file, without includes.
+QString coreSetting(const QString& common, const QString& key) {
+    QFile config(QDir(common).filePath(QStringLiteral("config")));
+    if (config.size() > 1024 * 1024 || !config.open(QIODevice::ReadOnly))
+        return {};
+    bool inCore = false;
+    while (!config.atEnd()) {
+        const QString line = QString::fromUtf8(config.readLine()).trimmed();
+        if (line.startsWith(QLatin1Char('['))) {
+            inCore = line.compare(QStringLiteral("[core]"), Qt::CaseInsensitive) == 0;
+            continue;
+        }
+        const qsizetype equals = line.indexOf(QLatin1Char('='));
+        if (!inCore || equals < 0 || line.left(equals).trimmed().compare(key, Qt::CaseInsensitive))
+            continue;
+        QString value = line.mid(equals + 1).trimmed();
+        if (value.size() >= 2 && value.startsWith(QLatin1Char('"')) &&
+            value.endsWith(QLatin1Char('"')))
+            value = value.mid(1, value.size() - 2);
+        return value;
+    }
+    return {};
+}
+
+// The first entry of `git worktree list`. A common directory called `.git` is listed as the
+// checkout beside it. Git lists any other one (`--separate-git-dir`, a submodule's directory
+// under `.git/modules`) as the Git directory itself, whatever `core.worktree` says, and a bare
+// repository is listed with a `bare` flag that leaves it out of the usable checkouts. This
+// keeps what the list of `git worktree list` gave before, quirk included.
+QString mainCheckout(const QString& common) {
+    if (QFileInfo(common).fileName() == QStringLiteral(".git"))
+        return QFileInfo(QFileInfo(common).absolutePath()).canonicalFilePath();
+    if (coreSetting(common, QStringLiteral("bare"))
+            .compare(QStringLiteral("true"), Qt::CaseInsensitive) == 0)
+        return {};
+    return QFileInfo(common).canonicalFilePath();
+}
+
 } // namespace
 
 QStringList WorktreePathCache::checkouts(const QString& directory) {
@@ -56,13 +94,8 @@ WorktreePathCache::Repository WorktreePathCache::read(const QString& common) {
     const QFileInfo folder(administration(common));
     repository.administrationExists = folder.isDir();
     repository.administrationModified = folder.lastModified();
-    // `git worktree list` names the parent of a `.git` common directory first; a bare
-    // repository has no main checkout to work in.
-    if (QFileInfo(common).fileName() == QStringLiteral(".git")) {
-        const QString main = QFileInfo(QFileInfo(common).absolutePath()).canonicalFilePath();
-        if (!main.isEmpty())
-            repository.checkouts.append(main);
-    }
+    if (const QString main = mainCheckout(common); !main.isEmpty())
+        repository.checkouts.append(main);
     if (!repository.administrationExists)
         return repository;
     const QDir linked(folder.absoluteFilePath());
@@ -97,6 +130,11 @@ WorktreePathCache::Repository WorktreePathCache::read(const QString& common) {
 }
 
 // Stats only: no file is read and no process runs while the list stays the same.
+//
+// Known limit: the directory's modification time is the only sign that a checkout was added or
+// removed. Two changes within one tick of the file system's clock, with a read in between,
+// leave the later one unseen until the next change (or until a listed checkout's `.git`
+// disappears); the list is then stale for tool calls in that checkout only.
 bool WorktreePathCache::current(const Repository& repository, const QString& common) {
     const QFileInfo folder(administration(common));
     if (folder.isDir() != repository.administrationExists ||
