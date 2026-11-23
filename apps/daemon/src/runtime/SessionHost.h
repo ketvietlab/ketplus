@@ -783,6 +783,9 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     mutable QHash<QString, BranchNames> branchNames_;
     // One thread for what a team's own checks ask git, in the order they were asked.
     QThreadPool teamGit_;
+    // T-23: a done worktree's removal, apart from teamGit_, so deleting several gigabytes holds
+    // no worktree, switch, merge check or review diff of any team behind it. One at a time.
+    QThreadPool teamWorktreeRemovals_;
     // T-93: one thread for the branch listings, apart from teamGit_ so a listing never holds
     // a worktree, a switch or a merge check behind it.
     QThreadPool teamBranchNames_;

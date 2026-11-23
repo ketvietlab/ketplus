@@ -220,6 +220,12 @@ void SessionHost::startTeams() {
                        : nullptr)
             ++teamActivity_[team->id];
     });
+    // T-23: a cleanup of done worktrees moved on. A notice to the desktop, not a team event: the
+    // phone's heartbeat has nothing to show of it.
+    connect(teams_, &teams::TeamCoordinator::storageChanged, this, [this](const qint64 teamId) {
+        emit noticeReady(QStringLiteral("team.storage.changed"),
+                         {{QStringLiteral("team_id"), QString::number(teamId)}});
+    });
     connect(teams_, &teams::TeamCoordinator::teamRemoved, this,
             [this](const QString& teamId, const QString& repository) {
                 teamWakeTasks_.removeIf([this](const auto& entry) {

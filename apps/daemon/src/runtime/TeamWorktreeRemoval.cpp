@@ -4,7 +4,9 @@
 #include <QDir>
 #include <QDirIterator>
 #include <QFileInfo>
+#include <QPointer>
 #include <QProcess>
+#include <QThreadPool>
 
 #ifdef Q_OS_UNIX
 #include <sys/stat.h>
@@ -46,7 +48,7 @@ qint64 sizeOnDisk(const QString& folder) {
     while (files.hasNext()) {
         const QString path = files.next();
 #ifdef Q_OS_UNIX
-        struct stat status {};
+        struct stat status{};
         if (::lstat(QFile::encodeName(path).constData(), &status) == 0) {
             total += static_cast<qint64>(status.st_blocks) * 512;
             continue;
@@ -62,13 +64,14 @@ qint64 sizeOnDisk(const QString& folder) {
 QString removeWorktree(const QString& repository, const QString& worktree) {
     const QString path = QDir::cleanPath(QFileInfo(worktree).absoluteFilePath());
     if (QFileInfo(QDir(path).filePath(QStringLiteral(".git"))).isDir())
-        return QStringLiteral("%1 is a repository's main checkout, which is never removed.").arg(path);
+        return QStringLiteral("%1 is a repository's main checkout, which is never removed.")
+            .arg(path);
     const QStringList quiet{QStringLiteral("--no-optional-locks")};
-    const GitAnswer status = git(path,
-                                 quiet + QStringList{QStringLiteral("status"),
-                                                     QStringLiteral("--porcelain=v1"), QStringLiteral("-z"),
-                                                     QStringLiteral("--untracked-files=all")},
-                                 15000);
+    const GitAnswer status =
+        git(path,
+            quiet + QStringList{QStringLiteral("status"), QStringLiteral("--porcelain=v1"),
+                                QStringLiteral("-z"), QStringLiteral("--untracked-files=all")},
+            15000);
     if (!status.ok)
         return QStringLiteral("The worktree could not be read: %1").arg(status.error);
     if (const qsizetype changed = status.output.split(QChar(u'\0'), Qt::SkipEmptyParts).size();
@@ -88,18 +91,32 @@ QString removeWorktree(const QString& repository, const QString& worktree) {
     if (const int commits = unpushed.output.trimmed().toInt(); commits > 0)
         return QStringLiteral("The worktree has %1 on no remote branch. Push them, then remove it "
                               "again.")
-            .arg(commits == 1 ? QStringLiteral("1 commit") : QStringLiteral("%1 commits").arg(commits));
+            .arg(commits == 1 ? QStringLiteral("1 commit")
+                              : QStringLiteral("%1 commits").arg(commits));
     // An absolute path never reads as an option.
     const GitAnswer removed =
         git(repository, {QStringLiteral("worktree"), QStringLiteral("remove"), path}, 120000);
     if (!removed.ok)
         return QStringLiteral("git worktree remove failed: %1").arg(removed.error);
-    const GitAnswer pruned = git(repository, {QStringLiteral("worktree"), QStringLiteral("prune")}, 30000);
+    const GitAnswer pruned =
+        git(repository, {QStringLiteral("worktree"), QStringLiteral("prune")}, 30000);
     if (!pruned.ok)
         return QStringLiteral("The worktree was removed, but git worktree prune failed: %1")
             .arg(pruned.error);
     return {};
 }
 
+void removeInBackground(QThreadPool& pool, QObject* receiver, const QString& repository,
+                        const QString& worktree, std::function<void(const QString&)> done) {
+    pool.start([receiver = QPointer<QObject>(receiver), repository, worktree,
+                done = std::move(done)]() mutable {
+        QString error = removeWorktree(repository, worktree);
+        if (!receiver)
+            return;
+        QMetaObject::invokeMethod(
+            receiver.data(), [done = std::move(done), error = std::move(error)] { done(error); },
+            Qt::QueuedConnection);
+    });
+}
 
 } // namespace ketplus::daemon::team_git

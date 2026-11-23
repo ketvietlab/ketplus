@@ -13,6 +13,7 @@
 #include <QHBoxLayout>
 #include <QJsonArray>
 #include <QPointer>
+#include <QTimer>
 #include <QVBoxLayout>
 
 namespace ketplus {
@@ -32,8 +33,12 @@ QString TeamPage::doneTasks(const QJsonObject& team) {
 }
 
 void TeamPage::readStorage() {
-    if (storagePending_ || !teams_->team(teamId_))
+    if (!teams_->team(teamId_))
         return;
+    if (storagePending_) {
+        storageStale_ = true;
+        return;
+    }
     storagePending_ = true;
     const QPointer<TeamPage> alive(this);
     teams_->request(QStringLiteral("team.storage.get"), {{QStringLiteral("team_id"), teamId_}},
@@ -41,6 +46,9 @@ void TeamPage::readStorage() {
                         if (!alive)
                             return;
                         alive->storagePending_ = false;
+                        // The daemon said it moved while this was on its way.
+                        if (std::exchange(alive->storageStale_, false))
+                            QTimer::singleShot(0, alive, [alive] { alive->readStorage(); });
                         // A daemon without teams.storage/1 refuses it: the page shows neither.
                         const QJsonObject storage =
                             error.isEmpty() ? result.value(QStringLiteral("storage")).toObject()
@@ -94,10 +102,11 @@ void TeamPage::buildDoneWorktrees(const QJsonObject& team) {
     const QJsonArray worktrees = storage_.value(QStringLiteral("worktrees")).toArray();
     if (worktrees.isEmpty()) {
         // Everything was removed: the section stays for the summary of the run.
-        if (removalOutcome_) {
+        if (removalOutcome_ || hasCleanupSummary()) {
             addSection(tr("Worktrees of done tasks"), tr("None left on disk"),
                        "teamDoneWorktreesHeading");
             buildRemovalSummary();
+            buildCleanupSummary();
         }
         return;
     }
@@ -105,9 +114,10 @@ void TeamPage::buildDoneWorktrees(const QJsonObject& team) {
     auto* removeAll = new ket::Button(tr("Remove all…"), ket::ButtonVariant::Ghost, column_);
     removeAll->setObjectName(QStringLiteral("teamDoneWorktreesRemoveAll"));
     removeAll->setIcon(ket::Icons::icon(u"trash"));
-    removeAll->setEnabled(!removingAll_);
+    // T-23: not while the daemon cleans up, so a cleanup is never started twice.
+    removeAll->setEnabled(!removingAll_ && !cleanupRuns());
     connect(removeAll, &QAbstractButton::clicked, this, [this, worktrees] {
-        if (removingAll_)
+        if (removingAll_ || cleanupRuns())
             return;
         const QPointer<TeamPage> alive(this);
         teamWorktreeRemovalAll(
@@ -115,6 +125,12 @@ void TeamPage::buildDoneWorktrees(const QJsonObject& team) {
             [alive] {
                 if (!alive)
                     return;
+                // T-23: the daemon took the cleanup: its rows are read from it.
+                if (alive->teams_->cleanupAvailable()) {
+                    alive->storageTasks_ = QStringLiteral("-");
+                    alive->readStorage();
+                    return;
+                }
                 alive->removingAll_ = true;
                 alive->removalOutcome_.reset();
                 alive->rebuild();
@@ -136,6 +152,7 @@ void TeamPage::buildDoneWorktrees(const QJsonObject& team) {
                                      : tr("%1 worktrees on disk").arg(worktrees.size()),
                "teamDoneWorktreesHeading", removeAll);
     buildRemovalSummary();
+    buildCleanupSummary();
     auto* panel = new team_page::Panel(column_);
     panel->setObjectName(QStringLiteral("teamDoneWorktrees"));
     auto* rows = new QVBoxLayout(panel);
@@ -191,8 +208,17 @@ void TeamPage::buildDoneWorktrees(const QJsonObject& team) {
         remove->setIcon(ket::Icons::icon(u"trash"));
         remove->setAccessibleName(tr("Remove the worktree of %1…").arg(taskId));
         remove->setEnabled(!removingAll_);
-        connect(remove, &QAbstractButton::clicked, this,
-                [this, entry] { teamWorktreeRemoval(this, teams_, teamId_, entry)->open(); });
+        // T-23: a worktree the daemon holds for a cleanup is locked, in words and an icon.
+        lockRemoval(remove, taskId, entry.value(QStringLiteral("removal")).toString());
+        connect(remove, &QAbstractButton::clicked, this, [this, entry] {
+            const QPointer<TeamPage> alive(this);
+            teamWorktreeRemoval(this, teams_, teamId_, entry, [alive] {
+                if (!alive)
+                    return;
+                alive->storageTasks_ = QStringLiteral("-");
+                alive->readStorage();
+            })->open();
+        });
         line->addWidget(remove);
         rows->addWidget(row);
     }

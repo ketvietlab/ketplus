@@ -7,6 +7,7 @@
 #include "teams/TeamPageParts.h"
 
 #include <QCoreApplication>
+#include <QJsonArray>
 #include <QPointer>
 #include <QVBoxLayout>
 
@@ -52,7 +53,7 @@ team_storage::Warning team_storage::warning(const QJsonObject& storage) {
 }
 
 ket::Dialog* teamWorktreeRemoval(QWidget* anchor, TeamDirectory* teams, const QString& teamId,
-                                 const QJsonObject& entry) {
+                                 const QJsonObject& entry, std::function<void()> accepted) {
     const QString taskId = entry.value(QStringLiteral("task_id")).toString();
     auto* dialog = new ket::Dialog(tr("Remove the worktree of %1?").arg(taskId), anchor);
     dialog->setObjectName(QStringLiteral("teamWorktreeDialog"));
@@ -109,6 +110,25 @@ ket::Dialog* teamWorktreeRemoval(QWidget* anchor, TeamDirectory* teams, const QS
         // Sent once: a refusal changes nothing, so the same removal would be refused again.
         remove->setEnabled(false);
         const QPointer<ket::Dialog> alive(dialog);
+        if (teams->cleanupAvailable()) {
+            // T-23: answered at once; the removal runs in the daemon's background.
+            teams->request(QStringLiteral("team.worktree.cleanup"),
+                           {{QStringLiteral("team_id"), teamId},
+                            {QStringLiteral("task_ids"), QJsonArray{taskId}}},
+                           [alive, refusal, accepted](const QJsonObject&, const QString& error) {
+                               if (!alive)
+                                   return;
+                               if (!error.isEmpty()) {
+                                   refusal->setMessage(error);
+                                   refusal->show();
+                                   return;
+                               }
+                               if (accepted)
+                                   accepted();
+                               alive->accept();
+                           });
+            return;
+        }
         teams->request(QStringLiteral("team.worktree.remove"),
                        {{QStringLiteral("team_id"), teamId}, {QStringLiteral("task_id"), taskId}},
                        [alive, refusal, note, remove, cancel](const QJsonObject& result,

@@ -47,10 +47,12 @@ void MainWindow::setupTeams() {
             return;
         // A daemon that went away keeps its teams, stale, so the sidebar does not scatter a
         // team's members as loose conversations while it reconnects (ADR 0115).
-        if (!daemon->isReady())
+        if (!daemon->isReady()) {
             teams_->setDisconnected();
-        else
+        } else {
             teams_->setAvailable(daemon->hasFeature(QStringLiteral("teams/1")));
+            teams_->setCleanupAvailable(daemon->hasFeature(QStringLiteral("teams.cleanup/1")));
+        }
         list->setTeamsAvailable(teams_->isAvailable());
         scheduleSidebarRefresh();
     };

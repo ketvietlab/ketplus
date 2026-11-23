@@ -48,27 +48,56 @@ QJsonObject team() {
         {"revision", 1}};
 }
 
+// T-23: the daemon's cleanup state beside the storage, and the rows it holds.
+QJsonObject cleanupRunning(const qint64 run = 1) {
+    return {{"run", run},
+            {"active", QJsonArray{QJsonObject{{"task_id", "T-2"}, {"state", "removing"}},
+                                  QJsonObject{{"task_id", "T-4"}, {"state", "queued"}}}},
+            {"last", QJsonValue::Null}};
+}
+
+QJsonObject cleanupFinished(const qint64 run, const QJsonArray& removed, const QJsonArray& kept,
+                            const qint64 freed, const bool exact = true) {
+    return {{"run", run},
+            {"active", QJsonArray{}},
+            {"last", QJsonObject{{"run", run},
+                                 {"removed", removed},
+                                 {"kept", kept},
+                                 {"notes", QJsonArray{}},
+                                 {"freed_bytes", freed},
+                                 {"freed_exact", exact},
+                                 {"finished_at", "2026-11-23T05:00:00.000Z"}}}};
+}
+
 QJsonObject storage(const qint64 free, const QString& level, const bool worktree = true,
-                    const bool second = false) {
+                    const bool second = false, const QJsonObject& cleanup = {},
+                    const QHash<QString, QString>& removal = {}) {
     QJsonArray worktrees;
+    const auto add = [&](QJsonObject entry) {
+        if (removal.contains(entry.value("task_id").toString()))
+            entry.insert("removal", removal.value(entry.value("task_id").toString()));
+        worktrees.append(entry);
+    };
     if (worktree)
-        worktrees.append(QJsonObject{{"task_id", "T-2"},
-                                     {"title", "Quick search"},
-                                     {"branch", "team/7/T-2"},
-                                     {"path", "/work/shop-quick-search"},
-                                     {"size_bytes", 4'200'000'000LL}});
+        add({{"task_id", "T-2"},
+             {"title", "Quick search"},
+             {"branch", "team/7/T-2"},
+             {"path", "/work/shop-quick-search"},
+             {"size_bytes", 4'200'000'000LL}});
     if (second)
-        worktrees.append(QJsonObject{{"task_id", "T-4"},
-                                     {"title", "Saved carts"},
-                                     {"branch", "team/7/T-4"},
-                                     {"path", "/work/shop-saved-carts"},
-                                     {"size_bytes", 1'800'000'000LL}});
-    return {{"ok", true},
-            {"storage", QJsonObject{{"free_bytes", free},
-                                    {"level", level},
-                                    {"warn_bytes", 20'000'000'000LL},
-                                    {"stop_bytes", 12'000'000'000LL},
-                                    {"worktrees", worktrees}}}};
+        add({{"task_id", "T-4"},
+             {"title", "Saved carts"},
+             {"branch", "team/7/T-4"},
+             {"path", "/work/shop-saved-carts"},
+             {"size_bytes", 1'800'000'000LL}});
+    QJsonObject body{{"free_bytes", free},
+                     {"level", level},
+                     {"warn_bytes", 20'000'000'000LL},
+                     {"stop_bytes", 12'000'000'000LL},
+                     {"worktrees", worktrees}};
+    if (!cleanup.isEmpty())
+        body.insert("cleanup", cleanup);
+    return {{"ok", true}, {"storage", body}};
 }
 
 struct FakeDaemon {
@@ -364,6 +393,211 @@ class TeamStoragePageTest final : public QObject {
         QTRY_VERIFY(!page.findChild<QWidget*>("teamDoneWorktreesHeading"));
     }
 
+    // T-23 criteria 1 and 2: with a daemon that cleans up in the background, Remove all… sends
+    // one request that is answered at once, the dialog closes, and the page shows the worktrees
+    // the daemon holds locked, in words, with nothing to press twice.
+    void aBackgroundCleanupClosesTheDialogAndLocksTheRows() {
+        start(storage(18'400'000'000LL, "low", true, true));
+        teams_->setCleanupAvailable(true);
+        TeamPage page(teams_.get(), "7", "/work/shop");
+        page.resize(1024, 900);
+        page.show();
+        QTRY_VERIFY(page.findChild<QWidget*>("teamDoneWorktree_T-4"));
+        page.findChild<ket::Button*>("teamDoneWorktreesRemoveAll")->click();
+        QPointer<ket::Dialog> dialog = page.findChild<ket::Dialog*>("teamWorktreeAllDialog");
+        QVERIFY(dialog);
+        // The daemon will report the run when the page reads again.
+        daemon_.answers.insert("team.storage.get",
+                               storage(18'400'000'000LL, "low", true, true, cleanupRunning(),
+                                       {{"T-2", "removing"}, {"T-4", "queued"}}));
+        dialog->findChild<ket::Button*>("teamWorktreeAllRemove")->click();
+        QCOMPARE(daemon_.count("team.worktree.cleanup"), 1);
+        QCOMPARE(daemon_.count("team.worktree.remove"), 0);
+        for (const auto& [type, payload] : daemon_.sent)
+            if (type == "team.worktree.cleanup") {
+                QCOMPARE(payload.value("team_id").toString(), QStringLiteral("7"));
+                QCOMPARE(payload.value("task_ids").toArray(), (QJsonArray{"T-2", "T-4"}));
+            }
+        QTRY_VERIFY(!dialog);
+
+        // Both rows are locked, with a word and an icon; nothing here moves by itself.
+        QTRY_VERIFY(page.findChild<QWidget*>("teamCleanupRunning"));
+        QWidget* removing = page.findChild<QWidget*>("teamDoneWorktree_T-2");
+        QWidget* queued = page.findChild<QWidget*>("teamDoneWorktree_T-4");
+        auto* removingButton = removing->findChild<ket::Button*>("teamDoneWorktreeRemove");
+        auto* queuedButton = queued->findChild<ket::Button*>("teamDoneWorktreeRemove");
+        QCOMPARE(removingButton->text(), QStringLiteral("Removing…"));
+        QCOMPARE(queuedButton->text(), QStringLiteral("Queued"));
+        QVERIFY(!removingButton->isEnabled() && !queuedButton->isEnabled());
+        QVERIFY(!removingButton->icon().isNull() && !queuedButton->icon().isNull());
+        QVERIFY(removingButton->accessibleName().contains("being removed"));
+        QVERIFY(queuedButton->accessibleName().contains("waits to be removed"));
+        auto* running = page.findChild<ket::Banner*>("teamCleanupRunning");
+        QCOMPARE(running->title(), QStringLiteral("Removing 2 worktrees in the background"));
+        // Remove all… cannot run twice, and the rest of the page is not locked.
+        auto* all = page.findChild<ket::Button*>("teamDoneWorktreesRemoveAll");
+        QVERIFY(!all->isEnabled());
+        all->click();
+        removingButton->click();
+        QCOMPARE(daemon_.count("team.worktree.cleanup"), 1);
+        QVERIFY(!page.findChild<ket::Dialog*>("teamWorktreeAllDialog"));
+        QVERIFY(page.isEnabled());
+        QVERIFY(page.findChild<QLabel*>("teamPageName")->isVisible());
+    }
+
+    // T-23 criterion 3: the daemon says it moved, the page reads again, and what the run did
+    // stays in a summary: how many, how much, and what was kept with its reason. Closing it
+    // is the user's; the next run shows its own.
+    void theSummaryNamesWhatTheRunDidAndStaysUntilClosed() {
+        start(storage(18'400'000'000LL, "low", true, true, cleanupRunning(1),
+                      {{"T-2", "removing"}, {"T-4", "queued"}}));
+        teams_->setCleanupAvailable(true);
+        TeamPage page(teams_.get(), "7", "/work/shop");
+        page.resize(1024, 900);
+        page.show();
+        QTRY_VERIFY(page.findChild<QWidget*>("teamCleanupRunning"));
+        const int reads = daemon_.count("team.storage.get");
+
+        // A team that is not this page's own changes nothing here.
+        teams_->applyEvent("team.storage.changed", {{"team_id", "8"}});
+        QTest::qWait(30);
+        QCOMPARE(daemon_.count("team.storage.get"), reads);
+
+        const QJsonArray kept{QJsonObject{
+            {"task_id", "T-4"},
+            {"reason", "The worktree has uncommitted or untracked changes (2 files)."}}};
+        daemon_.answers.insert(
+            "team.storage.get",
+            storage(
+                30'000'000'000LL, "", false, true,
+                cleanupFinished(
+                    1, QJsonArray{QJsonObject{{"task_id", "T-2"}, {"size_bytes", 4'200'000'000LL}}},
+                    kept, 4'200'000'000LL)));
+        teams_->applyEvent("team.storage.changed", {{"team_id", "7"}});
+        QTRY_VERIFY(!page.findChild<QWidget*>("teamCleanupRunning"));
+        auto* summary = page.findChild<ket::Banner*>("teamDoneWorktreesSummary");
+        QVERIFY(summary);
+        QCOMPARE(summary->title(),
+                 QStringLiteral("Removed 1 worktree, freeing 4.2 GB. Kept 1 with its reason."));
+        QVERIFY(summary->message().contains("T-4: The worktree has uncommitted or untracked"));
+        QCOMPARE(static_cast<int>(summary->tone()), static_cast<int>(ket::BannerTone::Warning));
+        // The kept worktree is unlocked again and can be asked for again.
+        auto* button = page.findChild<QWidget*>("teamDoneWorktree_T-4")
+                           ->findChild<ket::Button*>("teamDoneWorktreeRemove");
+        QCOMPARE(button->text(), QStringLiteral("Remove…"));
+        QVERIFY(button->isEnabled());
+        QVERIFY(page.findChild<ket::Button*>("teamDoneWorktreesRemoveAll")->isEnabled());
+
+        // Closed, it stays closed for that run, whenever the page reads again.
+        summary->action()->click();
+        QTRY_VERIFY(!page.findChild<ket::Banner*>("teamDoneWorktreesSummary"));
+        teams_->applyEvent("team.storage.changed", {{"team_id", "7"}});
+        QTest::qWait(50);
+        QVERIFY(!page.findChild<ket::Banner*>("teamDoneWorktreesSummary"));
+        // The next run has its own.
+        daemon_.answers.insert(
+            "team.storage.get",
+            storage(30'000'000'000LL, "", false, false,
+                    cleanupFinished(
+                        2,
+                        QJsonArray{QJsonObject{{"task_id", "T-4"}, {"size_bytes", QJsonValue()}}},
+                        QJsonArray{}, 0, false)));
+        teams_->applyEvent("team.storage.changed", {{"team_id", "7"}});
+        QTRY_VERIFY(page.findChild<ket::Banner*>("teamDoneWorktreesSummary"));
+        QCOMPARE(page.findChild<ket::Banner*>("teamDoneWorktreesSummary")->title(),
+                 QStringLiteral("Removed 1 worktree."));
+        QCOMPARE(static_cast<int>(page.findChild<ket::Banner*>("teamDoneWorktreesSummary")->tone()),
+                 static_cast<int>(ket::BannerTone::Info));
+        QVERIFY(page.findChild<QWidget*>("teamDoneWorktreesHeading"));
+    }
+
+    // T-23 criterion 3: the state is the daemon's, so a page opened again, or for another team
+    // and back, shows the locked rows and, afterwards, the summary.
+    void theStateSurvivesOpeningThePageAgain() {
+        start(storage(18'400'000'000LL, "low", true, true, cleanupRunning(1),
+                      {{"T-2", "removing"}, {"T-4", "queued"}}));
+        teams_->setCleanupAvailable(true);
+        {
+            TeamPage first(teams_.get(), "7", "/work/shop");
+            first.resize(1024, 900);
+            first.show();
+            QTRY_VERIFY(first.findChild<QWidget*>("teamCleanupRunning"));
+        }
+        TeamPage again(teams_.get(), "7", "/work/shop");
+        again.resize(1024, 900);
+        again.show();
+        QTRY_VERIFY(again.findChild<QWidget*>("teamCleanupRunning"));
+        QCOMPARE(again.findChild<QWidget*>("teamDoneWorktree_T-2")
+                     ->findChild<ket::Button*>("teamDoneWorktreeRemove")
+                     ->text(),
+                 QStringLiteral("Removing…"));
+        QVERIFY(!again.findChild<ket::Button*>("teamDoneWorktreesRemoveAll")->isEnabled());
+
+        // It ended while no page was open: the page opened then shows the summary.
+        daemon_.answers.insert(
+            "team.storage.get",
+            storage(
+                30'000'000'000LL, "", false, false,
+                cleanupFinished(
+                    1,
+                    QJsonArray{QJsonObject{{"task_id", "T-2"}, {"size_bytes", 4'200'000'000LL}},
+                               QJsonObject{{"task_id", "T-4"}, {"size_bytes", 1'800'000'000LL}}},
+                    QJsonArray{}, 6'000'000'000LL)));
+        TeamPage later(teams_.get(), "7", "/work/shop");
+        later.resize(1024, 900);
+        later.show();
+        QTRY_VERIFY(later.findChild<ket::Banner*>("teamDoneWorktreesSummary"));
+        QCOMPARE(later.findChild<ket::Banner*>("teamDoneWorktreesSummary")->title(),
+                 QStringLiteral("Removed 2 worktrees, freeing 6.0 GB."));
+        QVERIFY(!later.findChild<QWidget*>("teamCleanupRunning"));
+    }
+
+    // T-23: Remove… for one worktree takes the same road; a request the daemon refuses stays
+    // in the dialog in its words, and nothing locks.
+    void oneRemovalInTheBackgroundClosesTheDialog() {
+        start(storage(18'400'000'000LL, "low"));
+        teams_->setCleanupAvailable(true);
+        TeamPage page(teams_.get(), "7", "/work/shop");
+        page.resize(1024, 900);
+        page.show();
+        QTRY_VERIFY(page.findChild<QWidget*>("teamDoneWorktree_T-2"));
+        daemon_.answers.insert("team.worktree.cleanup",
+                               {{"ok", false},
+                                {"error_code", "team_not_found"},
+                                {"error_message", "The team no longer exists."}});
+        page.findChild<ket::Button*>("teamDoneWorktreeRemove")->click();
+        QPointer<ket::Dialog> dialog = page.findChild<ket::Dialog*>("teamWorktreeDialog");
+        QVERIFY(dialog);
+        dialog->findChild<ket::Button*>("teamWorktreeRemove")->click();
+        QVERIFY(dialog->isVisible());
+        auto* refusal = dialog->findChild<ket::Banner*>("teamWorktreeRefusal");
+        QVERIFY(!refusal->isHidden());
+        QVERIFY(refusal->message().contains("no longer exists"));
+        QCOMPARE(daemon_.count("team.worktree.remove"), 0);
+        dialog->findChild<ket::Button*>("teamWorktreeCancel")->click();
+        QTRY_VERIFY(!dialog);
+
+        daemon_.answers.insert("team.worktree.cleanup",
+                               {{"ok", true}, {"cleanup", cleanupRunning()}});
+        daemon_.answers.insert(
+            "team.storage.get",
+            storage(18'400'000'000LL, "low", true, false, cleanupRunning(), {{"T-2", "removing"}}));
+        page.findChild<ket::Button*>("teamDoneWorktreeRemove")->click();
+        dialog = page.findChild<ket::Dialog*>("teamWorktreeDialog");
+        dialog->findChild<ket::Button*>("teamWorktreeRemove")->click();
+        QTRY_VERIFY(!dialog);
+        QCOMPARE(daemon_.count("team.worktree.cleanup"), 2);
+        QJsonObject lastCleanup;
+        for (const auto& [type, payload] : daemon_.sent)
+            if (type == "team.worktree.cleanup")
+                lastCleanup = payload;
+        QCOMPARE(lastCleanup.value("task_ids").toArray(), QJsonArray{"T-2"});
+        QTRY_COMPARE(page.findChild<QWidget*>("teamDoneWorktree_T-2")
+                         ->findChild<ket::Button*>("teamDoneWorktreeRemove")
+                         ->text(),
+                     QStringLiteral("Removing…"));
+    }
+
     // With KETPLUS_TEAM_STORAGE_CAPTURE set to a folder, saves the page at both levels and the
     // dialog, plain and refused, in light and dark, as review evidence beside the mock.
     void captureForReview() {
@@ -420,6 +654,31 @@ class TeamStoragePageTest final : public QObject {
         QVERIFY(dialog);
         dialog->findChild<ket::Button*>("teamWorktreeRemove")->click();
         save(page, "remove-worktree-note");
+        dialog->findChild<ket::Button*>("teamWorktreeCancel")->click();
+
+        // T-23: the background cleanup, while it runs and once it ended.
+        start(storage(18'400'000'000LL, "low", true, true, cleanupRunning(),
+                      {{"T-2", "removing"}, {"T-4", "queued"}}));
+        teams_->setCleanupAvailable(true);
+        TeamPage running(teams_.get(), "7", "/work/shop");
+        running.resize(1280, 900);
+        running.show();
+        QTRY_VERIFY(running.findChild<QWidget*>("teamCleanupRunning"));
+        save(running, "cleanup-running");
+        const QJsonArray kept{QJsonObject{
+            {"task_id", "T-4"},
+            {"reason", "The worktree has uncommitted or untracked changes (2 files)."}}};
+        start(storage(
+            30'000'000'000LL, "", false, true,
+            cleanupFinished(
+                1, QJsonArray{QJsonObject{{"task_id", "T-2"}, {"size_bytes", 4'200'000'000LL}}},
+                kept, 4'200'000'000LL)));
+        teams_->setCleanupAvailable(true);
+        TeamPage finished(teams_.get(), "7", "/work/shop");
+        finished.resize(1280, 900);
+        finished.show();
+        QTRY_VERIFY(finished.findChild<ket::Banner*>("teamDoneWorktreesSummary"));
+        save(finished, "cleanup-done");
     }
 
     // Review finding: a removal after which a conversation could not be moved out of the
