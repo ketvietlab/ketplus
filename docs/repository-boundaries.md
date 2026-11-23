@@ -24,7 +24,7 @@ These stay outside this repository and are proprietary:
 
 | Capability | Repository |
 | --- | --- |
-| Cloud control, relay, gateway configuration, accounts, entitlements, and KétRouter service | the private relay service or dedicated service repositories |
+| Cloud control, hosted service, gateway configuration, accounts, entitlements, and KétRouter service | the private hosted service or dedicated service repositories |
 | iOS and Android remote client | the private mobile app |
 
 If a feature is useful in the editor alone, it belongs in `core/` so Lite ships

@@ -25,4 +25,4 @@ cloud-privacy and remote-client targets pass. Real CLI remains opt-in/skipped.
 This is stream completion, not acceptance of all tunnel/grant/lease, origin/path
 confinement, peer authentication, fairness or process-descendant behavior. Tests
 use synthetic loopback TCP/WebSocket services and fixed test keys, without a
-provider, installed renderer, real relay, UI, deployment or device installation.
+provider, installed renderer, real hosted service, UI, deployment or device installation.

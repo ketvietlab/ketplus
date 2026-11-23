@@ -37,7 +37,7 @@ KetPlus treats archive, restore, and delete as different operations:
   upload cursors and records the new workspace, all in one rewrite and as the last step of
   storing the enrollment. The devices of the account signed out of cannot read what is uploaded
   next, and a return to a workspace finds the keys its history is encrypted with and the wraps
-  its relay holds (the relay refuses a different wrap under the same id). The daemon repeats the
+  its hosted service holds (the hosted service refuses a different wrap under the same id). The daemon repeats the
   check at start, so a sign-in that stopped before that step is finished on restart. Keys from
   an install that was signed out before the workspace was recorded cannot be attributed and stay
   in use.

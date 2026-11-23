@@ -57,7 +57,7 @@ transcript windows carry `event_type` and the data as `payload`.
 - **Repository grain.** The daemon's `workspace.list` names each checkout's
   `repository_path` (read from a linked worktree's `.git` file and `commondir`,
   without running Git), and the local and SSH adapter groups checkouts under it
-  with their `worktrees`, as the Relay groups by repository id. A repository
+  with their `worktrees`, as the hosted service groups by repository id. A repository
   therefore appears once on every route.
 - **Conversation binding.** A `MachineConversationSession` keeps the backend it
   was opened with; turns, steer, stop and approval answers go to that machine
@@ -71,7 +71,7 @@ transcript windows carry `event_type` and the data as `payload`.
   Connected lists again and reloads the transcript window and pending
   approvals on its own.
 - **Worktree picker.** A new conversation picks a worktree of the selected
-  machine and starts with `MachineBackend::createSession`. Worktrees the Relay
+  machine and starts with `MachineBackend::createSession`. Worktrees the hosted service
   still verifies (`pending`) are listed as "verifying…" and cannot be chosen;
   `catalogChanged()` lists again and fills them in.
 - **Approvals and questions.** Cards answer through the conversation's machine;
@@ -941,7 +941,7 @@ in [ADR 0120](decisions/0120-github-copilot-acp-provider.md) and
 `--copilot` and `KETPLUS_COPILOT` select a custom executable location. These UI
 paths do not install a CLI or run a provider prompt by themselves.
 
-History, notifications and local/ControlV2/relay transport retain `copilot` as the
+History, notifications and local/ControlV2/hosted service transport retain `copilot` as the
 adapter id. Journal `cursor` fields remain event sequence numbers. No remote
 wire format or transcript cursor semantics change. Availability of actual turns,
 models and modes depends on the installed daemon's Copilot adapter.
@@ -1310,7 +1310,7 @@ Console, select **My Anthropic API key**, and choose **Save Claude settings**.
 Leave the key field blank to keep a saved key while changing mode or query budget.
 **Check connection** validates catalog access without model inference. The key is
 stored on the daemon's Mac in Keychain; paired phones use the same configuration.
-No key needs to be pasted into a conversation or sent through the relay.
+No key needs to be pasted into a conversation or sent through the hosted service.
 
 Changes apply to new queries. If Claude still owns background tasks, finish or stop
 those tasks before starting a turn with the changed configuration. Removing a key

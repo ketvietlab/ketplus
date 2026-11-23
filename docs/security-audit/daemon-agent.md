@@ -20,12 +20,12 @@ product code.
 Reviewed `AGENTS.md` and the relevant sections of `project-status.md`,
 `repository-boundaries.md`, `architecture.md`, `daemon-architecture.md`,
 `agent-workspace.md`, `development.md`, `testing.md`, `product-architecture.md`,
-`licensing.md`, ADR 0034 on device pins, and ADR 0036 on challenge v2.
+`licensing.md`, the device-pin rule in `daemon-architecture.md`, and ADR 0036 on challenge v2.
 
 - Reviewed only public code in `apps/daemon`, `modules/remote`, `modules/ai`, and
   related fixtures. No real credential stores, transcripts, or account settings
   were read.
-- Under ADR 0034, the relay may be actively malicious; its device list does not
+- Under the device-pin rule, the hosted service may be actively malicious; its device list does not
   independently grant authority. Pins approved by the user on this machine are
   the trust anchor, except for the explicitly documented one-time migration of
   existing enrollments.
@@ -54,12 +54,12 @@ module was reviewed. Line references and conclusions apply to the baseline above
 | Provider policy | [SessionHostTurns.cpp:33](../../apps/daemon/src/runtime/SessionHostTurns.cpp#L33); [ClaudeAdapter.cpp:238](../../apps/daemon/src/providers/ClaudeAdapter.cpp#L238); [CursorAdapter.cpp:255](../../apps/daemon/src/providers/CursorAdapter.cpp#L255); [review-guard.mjs](../../apps/daemon/providers/claude-sidecar/review-guard.mjs) | Codex maps sandbox and approval policy; Claude maps plan/acceptEdits/bypass; Cursor maps ask/agent. Six fake-SDK tests checked the sidecar read/verify review profiles. This does not establish sandbox enforcement by the real SDK or external CLIs. |
 | Browser sign-in / challenge | [BrowserSignIn.cpp:58](../../modules/remote/src/cloud/BrowserSignIn.cpp#L58), `:94–133`; [CloudControlSignIn.cpp:33](../../apps/daemon/src/cloud/CloudControlSignIn.cpp#L33), `:124–235`; [CloudControlCredentials.cpp:25](../../apps/daemon/src/cloud/CloudControlCredentials.cpp#L25) | Loopback/state, PKCE handoff, same-origin validation of the returned page, and sign-in/challenge epochs are present. The client requires challenge v2; correct service-side one-time redemption is not established. |
 | Remote identity / sign-out | [DevicePins.cpp:69](../../apps/daemon/src/cloud/DevicePins.cpp#L69); [CloudControlClient.cpp:367](../../apps/daemon/src/cloud/CloudControlClient.cpp#L367), `:620–770`; [CloudControlSync.cpp:447](../../apps/daemon/src/cloud/CloudControlSync.cpp#L447); [CloudControlCommands.cpp:249](../../apps/daemon/src/cloud/CloudControlCommands.cpp#L249) | Digest validation precedes pairing and key pinning; DA-01/02 concern callback/cache lifecycle. Heartbeat epoch guards do not imply equivalent guards in every callback. |
-| Remote client / peer grant | [ControlV2Authentication.cpp:30](../../modules/remote/src/control/ControlV2Authentication.cpp#L30), `:229–267`; [RemotePeers.cpp:76](../../apps/daemon/src/transport/RemotePeers.cpp#L76) | Desktop credential changes/sign-out advance the epoch, clear the signer cache, and empty host pins. Peers check grant, capability, machine/workspace, and device; the complete WebRTC stack was not audited. |
+| Remote client / peer grant | [ControlV2Authentication.cpp:30](../../modules/remote/src/control/ControlV2Authentication.cpp#L30), `:229–267`; [RemotePeers.cpp:76](../../apps/daemon/src/transport/RemotePeers.cpp#L76) | Desktop credential changes/sign-out advance the epoch, clear the signer cache, and empty host pins. Peers check grant, capability, machine/workspace, and device; the complete peer transport stack was not audited. |
 | Keys and storage | [CloudCrypto.cpp:537](../../modules/remote/src/cloud/CloudCrypto.cpp#L537), `:661–675`; [SessionCredentials.cpp:78](../../apps/daemon/src/cloud/SessionCredentials.cpp#L78); [CredentialStore.cpp:22](../../modules/remote/src/cloud/CredentialStore.cpp#L22), `:94–146`, `:185–205` | Wrapping uses X25519/HKDF/AES-GCM and signatures; workspace changes set content keys aside separately. Credentials actually reside in an owner-only file rather than the OS keychain (DA-03). No independent cryptographic assessment was performed. |
 
 ## DA-01 — A key-distribution callback survives sign-out and reopens adoption
 
-**Severity: High — confidentiality; violation of the untrusted-relay boundary.**
+**Severity: High — confidentiality; violation of the untrusted-hosted service boundary.**
 Status: control/data flow confirmed through source analysis; no C++ runtime
 reproduction was performed.
 
@@ -94,10 +94,10 @@ for actual legacy enrollments, not a pin set just removed by sign-out.
 
 **Prerequisites/impact:** The daemon remains alive with a session/content key and
 a pending device-list request; sign-out succeeds before the reply, and the
-credential store remains writable. A malicious relay within the threat model can
+credential store remains writable. A malicious hosted service within the threat model can
 return public keys it controls. The daemon then creates wraps for an unapproved
-device and sends the body to the relay. The post-sign-out POST may lack a bearer;
-rejection by an honest service does not protect the body from a malicious relay
+device and sends the body to the hosted service. The post-sign-out POST may lack a bearer;
+rejection by an honest service does not protect the body from a malicious hosted service
 that has already received it. The 500-envelope limit per invocation still applies.
 No subsequent sign-in is required or assumed for this key-disclosure path.
 
@@ -134,7 +134,7 @@ sign-out no longer proves the device is paired with the new enrollment.
 - [executeCommand:301–366](../../apps/daemon/src/cloud/CloudControlCommands.cpp#L301)
   uses the key from `withSenderKeys` for signature verification/decryption;
   the cache-hit path does not recheck the pin. Peer commands have an additional
-  grant check; this finding concerns the relay mailbox path. Staying in the same
+  grant check; this finding concerns the hosted service mailbox path. Staying in the same
   workspace preserves content keys
   ([SessionCredentials.cpp:78–91](../../apps/daemon/src/cloud/SessionCredentials.cpp#L78)).
 
@@ -142,7 +142,7 @@ sign-out no longer proves the device is paired with the new enrollment.
 the cache; the user signs out and enrolls again in the same workspace before the
 TTL expires. The new pin set is empty, but the authentication function still
 accepts D's key. D, or a party holding D's private key, can sign a suitable command;
-a malicious relay can deliver it with the current scope. This creates a window
+a malicious hosted service can deliver it with the current scope. This creates a window
 in which a reset identity remains accepted. It does not permit forging an
 arbitrary device's signature or establish a provider sandbox escape. Machine,
 generation, ciphertext, command-kind, and idempotency checks remain in place;
@@ -205,7 +205,7 @@ No native build/full ctest, live provider, service probing, binary installation 
 deployment, private-repository access, or exploit tooling was performed.
 Cryptographic, OS sandbox, and hosted-authorization behavior beyond the reviewed
 code remains unverified. Areas not deeply audited include the full team/schedule
-role matrix, every filesystem/attachment operation, WebRTC/native transport,
+role matrix, every filesystem/attachment operation, peer transport/native transport,
 every adapter extension, and the entire legacy direct transport in `modules/ai`.
 
 The reviewer should verify both trust-transition sequences with fake-transport

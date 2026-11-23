@@ -23,7 +23,7 @@ The target daemon owns:
 - local capability enforcement for filesystem, terminal, and process actions;
 - device identity and secure credential storage integration;
 - authenticated local IPC with KetPlus Desktop;
-- an outbound authenticated connection to the cloud relay;
+- an outbound authenticated connection to the hosted service;
 - bounded buffering, reconnect, heartbeats, and session cleanup.
 
 It does not own editor UI, AI presentation, organization membership, billing,
@@ -163,7 +163,7 @@ Streamed text reaches the journal coalesced: consecutive `assistant.delta` or
 (or 16 KiB) and journaled as one event. Any other event, a delta of another
 item, and SessionHost teardown journal the held text first, so provider order
 is kept. One event per provider chunk (a word or less) had every reader, above
-all a phone paging the relay, read tens of thousands of events per conversation.
+all a phone paging the hosted service, read tens of thousands of events per conversation.
 A delta for an item whose `item.completed` is already journaled is dropped, so a
 retried notification or a previous turn's tail cannot extend final text; an
 `item.started` with the same id reopens the item. The daemon remembers SHA-256
@@ -288,9 +288,9 @@ returned; live delivery owns them. `turn_limit` accepts 1-20 (was 1-3); the even
 are unchanged. `session.list` advertises `transcript_window_max_turns: 20` and
 `transcript_window_after_cursor: true`; clients that do not see these keep `turn_limit <= 3`
 and fall back to an explicit newest-window reload instead of forward paging.
-Forward paging is **local only**: `after_cursor` is not available over the cloud relay. Relayed
+Forward paging is **local only**: `after_cursor` is not available over the hosted service. Service-carried
 (mobile) transcript windows are served as restore requests with `turn_limit` capped at 3, and a
-relayed `after_cursor` is rejected with `invalid_page` ("Restore requests cannot page forward with
+service-carried `after_cursor` is rejected with `invalid_page` ("Restore requests cannot page forward with
 after_cursor."), so a mobile client that needs newer rows reloads the newest window instead.
 Existing cloud/mobile `session.transcript_page` behavior is unchanged. See
 [ADR 0005](decisions/0005-bounded-local-transcript-windows.md) for the exact local
@@ -315,15 +315,15 @@ uploads stable AES-256-GCM event envelopes from a durable retry cache (key epoch
 tag, because AES-GCM itself accepts others), and polls
 serialized encrypted commands. The machine signs a challenge only when it is
 exactly 32 canonical base64url bytes: the same Ed25519 key signs event
-envelopes, wrapped session keys and WebRTC answers, all longer, so a relay
+envelopes, wrapped session keys and peer transport answers, all longer, so a hosted service
 cannot obtain a host signature over one of them by calling it a challenge. A
-domain-separated challenge signature needs a matching relay change and is
+domain-separated challenge signature needs a matching hosted service change and is
 tracked in #85. A failed command poll or credential request waits before the
 next poll like a failed upload (one second doubling, up to five minutes after
-a refusal and one minute otherwise, with jitter); a relay wake-up or a
+a refusal and one minute otherwise, with jitter); a hosted service wake-up or a
 successful poll ends the wait. Pairing is explicitly confirmed on the Mac, and
 the daemon recomputes the claim digest from the claimed keys before approving.
-Only devices pinned on this Mac (ADR 0034) receive session keys, have their
+Only devices pinned on this Mac receive session keys, have their
 commands accepted or open peer links; the devices active when pins were
 introduced were adopted once; a
 closed pairing dialog revokes its outstanding ticket and paired devices can be
@@ -338,7 +338,7 @@ The sign-in epoch remains unchanged so the initiating sign-in callback can finis
 sign-out or another enrollment cannot adopt pins, wrap or upload session keys, or refresh the
 new enrollment's peers. Legacy adoption is an explicit, one-time permission established while
 restoring an existing enrollment without a pin record; an initialized empty set or a pin record
-removed later is not migration authority. See ADR 0034 and the native trust-lifecycle tests.
+removed later is not migration authority. See "Trust boundaries" and the native trust-lifecycle tests.
 
 The sender-key cache is an optimization, not pairing authority: every hit checks the
 current local pin and the account epoch, enrollment revision and machine/workspace scope.
@@ -347,7 +347,7 @@ pairing approval, device revocation and machine authorization revocation also cl
 advance a lookup revision, so an outstanding reply cannot refill the cache across those
 transitions (even if the same device is paired again). A same-workspace enrollment retains
 content keys but requires fresh pairing before an old sender can execute a command. Cache
-invalidation on relay revocation does not itself change the persisted pin policy.
+invalidation on hosted service revocation does not itself change the persisted pin policy.
 
 Heartbeat metadata and device-key preparation use one operation-scoped credential
 view, with staged writes committed before publishing envelopes or refreshing
@@ -366,11 +366,11 @@ silently overwrite the OS record or restore removed enrollment. See
 [ADR 0130](decisions/0130-os-credential-storage.md) for migration/recovery, platform
 access, headless prerequisites, prompt behavior and backup limitations.
 
-Enrollment commits relay, machine/workspace identifiers, account labels, key version, an empty
+Enrollment commits hosted service, machine/workspace identifiers, account labels, key version, an empty
 pin set and workspace content-key migration in a single credential transaction. A failed write
 retains the complete previous enrollment and content keys on restart. Restore validates every
 required read before granting an identity or migrating legacy state; an unreadable control URL
-or pin record is an explicit error, never a default relay or legacy adoption permission. A
+or pin record is an explicit error, never a default hosted service or legacy adoption permission. A
 record changed by another process during restore is rejected and retried by recreating the
 client. The remote Control v2 client likewise refuses a partial session/pin restore and preserves
 stored values; after OS access is recovered, recreate the client to reload the complete state.
@@ -381,11 +381,11 @@ of at most 100 sessions, matching the Control API request bound; a later batch
 is not sent after an earlier failure and event/key synchronization starts only
 after the complete snapshot succeeds.
 
-The relay accepts the rest of a snapshot when it refuses some sessions (owned by
+The hosted service accepts the rest of a snapshot when it refuses some sessions (owned by
 another enrollment of the Mac, or behind the stored generation) and names them in
 `rejectedSessions`. Until a later heartbeat accepts them, the daemon keeps those
 sessions local: it uploads none of their events and wraps none of their keys,
-neither for known devices nor in a pairing approval, which the relay would refuse
+neither for known devices nor in a pairing approval, which the hosted service would refuse
 as a whole for one envelope it cannot hold.
 
 Control requests use HTTP/1.1, never HTTP/2. Over HTTP/2 every request shared
@@ -396,34 +396,34 @@ the Mac offline and commands were claimed again and again.
 A control reply that fails in transport (connection loss, transfer timeout,
 protocol error) is a failure even when its status line had already arrived.
 Treated as success, a `200` command poll whose body was lost dropped the
-commands the relay had just leased; they came back only after the 30 s lease
+commands the hosted service had just leased; they came back only after the 30 s lease
 lapsed, and each session's queue waited behind them. The daemon logs a poll
 that lost its leased commands and every failed command acknowledgement.
 
 Event uploads to `/v2/events:append` hold at most 100 events and at most
-768 KiB of encrypted envelopes, below the relay's 1 MiB request limit; a single
-event is always sent alone. When the relay, or a proxy in front of it, still
+768 KiB of encrypted envelopes, below the hosted service's 1 MiB request limit; a single
+event is always sent alone. When the hosted service, or a proxy in front of it, still
 answers 413 (with or without a JSON body), the daemon halves that session's
 batch and retries from the same cursor, down to one event, and doubles it again
 after each accepted batch. Any other failed upload makes that session generation
 wait before its events are sent again, one second doubling on each consecutive
 failure: up to five minutes after a refusal (a 4xx other than 401, 408 and 429,
-such as `stale_generation` for a session the relay has deleted), up to one hour
-after `409 event_cursor_gap` (the relay waits for a cursor this journal has
+such as `stale_generation` for a session the hosted service has deleted), up to one hour
+after `409 event_cursor_gap` (the hosted service waits for a cursor this journal has
 already pruned, so retrying cannot fill the gap), and up to one minute when the
-relay cannot be reached or fails, a wait that the next successful heartbeat
+hosted service cannot be reached or fails, a wait that the next successful heartbeat
 ends. New journal events do not shorten the wait; without it, every
 event of every session retried each refused upload. A 401 waits only for the next
 credential, and an accepted batch clears the wait. The daemon remembers the
-cursor the relay accepted through for each session generation, so an upload
+cursor the hosted service accepted through for each session generation, so an upload
 pass (on every heartbeat and journaled event) skips sessions that are in
 flight, waiting, or have nothing newer without reading the journal. Streamed deltas and `item.completed` envelopes also
 carry a plaintext `itemKey` (a truncated SHA-256 of session, generation and
 item id, never the id itself), and a completion whose cloud payload holds the
-item's whole text carries `supersedesDeltas`, so the relay can drop the
+item's whole text carries `supersedesDeltas`, so the hosted service can drop the
 streamed copy the way the local journal does. Neither field is inside the
 signed content. `itemKey` is a public linkage value: it hides the item id
-from casual reading, but the relay knows session and generation and can
+from casual reading, but the hosted service knows session and generation and can
 confirm a guessed provider item id. Each session's cloud cursor is registered with the
 journal once per sign-in, not on every upload, and an acknowledgement at or
 behind the stored cursor writes nothing. Advancing ACKs commit a monotonic cursor
@@ -453,7 +453,7 @@ physical caps, not a hard storage quota; see [ADR 0050](decisions/0050-bounded-j
 Cloud envelope cache cleanup has its own 256-candidate/1-MiB maintenance lane.
 Only rows with receipts for their exact sent ciphertext are eligible. An additive
 receipt flag defaults to pending for legacy/new cache; pre-dispatch verification
-resets it for retries. Receipt and a versioned relay/workspace/machine/key-scoped
+resets it for retries. Receipt and a versioned hosted service/workspace/machine/key-scoped
 recovery cursor commit together before credential mirroring and raw ACK; restart
 repairs these later steps without re-encrypting already accepted events.
 Old account callbacks and old raw cloud cursors cannot authorize a replacement
@@ -500,11 +500,11 @@ reclaim with batches of 32,768 pages (128 MB) (ADR 0108).
 Before an event enters the cloud encryption and retry path, the daemon projects
 command lifecycle payloads to the full command text plus identity, status and
 exit code. It removes aggregated output, output deltas and command actions. The
-local SQLite journal remains unchanged and authoritative, while neither relay
+local SQLite journal remains unchanged and authoritative, while neither hosted service
 ciphertext nor mobile replay carries command output. A phone reads one command's
 output tail (`session.output.read`) or a bounded JPEG of an image the journal
 references (`session.media.read`) on demand; neither result is stored on the
-relay. The same `session.media.read` with a worktree-relative `path` instead of
+hosted service. The same `session.media.read` with a worktree-relative `path` instead of
 `media_ref` previews an image from the session's worktree as it is on disk now
 (no revision fence; symlinks, paths escaping the worktree and files over 16 MB
 are refused). Previews are decoded off the daemon's main thread, on a pool of
@@ -620,7 +620,7 @@ to trigger that pass). The local `remote.audit` request returns them
 newest first (`limit`, 1–500, default 100; `device_id` to show one device's).
 
 Workspace file reads are fenced by the worktree revision the daemon publishes in
-each heartbeat (a hash of HEAD, the status and dirty content). The relay only
+each heartbeat (a hash of HEAD, the status and dirty content). The hosted service only
 accepts a read naming the revision it lists, which trails the worktree by up to a
 heartbeat while an agent edits it. A read naming a revision the daemon published
 for that session in the last 10 minutes is served from the worktree as it is
@@ -704,7 +704,7 @@ Protocol code should be transport-independent. The desktop and daemon may link
 mobile app
   -> hosted gateway
      -> KetPlus Control API
-     -> KetPlus Relay
+     -> the hosted service
         -> outbound daemon connection
            -> local capability check
               -> PTY, process, or workspace operation
@@ -715,64 +715,33 @@ mobile app
 - Use short-lived session credentials; keep long-lived device keys in the OS
   credential store, never plaintext configuration.
 - Authorize every operation by explicit capability and workspace scope.
-- Treat relay messages, terminal output, filenames, and mobile input as
+- Treat hosted service messages, terminal output, filenames, and mobile input as
   untrusted data with bounded sizes.
 - Make reconnect idempotent and prevent a stale client from reclaiming a newer
   session generation.
 - Redact secrets and user content from routine logs. Security audit events must
   identify subjects/devices without recording command payloads by default.
 
+**Devices are pinned, never taken from a service's word.** The daemon assumes the hosted service can be actively malicious: content, device identity and host identity must stay safe against it, while availability and metadata (sizes, timing, ids) are out of scope. `DevicePins` records each trusted device's id, key version and a fingerprint of both public keys in the daemon's credential file. A device row the service returns is only a hint. Session keys are wrapped, device-key answers accepted, peer offers verified and message-socket event links opened only for pinned devices whose keys match their pins; a removed or replaced pin closes that device's links at once. A pin comes only from an approval on this Mac: the user compares a confirmation code the daemon computed from the claimed keys with the one on the phone, and `remote.pairing.approve` carries the digest the user confirmed, so the service cannot swap keys and digest together. The daemon never recomputes trust from what the service later says: it recomputes the claim digest itself and refuses a mismatch.
+
 ### Daemon challenge authentication
 
-The daemon requests only `signatureVersion: 2` and `signatureAlgorithm: "Ed25519"`
-on both challenge issuance and credential redemption. Before signing, it checks the
-same scheme in the reply, the enrolled machine/key binding, ASCII identifiers and
-a canonical unpadded base64url nonce of exactly 32 bytes. Missing or legacy fields
-fail closed; there is no retry using a raw nonce signature.
+The daemon requests only `signatureVersion: 2` and `signatureAlgorithm: "Ed25519"` on both challenge issuance and credential redemption. Before signing, it checks the same scheme in the reply, the enrolled machine/key binding, ASCII identifiers and a canonical unpadded base64url nonce of exactly 32 bytes. Missing or legacy fields fail closed; there is no retry using a raw nonce signature.
 
-The identity key signs UTF-8 compact JSON
-`["ketplus",2,"daemon-challenge",id,machineId,keyVersion]`, one NUL byte, then the
-decoded nonce. The fixed domain prevents a relay from obtaining signatures for
-other identity-key protocols. The relay owns challenge expiry and atomic one-time
-redemption. Deploy a v2-capable relay before this client; an old relay cannot issue
-new credentials to it. Existing cached credentials remain usable until refresh.
-See [ADR 0036](decisions/0036-daemon-challenge-domain-separation.md) for the exact
-contract and compatibility rules. This documents client behavior, not relay deployment.
+The identity key signs UTF-8 compact JSON `["ketplus",2,"daemon-challenge",id,machineId,keyVersion]`, one NUL byte, then the decoded nonce. The fixed domain stops a verifier from obtaining signatures usable in other identity-key protocols. Existing cached credentials remain usable until refresh. See ADR 0036 for the contract and the compatibility rules. This documents the daemon's behaviour, not a deployment.
 
-### Relay address and sign-in
+### Service address and sign-in
 
-Production packages compile `https://api.ketplus.app` into the desktop and daemon
-(`KETPLUS_PRODUCTION_RELEASE=ON`). Developer/staging defaults remain
-`https://ketplus-staging.ketviet.vn` until the separately approved staging cutover.
-The relay is the standalone KétPlus runtime, which serves `/v2/...` at the root of its host. A base URL may still
-carry a path, as the tenant gateway's `/native/ketplus` did before the staging
-cutover: every request and the `/v2/relay` socket append their path to that base
-(`cloud/ControlEndpoint.h`); resolving an absolute path against it would drop it.
+Production packages compile the service address into the desktop and daemon (`KETPLUS_PRODUCTION_RELEASE=ON`); developer builds use a configurable default. The service answers `/v2/...` at the root of its host. A base URL may still carry a path: every request and the message socket append their path to that base (`cloud/ControlEndpoint.h`); resolving an absolute path against it would drop it.
 
-KetPlus never asks for a password. Signing a Mac in is a browser handoff
-(RFC 8252 with PKCE S256, `cloud/CloudControlSignIn.cpp`):
+KetPlus never asks for a password. Signing a Mac in is a browser handoff (RFC 8252 with PKCE S256, `cloud/CloudControlSignIn.cpp`):
 
-1. `remote.sign_in` listens on a random `127.0.0.1` port (`BrowserSignIn`),
-   posts `/v2/auth/handoffs` with the installation ID, the loopback redirect,
-   a random `state` and the code challenge, and answers with the relay's
-   `authorization_url`. The daemon refuses a page on another host than its relay.
-2. The desktop opens that page in the system browser. The gateway signs the
-   viewer in to the tenant and the viewer approves.
-3. The browser returns to the loopback port with a one-time code and the same
-   `state`; a request with any other state is refused and does not end the wait.
-   An `error` with the right state (the viewer declined, or the tenant failed)
-   ends the sign-in at once with a fixed message, "Sign-in was declined." for
-   `access_denied`; `error_description` is never shown (#84).
-4. The daemon redeems the code at `/v2/auth/token` with the verifier and uses
-   that user session once, to enroll the Mac. The session is not stored. Its
-   subject's `displayName` and `username` are stored with the enrollment and
-   removed on sign-out (ADR 0109).
+1. `remote.sign_in` listens on a random `127.0.0.1` port (`BrowserSignIn`), starts a handoff with the installation ID, the loopback redirect, a random `state` and the code challenge, and answers with the service's authorization URL. The daemon refuses a page on another host than its service.
+2. The desktop opens that page in the system browser, where the viewer signs in and approves.
+3. The browser returns to the loopback port with a one-time code and the same `state`; a request with any other state is refused and does not end the wait. An `error` with the right state (the viewer declined, or the sign-in failed) ends the sign-in at once with a fixed message, "Sign-in was declined." for `access_denied`; `error_description` is never shown (#84).
+4. The daemon redeems the code with the verifier and uses that user session once, to enroll the Mac. The session is not stored. Its subject's `displayName` and `username` are stored with the enrollment and removed on sign-out (ADR 0109).
 
-`remote.status` reports `sign_in_pending` while it waits (ten minutes at most)
-and `sign_in_error` when it failed; `remote.sign_in.cancel` and sign-out stop it.
-Once enrolled, it reports `account {display_name, username}`. Settings → Account
-& devices and the Connections account strip show it. An enrollment made before
-ADR 0109 has no `account` until the next sign-in.
+`remote.status` reports `sign_in_pending` while it waits (ten minutes at most) and `sign_in_error` when it failed; `remote.sign_in.cancel` and sign-out stop it. Once enrolled, it reports `account {display_name, username}`. Settings → Account & devices and the Connections account strip show it. An enrollment made before ADR 0109 has no `account` until the next sign-in.
 
 ## Windows daemon (in progress)
 
@@ -885,7 +854,7 @@ Codex ownership migration is complete; terminal and cloud work remain incrementa
 1. Define versioned private protocol types and local IPC tests. (complete)
 2. Move Codex session/process ownership without changing UI. (complete)
 3. Run and reattach an external daemon in local-only mode. (complete)
-4. Add device registration and relay connection. (implemented in code; deployment pending)
+4. Add device registration and hosted service connection. (implemented in code; deployment pending)
 5. Enable mobile control only after capability and reconnect tests pass. (implemented in code;
    real staging end-to-end validation pending)
 
@@ -928,9 +897,9 @@ team briefing.
 
 ## Atlas live runtime
 
-`AtlasLiveRuntime` owns only the read-only static KetAtlas viewer it starts. Version 0.5.2 is required. Remote starts have no host-side per-launch renderer decision and do not opt into project commands, even when a renderer sidecar is present. Pairing and remote payload fields do not supply that decision; attachments expose only the viewer origin (ADR 0128). Discovery returns opaque project IDs. `atlas.start` fences the selected execution context; reconnect by an existing attachment channel instead retains that runtime's source even after a conversation switches. Back releases the connection with a five-minute idle lease; `atlas.detach` explicitly stops the owned runtime. A runtime and its tunnel also stop when the device that opened it is revoked (here or reported by the relay), when its conversation generation is deleted, when the relay revokes this machine, and on sign-out. A device revocation is handled even when WebRTC peer transport is not negotiated. An `atlas.start` still scanning when its device or the machine is revoked creates no runtime, because it captures an access fence before the scan and checks it before creating the runtime. Existing desktop viewers are not adopted or stopped.
+`AtlasLiveRuntime` owns only the read-only static KetAtlas viewer it starts. Version 0.5.2 is required. Remote starts have no host-side per-launch renderer decision and do not opt into project commands, even when a renderer sidecar is present. Pairing and remote payload fields do not supply that decision; attachments expose only the viewer origin (ADR 0128). Discovery returns opaque project IDs. `atlas.start` fences the selected execution context; reconnect by an existing attachment channel instead retains that runtime's source even after a conversation switches. Back releases the connection with a five-minute idle lease; `atlas.detach` explicitly stops the owned runtime. A runtime and its tunnel also stop when the device that opened it is revoked (here or reported by the hosted service), when its conversation generation is deleted, when the hosted service revokes this machine, and on sign-out. A device revocation is handled even when peer transport peer transport is not negotiated. An `atlas.start` still scanning when its device or the machine is revoked creates no runtime, because it captures an access fence before the scan and checks it before creating the runtime. Existing desktop viewers are not adopted or stopped.
 
-`AtlasLiveTunnel` multiplexes bounded byte streams to registered loopback viewer/renderer ports over a persistent authenticated WebSocket. Each attachment gets a new random key/channel; AES-GCM frames bind channel, direction and exact sequence. The phone uses matching loopback origins and an ephemeral HttpOnly cookie for its native bridge. HTTP, streaming bodies, renderer WebSockets and SSE remain ordinary protocols inside the encrypted byte streams. The relay forwards ciphertext and rechecks grants periodically; it cannot see resource bodies. There is no automatic write replay. Stream EOF is sent when a disconnected origin
+`AtlasLiveTunnel` multiplexes bounded byte streams to registered loopback viewer/renderer ports over a persistent authenticated WebSocket. Each attachment gets a new random key/channel; AES-GCM frames bind channel, direction and exact sequence. The phone uses matching loopback origins and an ephemeral HttpOnly cookie for its native bridge. HTTP, streaming bodies, renderer WebSockets and SSE remain ordinary protocols inside the encrypted byte streams. The hosted service forwards ciphertext and rechecks grants periodically; it cannot see resource bodies. There is no automatic write replay. Stream EOF is sent when a disconnected origin
 has been fully drained, including drains triggered by WebSocket writes; the
 client need not return additional credit after receiving the complete response
 (ADR 0084).
@@ -942,7 +911,7 @@ callback is consumed before invocation and cannot run again when the process
 exits immediately after readiness (ADR 0083). Synthetic CLI regressions cover
 these boundaries without starting a real viewer or renderer.
 
-`AtlasLiveTunnel` multiplexes bounded byte streams to registered loopback viewer/renderer ports over a persistent authenticated WebSocket. Each attachment gets a new random key/channel; AES-GCM frames bind channel, direction and exact sequence. The phone uses matching loopback origins and an ephemeral HttpOnly cookie for its native bridge. HTTP, streaming bodies, renderer WebSockets and SSE remain ordinary protocols inside the encrypted byte streams. The relay forwards ciphertext and rechecks grants periodically; it cannot see resource bodies. There is no automatic write replay.
+`AtlasLiveTunnel` multiplexes bounded byte streams to registered loopback viewer/renderer ports over a persistent authenticated WebSocket. Each attachment gets a new random key/channel; AES-GCM frames bind channel, direction and exact sequence. The phone uses matching loopback origins and an ephemeral HttpOnly cookie for its native bridge. HTTP, streaming bodies, renderer WebSockets and SSE remain ordinary protocols inside the encrypted byte streams. The hosted service forwards ciphertext and rechecks grants periodically; it cannot see resource bodies. There is no automatic write replay.
 
 `session.resource.resolve` resolves only resource references recorded in an exact event. It returns an opaque source scope and current content revision, never a historical content snapshot or inferred legacy provenance. For agent messages, it also validates inline Markdown file destinations in that exact event. Relative destinations remain bound to the recorded execution context; absolute destinations may identify another existing Git checkout. Switching the current worktree does not rewrite a link’s source. Messages without a recorded context revision remain unverified.
 
@@ -956,7 +925,7 @@ checks, a consistent SQLite snapshot, exclusive delta cursor and projection
 revision. `raw_activity_details` is an explicit local read option used for
 conversation export. Sometimes an MCP step that joined a group completes with images. It
 then leaves the group, and its completion carries the group's new summary as
-`left_activity_group`. Relay/mobile remain on the legacy projection. See
+`left_activity_group`. Hosted service/mobile remain on the legacy projection. See
 [ADR 0022](decisions/0022-daemon-activity-group-details.md).
 
 Opening a journal only marks sessions whose activity index is behind in
@@ -1008,7 +977,7 @@ retirement remains a separate hardening item.
 The heartbeat optionally carries `deletions` (session ID, generation, lifecycle
 revision and operation ID). Only an exact `acceptedDeletions` receipt clears cloud
 work. Missing receipts and transport failures retry after restart; absence from a
-session catalog alone never proves deletion. Relay consumers must deploy the
+session catalog alone never proves deletion. Hosted service consumers must deploy the
 additive control-v2 contract before relying on Mac-to-phone deletion propagation.
 
 Completion changes only the identified durable work row. Fully completed jobs are

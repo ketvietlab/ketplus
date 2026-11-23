@@ -5,9 +5,9 @@ backend over it (`ketplus_remote_ssh_backend`, see "Machine backend") are
 implemented. They are not yet composed into Desktop: no UI adds a host yet.
 
 Desktop can reach the KetPlus daemon of a Linux host that it can already reach
-with OpenSSH. The relay ([`remote-transport.md`](remote-transport.md)) needs
+with OpenSSH. The hosted service needs
 pairing and an account; this route needs only the user's own SSH access, and
-the relay sees nothing.
+the hosted service sees nothing.
 
 ## Route
 
@@ -276,19 +276,19 @@ target and writes each machine into `LinuxMachineModel`. Each machine is keyed
 by its ADR 0119 machine id (a saved target whose daemon has not named itself
 yet is `ssh:<target>`). The model shows its live state, the verified SSH host
 key, a presented key that did not verify (as a mismatch, never as verified),
-and an error the user can act on. A host that the Relay lists under the same
-machine id is one row reached over SSH, and the Relay's id is a route
+and an error the user can act on. A host that the hosted service lists under the same
+machine id is one row reached over SSH, and the hosted service's id is a route
 attribute. While SSH cannot reach that host (Offline with a connection
-failure) and the Relay can be used for it (entitled, with no error of its
-own), the row falls back to the Relay: its state, Connect / Disconnect and
-`machineBackend(id)` are the Relay's, and it stays the Relay's after a
-Disconnect, so Connect reaches the Relay again. Connect and Disconnect act
-only on the route the row shows. The row says why SSH failed ("Using the Relay
-because SSH failed. …", or "SSH failed, so Connect uses the Relay. …" while the
-Relay is disconnected) and offers Use SSH, which tries SSH again; once SSH
+failure) and the hosted service can be used for it (entitled, with no error of its
+own), the row falls back to the hosted service: its state, Connect / Disconnect and
+`machineBackend(id)` are the hosted service's, and it stays the hosted service's after a
+Disconnect, so Connect reaches the hosted service again. Connect and Disconnect act
+only on the route the row shows. The row says why SSH failed ("Using the hosted service
+because SSH failed. …", or "SSH failed, so Connect uses the hosted service. …" while the
+Hosted service is disconnected) and offers Use SSH, which tries SSH again; once SSH
 answers, the row is SSH's. A user Disconnect of a connected SSH machine is not
-a failure, so the Relay does not take that row. A key mismatch or a changed
-identity is never hidden behind the Relay. After an identity change, Details shows the trusted and the presented
+a failure, so the hosted service does not take that row. A key mismatch or a changed
+identity is never hidden behind the hosted service. After an identity change, Details shows the trusted and the presented
 daemon identity before Trust new identity, which is disabled when the daemon
 named none. The `ssh-keygen -R` hint names the entry as ssh files it
 (`'[host]:port'` for a port other than 22, an IPv6 address without brackets on
@@ -296,13 +296,13 @@ port 22). The connect card adds the target when Connect is pressed. An
 attempt that fails or is cancelled before the first connection removes the
 target and any key accepted for it. Connect, Disconnect, Remove, Forget old
 key and Trust new identity act on the backend. Saved machines with a trusted
-identity connect when the app starts. The Relay machines attach only while the
+identity connect when the app starts. The hosted service machines attach only while the
 account is entitled. A machine the user disconnected stays closed until they
 connect it.
 
 The app owns one set of Linux machines, `LinuxMachines` (apps/desktop). It
 holds the account client, the `LinuxMachineModel`, one `SshMachineBackend`
-(one tunnel) per saved SSH machine, and one Relay link per Relay host, so each
+(one tunnel) per saved SSH machine, and one hosted service link per hosted service host, so each
 host's outbox has one writer. `main()` creates the set, attaches both routes
 and starts it once. It gives the set to every window with
 `MainWindow::useLinuxMachines()`. Each window then creates Connections
@@ -317,23 +317,23 @@ in the card that connects. The hidden page polls nothing: its daemon status
 refresh runs only while Connections is shown. A window without a set (as in
 tests) makes its own when Connections opens.
 
-`LinuxRelayMachines` (apps/desktop) is the Relay half. It owns one
-`RelayMachineBackend` for each host that the Relay's worktree index lists,
+the hosted-service machine list (apps/desktop) is the hosted service half. It owns one
+the hosted-service machine backend for each host that the hosted service's worktree index lists,
 with one owner-only outbox file per host
-(`<GenericDataLocation>/Ketsuite/KetPlus/relay/outbox-<hash>.json`). The links
-run only while the signed-in account holds the Relay entitlement (ADR 0119
-"Relay entitlement"). Without it, each Relay row shows "Needs Pro" with an
+(`<GenericDataLocation>/Ketsuite/KetPlus/hosted service/outbox-<hash>.json`). The links
+run only while the signed-in account holds the hosted service entitlement (ADR 0119
+"hosted service entitlement"). Without it, each hosted service row shows "Needs Pro" with an
 upgrade hint and offers no Connect; SSH stays free. A row named by the pinned
 host identity shows it as verified in Details. An unpinned host is
-`relay:<relay id>` and its Details reads "Not verified yet". The listing's
+`hosted service:<hosted service id>` and its Details reads "Not verified yet". The listing's
 `machineDisplayName` names the row, and the newest worktree `updatedAt` (the
 host heartbeat, every 15 s) is when the host was last seen. Connected over the
-Relay means only that the Relay answers. When the host has not been seen for
+Hosted service means only that the hosted service answers. When the host has not been seen for
 more than two minutes, the row, Details and picker say "Host offline, last
 seen …", and Connect and Details say that requests wait for the host for up to
 15 minutes (as they do while Connecting or Reconnecting). Commands still in the
 outbox are shown as "outcome pending" until `commandCompleted`. Connections
-refreshes the listing every minute while it is shown. Relay pairings are not
+refreshes the listing every minute while it is shown. Hosted service pairings are not
 removed from Desktop; Remove is offered only for SSH machines.
 
 The activity bar's machine picker labels each machine with the same route and
@@ -355,17 +355,17 @@ and forgotten for re-trust, an unreadable store, and destination parsing.
 `hasKnownHost()`, including a key ssh appends while the file is rewritten (it
 is kept) and a file that keeps changing (left as it is). `ketplus_linux_ssh_machines_tests` (offscreen) drives
 Connections' SSH route through the same fake link and daemon
-(`tests/daemon/FakeSshLink.h`). `ketplus_linux_relay_machines_tests` (offscreen) drives the Relay route
+(`tests/daemon/FakeSshLink.h`). `ketplus_linux_relay_machines_tests` (offscreen) drives the hosted service route
 with fake links: live state, the entitlement gate, fingerprint keying with SSH
-preferred, the Relay fallback (Disconnect and Connect again, a user Disconnect
+preferred, the hosted service fallback (Disconnect and Connect again, a user Disconnect
 that keeps SSH), host presence, pending outcomes and the Pro hint.
 `ketplus_machine_window_tests` shows two windows on one set: one tunnel and
-one Relay link per host, the same backend in both windows' `MachineSelection`,
+one hosted service link per host, the same backend in both windows' `MachineSelection`,
 a prompt opening in one window, and the second window still connected after
 the first closes. `ketplus_remote_relay_backend_tests` keeps the commands two
 windows queue on the shared backend across a restart and applies each once.
 `ketplus_linux_machines_tests` covers the launch start (saved SSH machines and,
-only while entitled, the Relay machines connect with Connections hidden) and
+only while entitled, the hosted service machines connect with Connections hidden) and
 the fallback row's SSH failure and Use SSH.
 `ketplus_remote_ssh_daemon_integration_tests` runs a real
 `ketplus_daemon` with FakeCodex (no provider quota) behind the loopback `sshd`

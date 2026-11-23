@@ -1,11 +1,11 @@
 # ADR 0036: Domain-separated daemon challenge signatures
 
-Status: accepted contract; relay/client rollout tracked in #85.
+Status: accepted contract; hosted service/client rollout tracked in #85.
 
 ## Decision
 
 The daemon identity key also signs event envelopes, wrapped session keys and
-WebRTC answers. Authentication must never expose a signing oracle for those
+peer transport answers. Authentication must never expose a signing oracle for those
 protocols. The previous 32-byte-only nonce restriction remains a legacy
 mitigation; the new client uses only the following domain-separated scheme.
 
@@ -36,34 +36,11 @@ RFC 8032 test key, not a deployed identity. C++ checks the exact bytes and verif
 the supplied signature independently with OpenSSL; HTTP tests also verify the
 signature emitted by the actual client.
 
-The relay binds the persisted challenge to machine, key, scheme and expiry and
+The hosted service binds the persisted challenge to machine, key, scheme and expiry and
 atomically consumes it with credential creation. Scheme mismatch is rejected;
-failed v2 verification must never fall back to v1. Relay implementation remains
+failed v2 verification must never fall back to v1. Hosted service implementation remains
 in its own repository.
 
 ## Compatibility and rollout
 
-| Client | Relay | Behavior |
-| --- | --- | --- |
-| Legacy | Legacy | Existing raw-32-byte authentication |
-| Legacy | V2 with legacy enabled | Legacy only when both scheme fields are absent |
-| Legacy | V2 with legacy disabled | Authentication rejected |
-| V2 | Legacy | Fail closed on absent/mismatched reply fields or unsupported request |
-| V2 | V2 | Domain-separated authentication |
-
-Deploy and verify the relay first, release the client next, then disable legacy
-after old clients are retired. The agreed relay compatibility flag is
-`KETPLUS_ALLOW_LEGACY_DAEMON_CHALLENGE`; `false` blocks legacy issuance and redemption,
-including outstanding old challenges. Legacy is initially enabled for relay-first
-rollout. Explicit version 1, partially supplied scheme fields, null or unknown
-request schemes are rejected. Stored legacy challenges include new rows with
-`signatureVersion: 1` and `signatureAlgorithm: "Ed25519"`, as well as pre-migration
-rows whose two scheme fields are both null. Both forms can use the legacy branch
-only while the flag allows it. This stored representation does not make explicit
-version 1 valid in a client request.
-
-The new client never retries legacy. Cached credentials remain valid until their
-normal refresh boundary. Rolling the relay back to legacy while these clients
-are deployed breaks refresh; restore v2 support rather than weaken client
-validation. This PR does not deploy either component or establish that legacy has
-been disabled. #85 stays open until coordinated rollout is verified.
+The daemon never retries the legacy authentication: on an absent or mismatched reply field, or an unsupported request, it fails closed. Cached credentials remain valid until their normal refresh boundary. Explicit version 1, partially supplied scheme fields, null or unknown request schemes are rejected; the legacy forms exist only for challenges stored before this change. A service that cannot issue the domain-separated challenge cannot issue new credentials to this daemon, so refresh fails; the answer is to restore the domain-separated challenge, never to weaken the daemon's validation. The order in which each side is deployed is coordinated outside this repository, and #85 stays open until that rollout is verified.

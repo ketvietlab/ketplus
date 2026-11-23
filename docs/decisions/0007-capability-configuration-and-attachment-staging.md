@@ -30,7 +30,7 @@ on completion or provider error; committed staging rows are removed with them.
 
 ## Consequences
 
-- Relay/database rows remain bounded; no attachment becomes one large JSON row.
+- Hosted service/database rows remain bounded; no attachment becomes one large JSON row.
 - A stale UI cannot silently overwrite model, effort or execution policy.
 - Capability absence is represented by hiding or disabling the control.
 - Cloud durability and retry do not expose attachment content to the service.

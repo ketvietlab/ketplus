@@ -7,7 +7,7 @@ Status: accepted for the local daemon/Desktop transcript in 0.1.30.
 The journal remains the canonical history authority. A Desktop opts in with
 `transcript_activity_groups: true` in its authenticated minor-1 `daemon.hello`;
 the daemon advertises `transcript.activity_groups/1`. Other clients retain the
-existing wire events and client-side grouping. The relay hot replica and mobile
+existing wire events and client-side grouping. The service hot replica and mobile
 protocol are unchanged; this capability is not a claim of a mobile cutover.
 
 For an opted-in connection, live `session.event` and the ordinary local replay,
@@ -30,9 +30,9 @@ only while all of the following stay true:
 - `latest` is a single step's command or tool label, with the arguments that label needs,
   truncated as above. It never carries output, a result body, stdout, stderr or a diff.
 - It travels over local IPC only: an authenticated `daemon.hello` on the daemon's local socket
-  that opted in with `transcript_activity_groups`. The relay and mobile protocol do not carry
+  that opted in with `transcript_activity_groups`. The hosted service and mobile protocol do not carry
   summaries, and an SSH machine's `DaemonClient` (`SshMachineBackend`) does not opt in, so
-  neither Relay nor SSH sends `latest` to another device.
+  neither hosted service nor SSH sends `latest` to another device.
 - Neither the daemon nor the Desktop logs it.
 
 A Desktop that predates the field ignores it, and a daemon that predates it sends none, so the
@@ -180,6 +180,6 @@ loading, error, Retry and the expanded updated state; no JavaScript errors were
 reported. KetAtlas 0.6.1 validation and strict audit passed. The existing mock
 is a prototype, not a second implementation of the native Qt networking.
 
-A new Linux runtime deployment, mobile-device installation, real relay pairing,
+A new Linux runtime deployment, mobile-device installation, real hosted service pairing,
 Windows/Intel builds and signed/notarized release acceptance were not exercised
-by this change. The relay/mobile protocol remains unchanged.
+by this change. The hosted service/mobile protocol remains unchanged.

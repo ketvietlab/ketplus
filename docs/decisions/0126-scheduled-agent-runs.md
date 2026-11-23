@@ -20,7 +20,7 @@ manages; it does not create.
    it through the `schedules/1` feature. That name is not advertised in
    `daemon.hello` until the handlers that answer `schedule.*` are registered;
    advertising it earlier would make every request `unsupported`. Phone and cloud
-   sync are out of scope for v1: nothing in this feature is projected to the relay.
+   sync are out of scope for v1: nothing in this feature is projected to the hosted service.
 
 2. **Two records.** Field names on the wire are snake_case.
 

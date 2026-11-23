@@ -103,10 +103,10 @@ according to the user's backup policy. No automatic backup export is added.
 ## Enrollment transaction and restore errors
 
 The enrollment caller uses one `CredentialStore::update` for the empty device-pin set,
-relay and identity fields, account labels, key version and workspace content-key transition.
+hosted service and identity fields, account labels, key version and workspace content-key transition.
 The complete enrollment is one commit unit, including recovery after an interrupted or failed
 write. The workspace transition helper mutates the transaction's account map without nested
-store operations. When crossing relays, removal of upload cursors belongs to this transaction too.
+store operations. When crossing services, removal of upload cursors belongs to this transaction too.
 
 Daemon restore checks read errors before applying legacy migration, then verifies that the
 relevant accounts still match inside the migration transaction. Failure preserves the stored

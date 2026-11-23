@@ -19,7 +19,7 @@ between conversations without a new process or a cloud dependency.
 Product scope decided for this feature:
 
 - Numbers and messaging are local to one daemon. There is no cross-host
-  addressing and no relay routing.
+  addressing and no hosted service routing.
 - A message to an idle conversation starts a turn automatically.
 - Automatic turns are not restricted by the receiver's execution policy,
   including bypass.
@@ -275,10 +275,10 @@ as `ketplus_browser`:
 - While a message-started turn runs, the broker keeps its sender in memory.
   `session.list` adds it as `agent_turn`, and Desktop ends that conversation's
   sidebar row with "from #4821" until the turn ends.
-- The relay and mobile receive these events through the existing encrypted
+- The hosted service and mobile receive these events through the existing encrypted
   projection as additive types, and older clients ignore them. The phone gets
   each conversation's number, and the sender of a running message-started turn
-  (`agentTurn`), in its sealed session metadata beside the branch, so the relay
+  (`agentTurn`), in its sealed session metadata beside the branch, so the hosted service
   never reads either. Mobile shows numbers, agent-message bubbles and notes, the
   woken row's sender, and its own `#` picker, as the desktop does.
 - Minor capability `agents.messaging/1` advertises the feature;
@@ -320,7 +320,7 @@ Verification uses fake providers and consumes no quota. It covers:
 
 Codex per-thread configuration is checked by a metadata-only probe, as in
 ADR 0021. An authorized provider run on 2026-11-01 used an isolated 0.1.49
-daemon (its own data directory and socket, not signed in to the relay) with
+daemon (its own data directory and socket, not signed in to the hosted service) with
 Claude Sonnet through the sidecar and Codex `gpt-5.6-luna` on Codex 0.162.1,
 and confirmed the following with no approval prompts:
 

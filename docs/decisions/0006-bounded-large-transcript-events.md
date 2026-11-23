@@ -115,7 +115,7 @@ SHA-256 digest of the complete local page. The daemon uploads the page before a
 compact terminal acknowledgement and never places the page itself in the
 64 KiB command result. A fresh mailbox request names a snapshot at or before
 the SQLite journal head and is served as of that cursor, never with a later
-event. The relay learns the head from heartbeats, so during a running turn its
+event. The hosted service learns the head from heartbeats, so during a running turn its
 snapshot always trails the journal; requiring equality left a running
 conversation unrestorable on the phone (`restore_window_unavailable`). Newer
 events reach the phone live. A compaction after the snapshot drops only

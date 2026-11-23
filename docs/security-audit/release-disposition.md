@@ -248,7 +248,7 @@ real provider sandbox enforcement. The accepted review's synthetic verification
 is not a full native-suite or end-to-end command-execution result. The audit did
 not execute `AgentMessagingTest`, `DaemonProtocolTest` or
 `cloud-privacy/CloudPrivacyTest`, or a native build/full ctest. Its complete
-team/schedule role matrix, every filesystem/attachment operation, WebRTC/native
+team/schedule role matrix, every filesystem/attachment operation, peer transport/native
 transport, every adapter extension and the entire legacy direct transport were
 not deeply audited. Cryptographic, OS sandbox and hosted-authorization behavior
 beyond the reviewed code remains unverified; acceptance of T-1 is not clearance

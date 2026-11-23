@@ -10,11 +10,11 @@ who signed this Mac in. The app had no such data:
 - Settings had only a link to Connections.
 
 Two sign-in paths enroll a Mac: the browser sign-in and the device code. Both
-redeem a short user session. The relay's `UserSession.subject` carries `id`,
+redeem a short user session. The hosted service's `UserSession.subject` carries `id`,
 `username` and `displayName` (ketplus-control v2). The daemon used that session once
 to enroll and then dropped it, subject included.
 
-The mock also shows "KetPlus Relay this month 3.1 GB of 20 GB". The relay reports
+The mock also shows "the hosted service this month 3.1 GB of 20 GB". The hosted service reports
 no usage, and no allowance is defined anywhere.
 
 ## Decision
@@ -39,7 +39,7 @@ no usage, and no allowance is defined anywhere.
   It shows nothing about the account until the daemon answers.
 - **Connections.** The account strip shows the same data. Only the demo mode keeps
   its synthetic account.
-- **The relay usage meter is left out.** Jay chose this on 2026-11-10. Adding it
+- **The hosted service usage meter is left out.** Jay chose this on 2026-11-10. Adding it
   would need a monthly allowance per plan and usage counting in the gateway.
 
 ## Consequences

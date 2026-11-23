@@ -1,7 +1,6 @@
 # ADR 0116: A paired phone reads and changes teams
 
-Status: accepted (2026-11-12); the daemon side is implemented, the phone app is pending. Extends ADR 0114 and ADR 0115. Uses ADR 0025 (remote
-transport), ADR 0113 (sealed session metadata).
+Status: accepted (2026-11-12); the daemon side is implemented, the phone app is pending. Extends ADR 0114 and ADR 0115. Uses the peer protocol (`docs/remote-clients.md`), ADR 0113 (sealed session metadata).
 
 ## Context
 
@@ -12,11 +11,11 @@ The team page shows the goal, the settings, Waiting for you, tasks, members and
 Updates. The phone can also answer a decision, pause, resume, delete a team, create one,
 add a developer, remove a member, add a conversation to a team, and hand a task over.
 
-Three parts have to be built for this: the daemon, the relay and the phone's core. This
+Three parts have to be built for this: the daemon, the hosted service and the phone's core. This
 record fixes the protocol, so the three can be built at the same time.
 
-A paired phone reaches the Mac only through the relay. The relay can read only what
-ADR 0025 leaves in plaintext. A command is either sealed to a conversation's session key
+A paired phone reaches the Mac only through the hosted service. The hosted service can read only what
+the peer protocol leaves in plaintext. A command is either sealed to a conversation's session key
 or, when no conversation exists yet, sealed to the Mac (`session.create`,
 `worktree.branches.read`). A team spans several conversations and has no session key
 of its own.
@@ -25,16 +24,16 @@ of its own.
 
 ### 1. Capability `teams.remote/1`, advertised by all three sides
 
-The name follows the capability rules of `docs/remote-transport.md`:
+The name follows the capability rules of `docs/remote-clients.md`:
 
 - **Daemon.** It lists `teams.remote/1` in the heartbeat's `capabilities` once it serves
   the commands of §4 and writes the `team` metadata of §3.
-- **Relay.** It offers the name and enables it for a machine only when the host
-  advertises it. The relay's answer lists it in `Compatibility.capabilities`, and the
-  machine record lists it in `Machine.capabilities`. Unlike `events.forward_only/1`,
+- **Hosted service.** It offers the name and enables it for a machine only when the host
+  advertises it. The hosted service's answer lists it in `Compatibility.capabilities`, and the
+  machine record lists it in `Machine.capabilities`. Unlike the event-forwarding capability,
   every device decides for itself: a device that lacks the name blocks nobody else.
 - **Device.** It lists the name on its device record
-  (`PUT /v2/mobile/device/capabilities`). The relay accepts team commands only from a
+  (`PUT /v2/mobile/device/capabilities`). The hosted service accepts team commands only from a
   device that lists it.
 
 **When any side lacks it**, the phone shows no team UI at all. There is no team branch
@@ -44,14 +43,14 @@ repository, each with its title and number. A team message in a member's transcr
 (`assignment`, `digest`, `decision`) stays plain text, as ADR 0114 already says.
 
 The phone checks the name on the machine record, not on the session metadata. A daemon
-may write the `team` metadata while the relay does not yet offer the feature, and the
-phone ignores that metadata until the machine enables the name. The relay refuses a
+may write the `team` metadata while the hosted service does not yet offer the feature, and the
+phone ignores that metadata until the machine enables the name. The hosted service refuses a
 team command for a machine without the name with `teams_remote_unavailable`. A daemon
 that does not know a team kind answers `unknown_operation`, as it does today.
 
 ### 2. Transport: one command, sealed to the Mac, answered to the device
 
-Every team read and every team change is a durable mailbox command, as ADR 0025
+Every team read and every team change is a durable mailbox command, as the peer protocol
 describes them.
 
 - **Command kind.** The kind is the name of the daemon's local `team.*` request
@@ -73,16 +72,16 @@ describes them.
   - `recipientDeviceId` and `recipientKeyVersion`: the requesting device's;
   - its own `ephemeralPublicKey`.
 
-  Its associated data is the command-result associated data of ADR 0025 (`sessionId`
+  Its associated data is the command-result associated data of the peer protocol (`sessionId`
   `""`, `sessionGeneration` `0`), followed in this order by `ownerSubjectId`,
-  `recipientDeviceId` and `recipientKeyVersion`. No other device and not the relay can
+  `recipientDeviceId` and `recipientKeyVersion`. No other device and not the hosted service can
   read it. The fixture holds a vector for each direction.
 - **Route.** The phone posts to `POST /v2/mobile/machines/{machineId}/team-commands` and
   reads the result at `GET /v2/mobile/commands/{commandId}`. The daemon claims team
   commands with `/v2/commands:poll`, like every other command.
-- **Mailbox only in this version.** Team commands do not go over the WebRTC peer
+- **Mailbox only in this version.** Team commands do not go over the peer
   connection, because their results are small and rare. Carrying them on the peer
-  connection later needs no protocol change, since the grant of ADR 0025 already holds
+  connection later needs no protocol change, since the grant of the peer protocol already holds
   what the checks need.
 - **Capability field.** It is `teams.read` for the reads of §4 and `teams.write` for the
   changes.
@@ -101,7 +100,7 @@ describes them.
   - `role` is `leader`, `developer` or `reviewer`. It is a field of its own, never a tag:
     the phone-facing model carries no tags (§6).
   - The field is absent when the conversation is on no team.
-  - It is inside the existing ciphertext, so the relay learns no more than it does from
+  - It is inside the existing ciphertext, so the hosted service learns no more than it does from
     a title change.
 - **When the daemon sends it.** On `team.changed` or `team.removed` it re-seals the
   metadata of the members concerned. Then it sends a heartbeat, at most one every
@@ -160,7 +159,7 @@ describes them.
 
   | Code | Meaning |
   | --- | --- |
-  | `teams_remote_unavailable` | The relay or the machine does not enable the capability. |
+  | `teams_remote_unavailable` | The hosted service or the machine does not enable the capability. |
   | `team_scope_forbidden` | The device or subject may not act on this machine's teams (§5). |
   | `stale_team` | The target part changed after `expected_revision`. The current `team` is included. |
   | `confirmation_required` | `team.delete` without `confirmation: "DELETE"`. |
@@ -217,7 +216,7 @@ describes them.
   members and their roles, tasks with criteria and history, decisions with
   their answers, and Updates. Every payload and result is sealed to the Mac or to the
   requesting device, and the `team` metadata is inside the session metadata's
-  ciphertext. The relay sees none of it and stores no plaintext. Encrypted results
+  ciphertext. The hosted service sees none of it and stores no plaintext. Encrypted results
   expire with the mailbox's command time to live.
 - **Who may read and who may change.**
   - Both reads and changes are allowed only from an *active* paired device of the
@@ -225,7 +224,7 @@ describes them.
     version is current.
   - A pending device, a revoked device, and any other member of an organization
     workspace get `team_scope_forbidden`.
-  - The relay checks this when the command is queued and again when the daemon claims
+  - The hosted service checks this when the command is queued and again when the daemon claims
     it, as for `session.create`. The daemon checks the owner and the machine again
     before it acts.
   - The reason: a team change starts turns and creates conversations on the owner's
@@ -248,13 +247,13 @@ describes them.
 - **Authority.** Nothing here gives the phone more authority than the desktop. The
   daemon applies every role rule of ADR 0114 to a phone command exactly as to a local
   one. A member's messages still approve nothing.
-- **Plaintext that is new.** Nothing else about teams is readable by the relay.
+- **Plaintext that is new.** Nothing else about teams is readable by the hosted service.
 
   | Field | Where | Why it must be plaintext |
   | --- | --- | --- |
-  | `teams.remote/1` | the host's heartbeat capabilities, the device record, the machine record | The relay enables the feature only on both sides (§1). It says that the feature is supported, not that a team exists. |
-  | `kind` (`team.*`) and `capability` (`teams.read` or `teams.write`) | the command envelope | The relay authorizes, routes and rate-limits by them. They reveal which kind of action and when, as for every other command kind today. |
-  | `repositoryId`, `expectedCatalogRevision` | the `team.create` envelope | They are opaque catalog values that are already plaintext for `session.create`. The relay checks that the repository is in the machine's catalog. |
+  | `teams.remote/1` | the host's heartbeat capabilities, the device record, the machine record | The hosted service enables the feature only on both sides (§1). It says that the feature is supported, not that a team exists. |
+  | `kind` (`team.*`) and `capability` (`teams.read` or `teams.write`) | the command envelope | The hosted service authorizes, routes and rate-limits by them. They reveal which kind of action and when, as for every other command kind today. |
+  | `repositoryId`, `expectedCatalogRevision` | the `team.create` envelope | They are opaque catalog values that are already plaintext for `session.create`. The hosted service checks that the repository is in the machine's catalog. |
   | `resultCode` | the command result | It is plaintext for every command, for mailbox status and retries. A team code such as `stale_team` reveals only the outcome. |
 
   **Known side channels.** The metadata ciphertext grows a few bytes when a conversation
@@ -303,7 +302,7 @@ created without its own takes), `turn_budget_minimum`, `turn_budget_maximum` and
 to check a typed one against the bounds. It is read-only: no remote kind changes the
 global value, and `team.settings.update` stays a local kind. An older phone ignores
 the object. A daemon that does not send it leaves the phone on its label "The Mac's
-default (Settings → Teams)", and the daemon still applies the global value. The relay
+default (Settings → Teams)", and the daemon still applies the global value. The hosted service
 stores the answer as ciphertext and needs no change.
 
 **Summary**: `team.get`, and the `team` of a change's result or of a `stale_team`
@@ -417,7 +416,7 @@ metadata. The phone never reads the role from a tag, and nothing here carries ta
 - Each of the three parts can be built against this record and the contract
   (`ketplus-control-v2.openapi.json`, its `x-ketplus-teams` section and the fixture
   `team-remote-v1.json`) without another design round.
-- **Older parts.** An older phone, relay or daemon never shows a partial team UI. It
+- **Older parts.** An older phone, hosted service or daemon never shows a partial team UI. It
   shows the members as conversations.
 - **Load.** A busy team sends more heartbeats, at most one every 2 seconds, and makes the
   phone read `team.get` while its page is open. Nothing is pushed while no page is open,
@@ -427,6 +426,7 @@ metadata. The phone never reads the role from a tag, and nothing here carries ta
 - **The local protocol** is unchanged for local clients, except for the parts added
   below: the changed revisions, the fences, member `state` and `now`, and `delivers_to`
   and `warning`. The desktop may use them too.
+- The hosted service's side of this feature (capability negotiation, command admission, size and rate bounds) is specified outside this repository.
 
 ## Alternatives considered
 
@@ -485,28 +485,6 @@ metadata. The phone never reads the role from a tag, and nothing here carries ta
 10. Tests: each kind's mapping and refusals, every fence, a repeated delivery of
     `team.create`, the `full` policy without the acknowledgement, the audit entries,
     and the metadata with a team, without one, and after deletion.
-
-### Relay (private service)
-
-1. Offer `teams.remote/1`. Enable it per machine when the host advertises it, show it in
-   `Machine.capabilities` and `Compatibility.capabilities`, and accept it on device
-   records.
-2. Add `POST /v2/mobile/machines/{machineId}/team-commands` (`TeamCommandRequest`):
-   - deduplicate on `idempotencyKey`;
-   - authorize the owner subject's active device with a current key version, when
-     queued and when claimed (`team_scope_forbidden`);
-   - require the capability on the machine and the device (`teams_remote_unavailable`);
-   - for `team.create`, require the repository to be in the machine's catalog.
-3. Add the team kinds and the `teams.read` / `teams.write` capabilities to the command
-   kinds, the associated data (`commandAssociatedData`) and the mailbox's active-command
-   scopes, without reading or storing any payload.
-4. Keep the existing 512 KiB result bound and time to live, and rate-limit team commands
-   with the existing per-device mobile limit.
-5. Tests: the capability negotiation, including one side missing; a refused scope (a
-   pending device, a revoked device, a workspace member who is not the owner); a
-   repeated `idempotencyKey`; the associated-data vectors from
-   `contracts/fixtures/team-remote-v1.json`; and no plaintext team field in storage or
-   logs.
 
 ### iOS core (KetPlusRemoteCore, no UI)
 
