@@ -881,9 +881,10 @@ with; `team.create` sets it when every member runs on one provider. Updates
 The phone sends the same request (ADR 0116 §4) and reads the results.
 
 `team.update` takes `context_reset` (`task_and_threshold`, `threshold` or `never`),
-`context_reset_turns` (0 or 4 to 100) and `context_reset_idle_minutes` (0 or 5 to 1440), `context_reset_tokens` (0 to 10,000,000), and
-the team's document returns all three (§11). They are
-local commands; the phone's `team.update` is unchanged.
+`context_reset_turns` (0 or 4 to 100), `context_reset_idle_minutes` (0 or 5 to 1440),
+and `context_reset_tokens` (0 to 10,000,000). The team's document returns all four (§11).
+These settings can be changed through the local command. The phone's `team.update`
+is unchanged.
 
 `team.create` and `team.update` take `max_rounds` (1 to 5; 2 when absent) and
 `review_place` (`board` or `pull_request`; `board` when absent), and the team's document
