@@ -22,12 +22,17 @@ test("sidecar supplies host MCP servers on resume and scopes auto-approval to in
     ["node_modules/fixture", "ignored-dependency"],
     ["apps/build", "ignored-build"],
     ["apps/build-local", "ignored-build-variant"],
+    ["apps/vendor", "ignored-vendor"],
+    [Array(9).fill("nested").join("/"), "ignored-depth"],
     [".git", "ignored-git"],
   ]) {
     const projectSkill = path.join(root, directory, ".claude", "skills", name);
     await fs.mkdir(projectSkill, { recursive: true });
     await fs.writeFile(path.join(projectSkill, "SKILL.md"), `---\nname: ${name}\n---\n`);
   }
+  // Preserve T-4 discovery for a workspace that links its Claude settings.
+  await fs.rename(path.join(root, ".claude"), path.join(root, ".linked-claude"));
+  await fs.symlink(path.join(root, ".linked-claude"), path.join(root, ".claude"), "junction");
   const sdk = path.join(root, "node_modules/@anthropic-ai/claude-agent-sdk");
   await fs.mkdir(sdk, { recursive: true });
   await fs.writeFile(path.join(sdk, "package.json"), JSON.stringify({ type: "module", exports: "./index.mjs" }));

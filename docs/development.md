@@ -320,9 +320,13 @@ project skills in `.claude/skills/<name>/SKILL.md` at the workspace root and
 under its subdirectories, the repository development skills, and
 `ketplus-browser`. The scan skips hidden directories such as `.git`, dependency
 trees named `node_modules`, output directories named `build` or starting with
-`build-`, and symlinked workspace subdirectories. Each scanned directory's
-`.claude/skills` is checked directly. Only leaders receive `enterprise-grade`
-and `ket-design-system`, including project skills with those names.
+`build-`, and directories named `dist`, `target`, `out`, `vendor`,
+`DerivedData`, or `venv`. It visits directories breadth-first up to eight levels
+below the root and checks at most 4,096 workspace directories, including the
+root. It skips symlinked subdirectories and supports a linked `.claude` at the
+workspace root. Only Claude Team leaders receive `enterprise-grade` and
+`ket-design-system` in either the SDK allowlist or bundled skill instructions.
+Atlas guidance remains available to all roles.
 Atlas guidance and the bundled browser instructions are also available
 through the KetPlus instructions, which reference their skill files directly.
 Ordinary conversations retain default discovery.

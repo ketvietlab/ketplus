@@ -397,7 +397,8 @@ void ClaudeAdapter::sendCall(const QString& method, const QJsonObject& params, C
             QCoreApplication::applicationDirPath());
         QJsonObject servers =
             computer_tools::withClaudeMcpServer(browser_tools::claudeMcpServers(launch), computer);
-        QString instructions = browser_tools::hostAgentInstructions(launch.has_value()) +
+        const QString teamRole = params.value(QStringLiteral("teamRole")).toString();
+        QString instructions = browser_tools::hostAgentInstructions(launch.has_value(), teamRole) +
                                QStringLiteral("\n\n") +
                                computer_tools::agentInstructions(computer.has_value());
         // ADR 0027: the conversation's ketplus_agents server, supplied by SessionHost.

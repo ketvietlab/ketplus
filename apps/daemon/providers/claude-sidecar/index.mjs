@@ -19,17 +19,22 @@ function emit(value) {
 }
 
 const leaderSkills = ["enterprise-grade", "ket-design-system"];
-const skippedSkillDirectories = new Set(["node_modules", "build"]);
+const skippedSkillDirectories = new Set([
+  "node_modules", "build", "dist", "target", "out", "vendor", "DerivedData", "venv",
+]);
+const maxSkillScanDepth = 8;
+const maxSkillScanDirectories = 4096;
 
 async function teamSkillNames(cwd, role) {
   const names = new Set(["ketplusdev", "ketvietdev", "ketplus-browser"]);
   if (role === "leader") for (const name of leaderSkills) names.add(name);
   // The SDK accepts names only, so reserved names must also be filtered at discovery.
-  const pending = [cwd];
-  while (pending.length) {
-    const directory = pending.pop();
+  const pending = [{ directory: cwd, depth: 0 }];
+  for (let index = 0; index < pending.length; index++) {
+    const { directory, depth } = pending[index];
     const entries = await readdir(directory, { withFileTypes: true }).catch(() => []);
-    if (entries.some(entry => entry.name === ".claude" && entry.isDirectory())) {
+    if (entries.some(entry => entry.name === ".claude" &&
+        (entry.isDirectory() || (depth === 0 && entry.isSymbolicLink())))) {
       const skills = path.join(directory, ".claude", "skills");
       const candidates = await readdir(skills).catch(() => []);
       for (const name of candidates.sort()) {
@@ -38,10 +43,12 @@ async function teamSkillNames(cwd, role) {
         if (skill?.isFile()) names.add(name);
       }
     }
-    for (const entry of entries.sort((a, b) => b.name.localeCompare(a.name))) {
+    if (depth === maxSkillScanDepth) continue;
+    for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+      if (pending.length === maxSkillScanDirectories) break;
       if (entry.isDirectory() && !entry.name.startsWith(".") &&
           !skippedSkillDirectories.has(entry.name) && !entry.name.startsWith("build-")) {
-        pending.push(path.join(directory, entry.name));
+        pending.push({ directory: path.join(directory, entry.name), depth: depth + 1 });
       }
     }
   }

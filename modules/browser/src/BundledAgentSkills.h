@@ -2,6 +2,7 @@
 
 #include <QList>
 #include <QString>
+#include <QStringView>
 
 namespace ketplus::agent_skills {
 
@@ -19,9 +20,10 @@ struct BundledSkill {
 
 // When agents read the bundled skills without the user mentioning them. Empty when the
 // application ships none.
-[[nodiscard]] QString defaultSkillInstructions(const QList<BundledSkill>& skills);
+[[nodiscard]] QString defaultSkillInstructions(const QList<BundledSkill>& skills,
+                                               QStringView teamRole = {});
 
 // defaultSkillInstructions for the running application.
-[[nodiscard]] QString defaultSkillInstructions();
+[[nodiscard]] QString defaultSkillInstructions(QStringView teamRole = {});
 
 } // namespace ketplus::agent_skills

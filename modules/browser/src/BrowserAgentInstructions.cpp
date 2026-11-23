@@ -116,10 +116,10 @@ QString agentMermaidInstructions() {
         "\n[/KetPlus Mermaid guidance]");
 }
 
-QString hostAgentInstructions(const bool browserAvailable) {
+QString hostAgentInstructions(const bool browserAvailable, const QStringView teamRole) {
     QString text = browserAgentInstructions(browserAvailable) + QStringLiteral("\n\n") +
                    agentReadingInstructions() + QStringLiteral("\n\n") + agentMermaidInstructions();
-    if (const QString skills = agent_skills::defaultSkillInstructions(); !skills.isEmpty())
+    if (const QString skills = agent_skills::defaultSkillInstructions(teamRole); !skills.isEmpty())
         text += QStringLiteral("\n\n") + skills;
     return text;
 }

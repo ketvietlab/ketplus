@@ -2,6 +2,7 @@
 
 #include <QJsonObject>
 #include <QString>
+#include <QStringView>
 
 namespace ketplus::browser_tools {
 
@@ -13,7 +14,7 @@ namespace ketplus::browser_tools {
 [[nodiscard]] QString agentMermaidInstructions();
 // Everything KetPlus adds to an agent's instructions: the browser, reading and Mermaid policies
 // and, when the application ships them, when to read the default skills.
-[[nodiscard]] QString hostAgentInstructions(bool browserAvailable);
+[[nodiscard]] QString hostAgentInstructions(bool browserAvailable, QStringView teamRole = {});
 // Appends hostAgentInstructions to Codex thread/start and thread/resume.
 [[nodiscard]] QJsonObject withCodexBrowserInstructions(const QString& method, QJsonObject params,
                                                        bool available);

@@ -43,9 +43,8 @@ QList<BundledSkill> bundledSkills(const QString& applicationDirPath) {
     return skills;
 }
 
-QString defaultSkillInstructions(const QList<BundledSkill>& skills) {
-    if (skills.isEmpty())
-        return {};
+QString defaultSkillInstructions(const QList<BundledSkill>& skills, const QStringView teamRole) {
+    const bool atlasOnly = teamRole == u"developer" || teamRole == u"reviewer";
     const auto when = [](const QString& name) -> QString {
         if (name == QLatin1String("ket-atlas"))
             return QStringLiteral(
@@ -68,16 +67,23 @@ QString defaultSkillInstructions(const QList<BundledSkill>& skills) {
         "skill's SKILL.md before starting and follow it, reading only the reference files it "
         "points you to. Do not read them for unrelated tasks. A project or user skill with the "
         "same name takes precedence; if it is already loaded, do not read this copy.");
-    for (const BundledSkill& skill : skills)
-        text +=
-            QStringLiteral("\n- %1 (%2): when %3").arg(skill.name, skill.file, when(skill.name));
+    QString entries;
+    for (const BundledSkill& skill : skills) {
+        if (!atlasOnly || skill.name == QLatin1String("ket-atlas"))
+            entries += QStringLiteral("\n- %1 (%2): when %3")
+                           .arg(skill.name, skill.file, when(skill.name));
+    }
+    if (entries.isEmpty())
+        return {};
+    text += entries;
     return text + QStringLiteral("\n[/KetPlus default skills]");
 }
 
-QString defaultSkillInstructions() {
+QString defaultSkillInstructions(const QStringView teamRole) {
     if (!QCoreApplication::instance())
         return {};
-    return defaultSkillInstructions(bundledSkills(QCoreApplication::applicationDirPath()));
+    return defaultSkillInstructions(bundledSkills(QCoreApplication::applicationDirPath()),
+                                    teamRole);
 }
 
 } // namespace ketplus::agent_skills
