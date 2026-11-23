@@ -143,17 +143,41 @@ input.on('line', line => {
     }
   });
 
-test('pinned SDK keeps project memory and filters skill descriptions in the prompt',
+test('pinned SDK filters skill descriptions and rejects unlisted Skill calls',
   { skip: !directory, timeout: 20000 }, async () => {
     const { query } = await import(pathToFileURL(path.join(directory, 'sdk.mjs')).href);
     const cwd = await mkdtemp(path.join(tmpdir(), 'kp-sdk-skill-prompt-'));
     const requests = [];
-    // Use only local synthetic credentials and reject every request on loopback.
+    let skillCall;
+    // Serve synthetic Anthropic responses locally without invoking inference.
     const server = createServer(async (request, response) => {
       let body = '';
       for await (const chunk of request) body += chunk;
-      if (request.url.startsWith('/v1/messages') && body.includes('Compare offline skills'))
+      if (request.url.startsWith('/v1/messages') && body.includes('Compare offline skills')) {
         requests.push(body);
+        if (skillCall && requests.length === 1) {
+          const message = {
+            id: 'msg_offline', type: 'message', role: 'assistant',
+            model: JSON.parse(body).model, content: [], stop_reason: null,
+            stop_sequence: null, usage: { input_tokens: 10, output_tokens: 0 },
+          };
+          const tool = { type: 'tool_use', id: 'toolu_offline_skill', name: 'Skill', input: {} };
+          const events = [
+            { type: 'message_start', message },
+            { type: 'content_block_start', index: 0, content_block: tool },
+            { type: 'content_block_delta', index: 0, delta: {
+              type: 'input_json_delta', partial_json: JSON.stringify({ skill: skillCall }),
+            } },
+            { type: 'content_block_stop', index: 0 },
+            { type: 'message_delta', delta: { stop_reason: 'tool_use', stop_sequence: null },
+              usage: { output_tokens: 10 } },
+            { type: 'message_stop' },
+          ];
+          response.writeHead(200, { 'content-type': 'text/event-stream' });
+          response.end(events.map(event => `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`).join(''));
+          return;
+        }
+      }
       response.writeHead(400, { 'content-type': 'application/json' });
       response.end(JSON.stringify({ type: 'error', error: {
         type: 'invalid_request_error', message: 'Offline fixture',
@@ -184,10 +208,11 @@ test('pinned SDK keeps project memory and filters skill descriptions in the prom
         JSON.stringify({ name: 'offline-plugin' }));
       await writeFile(path.join(pluginSkill, 'SKILL.md'),
         '---\nname: other\ndescription: OFFLINE_PLUGIN_SKILL\n---\nFixture\n');
-      for (const skills of [undefined, ['keep']]) {
+      for (const [skills, call] of [[undefined], [['keep'], 'hide'], [['keep'], 'keep']]) {
+        skillCall = call;
         requests.length = 0;
         const q = query({ prompt: 'Compare offline skills', options: {
-          cwd, skills, plugins: [{ type: 'local', path: plugin }],
+          cwd, skills, allowedTools: ['Skill'], plugins: [{ type: 'local', path: plugin }],
           systemPrompt: { type: 'preset', preset: 'claude_code' },
           abortController: controller,
           env: {
@@ -207,6 +232,13 @@ test('pinned SDK keeps project memory and filters skill descriptions in the prom
         assert.match(requests[0], /OFFLINE_KEEP/);
         assert.equal(requests[0].includes('OFFLINE_PLUGIN_SKILL'), skills === undefined);
         assert.equal(requests[0].includes('OFFLINE_HIDE'), skills === undefined);
+        if (skillCall) {
+          const followUp = requests.slice(1).flatMap(body => JSON.parse(body).messages)
+            .flatMap(message => message.content)
+            .find(block => block.type === 'tool_result' && block.tool_use_id === 'toolu_offline_skill');
+          assert.ok(followUp, 'SDK must submit the Skill tool result to loopback');
+          assert.equal(Boolean(followUp.is_error), skillCall === 'hide', JSON.stringify(followUp));
+        }
       }
     } finally {
       controller.abort();

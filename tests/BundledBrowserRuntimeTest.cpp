@@ -307,6 +307,28 @@ class BundledBrowserRuntimeTest final : public QObject {
         QVERIFY(!text.contains(QStringLiteral("/other/")));
     }
 
+    void bundledSkillInstructionsFollowTeamRole() {
+        using ketplus::agent_skills::BundledSkill;
+        using ketplus::agent_skills::defaultSkillInstructions;
+        const QList<BundledSkill> skills{
+            {QStringLiteral("ket-atlas"), QStringLiteral("/fixture/atlas/SKILL.md")},
+            {QStringLiteral("enterprise-grade"), QStringLiteral("/fixture/enterprise/SKILL.md")},
+            {QStringLiteral("ket-design-system"), QStringLiteral("/fixture/design/SKILL.md")},
+        };
+        for (const QStringView role : {QStringView{}, QStringView(u"leader"),
+                                       QStringView(u"developer"), QStringView(u"reviewer")}) {
+            const QString instructions = defaultSkillInstructions(skills, role);
+            const bool expectUi = role.isEmpty() || role == u"leader";
+            QCOMPARE(instructions.contains(QStringLiteral("/fixture/atlas/SKILL.md")), expectUi);
+            QCOMPARE(instructions.isEmpty(), !expectUi);
+            QCOMPARE(instructions.contains(QStringLiteral("enterprise-grade")), expectUi);
+            QCOMPARE(instructions.contains(QStringLiteral("ket-design-system")), expectUi);
+            QCOMPARE(instructions.contains(QStringLiteral("/fixture/enterprise/SKILL.md")),
+                     expectUi);
+            QCOMPARE(instructions.contains(QStringLiteral("/fixture/design/SKILL.md")), expectUi);
+        }
+    }
+
     void defaultCacheDirIsUnderKetPlusData() {
         QVERIFY(defaultBrowserCacheDir().endsWith(
             QStringLiteral("/Ketsuite/KetPlus/browser-runtime/chrome")));

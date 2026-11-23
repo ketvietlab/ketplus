@@ -43,8 +43,8 @@ QList<BundledSkill> bundledSkills(const QString& applicationDirPath) {
     return skills;
 }
 
-QString defaultSkillInstructions(const QList<BundledSkill>& skills) {
-    if (skills.isEmpty())
+QString defaultSkillInstructions(const QList<BundledSkill>& skills, const QStringView teamRole) {
+    if (skills.isEmpty() || teamRole == u"developer" || teamRole == u"reviewer")
         return {};
     const auto when = [](const QString& name) -> QString {
         if (name == QLatin1String("ket-atlas"))
@@ -74,10 +74,11 @@ QString defaultSkillInstructions(const QList<BundledSkill>& skills) {
     return text + QStringLiteral("\n[/KetPlus default skills]");
 }
 
-QString defaultSkillInstructions() {
+QString defaultSkillInstructions(const QStringView teamRole) {
     if (!QCoreApplication::instance())
         return {};
-    return defaultSkillInstructions(bundledSkills(QCoreApplication::applicationDirPath()));
+    return defaultSkillInstructions(bundledSkills(QCoreApplication::applicationDirPath()),
+                                    teamRole);
 }
 
 } // namespace ketplus::agent_skills

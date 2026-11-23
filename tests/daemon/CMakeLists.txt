@@ -28,6 +28,7 @@ set(KETPLUS_WINDOWS_SCRIPT_FIXTURE_TESTS
     ketplus_computer_tool_launch_tests
     ketplus_computer_provider_integration_tests
     ketplus_daemon_cursor_adapter_tests
+    ketplus_provider_skill_policy_tests
     ketplus_daemon_session_fork_tests
     ketplus_agent_messaging_tests
     ketplus_agent_urgent_delivery_tests
@@ -313,6 +314,15 @@ target_link_libraries(ketplus_desktop_start_retention_tests PRIVATE ketplus_ai)
     ketplus_add_daemon_test(ketplus_browser_provider_integration_tests BrowserProviderIntegrationTest.cpp)
     target_link_libraries(ketplus_browser_provider_integration_tests PRIVATE ketplus_ai)
 endif()
+ketplus_add_daemon_test(ketplus_provider_skill_policy_tests ProviderSkillPolicyTest.cpp)
+# Give only this executable a synthetic installed skill directory.
+set_target_properties(ketplus_provider_skill_policy_tests PROPERTIES
+    RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}/provider-skill-policy")
+foreach(skill IN ITEMS enterprise-grade ket-design-system ket-atlas)
+    file(GENERATE
+        OUTPUT "$<TARGET_FILE_DIR:ketplus_provider_skill_policy_tests>/agent-skills/${skill}/SKILL.md"
+        CONTENT "Synthetic bundled skill fixture.\n")
+endforeach()
 ketplus_add_daemon_test(ketplus_daemon_claude_adapter_tests ClaudeAdapterTest.cpp)
 ketplus_add_daemon_test(ketplus_computer_tool_launch_tests ComputerToolLaunchTest.cpp)
 qt_add_executable(ketplus_tool_locations_tests ToolLocationsTest.cpp)

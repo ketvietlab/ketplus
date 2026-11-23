@@ -121,8 +121,10 @@ void AcpAdapter::sendPrompt(TurnState& turn, const QJsonObject& params) {
     // ACP has no system-prompt field. Supply host context as a separate block;
     // the journal and user prompt remain unchanged, including image attachments.
     auto prompt = promptContent(params);
+    const QString teamRole = params.value(QStringLiteral("teamRole")).toString();
     QString hostText =
-        browser_tools::hostAgentInstructions(browserSessions_.contains(turn.ketplusSessionId)) +
+        browser_tools::hostAgentInstructions(browserSessions_.contains(turn.ketplusSessionId),
+                                             teamRole) +
         QStringLiteral("\n\n") +
         computer_tools::agentInstructions(computerSessions_.contains(turn.ketplusSessionId));
     const bool agentTools = agentSessions_.contains(turn.ketplusSessionId);

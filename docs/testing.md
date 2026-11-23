@@ -949,7 +949,9 @@ local SDK package and run
 `node --test tests/daemon/claude-sidecar/background-sdk-offline.test.mjs`.
 The prompt fixture sends synthetic requests only to loopback and checks that
 project and user memory and the allowed skill appear, while unrelated project
-and plugin skills disappear. For a token comparison, use matched fresh
+and plugin skills disappear. Synthetic model responses invoke a listed and an
+unlisted skill to check the actual Skill tool results. For a token comparison,
+use matched fresh
 sessions with the same model, workspace, input and cache conditions. Compare
 first-request uncached input, cache-read input and cache-write input separately
 and sum them for total input. Request bytes from the loopback fixture do not

@@ -18,16 +18,51 @@ function emit(value) {
   stdout.write(`${JSON.stringify(redact(value))}\n`);
 }
 
-async function teamSkillNames(cwd) {
-  const builtInNames = ["ketplusdev", "ketvietdev", "ketplus-browser", "enterprise-grade", "ket-design-system"];
-  // The SDK accepts skill names, with no source selector for project skills.
-  const directory = path.join(cwd, ".claude", "skills");
-  const entries = await readdir(directory).catch(() => []);
-  const projectNames = await Promise.all(entries.sort().map(async (name) => {
-    const skill = await stat(path.join(directory, name, "SKILL.md")).catch(() => undefined);
-    return skill?.isFile() ? name : undefined;
-  }));
-  return [...new Set([...builtInNames, ...projectNames.filter(Boolean)])];
+const leaderSkills = ["enterprise-grade", "ket-design-system"];
+const skippedSkillDirectories = new Set([
+  "node_modules", "build", "dist", "target", "out", "vendor", "DerivedData", "venv",
+]);
+const maxSkillScanDepth = 8;
+const maxSkillScanDirectories = 4096;
+const projectSkillCache = new Map();
+
+async function scanProjectSkillNames(cwd) {
+  const names = new Set();
+  const pending = [{ directory: cwd, depth: 0 }];
+  for (let index = 0; index < pending.length; index++) {
+    const { directory, depth } = pending[index];
+    const entries = await readdir(directory, { withFileTypes: true }).catch(() => []);
+    if (entries.some(entry => entry.name === ".claude" &&
+        (entry.isDirectory() || (depth === 0 && entry.isSymbolicLink())))) {
+      const skills = path.join(directory, ".claude", "skills");
+      const candidates = await readdir(skills).catch(() => []);
+      for (const name of candidates.sort()) {
+        const skill = await stat(path.join(skills, name, "SKILL.md")).catch(() => undefined);
+        if (skill?.isFile()) names.add(name);
+      }
+    }
+    if (depth === maxSkillScanDepth) continue;
+    for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+      if (pending.length === maxSkillScanDirectories) break;
+      if (entry.isDirectory() && !entry.name.startsWith(".") &&
+          !skippedSkillDirectories.has(entry.name) && !entry.name.startsWith("build-")) {
+        pending.push({ directory: path.join(directory, entry.name), depth: depth + 1 });
+      }
+    }
+  }
+  return [...names];
+}
+
+async function teamSkillNames(cwd, role) {
+  if (!projectSkillCache.has(cwd)) projectSkillCache.set(cwd, scanProjectSkillNames(cwd));
+  const projectNames = await projectSkillCache.get(cwd);
+  const names = ["ketplusdev", "ketvietdev", "ketplus-browser"];
+  if (role === "leader") names.push(...leaderSkills);
+  // The SDK accepts names only, so project names must obey the same role policy.
+  for (const name of projectNames) {
+    if (role === "leader" || !leaderSkills.includes(name)) names.push(name);
+  }
+  return [...new Set(names)];
 }
 
 function permissionMode(profile) {
@@ -642,7 +677,7 @@ async function startRun(messageId, params, prompt, images) {
     if (params.resume) await ensureResumable(params.resume, run.cwd).catch(() => false);
     const authentication = authenticationOptions(params.authentication);
     const skills = ["leader", "developer", "reviewer"].includes(params.teamRole)
-      ? await teamSkillNames(run.cwd) : undefined;
+      ? await teamSkillNames(run.cwd, params.teamRole) : undefined;
     const teamRestrictions = teamDisallowedTools("claude", params.teamRole);
     const appended = [typeof params.browserInstructions === "string" ? params.browserInstructions : "",
       review?.instructions || ""].filter(Boolean).join("\n\n");

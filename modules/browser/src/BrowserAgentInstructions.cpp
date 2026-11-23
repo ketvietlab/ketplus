@@ -116,10 +116,10 @@ QString agentMermaidInstructions() {
         "\n[/KetPlus Mermaid guidance]");
 }
 
-QString hostAgentInstructions(const bool browserAvailable) {
+QString hostAgentInstructions(const bool browserAvailable, const QStringView teamRole) {
     QString text = browserAgentInstructions(browserAvailable) + QStringLiteral("\n\n") +
                    agentReadingInstructions() + QStringLiteral("\n\n") + agentMermaidInstructions();
-    if (const QString skills = agent_skills::defaultSkillInstructions(); !skills.isEmpty())
+    if (const QString skills = agent_skills::defaultSkillInstructions(teamRole); !skills.isEmpty())
         text += QStringLiteral("\n\n") + skills;
     return text;
 }
@@ -128,11 +128,11 @@ QJsonObject withCodexBrowserInstructions(const QString& method, QJsonObject para
                                          const bool available) {
     if (method != QStringLiteral("thread/start") && method != QStringLiteral("thread/resume"))
         return params;
+    const QString teamRole = params.take(QStringLiteral("teamRole")).toString();
+    const QString host = hostAgentInstructions(available, teamRole);
     const QString existing = params.value(QStringLiteral("developerInstructions")).toString();
     params.insert(QStringLiteral("developerInstructions"),
-                  existing.isEmpty()
-                      ? hostAgentInstructions(available)
-                      : existing + QStringLiteral("\n\n") + hostAgentInstructions(available));
+                  existing.isEmpty() ? host : existing + QStringLiteral("\n\n") + host);
     return params;
 }
 
