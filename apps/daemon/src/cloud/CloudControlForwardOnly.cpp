@@ -28,6 +28,29 @@ void CloudControlClient::followEventsForwardOnly(const bool forwardOnly) {
     if (!advanceUploadCursorsToHead())
         return;
     eventsForwardOnly_ = false;
+    forwardOnlyReleased_.clear();
+}
+
+void CloudControlClient::releaseForwardOnlyRetention() {
+    const QList<StoredSession> sessions = journal_->sessions();
+    QSet<QString> current;
+    for (const StoredSession& session : sessions) {
+        const QString key = QStringLiteral("%1:%2").arg(session.id).arg(session.generation);
+        current.insert(key);
+        const qint64 fence = session.lastCursor - peerEventWindow;
+        if (fence <= 0 || fence - forwardOnlyReleased_.value(key, 0) < forwardOnlyReleaseStep)
+            continue;
+        // Monotonic: a client still behind keeps its own, lower cursor as the retention fence.
+        if (!journal_->acknowledgeCursor(QStringLiteral("cloud-control-v2"), session.id,
+                                         session.generation, fence)) {
+            lastError_ = journal_->errorString();
+            return;
+        }
+        forwardOnlyReleased_.insert(key, fence);
+    }
+    forwardOnlyReleased_.removeIf([&current](const QHash<QString, qint64>::iterator entry) {
+        return !current.contains(entry.key());
+    });
 }
 
 // Only the upload cursor moves: acknowledging the head for journal retention here would delete

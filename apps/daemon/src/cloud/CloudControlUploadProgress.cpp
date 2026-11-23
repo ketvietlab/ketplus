@@ -25,8 +25,12 @@ qint64 CloudControlClient::uploadedCursor(const QString& sessionId, qint64 gener
 }
 
 void CloudControlClient::uploadEvents() {
-    if (machineId_.isEmpty() || daemonToken_.isEmpty() || eventsForwardOnly())
+    if (machineId_.isEmpty() || daemonToken_.isEmpty())
         return;
+    if (eventsForwardOnly()) {
+        releaseForwardOnlyRetention();
+        return;
+    }
     const QList<StoredSession> sessions = journal_->sessions();
     // Every upload used to re-register every session's cursor, one journal transaction each, on
     // the daemon's only thread. Only a session this process has not registered yet needs one.

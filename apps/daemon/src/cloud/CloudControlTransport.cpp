@@ -156,7 +156,7 @@ transport::EventPage CloudControlClient::peerEvents(const QString& sessionId, qi
     const auto selected = journal_->sessionHead(sessionId);
     if (selected.generation == 0 || selected.generation != generation ||
         refusedSessions_.contains(sessionId) || cursor > selected.cursor ||
-        selected.cursor - cursor > 2000) {
+        selected.cursor - cursor > peerEventWindow) {
         page.reset = true;
         page.generation = selected.generation == 0 ? generation : selected.generation;
         return page;

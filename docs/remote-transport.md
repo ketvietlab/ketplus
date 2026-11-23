@@ -63,8 +63,17 @@ the name in its own heartbeat yet:
   state for its enrollment, so a restart does not upload the backlog before the next answer.
 - When an answer no longer lists it, the daemon moves each session's upload cursor to the journal
   head at that moment and uploads only events journaled afterwards. Events journaled while
-  forward-only are never uploaded and stay in the journal; retention resumes with the next
-  acknowledged upload. A late answer to an earlier upload never moves the cursor back.
+  forward-only are never uploaded. Those still within the paging window stay in the journal
+  (below); the upload acknowledgement moves no further until the next acknowledged upload. A late
+  answer to an earlier upload never moves the cursor back.
+- Without uploads there is nothing to wait for, so the journal does not grow without bound while
+  the name stays listed. The daemon treats each session's events older than the last 2,000 as
+  delivered, in steps of 64 events, because a client further behind than that receives
+  `session.reset` and loads the newest window (see Resume and retry), so none needs them. They then
+  go through ordinary acknowledged-event retention, which removes them in bounded passes.
+  A client that has not acknowledged an event keeps it: retention still stops at the slowest
+  client, however far behind. Listing the name, withdrawing it and listing it again does not make
+  the journal larger than that window plus what the clients have not acknowledged.
 
 The desktop offers first-turn attachments only when the target daemon and relay both
 advertise `session.prepare/1`. Preparation and its cancellation use the encrypted

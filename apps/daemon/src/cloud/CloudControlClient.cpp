@@ -380,6 +380,7 @@ void CloudControlClient::signOut(LocalCallback callback) {
     accountUsername_.clear();
     daemonToken_.clear();
     registeredCloudCursors_.clear();
+    forwardOnlyReleased_.clear();
     knownUploadedCursors_.clear();
     eventUploadLimits_.clear();
     eventUploadBackoff_.clear();

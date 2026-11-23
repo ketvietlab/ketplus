@@ -47,6 +47,13 @@ class CloudControlClient final : public QObject {
     Q_OBJECT
 
   public:
+    // A peer further behind the journal head than this many events is reset instead of paged
+    // (docs/remote-transport.md, "Resume and retry"), so no peer needs older events.
+    static constexpr qint64 peerEventWindow = 2000;
+    // Retention is released in steps of this many events, not on every event. A step stays under
+    // the 128 rows one acknowledgement cleanup pass removes, so cleanup keeps up with it.
+    static constexpr qint64 forwardOnlyReleaseStep = 64;
+
     using LocalCallback = std::function<void(const QJsonObject&, const QString&)>;
 
     CloudControlClient(LocalJournal* journal, SessionHost* host, QObject* parent = nullptr);
@@ -153,6 +160,10 @@ class CloudControlClient final : public QObject {
     void followEventsForwardOnly(bool forwardOnly);
     [[nodiscard]] bool eventsForwardOnly();
     bool advanceUploadCursorsToHead();
+    // While forward-only, nothing is acknowledged by uploads, so the events journaled beyond what
+    // a peer can still page (peerEventWindow) are released for retention. Clients that have not
+    // acknowledged them keep them: retention still stops at the slowest client.
+    void releaseForwardOnlyRetention();
     void uploadSessionEvents(const QString& sessionId, qint64 generation, qint64 afterCursor);
     // A deleted generation's history awaits purge but must never leave the machine (ADR 0093).
     [[nodiscard]] bool isLiveGeneration(const QString& sessionId, qint64 generation) const;
@@ -301,6 +312,8 @@ class CloudControlClient final : public QObject {
     QSet<QString> eventUploadsInFlight_;
     // session:generation pairs whose cloud cursor this process has registered with the journal.
     QSet<QString> registeredCloudCursors_;
+    // session:generation -> cursor the forward-only retention release last acknowledged.
+    QHash<QString, qint64> forwardOnlyReleased_;
     // session:generation -> events per upload after the relay refused a batch as too large.
     QHash<QString, int> eventUploadLimits_;
     struct EventUploadBackoff {
