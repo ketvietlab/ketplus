@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QJsonArray>
+#include <QJsonObject>
 #include <QPointer>
 #include <QString>
 #include <QWidget>
@@ -42,6 +43,9 @@ class TeamTaskDialog final : public QWidget {
     // Wider than a form's dialog, for a description to read.
     static constexpr int kCardWidth = 720;
 
+    // How many times the details were built; the tests count rebuilds with it.
+    [[nodiscard]] int buildsForTesting() const { return builds_; }
+
     static ket::Dialog* present(QWidget* anchor, TeamDirectory* teams, const QString& teamId,
                                 const QString& taskId);
 
@@ -58,6 +62,11 @@ class TeamTaskDialog final : public QWidget {
   private:
     static QWidget* pullRequestLink(const QString& value, QWidget* parent);
     void rebuild();
+    // T-6: the team changed. Builds again only when what the dialog shows changed, and reads
+    // the history again only when the task did.
+    void follow();
+    // What the dialog shows of the team: its task, and the members it names.
+    [[nodiscard]] QJsonObject shownInput() const;
     void fitHeight();
     // The newest page of history, or with `earlier` the page before the first entry shown.
     void readHistory(bool earlier = false);
@@ -84,6 +93,8 @@ class TeamTaskDialog final : public QWidget {
     bool historyAgain_{false};
     bool wholeDescription_{false};
     bool canHandOver_{false};
+    QJsonObject shown_;
+    int builds_{0};
 };
 
 } // namespace ketplus

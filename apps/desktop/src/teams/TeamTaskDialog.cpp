@@ -207,10 +207,7 @@ TeamTaskDialog::TeamTaskDialog(TeamDirectory* teams, const QString& teamId, cons
     error_->setVisible(false);
     fields->addWidget(error_);
 
-    connect(teams_, &TeamDirectory::changed, this, [this] {
-        rebuild();
-        readHistory();
-    });
+    connect(teams_, &TeamDirectory::changed, this, &TeamTaskDialog::follow);
     connect(&ket::Appearance::instance(), &ket::Appearance::themeChanged, this,
             &TeamTaskDialog::rebuild);
     connect(&ket::Appearance::instance(), &ket::Appearance::zoomChanged, this,
@@ -221,7 +218,36 @@ TeamTaskDialog::TeamTaskDialog(TeamDirectory* teams, const QString& teamId, cons
 
 QString TeamTaskDialog::error() const { return error_->isHidden() ? QString{} : error_->text(); }
 
+QJsonObject TeamTaskDialog::shownInput() const {
+    const auto team = teams_->team(teamId_);
+    if (!team)
+        return {};
+    QJsonArray members;
+    for (const auto& value : team->value(QStringLiteral("members")).toArray()) {
+        const QJsonObject member = value.toObject();
+        members.append(
+            QJsonObject{{QStringLiteral("session_id"), member.value(QStringLiteral("session_id"))},
+                        {QStringLiteral("name"), member.value(QStringLiteral("name"))},
+                        {QStringLiteral("role"), member.value(QStringLiteral("role"))}});
+    }
+    return {{QStringLiteral("task"), taskOf(*team, taskId_)}, {QStringLiteral("members"), members}};
+}
+
+void TeamTaskDialog::follow() {
+    // Every team's change reaches here, and most leave this task as it was.
+    const QJsonObject now = shownInput();
+    if (now == shown_)
+        return;
+    const bool taskChanged =
+        now.value(QStringLiteral("task")) != shown_.value(QStringLiteral("task"));
+    rebuild();
+    if (taskChanged)
+        readHistory();
+}
+
 void TeamTaskDialog::rebuild() {
+    ++builds_;
+    shown_ = shownInput();
     const int position = scroll_->verticalScrollBar()->value();
     details_ = new QWidget;
     details_->setObjectName(QStringLiteral("teamTaskDetails"));

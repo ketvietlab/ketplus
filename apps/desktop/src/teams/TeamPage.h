@@ -10,6 +10,7 @@
 #include <QString>
 #include <QWidget>
 
+#include <array>
 #include <optional>
 
 class QLabel;
@@ -54,6 +55,15 @@ class TeamPage final : public QWidget {
     // Opens the task dialog (description, criteria, dependencies, history, Hand over…).
     ket::Dialog* openTask(const QString& taskId);
 
+    // T-6: the page's sections, in their order. Each is built in a box of its own, and a change
+    // of the team builds again only the sections whose data changed (TeamPageRefresh.cpp).
+    enum class Section { Heading, Banners, Decisions, Tasks, DoneWorktrees, Members, Updates };
+    static constexpr int kSections = 7;
+    // How many times a section was built; the tests count rebuilds with it.
+    [[nodiscard]] int sectionBuildsForTesting(Section section) const {
+        return builds_.at(static_cast<int>(section));
+    }
+
   signals:
     void conversationRequested(const QString& sessionId);
     // A mention in the goal: `number` is the conversation's `@agent/` number.
@@ -73,7 +83,15 @@ class TeamPage final : public QWidget {
     void hideEvent(QHideEvent* event) override;
 
   private:
+    // Builds the whole page: the first time, and when the theme, the zoom, the width or what
+    // the page holds beside the team (storage, drafts) changes.
     void rebuild();
+    // The team changed: once per turn of the event loop, the sections whose data changed.
+    void followTeam();
+    void rebuildSections(const QList<Section>& sections);
+    void buildSection(Section section, const QJsonObject& team, int at);
+    // What a section shows of the team; a section is built again only when this changes.
+    [[nodiscard]] static QJsonValue sectionInput(Section section, const QJsonObject& team);
     void readUpdates();
     // ADR 0115: the page of Updates before the oldest one shown.
     void readOlderUpdates();
@@ -136,6 +154,13 @@ class TeamPage final : public QWidget {
     bool olderPending_{false};
     // The team the content was built from; empty for the page without a team.
     QJsonObject shown_;
+    // The sections' boxes, null on the page without a team, and what each was built from.
+    std::array<QWidget*, kSections> sections_{};
+    std::array<QJsonValue, kSections> inputs_;
+    std::array<int, kSections> builds_{};
+    bool followPending_{false};
+    // The team as it was when the Updates were last read: team.get only after it changes.
+    QJsonObject readFor_;
     QScrollArea* scroll_;
     QWidget* content_{nullptr};
     // The column of sections, centred in content_.

@@ -618,6 +618,13 @@ class TeamPageTest final : public QObject {
         const auto change = [&] {
             QJsonObject next = fixture(revision++);
             next.insert("name", QStringLiteral("Shop %1").arg(revision));
+            // T-6: the card is built again only when its decision changed.
+            QJsonArray decisions = next.value("decisions").toArray();
+            QJsonObject decision = decisions.at(0).toObject();
+            decision.insert("context",
+                            QStringLiteral("Payments need a provider (%1).").arg(revision));
+            decisions.replace(0, decision);
+            next.insert("decisions", decisions);
             teams_->applyEvent("team.changed", {{"team", next}});
             QApplication::processEvents();
         };
@@ -1178,8 +1185,9 @@ class TeamPageTest final : public QObject {
         QJsonObject next = fixture(5);
         next.insert("name", "Shop 2");
         teams_->applyEvent("team.changed", {{"team", next}});
-        QCOMPARE(page.findChild<QLabel*>("teamPageName")->text(), QStringLiteral("Shop 2"));
+        // T-6: the page follows once the event loop has handled the burst of changes.
         QApplication::processEvents();
+        QCOMPARE(page.findChild<QLabel*>("teamPageName")->text(), QStringLiteral("Shop 2"));
         QCOMPARE(bar->value(), 40);
     }
 
@@ -1197,11 +1205,14 @@ class TeamPageTest final : public QObject {
         QApplication::processEvents();
         QVERIFY(content);
         QCOMPARE(page.scrollArea()->widget(), content.data());
-        // Its own change still rebuilds it.
+        // Its own change still shows, in the section it changed (T-6).
+        const QPointer<QWidget> heading(page.findChild<QWidget*>("teamSectionHeading"));
         QJsonObject next = fixture(5);
         next.insert("name", "Shop 2");
         teams_->applyEvent("team.changed", {{"team", next}});
-        QVERIFY(page.scrollArea()->widget() != content.data());
+        QApplication::processEvents();
+        QVERIFY(!heading);
+        QCOMPARE(page.scrollArea()->widget(), content.data());
         QCOMPARE(page.findChild<QLabel*>("teamPageName")->text(), QStringLiteral("Shop 2"));
     }
 
@@ -1221,8 +1232,13 @@ class TeamPageTest final : public QObject {
         const QPointer<QAbstractButton> before(open.last());
         before->setFocus();
         QCOMPARE(page.window()->focusWidget(), open.last());
+        // A member renamed: the members and the tasks that name them are built again (T-6).
         QJsonObject next = fixture(5);
-        next.insert("name", "Shop 2");
+        QJsonArray members = next.value("members").toArray();
+        QJsonObject renamed = members.last().toObject();
+        renamed.insert("name", "Review 2");
+        members.replace(members.size() - 1, renamed);
+        next.insert("members", members);
         teams_->applyEvent("team.changed", {{"team", next}});
         QApplication::processEvents();
         QVERIFY(!before); // the content was rebuilt
@@ -1251,6 +1267,8 @@ class TeamPageTest final : public QObject {
             QCOMPARE(page.window()->focusWidget(), before.data());
             QJsonObject next = fixture(named ? 5 : 6, 4, true, false);
             next.insert("name", named ? "Shop 2" : "Shop 3");
+            // T-6: the banners are built again only when what they say changed.
+            next.insert("paused_reason", named ? "user" : "empty_role");
             teams_->applyEvent("team.changed", {{"team", next}});
             QApplication::processEvents();
             QVERIFY(!before); // the content was rebuilt
