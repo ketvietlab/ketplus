@@ -571,8 +571,7 @@ class TeamStorageTest final : public QObject {
 
     // T-23 criterion 1: deleting a large worktree holds no event loop. The removal the session
     // runtime asks for runs on a pool of its own; a timer on this thread keeps firing while a
-    // worktree with 20,000 ignored build files is removed, git still refuses a dirty one, and
-    // nothing is forced.
+    // clean, pushed worktree with 20,000 files is removed without force.
     void aLargeRemovalDoesNotBlockTheEventLoop() {
         QTemporaryDir root;
         const QString remote = root.filePath("remote.git");
@@ -580,20 +579,19 @@ class TeamStorageTest final : public QObject {
         const QString worktree = root.filePath("main-task");
         QVERIFY(git(root.path(), {"init", "--bare", remote}) != "<failed>");
         QVERIFY(git(root.path(), {"clone", remote, main}) != "<failed>");
-        QVERIFY(write(main + "/.gitignore", "build/\n"));
-        QVERIFY(git(main, {"add", ".gitignore"}) != "<failed>");
-        QVERIFY(git(main, {"commit", "-m", "ignore"}) != "<failed>");
+        QVERIFY(git(main, {"commit", "--allow-empty", "-m", "base"}) != "<failed>");
         QVERIFY(git(main, {"push", "origin", "HEAD:main"}) != "<failed>");
         QVERIFY(git(main, {"worktree", "add", "-b", "team/1/T-1", worktree}) != "<failed>");
-        QVERIFY(git(worktree, {"push", "origin", "team/1/T-1"}) != "<failed>");
-        // A build tree: ignored, so the worktree is clean, and big enough to take a while.
         const QByteArray content(1024, 'b');
         for (int directory = 0; directory < 200; ++directory) {
-            const QString folder = worktree + QStringLiteral("/build/d%1").arg(directory);
+            const QString folder = worktree + QStringLiteral("/payload/d%1").arg(directory);
             QVERIFY(QDir().mkpath(folder));
             for (int file = 0; file < 100; ++file)
-                QVERIFY(write(folder + QStringLiteral("/f%1.o").arg(file), content));
+                QVERIFY(write(folder + QStringLiteral("/f%1.txt").arg(file), content));
         }
+        QVERIFY(git(worktree, {"add", "payload"}) != "<failed>");
+        QVERIFY(git(worktree, {"commit", "-m", "large tracked worktree"}) != "<failed>");
+        QVERIFY(git(worktree, {"push", "origin", "team/1/T-1"}) != "<failed>");
         QVERIFY(team_git::sizeOnDisk(worktree) > 20'000'000);
 
         QThreadPool pool;
