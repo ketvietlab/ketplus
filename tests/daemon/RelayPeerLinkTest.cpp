@@ -299,6 +299,19 @@ class RelayPeerLinkTest final : public QObject {
         QCOMPARE(relay.peers.size(), 1);
         relay.signaling.refreshDevices(QJsonArray{relay.device});
         QCOMPARE(relay.peers.size(), 1);
+        // The same device with another key version no longer matches the link's admission.
+        relay.signaling.refreshDevices(
+            QJsonArray{QJsonObject{{"id", "device"}, {"keyVersion", 4}, {"status", "active"}}});
+        QCOMPARE(relay.peers.size(), 0);
+
+        relay.frame(subscribe());
+        QCOMPARE(relay.peers.size(), 1);
+        relay.signaling.devicePinChanged("other");
+        QCOMPARE(relay.peers.size(), 1);
+        relay.signaling.devicePinChanged("device");
+        QCOMPARE(relay.peers.size(), 0);
+
+        relay.frame(subscribe());
         relay.signaling.refreshDevices(
             QJsonArray{QJsonObject{{"id", "device"}, {"keyVersion", 3}, {"status", "revoked"}}});
         QCOMPARE(relay.peers.size(), 0);

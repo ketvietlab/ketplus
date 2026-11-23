@@ -336,6 +336,7 @@ void CloudControlClient::approvePairing(const QJsonObject& payload, LocalCallbac
                             } else {
                                 legacyPinAdoptionPending_ = false;
                                 invalidateSenderKeys();
+                                signaling_->devicePinChanged(device.value("id").toString());
                                 callback({{QStringLiteral("ok"), true},
                                           {QStringLiteral("ticket"), object(approveValue)}},
                                          {});
@@ -422,7 +423,9 @@ void CloudControlClient::revokeDevice(const QJsonObject& payload, LocalCallback 
                 legacyPinAdoptionPending_ = false;
                 signaling_->receive({{"type", "device.revoked"}, {"deviceId", deviceId}});
                 QString pinError;
-                if (!pins_.unpin(deviceId, &pinError)) {
+                const bool unpinned = pins_.unpin(deviceId, &pinError);
+                signaling_->devicePinChanged(deviceId);
+                if (!unpinned) {
                     callback({}, pinError);
                     return;
                 }

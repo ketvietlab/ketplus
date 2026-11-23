@@ -36,8 +36,11 @@ class RemotePeers final : public QObject {
     static constexpr qint64 relayAuthorizationMs = 10 * 60'000;
     static QString relayId(const QString& device) { return "relay:" + device; }
     bool acceptRelay(const QString& device, int keyVersion, PeerLink* link, qint64 epoch);
-    // Closes relay links whose device is not in `activeDevices`, or all of them.
-    void retainRelay(const QSet<QString>& activeDevices);
+    // Closes relay links whose device is not in `activeDevices` (device id -> key version) or
+    // whose key version differs from the one it was admitted with.
+    void retainRelay(const QHash<QString, int>& activeDevices);
+    // Closes the device's relay link now, as its pin was removed or replaced.
+    void closeRelay(const QString& device);
     void closeRelay();
     PeerLink* link(const QString& id) const;
     bool renew(const QString& id, const QJsonObject& grant);

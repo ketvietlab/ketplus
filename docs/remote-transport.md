@@ -318,7 +318,8 @@ not depend on Control v2 HTTP internals:
   `events.forward_only/1`, a `subscribe` arriving as `{"type":"frame","deviceId",…,"frame"}` opens
   one link per device. A device list fetched from the server is only a hint: the link opens only for
   a device pinned on this host whose keys match its pin, through the same pinned-device check as
-  WebRTC admission, and closes when the pin is removed.
+  WebRTC admission, and closes at once when the pin is removed or replaced, and when a device list shows another key
+  version for it.
   - Event pages are the same `SessionEvent` envelopes as on WebRTC: sealed under the session key,
     which is wrapped only for pinned devices. Only routing metadata leaves the host in the clear.
   - The link needs no `hello` and authorizes `session.read` only, for 10 minutes after each

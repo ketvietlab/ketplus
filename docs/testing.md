@@ -1709,7 +1709,9 @@ client and 64 KiB host caps, page trimming, `gap` on a full live queue and for a
 `session.reset`, links closed by refused frames, drops, socket loss and revocation, and expiry
 10 minutes after the last `subscribe` on a test clock, with `gap` for each subscription first,
 and a frame within 64 KiB whose envelope is not. `ketplus_daemon_peer_transport_tests`
-checks that a listed but unpinned device gets no relay link and that removing the pin closes it.
+checks, with real pins, that a listed but unpinned device gets no relay link, and that replacing the
+pin (pairing again), a device list with another key version and the client's revoke path each close
+it before any refresh.
 Physical devices/TURN require a separate explicitly configured local test stack.
 `ketplus_peer_link_tests` links only `ketplus_peer_link`: a `WebRtcPeerLink` offerer against an
 answerer over loopback carries frames on all three channels both ways, a transfer of exactly

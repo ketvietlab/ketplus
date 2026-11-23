@@ -506,11 +506,63 @@ class PeerTransportTest final : public QObject {
         QTRY_VERIFY_WITH_TIMEOUT((signaling.receive(frame), peers.size() == 1), 3000);
         QVERIFY(peers.link(RemotePeers::relayId("device")));
 
-        QVERIFY(Access::pins(cloud).unpin("device"));
-        const auto before = lookups();
-        Access::distributeKeys(cloud);
-        QTRY_VERIFY_WITH_TIMEOUT(lookups() > before, 3000);
-        QTRY_COMPARE_WITH_TIMEOUT(peers.size(), 0, 3000);
+        // Replacing the pin (a device paired again with new keys) closes the link at once, with
+        // no device list refresh in between.
+        CredentialStore newStore("relay-device-new");
+        CloudCrypto newDevice(&newStore);
+        const QJsonObject replaced{
+            {"id", "device"}, {"keyVersion", 2}, {"keys", newDevice.publicKeys()}};
+        network.statusForPath.insert("/v2/pairing/tickets/ticket", 200);
+        network.responseForPath.insert(
+            "/v2/pairing/tickets/ticket",
+            QJsonDocument(QJsonObject{{"id", "ticket"},
+                                      {"status", "claimed"},
+                                      {"claimedDevice", replaced},
+                                      {"claimDigest", DevicePins::claimDigest("ticket", replaced)}})
+                .toJson());
+        network.statusForPath.insert("/v2/pairing/tickets/ticket/approve", 200);
+        network.responseForPath.insert("/v2/pairing/tickets/ticket/approve", "{}");
+        bool approved = false;
+        cloud.handleLocal("remote.pairing.approve",
+                          {{"ticket_id", "ticket"},
+                           {"claim_digest", DevicePins::claimDigest("ticket", replaced)}},
+                          [&](const QJsonObject&, const QString& error) {
+                              QVERIFY2(error.isEmpty(), qPrintable(error));
+                              approved = true;
+                          });
+        QTRY_VERIFY_WITH_TIMEOUT(approved, 3000);
+        QCOMPARE(peers.size(), 0);
+        network.responseForPath.insert(
+            "/v2/devices", QJsonDocument(QJsonArray{QJsonObject{{"id", "device"},
+                                                                {"keyVersion", 2},
+                                                                {"status", "active"},
+                                                                {"keys", replaced.value("keys")}}})
+                               .toJson());
+
+        // A link opened for the old key is also closed by a device list that carries another
+        // key version for it.
+        QTRY_VERIFY_WITH_TIMEOUT((signaling.receive(frame), peers.size() == 1), 3000);
+        signaling.refreshDevices(
+            QJsonArray{QJsonObject{{"id", "device"}, {"keyVersion", 3}, {"status", "active"}}});
+        QCOMPARE(peers.size(), 0);
+
+        // Removing the pin through the client's own revoke path closes it before any refresh.
+        QTRY_VERIFY_WITH_TIMEOUT((signaling.receive(frame), peers.size() == 1), 3000);
+        network.statusForPath.insert("/v2/devices/device/revoke", 200);
+        network.responseForPath.insert("/v2/devices/device/revoke", "{}");
+        bool revoked = false;
+        cloud.handleLocal("remote.device.revoke", {{"device_id", "device"}},
+                          [&](const QJsonObject&, const QString& error) {
+                              QVERIFY2(error.isEmpty(), qPrintable(error));
+                              revoked = true;
+                          });
+        QTRY_VERIFY_WITH_TIMEOUT(revoked, 3000);
+        QCOMPARE(peers.size(), 0);
+        QVERIFY(!Access::pins(cloud).trusts(replaced));
+        // With the pin gone, the same subscribe opens nothing.
+        const auto after = lookups();
+        QTRY_VERIFY_WITH_TIMEOUT((signaling.receive(frame), lookups() > after + 1), 3000);
+        QCOMPARE(peers.size(), 0);
     }
     void largeItemsReachThePeerWithTheirChunks() {
         QTemporaryDir dir;

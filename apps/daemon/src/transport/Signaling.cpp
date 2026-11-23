@@ -243,6 +243,11 @@ void Signaling::setForwardOnly(bool enabled) {
     forwardOnly_ = enabled;
 }
 
+void Signaling::devicePinChanged(const QString& device) {
+    pendingRelay_.remove(device);
+    peers_->closeRelay(device);
+}
+
 void Signaling::relayLost() {
     pendingRelay_.clear();
     peers_->closeRelay();
@@ -303,11 +308,11 @@ void Signaling::finishRelay(const QString& device, const QJsonObject& keys) {
 }
 
 void Signaling::refreshDevices(const QJsonArray& devices) {
-    QSet<QString> active;
+    QHash<QString, int> active;
     for (const auto& value : devices) {
         const auto device = value.toObject();
         if (!device.contains("status") || device.value("status") == "active")
-            active.insert(device.value("id").toString());
+            active.insert(device.value("id").toString(), device.value("keyVersion").toInt());
     }
     peers_->retainRelay(active);
     for (const auto& id : attempts_.keys()) {

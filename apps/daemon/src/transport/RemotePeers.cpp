@@ -396,13 +396,19 @@ void RemotePeers::revoke(const QString& device) {
         if (peers_.value(id)->device == device)
             close(id, "device_revoked");
 }
-void RemotePeers::retainRelay(const QSet<QString>& activeDevices) {
+void RemotePeers::retainRelay(const QHash<QString, int>& activeDevices) {
     for (const auto& id : peers_.keys()) {
         const auto peer = peers_.value(id);
-        if (peer->relay && !activeDevices.contains(peer->device))
+        if (!peer->relay)
+            continue;
+        const auto found = activeDevices.constFind(peer->device);
+        if (found == activeDevices.cend())
             close(id, "device_revoked");
+        else if (found.value() != peer->version)
+            close(id, "key_changed");
     }
 }
+void RemotePeers::closeRelay(const QString& device) { close(relayId(device), "pin_changed"); }
 void RemotePeers::closeRelay() {
     for (const auto& id : peers_.keys())
         if (peers_.value(id)->relay)

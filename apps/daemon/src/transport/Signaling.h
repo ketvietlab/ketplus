@@ -20,6 +20,9 @@ class Signaling final : public QObject {
     void setForwardOnly(bool enabled);
     // The socket closed: every relay link ends, and devices subscribe again on the next one.
     void relayLost();
+    // The device's pin was removed or replaced: its relay link closes now, and a later
+    // subscribe must pass the pin check again.
+    void devicePinChanged(const QString& device);
     static QByteArray offerBytes(const QJsonObject& offer);
     static QByteArray answerBytes(const QJsonObject& offer, const QString& sdp, int machineVersion,
                                   const QString& issuedAt);
