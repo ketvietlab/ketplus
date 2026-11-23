@@ -345,25 +345,23 @@ class TeamAgentToolsTest final : public QObject {
     }
 
     void instructionsFollowTheRole() {
+        using agent_messaging::conversationContext;
         using agent_messaging::teamInstructions;
-        const QString leader = teamInstructions({.team = "Shop",
-                                                 .goal = "Ship",
-                                                 .role = "leader",
-                                                 .mergePolicy = "leader",
-                                                 .integrationBranch = "integration"});
+        const QString leader = teamInstructions("leader");
         QVERIFY(leader.contains("Answer explanation, advice, synthesis and coordination directly"));
         QVERIFY(leader.contains("developer_leader"));
         QVERIFY(leader.contains("developer_reviewer"));
         QVERIFY(leader.contains("Confidence above 90 is only supplementary"));
         QVERIFY(!leader.contains("reviewer reviews each task"));
         QVERIFY(leader.contains("Never approve a permission request"));
-        QVERIFY(leader.contains("You merge each Ready task into integration"));
-        QVERIFY(
-            teamInstructions({.role = "leader", .mergePolicy = "user", .integrationBranch = "i"})
-                .contains("The user merges reviewed tasks"));
-        const QString developer =
-            teamInstructions({.team = "Shop", .role = "developer", .lane = "Web"});
-        QVERIFY(developer.contains("Your lane is \"Web\"."));
+        QVERIFY(conversationContext("79461", {.role = "leader", .integrationBranch = "integration"})
+                    .contains("You merge each Ready task into integration"));
+        QVERIFY(conversationContext(
+                    "79461", {.role = "leader", .mergePolicy = "user", .integrationBranch = "i"})
+                    .contains("The user merges reviewed tasks"));
+        const QString developer = teamInstructions("developer");
+        QVERIFY(conversationContext("79461", {.role = "developer", .lane = "Web"})
+                    .contains("Your lane is \"Web\"."));
         QVERIFY(!developer.contains("paths"));
         QVERIFY(!developer.contains("outside the lane"));
         QVERIFY(!leader.contains("team_paths_allow"));
@@ -374,9 +372,47 @@ class TeamAgentToolsTest final : public QObject {
         QVERIFY(developer.contains("chosen route requires review"));
         QVERIFY(
             leader.contains("Do not ask the user to approve again an action already authorized"));
-        const QString reviewer = teamInstructions({.team = "Shop", .role = "reviewer"});
+        const QString reviewer = teamInstructions("reviewer");
         QVERIFY(reviewer.contains("Verdict: no findings"));
         QVERIFY(reviewer.contains("read-only"));
+    }
+
+    void memberIdentityDoesNotChangeHostPrefix() {
+        using namespace agent_messaging;
+        const TeamRoleContext first{
+            .team = "Shop", .goal = "Ship the cart", .role = "developer", .lane = "Web"};
+        const TeamRoleContext second{
+            .team = "Warehouse", .goal = "Count stock", .role = "developer", .lane = "Inventory"};
+        const auto prefix = [](const TeamRoleContext& member) {
+            return (toolInstructions() + QLatin1Char('\n') + teamInstructions(member.role))
+                .toUtf8();
+        };
+        QCOMPARE(prefix(first), prefix(second));
+        const auto listedTools = [](const QString& number, const TeamRoleContext& member) {
+            return QJsonDocument(agent_mcp::handleMessage(
+                                     {{"jsonrpc", "2.0"}, {"id", 1}, {"method", "tools/list"}},
+                                     [&](const QString&, const QJsonObject&) {
+                                         return QJsonObject{
+                                             {"number", number},
+                                             {"worktree", "/fixture/" + member.team},
+                                             {"team", QJsonObject{{"role", member.role},
+                                                                  {"name", member.team}}}};
+                                     }))
+                .toJson(QJsonDocument::Compact);
+        };
+        const QByteArray tools = listedTools("79461", first);
+        QCOMPARE(tools, listedTools("79462", second));
+        for (const QByteArray& text : {prefix(first), tools}) {
+            QVERIFY(!text.contains("79461"));
+            QVERIFY(!text.contains("79462"));
+            QVERIFY(!text.contains("/fixture/"));
+        }
+        const QString firstContext = conversationContext("79461", first);
+        QVERIFY(firstContext.contains("@agent/79461"));
+        QVERIFY(firstContext.contains(first.team));
+        QVERIFY(firstContext.contains(first.goal));
+        QVERIFY(firstContext.contains(first.lane));
+        QVERIFY(conversationContext("79462", second).contains(second.goal));
     }
 
     void routingPromptFixturesStayConservative() {
@@ -384,8 +420,7 @@ class TeamAgentToolsTest final : public QObject {
         QVERIFY(file.open(QIODevice::ReadOnly));
         const auto fixtures = QJsonDocument::fromJson(file.readAll()).array();
         QCOMPARE(fixtures.size(), 3);
-        const QString leader = agent_messaging::teamInstructions(
-            {.team = "Fixture", .role = "leader", .integrationBranch = "integration"});
+        const QString leader = agent_messaging::teamInstructions("leader");
         for (const auto& value : fixtures) {
             const auto scenario = value.toObject();
             QVERIFY(!scenario.value("synthetic_prompt").toString().isEmpty());
@@ -404,9 +439,22 @@ class TeamAgentToolsTest final : public QObject {
         QVERIFY(!team.id.isEmpty());
         QTRY_COMPARE_WITH_TIMEOUT(fixture.count(team.leader, "turn.completed"), 1, 8000);
         const QByteArray log = logText(fixture.claudeLog);
-        QVERIFY(log.contains("[KetPlus team]"));
-        QVERIFY(log.contains("You are the leader of team"));
-        QVERIFY(log.contains("Ship the cart"));
+        QJsonObject policy;
+        for (const auto& line : log.split('\n')) {
+            if (line.startsWith("policy:")) {
+                policy = QJsonDocument::fromJson(line.mid(7)).object();
+                break;
+            }
+        }
+        const QString instructions = policy.value("instructions").toString();
+        QVERIFY(instructions.contains("[KetPlus team]"));
+        QVERIFY(instructions.contains("Your team role is leader."));
+        QVERIFY(!instructions.contains("Ship the cart"));
+        QVERIFY(!instructions.contains("This conversation is #"));
+        const QString prompt = policy.value("prompt").toString();
+        QVERIFY(prompt.contains("[KetPlus conversation context]"));
+        QVERIFY(prompt.contains("You are the leader of team"));
+        QVERIFY(prompt.contains("Ship the cart"));
         // Developers and the reviewer wait for work.
         QCOMPARE(fixture.count(team.developer, "user.message"), 0);
         QCOMPARE(fixture.count(team.reviewer, "user.message"), 0);

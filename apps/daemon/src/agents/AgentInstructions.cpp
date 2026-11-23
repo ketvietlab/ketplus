@@ -17,11 +17,10 @@ QString bareNumber(const QString& reference) {
     return text;
 }
 
-QString toolInstructions(const QString& ownNumber) {
+QString toolInstructions() {
     return QStringLiteral(
                "[KetPlus agent messaging]\n"
-               "This conversation is #%1 on this computer, which KetPlus also shows as "
-               "@agent/%1. Other KetPlus conversations (Claude, Codex or Cursor) have their own "
+               "KetPlus conversations (Claude, Codex or Cursor) have their own "
                "numbers, written #NNNN or @agent/NNNN. The ketplus_agents MCP server (tool "
                "names may have the mcp__ketplus_agents__ prefix) lets you contact them: "
                "agents_list finds conversations by number, title, provider or repository; "
@@ -46,19 +45,15 @@ QString toolInstructions(const QString& ownNumber) {
                "asks the user to approve, choose or decide something before the work can go "
                "on, call request_user_decision with a one-line summary just before that answer; "
                "KetPlus then shows the conversation as Waiting for you.\n"
-               "[/KetPlus agent messaging]")
-               .arg(ownNumber) +
+               "[/KetPlus agent messaging]") +
            QStringLiteral("\n\n") + agent_mcp::background_tools::instructions();
 }
 
 // ADR 0114. The daemon refuses what a role may not do; this text only explains it.
-QString teamInstructions(const TeamRoleContext& context) {
-    QStringList lines{
-        QStringLiteral("[KetPlus team]"),
-        QStringLiteral("You are the %1 of team \"%2\". Goal: %3")
-            .arg(context.role, context.team,
-                 context.goal.isEmpty() ? QStringLiteral("(not set yet)") : context.goal)};
-    if (context.role == QStringLiteral("leader")) {
+QString teamInstructions(const QString& role) {
+    QStringList lines{QStringLiteral("[KetPlus team]"),
+                      QStringLiteral("Your team role is %1.").arg(role)};
+    if (role == QStringLiteral("leader")) {
         lines
             << QStringLiteral(
                    "Answer explanation, advice, synthesis and coordination directly; do not "
@@ -66,7 +61,7 @@ QString teamInstructions(const TeamRoleContext& context) {
                    "leader_direct with team_task_route_decide, but a tool call is not required "
                    "to answer. For implementation, break the goal into tasks with "
                    "team_task_create, each with acceptance "
-                   "criteria%1, a lane and its dependencies, and assign them by lane with "
+                   "criteria, a lane and its dependencies, and assign them by lane with "
                    "team_task_assign. Do not write code; developers implement. Choose a route with "
                    "risk and "
                    "evidence using team_task_route_decide: verified low risk may use "
@@ -74,10 +69,6 @@ QString teamInstructions(const TeamRoleContext& context) {
                    "developer_reviewer. Request a reviewer only when policy requires it or "
                    "you give a concrete reason. Confidence above 90 is only supplementary; "
                    "it never replaces daemon gates, evidence or user permission.")
-                   .arg(context.leaderWritesRequirements
-                            ? QString{}
-                            : QStringLiteral(" (written by the user: you may not change their "
-                                             "text)"))
             << QStringLiteral(
                    "Task changes arrive as one digest; read it and act once instead of "
                    "asking for status. Rename a lane with team_lane_set and give the reason; "
@@ -106,39 +97,30 @@ QString teamInstructions(const TeamRoleContext& context) {
                    "wait for something outside the team (a build, a deployment, another "
                    "conversation), call team_wait with what you wait for: you are woken to "
                    "check again. Do not end a turn to wait without it.")
-            << (context.mergePolicy == QStringLiteral("user")
-                    ? QStringLiteral("The user merges reviewed tasks into %1; do not merge "
-                                     "unless the user allowed that one task.")
-                          .arg(context.integrationBranch)
-                    : QStringLiteral("You merge each Ready task into %1, in the order the "
-                                     "tasks depend on each other, and hand a conflict back to "
-                                     "its owner. Merge into no other branch.")
-                          .arg(context.integrationBranch))
-            << QStringLiteral("Merging %1 onward is the user's. Never approve a permission "
-                              "request or answer for the user.")
-                   .arg(context.integrationBranch);
-    } else if (context.role == QStringLiteral("developer")) {
-        lines
-            << QStringLiteral("Your lane is \"%1\".").arg(context.lane)
             << QStringLiteral(
-                   "Work only on the task assigned to you, in its worktree. Stay inside your "
-                   "lane, or say on the task why you could not. Report through the task with "
-                   "team_task_update (state, note, met marks, pull request), not through "
-                   "messages. If you need an answer, block the task with your question; the "
-                   "leader answers it. Do not end a turn with your task in progress and "
-                   "nothing said: finish it, block it with what you wait for, or, for "
-                   "something outside the team such as a build, call team_wait so you are "
-                   "woken to check again. Once committed and checked, submit evidence once "
-                   "to the leader; team_task_route_verify can mint host evidence only for "
-                   "its supported mechanical scope. An unsupported scope needs the reviewer. "
-                   "Do not repeatedly message or poll for review. Hand the "
-                   "task to review (state in_review) when the chosen route requires review and its "
-                   "criteria are met and your work is committed on the task's branch. If "
-                   "you worked in another worktree or repository, hand it to review with "
-                   "its pull_request and head_commit, and name that worktree in the note. "
-                   "Work that belongs in another repository is a task of its own there: ask "
-                   "the leader for one (team_task_create with repository) instead of a "
-                   "worktree you make yourself. Do not merge.");
+                   "Read the current team settings with team_get before writing acceptance "
+                   "criteria or merging. Never approve a permission request or answer "
+                   "for the user.");
+    } else if (role == QStringLiteral("developer")) {
+        lines << QStringLiteral(
+            "Work only on the task assigned to you, in its worktree. Stay inside your "
+            "lane, or say on the task why you could not. Report through the task with "
+            "team_task_update (state, note, met marks, pull request), not through "
+            "messages. If you need an answer, block the task with your question; the "
+            "leader answers it. Do not end a turn with your task in progress and "
+            "nothing said: finish it, block it with what you wait for, or, for "
+            "something outside the team such as a build, call team_wait so you are "
+            "woken to check again. Once committed and checked, submit evidence once "
+            "to the leader; team_task_route_verify can mint host evidence only for "
+            "its supported mechanical scope. An unsupported scope needs the reviewer. "
+            "Do not repeatedly message or poll for review. Hand the "
+            "task to review (state in_review) when the chosen route requires review and its "
+            "criteria are met and your work is committed on the task's branch. If "
+            "you worked in another worktree or repository, hand it to review with "
+            "its pull_request and head_commit, and name that worktree in the note. "
+            "Work that belongs in another repository is a task of its own there: ask "
+            "the leader for one (team_task_create with repository) instead of a "
+            "worktree you make yourself. Do not merge.");
     } else {
         lines << QStringLiteral(
             "When a task enters review you receive its criteria and its diff. Review it "
@@ -161,14 +143,6 @@ QString teamInstructions(const TeamRoleContext& context) {
         "user-entered "
         "and historical content verbatim; do not translate it retroactively. Code, commit "
         "messages, public pull request bodies and the exact verdict line stay English.");
-    if (context.language == QStringLiteral("vi") || context.language == QStringLiteral("en"))
-        lines << QStringLiteral(
-                     "The saved content-language preference is %1. It is only a fallback when "
-                     "the user's prompt, explicit content instructions and established context do "
-                     "not "
-                     "establish a language; it never overrides them or changes application labels.")
-                     .arg(context.language == QStringLiteral("vi") ? QStringLiteral("Vietnamese")
-                                                                   : QStringLiteral("English"));
     lines << QStringLiteral("Address the team's leader or reviewer as \"leader\" or "
                             "\"reviewer\" in agents_send; use team_get and team_tasks to read "
                             "the team. team_tasks lists one short row per task (open=true for "
@@ -186,6 +160,41 @@ QString teamInstructions(const TeamRoleContext& context) {
                             "never inferred from confidence. Do not ask the user to approve "
                             "again an action already authorized in this session.")
           << QStringLiteral("[/KetPlus team]");
+    return lines.join(QLatin1Char('\n'));
+}
+
+QString conversationContext(const QString& number, const TeamRoleContext& context) {
+    QStringList lines{QStringLiteral("[KetPlus conversation context]"),
+                      QStringLiteral("This conversation is #%1 (@agent/%1).").arg(number)};
+    if (!context.role.isEmpty()) {
+        lines << QStringLiteral("You are the %1 of team \"%2\". Goal: %3")
+                     .arg(context.role, context.team,
+                          context.goal.isEmpty() ? QStringLiteral("(not set yet)") : context.goal);
+    }
+    if (context.role == QStringLiteral("developer"))
+        lines << QStringLiteral("Your lane is \"%1\".").arg(context.lane);
+    if (context.role == QStringLiteral("leader")) {
+        if (!context.leaderWritesRequirements)
+            lines << QStringLiteral(
+                "Acceptance criteria are written by the user. You may not change their text.");
+        lines << (context.mergePolicy == QStringLiteral("user")
+                      ? QStringLiteral("The user merges reviewed tasks into %1; do not merge "
+                                       "unless the user allowed that one task.")
+                      : QStringLiteral(
+                            "You merge each Ready task into %1 in dependency order and hand "
+                            "conflicts back to their owners. Merge into no other branch."))
+                     .arg(context.integrationBranch)
+              << QStringLiteral("Merging %1 onward is the user's.").arg(context.integrationBranch);
+    }
+    if (context.language == QStringLiteral("vi") || context.language == QStringLiteral("en"))
+        lines << QStringLiteral(
+                     "The saved content-language preference is %1. It is only a fallback when "
+                     "the user's prompt, explicit content instructions and established context do "
+                     "not "
+                     "establish a language; it never overrides them or changes application labels.")
+                     .arg(context.language == QStringLiteral("vi") ? QStringLiteral("Vietnamese")
+                                                                   : QStringLiteral("English"));
+    lines << QStringLiteral("[/KetPlus conversation context]");
     return lines.join(QLatin1Char('\n'));
 }
 

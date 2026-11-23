@@ -1,6 +1,7 @@
 #pragma once
 
 #include "agents/AgentBroker.h"
+#include "agents/AgentInstructions.h"
 #include "agents/AgentMutationOrigin.h"
 #include "agents/AgentToolLaunch.h"
 #include "runtime/JournalStorageJobs.h"
@@ -478,7 +479,7 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     teams::RoutingEvidence routingEvidence_;
     QHash<QString, QJsonObject> routingReplies_;
     int routingVerifications_{0};
-    [[nodiscard]] QString teamInstructionsFor(const QString& sessionId) const;
+    [[nodiscard]] agent_messaging::TeamRoleContext teamContextFor(const QString& sessionId) const;
     void noteInConversation(const QString& sessionId, const QJsonObject& note) override;
     void releaseTeamHeldMessages(const QStringList& sessionIds) override;
     [[nodiscard]] QString repositoryOf(const QString& worktreePath) const;

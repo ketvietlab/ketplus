@@ -2354,6 +2354,15 @@ the Microsoft Store alias), and producer-flood timing (QProcess drains the pipe 
 Windows; its cause has not been measured. Fixtures that write exact byte counts switch stdout to
 binary mode (`BinaryStdio.h`), because the C runtime would otherwise add `\r`.
 
+## Team prompt prefix
+
+Run `ketplus_team_agent_tools_tests`, `ketplus_team_language_tests`,
+`ketplus_agent_messaging_tests`, `ketplus_agent_urgent_delivery_tests` and the
+Claude, Cursor and Copilot adapter suites for changes to team prompt assembly.
+These offline fixtures check host instruction and MCP tool-list bytes and the
+first provider input. Cache read and creation counts require real provider
+usage records.
+
 ## English chrome and multilingual team content (T30)
 
 See [the inventory](team-content-language.md). Run `ketplus_team_page_language_tests`,

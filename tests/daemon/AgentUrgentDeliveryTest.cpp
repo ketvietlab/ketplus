@@ -125,7 +125,7 @@ class AgentUrgentDeliveryTest final : public QObject {
 
     void receiptStatesAreDescribedToAgents() {
         // The agents' instructions and the agents_send tool name each receipt state.
-        const QString instructions = agent_messaging::toolInstructions("4821");
+        const QString instructions = agent_messaging::toolInstructions();
         for (const QString& state :
              {"starting", "queued", "steering", "urgent_waiting", "recorded"})
             QVERIFY2(instructions.contains(state), qPrintable(state));

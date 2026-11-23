@@ -71,21 +71,20 @@ QString SessionHost::teamRoleNumber(const QString& sessionId, const QString& rol
     return member ? memberNumber(member->sessionId) : QString{};
 }
 
-QString SessionHost::teamInstructionsFor(const QString& sessionId) const {
+agent_messaging::TeamRoleContext SessionHost::teamContextFor(const QString& sessionId) const {
     const teams::Team* team = teams_ ? teams_->teamOf(sessionId) : nullptr;
     if (!team)
         return {};
     const teams::Member* member = team->member(sessionId);
-    return agent_messaging::teamInstructions(
-        {.team = team->name,
-         .goal = team->goal,
-         .role = member->role,
-         .lane = member->lane,
-         .mergePolicy = team->mergePolicy,
-         .integrationBranch =
-             team->integrationBranch.isEmpty() ? QStringLiteral("HEAD") : team->integrationBranch,
-         .leaderWritesRequirements = team->leaderWritesRequirements,
-         .language = team->language});
+    return {.team = team->name,
+            .goal = team->goal,
+            .role = member->role,
+            .lane = member->lane,
+            .mergePolicy = team->mergePolicy,
+            .integrationBranch = team->integrationBranch.isEmpty() ? QStringLiteral("HEAD")
+                                                                   : team->integrationBranch,
+            .leaderWritesRequirements = team->leaderWritesRequirements,
+            .language = team->language};
 }
 
 QString SessionHost::teamMemberByNumber(const teams::Team& team, const QString& number) const {

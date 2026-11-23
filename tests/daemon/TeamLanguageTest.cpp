@@ -308,14 +308,15 @@ class TeamLanguageTest final : public QObject {
              {QStringLiteral("auto"), QStringLiteral("vi"), QStringLiteral("en")}) {
             for (const QString& role : {QStringLiteral("leader"), QStringLiteral("developer"),
                                         QStringLiteral("reviewer")}) {
-                const QString instructions =
-                    teamInstructions({.team = "Shop", .role = role, .language = language});
+                const QString instructions = teamInstructions(role);
+                const QString context = agent_messaging::conversationContext(
+                    "4821", {.team = "Shop", .role = role, .language = language});
                 QVERIFY(instructions.contains("The application interface is English"));
                 QVERIFY(instructions.contains("A Vietnamese prompt calls for Vietnamese content"));
                 QVERIFY(instructions.contains("an English prompt calls for English"));
                 QVERIFY(instructions.contains("explicit content-language instructions"));
                 QVERIFY(instructions.contains("retain the established content language"));
-                QVERIFY(instructions.contains("never overrides them") || language == "auto");
+                QVERIFY(context.contains("never overrides them") == (language != "auto"));
                 QVERIFY(instructions.contains("do not translate it retroactively"));
                 QVERIFY(!instructions.contains("The team works in Vietnamese"));
             }
