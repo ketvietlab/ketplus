@@ -445,9 +445,10 @@ void LocalIpcServer::consumeFrame(QLocalSocket* socket, const QByteArray& frame)
         });
         return;
     }
-    // Answered later: a background task command, and a team command that waits for git.
+    // Answered later: a background task command, and a team command or worktree listing that
+    // waits for git.
     if (SessionHost::isManagedTaskCommand(type) || SessionHost::isBackgroundTaskCommand(type) ||
-        type.startsWith(QStringLiteral("team."))) {
+        type.startsWith(QStringLiteral("team.")) || type == QStringLiteral("session.worktrees")) {
         const QPointer<QLocalSocket> guardedSocket(socket);
         host_->handleCommandDeferred(request, it->clientId,
                                      [server = QPointer<LocalIpcServer>(this), guardedSocket,

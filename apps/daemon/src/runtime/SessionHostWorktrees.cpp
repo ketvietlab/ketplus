@@ -354,6 +354,20 @@ void SessionHost::sessionWorktreesDeferred(const QJsonObject& request, const QSt
             guard,
             [guard, request, clientId, done = std::move(done),
              listing = std::move(listing)]() mutable {
+                // The conversation moved while Git listed its old checkout: list where it is
+                // now, again off this thread, rather than read Git here.
+                const auto current =
+                    guard->sessions_.constFind(request.value("session_id").toString());
+                if (current != guard->sessions_.cend()) {
+                    const auto now = current->stored.worktreePath;
+                    const auto recordedNow =
+                        QFileInfo(now).isDir() ? QString{}
+                                               : guard->journal_->worktreeRepositories().value(now);
+                    if (now != listing.sessionWorktree || recordedNow != listing.recordedRoot) {
+                        guard->sessionWorktreesDeferred(request, clientId, std::move(done));
+                        return;
+                    }
+                }
                 guard->prefetchedWorktreeListing_ = &listing;
                 const auto result = guard->handleCommand(request, clientId);
                 guard->prefetchedWorktreeListing_ = nullptr;
@@ -489,7 +503,7 @@ void SessionHost::recordWorktreeActivity(Session& session, const QString& type,
             paths.append(v.toObject().value("path").toString());
     if (paths.isEmpty())
         return;
-    const auto entries = worktrees(root);
+    const auto entries = worktreePaths_.checkouts(root);
     for (const auto& path : paths) {
         if (!QFileInfo(path).isAbsolute())
             continue;
@@ -497,8 +511,7 @@ void SessionHost::recordWorktreeActivity(Session& session, const QString& type,
         if (canonical.isEmpty())
             continue;
         QString matched;
-        for (const auto& v : entries) {
-            const auto candidate = v.toObject().value("worktree_path").toString();
+        for (const auto& candidate : entries) {
             if ((canonical == candidate || canonical.startsWith(candidate + '/')) &&
                 candidate.size() > matched.size())
                 matched = candidate;
