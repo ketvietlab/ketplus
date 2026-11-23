@@ -44,8 +44,12 @@ class RelayFrameLink final : public QObject {
     static constexpr qsizetype maximumSendBytes = 4 * 1024;
     static constexpr qsizetype maximumReceiveBytes = 66 * 1024;
 
+    // Overloads rather than a default argument: a nested type's member initializers are not
+    // usable in a default argument inside the enclosing class (Apple clang refuses it).
+    RelayFrameLink(const QUrl& origin, TokenSource token, SocketFactory factory, Options options,
+                   QObject* parent = nullptr);
     RelayFrameLink(const QUrl& origin, TokenSource token, SocketFactory factory,
-                   Options options = {}, QObject* parent = nullptr);
+                   QObject* parent = nullptr);
     ~RelayFrameLink() override;
 
     void start();

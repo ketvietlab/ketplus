@@ -19,6 +19,10 @@ RelayEventStream::RelayEventStream(RelayFrameLink* link, QString machineId,
         linkOpened();
 }
 
+RelayEventStream::RelayEventStream(RelayFrameLink* link, QString machineId,
+                                   EventCursorStore* cursors, QObject* parent)
+    : RelayEventStream(link, std::move(machineId), cursors, Options{}, parent) {}
+
 void RelayEventStream::send(const QList<QByteArray>& frames) {
     for (const QByteArray& frame : frames)
         if (!frame.isEmpty())
