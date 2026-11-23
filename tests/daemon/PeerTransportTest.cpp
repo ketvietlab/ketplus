@@ -594,6 +594,119 @@ class PeerTransportTest final : public QObject {
         emit host.eventReady(event);
         QCOMPARE(notices.pending(), 0);
     }
+    // The heartbeat lists the capability; once the answer lists it too, events leave as frames
+    // and notices only, and a withdrawn answer resumes uploads after the journal head.
+    void forwardOnlyMovesEventsToFramesAndBack() {
+        QTemporaryDir dir;
+        LocalJournal journal(dir.filePath("journal.sqlite"));
+        StoredSession session;
+        session.id = "session";
+        session.worktreePath = dir.path();
+        session.state = "ready";
+        session.adapter = "codex";
+        QVERIFY(journal.upsertSession(session));
+        CodexAdapter provider(dir.filePath("never-run-provider"));
+        SessionHost host(&journal, &provider);
+        r03::Transport network;
+        network.statusForPath.insert("/v2/events:append", 202);
+        CloudControlClient cloud(&journal, &host);
+        Access::configure(cloud, network);
+        CredentialStore deviceStore("forward-device");
+        CloudCrypto device(&deviceStore);
+        const auto keys = device.publicKeys();
+        auto& signaling = Access::signaling(cloud);
+        auto& peers = Access::peers(cloud);
+        signaling.configure("workspace-synthetic", "machine-synthetic", 1, true);
+        QJsonArray frames;
+        signaling.setRelaySender([&](const QJsonObject& message) {
+            frames.append(message);
+            return true;
+        });
+        Access::pinDevice(cloud, "device", 1, keys);
+        QVERIFY(!Access::crypto(cloud)
+                     .wrapSessionKey("session", 1, 1,
+                                     {{"id", "device"}, {"keyVersion", 1}, {"keys", keys}},
+                                     "machine-synthetic", 1)
+                     .isEmpty());
+        Access::heartbeatAnswer(
+            cloud, {{"compatibility",
+                     QJsonObject{{"capabilities", QJsonArray{"events.forward_only/1"}}}}});
+        QVERIFY(Access::eventsForwardOnly(cloud));
+        // The answer reconfigures signaling from the enrollment, which the test has none of.
+        signaling.configure("workspace-synthetic", "machine-synthetic", 1, true);
+        signaling.setForwardOnly(true);
+        QVERIFY(signaling.forwardOnlyActive());
+        const QJsonObject subscribe{{"type", "frame"},
+                                    {"deviceId", "device"},
+                                    {"frame", QJsonObject{{"type", "subscribe"},
+                                                          {"sessionId", "session"},
+                                                          {"sessionGeneration", 1},
+                                                          {"afterCursor", 0}}}};
+        network.statusForPath.insert("/v2/devices", 200);
+        network.responseForPath.insert(
+            "/v2/devices",
+            QJsonDocument(
+                QJsonArray{QJsonObject{
+                    {"id", "device"}, {"keyVersion", 1}, {"status", "active"}, {"keys", keys}}})
+                .toJson());
+        QTRY_VERIFY_WITH_TIMEOUT((signaling.receive(subscribe), peers.size() == 1), 3000);
+        frames = QJsonArray{};
+
+        QString error;
+        const qint64 first =
+            journal.appendEvent("session", 1, "turn.completed", {{"text", "synthetic"}}, &error);
+        QVERIFY2(first > 0, qPrintable(error));
+        emit host.eventReady(QJsonObject{{"session_id", "session"},
+                                         {"cursor", first},
+                                         {"event_type", "turn.completed"},
+                                         {"payload", QJsonObject{{"text", "synthetic"}}}});
+        Access::uploadAll(cloud);
+        QCoreApplication::processEvents();
+        const auto appends = [&] {
+            int count = 0;
+            for (const auto& request : std::as_const(network.requests))
+                count += request.url().path() == "/v2/events:append";
+            return count;
+        };
+        QCOMPARE(appends(), 0);
+        // The event reaches the subscriber as a frame (live, or in a page).
+        QTRY_VERIFY_WITH_TIMEOUT(
+            std::any_of(
+                frames.cbegin(), frames.cend(),
+                [](const QJsonValue& value) {
+                    const auto inner = value.toObject().value("frame").toObject();
+                    return inner.value("type") == "events" &&
+                           !inner.value("page").toObject().value("events").toArray().isEmpty();
+                }),
+            3000);
+        QCOMPARE(Access::pushSignals(cloud).pending(), 1); // and a content-free notice waits
+
+        Access::heartbeatAnswer(cloud,
+                                {{"compatibility", QJsonObject{{"capabilities", QJsonArray{}}}}});
+        QVERIFY(!Access::eventsForwardOnly(cloud));
+        QVERIFY(!signaling.forwardOnlyActive());
+        const qint64 second =
+            journal.appendEvent("session", 1, "turn.completed", {{"text", "synthetic"}}, &error);
+        QVERIFY2(second > first, qPrintable(error));
+        network.responseForPath.insert(
+            "/v2/events:append",
+            QJsonDocument(
+                QJsonObject{{"acceptedThrough", QJsonArray{QJsonObject{{"sessionId", "session"},
+                                                                       {"sessionGeneration", 1},
+                                                                       {"cursor", second}}}}})
+                .toJson(QJsonDocument::Compact));
+        Access::noteEvent(cloud, second, "session");
+        Access::uploadAll(cloud);
+        QTRY_COMPARE_WITH_TIMEOUT(appends(), 1, 3000);
+        for (qsizetype i = 0; i < network.requests.size(); ++i) {
+            if (network.requests.at(i).url().path() != "/v2/events:append")
+                continue;
+            const auto events =
+                QJsonDocument::fromJson(network.bodies.at(i)).object().value("events").toArray();
+            QCOMPARE(events.size(), 1); // only the event journaled after the withdrawal
+            QCOMPARE(events.at(0).toObject().value("cursor").toInteger(), second);
+        }
+    }
     void largeItemsReachThePeerWithTheirChunks() {
         QTemporaryDir dir;
         LocalJournal journal(dir.filePath("journal.sqlite"));

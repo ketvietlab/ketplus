@@ -24,7 +24,7 @@ A paired phone or desktop reaches the daemon over an encrypted peer connection, 
 
 ## Journal while events are forwarded
 
-The daemon follows the event-forwarding capability in each heartbeat answer, even though it does not list the capability in its own heartbeat yet.
+The daemon lists the event-forwarding capability in each heartbeat and follows it in each heartbeat answer.
 
 - While the answer lists it, the daemon uploads no events and prepares no upload batches; live frames, host pages, heartbeats, session metadata, session keys, the command path and push notices go on as before. An upload already in flight finishes but sends no further chunk. The daemon remembers the state for its enrollment, so a restart does not upload the backlog before the next answer.
 - When an answer no longer lists it, the daemon moves each session's upload cursor to the journal head at that moment and uploads only events journaled afterwards. Events journaled while forwarding are never uploaded. Those still within the paging window stay in the journal; the upload acknowledgement moves no further until the next acknowledged upload. A late answer to an earlier upload never moves the cursor back.

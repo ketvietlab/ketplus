@@ -33,7 +33,7 @@ endif()
 
 project(
     KetPlus
-    VERSION 0.1.52
+    VERSION 0.1.53
     DESCRIPTION "The full KetPlus desktop product"
     LANGUAGES C CXX
 )

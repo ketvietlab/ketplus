@@ -1,6 +1,7 @@
 #pragma once
 
 #include <QByteArray>
+#include <QJsonArray>
 #include <QJsonObject>
 #include <QJsonValue>
 #include <QString>
@@ -14,6 +15,14 @@ inline QJsonObject object(const QJsonValue& value) {
 
 inline QString responseCode(const QJsonValue& value, const QString& fallback) {
     return object(value).value(QStringLiteral("code")).toString(fallback);
+}
+
+// The capabilities this daemon lists in each heartbeat. `events.forward_only/1` tells the service
+// that the daemon follows its answer: while the answer lists it, events reach clients only as
+// frames and the daemon uploads none.
+inline QJsonArray daemonCapabilities() {
+    return QJsonArray{"transport.webrtc/1", "teams.remote/1", "session.prepare/1", "runner.relay/1",
+                      "events.forward_only/1"};
 }
 
 // Keyed with a per-installation random salt so the relay cannot confirm guessed paths.
