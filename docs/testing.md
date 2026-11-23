@@ -1704,10 +1704,7 @@ SDP, in-memory credentials, temporary SQLite and a fake provider that is never
 started. It covers transfer caps/order/expiry, strict send priority, grants,
 revocation, supersede/epochs, subscriptions, cloud-safe encryption and the same
 command retried over both paths. No user daemon or provider account is accessed.
-`ketplus_daemon_push_signal_tests` needs no network: the exact five keys of each notice and its
-kinds, events that raise none, sending only while events are forwarded, the 64-notice bound with
-the newest kept, expiry, retry on a backed-up socket and ignoring the answer; the peer suite checks
-the wiring from appended events to the notice queue.
+`ketplus_daemon_push_signal_tests` covers the notices without a network.
 `ketplus_daemon_relay_peer_link_tests` needs no network: the relay frame envelope, the 4 KiB
 client and 64 KiB host caps, page trimming, `gap` on a full live queue and for an oversized event,
 `session.reset`, links closed by refused frames, drops, socket loss and revocation, and expiry

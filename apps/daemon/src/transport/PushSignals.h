@@ -8,7 +8,7 @@
 
 namespace ketplus::daemon::transport {
 // Content-free notices that an event worth a phone notification was appended, sent on the
-// daemon's relay socket while events are forwarded instead of uploaded. A notice holds exactly
+// daemon's message socket while events are forwarded instead of uploaded. A notice holds exactly
 // five keys: type "push.signal", sessionId, routingId (the session's processInstanceId, which is
 // its id), kind and cursor. It never carries text, ciphertext, titles or tool names.
 // Best effort: at most maxPending notices wait for the socket, a new one replaces the oldest,
