@@ -318,7 +318,7 @@ and local/archive includes with cycles, escapes and the 16-level boundary.
 | Browser provider wiring | `ketplus_browser_provider_integration_tests` | host routing instructions for direct/daemon Codex and new/resumed Claude/Cursor, prompt/image preservation, scoped approvals, disabled/damaged/missing runtime |
 | Daemon Claude adapter | `ketplus_daemon_claude_adapter_tests` | sidecar turns, approvals, handoff |
 | Provider handoff history | `ketplus_provider_handoff_tests` | history after delivery acknowledgment, compacted cursor gaps, event/byte-limited paging, session/generation isolation |
-| Team context reset (ADR 0114 §11) | `ketplus_team_context_reset_tests` | coordinator with a fake runtime: task boundary for developers and reviewers, threshold for every role, `cache_cold` for every role (the idle and the 50,000-token size both needed, unknown size or turn end, `never`, an idle of 0, the older reasons first), `threshold` and `never`, a threshold of 0, a new thread adopted, `context_size` at and below the limit, custom and disabled limits, settings validated and kept, briefing within 4 KiB and the leader's 20 open tasks; then the scripted fake providers: the leader's team turns start fresh past the threshold with the transcript note and briefing, user turns never do, a woken leader starts fresh with `cache_cold` on a fake clock timed from the end of a long turn, and a transcript that cannot be written keeps the thread |
+| Team context reset (ADR 0114 §11) | `ketplus_team_context_reset_tests` | coordinator with a fake runtime: task boundary for developers and reviewers, threshold for every role, `cache_cold` for every role (the idle and the 50,000-token size both needed, unknown size or turn end, `never`, an idle of 0, the older reasons first), `threshold` and `never`, a threshold of 0, a new thread adopted, `context_size` at and below the limit, custom and disabled limits, settings validated and kept, briefing within 4 KiB with multibyte truncation, deduplicated task file hints and criteria excerpts, and the leader's 20 open tasks; then the scripted fake providers: the leader's team turns start fresh past the threshold with the transcript note and briefing, user turns never do, a woken leader starts fresh with `cache_cold` on a fake clock timed from the end of a long turn, and a transcript that cannot be written keeps the thread |
 | Held-message Desktop release (#130) | `ketplus_agent_messaging_tests`, `ketplus_provider_transcript_tests`; Agent Workspace `heldMessageRequiresExplicitClickAndFencesDuplicates` | scoped authorization, all three guards, whole-batch validation, busy receiver, agent/remote refusal, expiry/deletion/generation fences, command replay, recovery before/after the durable input, explicit click/retry and typed notice projection; fake providers only |
 | Agent messaging (ADR 0027) | `ketplus_agent_messaging_tests` | number allocation, uniqueness, restart stability and legacy-journal backfill; idle delivery and automatic reply from the final answer; busy receivers batched at turn end; `urgent` steering of a running turn; hop, chain and hourly holds released with the next user turn, the per-sender backlog and the per-turn delivery budget measured on the serialized message (escapes and sender title), with oversize messages refused at send, and the 24-hour request expiry; `#NNNN` references; token, number, size and reply validation; deletion quarantine and token revocation; per-provider `ketplus_agents` injection (Claude `mcpServers`, Codex dotted per-thread config, Cursor ACP); agent-token IPC scope without broadcasts; MCP tool mapping; `sent` and `replied` notices and the running automatic turn's sender in `session.list`; the number and that sender sealed into the phone's session metadata (`ketplus_daemon_cloud_privacy_tests`); Desktop notice text (`ketplus_provider_transcript_tests`) and the sidebar "from #N" label (`ketplus_workspace_tests`). Fake providers only; the one authorized live run is recorded in ADR 0027 |
 | Conversation fork | `ketplus_daemon_session_fork_tests` | `threadFork` gating, Codex/Claude native fork, transcript copy at the same cursors, idempotent retry, active source isolation and unknown refusal, next turn resumes the forked thread; a fork of an archived conversation is unarchived and outlives its source's expiry (ADR 0100) |
@@ -2383,6 +2383,39 @@ the fake providers, excluding launch environment values. It also compares the
 ordered MCP tool list through the real session-bound agent command handler.
 Provider-generated context, deferred-tool ordering, and cache read and creation
 counts require real provider usage records.
+
+### Offline reset briefing measurement
+
+The offline baseline comes from 17 existing local Claude JSONL transcripts.
+Each user record containing the KetPlus reset marker starts a segment that
+ends at the next marker or end of file. Of 21 segments, 20 had a recorded
+assistant response with usage. Count one request per distinct Claude
+message ID in transcript order, retaining its last usage record.
+
+| Baseline metric | Reset segments with data | Median | Range |
+| --- | ---: | ---: | ---: |
+| Discovery requests among the first 20 observed requests | 20 | 1 | 0–4 |
+| Input context tokens at request #10 | 13 | 75,201 | 47,230–364,331 |
+| Input context tokens at request #20 | 7 | 78,636 | 63,420–427,815 |
+
+The 20 segments recorded 24 qualifying discovery requests. This conservative
+count includes only requests whose tool calls all read or search files, list
+paths, or inspect team/task state. Shell commands must begin with `rg`, `cat`,
+`sed -n`, `head`, `tail`, or `ls` and contain no shell chaining, pipelines,
+output redirection, or command substitution. Segments with fewer than 20
+requests contribute only their observed requests. Context tokens sum
+`input_tokens`, `cache_creation_input_tokens`, and `cache_read_input_tokens`.
+Each context sample includes only segments that reached the stated
+request number. The two milestones therefore use different samples.
+
+On Linux with Qt 6.11.1, calling the production briefing renderer for a
+synthetic developer task produced **502 UTF-8 bytes** and **four file hints**.
+The fixture used one description with two inline paths and one criterion with
+a repeated path and one new path. The four hints include `AGENTS.md`.
+This measures the generated briefing for one reset. The renderer caps the
+briefing at 4,096 bytes, and the context reset suite covers multibyte
+truncation. Live request counts and context measurements require a separate
+provider usage sample.
 
 ## English chrome and multilingual team content (T30)
 

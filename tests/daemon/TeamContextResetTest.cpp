@@ -325,7 +325,8 @@ class TeamContextResetTest final : public QObject {
         task->criteria.clear();
         for (int index = 0; index < maximumCriteria; ++index)
             task->criteria.append(
-                {QStringLiteral("Criterion %1 ").arg(index) + QString(900, 'c'), index % 2 == 0});
+                {QStringLiteral("Criterion %1 ").arg(index) + QString(450, QChar(0x1EC7)),
+                 index % 2 == 0});
         for (int index = 0; index < 30; ++index)
             task->history.append(
                 {.at = nowIso(),
@@ -336,6 +337,9 @@ class TeamContextResetTest final : public QObject {
         QVERIFY(text.toUtf8().size() <= context_reset::maximumBriefingBytes);
         QVERIFY(text.contains(first_));
         QVERIFY(text.contains("team_get"));
+        QVERIFY(text.contains("briefing shortened"));
+        QVERIFY(text.endsWith(QStringLiteral("\n\n")));
+        QCOMPARE(QString::fromUtf8(text.toUtf8()), text);
         // Small enough to be whole: the last five entries, and none before them.
         task->criteria = {{"Works", true}};
         for (HistoryEntry& entry : task->history)
@@ -346,6 +350,28 @@ class TeamContextResetTest final : public QObject {
         QVERIFY(whole.contains("entry-25") && whole.contains("entry-29"));
         QVERIFY(!whole.contains("entry-24"));
         QVERIFY(whole.contains("lane \"Web\""));
+    }
+
+    void theBriefingListsTaskFilesAndSummarizesCriteria() {
+        Team project = team();
+        Task* task = project.task(first_);
+        task->description = QStringLiteral("Read `docs/design.md` and `src/main.cpp`. "
+                                           "Skip `/tmp/secret.txt`, `../other.md`, `0.1.53`, "
+                                           "`team.name`, and `node.js`.");
+        task->criteria = {{QStringLiteral("Verify `src/main.cpp` with `tests/reset.cpp`."), true},
+                          {QStringLiteral("Document the limit. ") + QString(600, 'a'), false}};
+        const QString brief = context_reset::briefing(project, *project.member("dev1"), first_);
+        QVERIFY(brief.contains("Files to read in the task worktree:\n- AGENTS.md\n"
+                               "- docs/design.md\n- src/main.cpp\n- tests/reset.cpp\n"));
+        QVERIFY(!brief.contains("\n- /tmp/secret.txt"));
+        QVERIFY(!brief.contains("\n- ../other.md"));
+        QVERIFY(!brief.contains("\n- 0.1.53"));
+        QVERIFY(!brief.contains("\n- team.name"));
+        QVERIFY(!brief.contains("\n- node.js"));
+        QVERIFY(brief.contains("Acceptance criteria (summary):"));
+        QVERIFY(brief.contains("- [x] Verify"));
+        QVERIFY(brief.contains("- [ ] Document the limit."));
+        QVERIFY(brief.contains("more characters)"));
     }
 
     void theLeaderBriefingListsAtMostTwentyOpenTasks() {
