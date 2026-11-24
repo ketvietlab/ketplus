@@ -445,6 +445,92 @@ class ManagedTaskRuntimeTest final : public QObject {
         }
         QSqlDatabase::removeDatabase(connection);
     }
+
+    // ADR 0127 §7a: a job held behind its root's full slots tells its owner once, and why,
+    // well before its timeout; the notice is superseded when the job ends.
+    void aJobQueuedBehindFullRootSlotsNotifiesItsOwnerOnceBeforeItsTimeout() {
+        QString connection;
+        {
+            Fixture fixture;
+            connection = fixture.connection;
+            QString error;
+            QVERIFY(fixture.initialize(&error));
+            fixture.runtime->setCallbacks(
+                {},
+                [&](const QJsonObject& task, const QJsonObject&) {
+                    fixture.runtime->permissionResolved(task.value("task_id").toString(), true);
+                },
+                [&](const QJsonObject& task, const QJsonObject&) {
+                    const auto id = task.value("task_id").toString();
+                    const auto child = "child-" + id;
+                    QSqlQuery query(fixture.database);
+                    query.prepare("INSERT INTO sessions VALUES(?,1)");
+                    query.addBindValue(child);
+                    QVERIFY(query.exec());
+                    query.prepare("INSERT INTO managed_job_children VALUES(?,?,1)");
+                    query.addBindValue(id);
+                    query.addBindValue(child);
+                    QVERIFY(query.exec());
+                    BackgroundTaskChange running;
+                    running.state = "running";
+                    running.handshakeCommitted = true;
+                    running.executionIdentity = {{"child_session_id", child},
+                                                 {"child_generation", 1}};
+                    fixture.runtime->childChanged(id, running);
+                },
+                [](const QJsonObject&) {});
+            QStringList holders;
+            for (int i = 0; i < BackgroundTaskLedger::rootSlotLimit; ++i) {
+                auto request = fixture.intent("holder" + QString::number(i));
+                request.kind = "agent";
+                request.timeoutMs = 60000;
+                const auto id = fixture.start(request, {{"prompt", "Fake child"}})
+                                    .value("task")
+                                    .toObject()
+                                    .value("task_id")
+                                    .toString();
+                QTRY_COMPARE(fixture.get(id).value("state"), "running");
+                holders.append(id);
+            }
+            auto request = fixture.intent("queued");
+            request.kind = "agent";
+            request.timeoutMs = 3000;
+            const auto queued = fixture.start(request, {{"prompt", "Fake queued child"}})
+                                    .value("task")
+                                    .toObject()
+                                    .value("task_id")
+                                    .toString();
+            QTRY_VERIFY(fixture.get(queued).value("permission_approved").toBool());
+            QCOMPARE(fixture.get(queued).value("state"), "queued");
+            const auto notices = [&](const QString& status) {
+                QSqlQuery query(fixture.database);
+                query.prepare("SELECT count(*) FROM managed_job_notices WHERE task_id=? "
+                              "AND kind='queued' AND status=?");
+                query.addBindValue(queued);
+                query.addBindValue(status);
+                return query.exec() && query.next() ? query.value(0).toInt() : -1;
+            };
+            QTRY_COMPARE_WITH_TIMEOUT(notices("pending"), 1, 2500);
+            // Still queued: the notice came before the timeout, not with it.
+            QCOMPARE(fixture.get(queued).value("state"), "queued");
+            const auto page = fixture.ledger.noticePage().value("events").toArray();
+            QCOMPARE(page.size(), 1);
+            const auto turn = page.first().toObject().value("turn_record").toObject();
+            QCOMPARE(turn.value("event"), "queued");
+            QCOMPARE(turn.value("queue_reason"), "root_slot_limit");
+            QCOMPARE(turn.value("slot_limit").toInt(), BackgroundTaskLedger::rootSlotLimit);
+            QStringList named;
+            for (const auto holder : turn.value("slot_holders").toArray())
+                named.append(holder.toObject().value("task_id").toString());
+            QCOMPARE(named, holders);
+            QVERIFY(fixture.ledger.noticeCurrent(turn));
+            QTRY_COMPARE_WITH_TIMEOUT(fixture.get(queued).value("state"), "timed_out", 3000);
+            QCOMPARE(notices("pending"), 0);
+            QCOMPARE(notices("suppressed"), 1);
+            QVERIFY(!fixture.ledger.noticeCurrent(turn));
+        }
+        QSqlDatabase::removeDatabase(connection);
+    }
 };
 QTEST_GUILESS_MAIN(ManagedTaskRuntimeTest)
 #include "ManagedTaskRuntimeTest.moc"

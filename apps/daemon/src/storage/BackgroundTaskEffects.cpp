@@ -25,6 +25,7 @@ QJsonObject BackgroundTaskLedger::applyTransition(const QString& id, QJsonObject
                                                   qint64 revision,
                                                   const BackgroundTaskChange& change,
                                                   const BackgroundTaskEffects& effects) {
+    const QString previous = record.value("state").toString();
     std::optional<bool> stopped = effects.executorStopped;
     const auto stop = [&](const bool value) {
         if (!stopped)
@@ -98,7 +99,15 @@ QJsonObject BackgroundTaskLedger::applyTransition(const QString& id, QJsonObject
         if (!query.exec())
             return failure("storage_error", query.lastError().text());
     }
+    if (change.state == "needs_attention") {
+        const auto noticed = noticeAttention(id, record, previous);
+        if (!noticed.value("ok").toBool())
+            return noticed;
+    }
     if (terminal(change.state)) {
+        const auto superseded = supersedeNotices(id);
+        if (!superseded.value("ok").toBool())
+            return superseded;
         const QString eventId = id + ":" + QString::number(revision + 1);
         record.insert("completion_event_id", eventId);
         record.insert("ended_at", record.value("updated_at"));

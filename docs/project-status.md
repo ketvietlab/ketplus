@@ -144,7 +144,8 @@ Linux store policy, signed upgrade prompts and platform release acceptance remai
   most twice, then a `stalled` decision asks the user to wake the leader again or pause.
   A member the user stopped is not woken on its own.
   `team_wait` lets a leader or developer wait 1 to 60 minutes for something outside the
-  team and be woken to check, and a member's message to a conversation outside the team
+  team and be woken to check; a build runs as a managed background job instead, whose
+  wake ends that wait and keeps the watchdog off the member (ADR 0127 §7a). A member's message to a conversation outside the team
   that failed or was never answered wakes that member (message kinds `wait` and
   `message_failed`). Waits are in memory only; neither has run on a live team yet.
   Disk and done worktrees (ADR 0114 §10, `teams.storage/1`): the team page warns below
@@ -792,7 +793,9 @@ Linux store policy, signed upgrade prompts and platform release acceptance remai
   deny hooks; the legacy collector/stop/output path remains for drain. Offline MCP,
   sidecar and real-SDK control checks are implementation evidence, not live-model
   or shared desktop UI acceptance. Registry completion uses the durable owner-wake
-  path instead of a retained Claude query or a watchdog. Start/stop require an
+  path instead of a retained Claude query or a watchdog. The same path carries one owner
+  notice when a job enters `needs_attention` or stays queued past half its timeout
+  (at most two minutes), naming why (ADR 0127 §7a). Start/stop require an
   immutable per-turn mutation capability; review origins receive no grant and
   accepted jobs retain their effective-policy snapshot. Claude waits for actual
   SDK process exit; Codex/ACP use dedicated per-conversation processes before

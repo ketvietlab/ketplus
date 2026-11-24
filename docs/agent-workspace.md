@@ -1152,6 +1152,14 @@ the job (`Queued · title`, or `title and N more`). The opened output lists the 
 facts above its output: when it was queued or created, its timeout, a verified
 cleanup and what happens when it ends, including that a cancelled job wakes no one.
 
+The owner agent is told too ([ADR 0127 §7a](decisions/0127-daemon-background-tasks.md#7a-owner-notices-of-nonterminal-jobs)).
+Entering `needs_attention` queues one owner notice that says cleanup is unverified and
+that only the user acknowledges it. An approved job still queued after half its timeout
+(at most two minutes) queues one notice naming why: its root's four slots are held (the
+notice lists the jobs holding them), it waits for a runner, or it is not admitted yet.
+Both go through the completion wake's acceptance and fences, and are dropped when the
+job has moved on before the owner could take them.
+
 Output is plain text for both managed process and agent jobs. Reads return at most
 8 KiB and the UI passes `next_cursor` back unchanged. Read more/Refresh and live
 polling append pages to a bounded 64K-character display; spool truncation and display
@@ -1365,6 +1373,12 @@ one **reviewer** (a Claude conversation). A conversation is on at most one team.
   entering review, the reviewer; findings, the owner; an answered decision, the leader
   and the blocked owner; actionable updates, one leader digest. Notes, met marks and
   other state changes start nothing.
+- **Waiting for builds.** A member runs a long build or test as a managed background job
+  (`background_task_start`) and ends its turn: the job's completion, or a notice that it
+  needs attention or is still queued, starts its next turn. While it owns such a job the
+  watchdog counts it as at work and looks again later, since a job the user stops wakes
+  no one. `team_wait` with minutes is for what KetPlus does not track, such as a
+  deployment or another conversation's answer; a job's wake leaves such a wait in place.
 - **Decisions.** Only the leader raises one; the user answers on the team page. The
   folder in the sidebar shows the count.
 - **Commands from the page.** Every control that sends a team command (a decision's

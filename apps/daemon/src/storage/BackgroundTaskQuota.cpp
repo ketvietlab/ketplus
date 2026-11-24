@@ -37,9 +37,10 @@ QJsonObject BackgroundTaskLedger::claimNext() {
         "json_extract(j.record,'$.created_at')+json_extract(j.record,'$.timeout_ms')>? AND "
         "(SELECT count(*) FROM managed_jobs active WHERE active.holds_slot=1 "
         "AND active.root_session_id=j.root_session_id AND "
-        "active.root_generation=j.root_generation)<4 "
+        "active.root_generation=j.root_generation)<? "
         "ORDER BY j.sequence LIMIT 1");
     query.addBindValue(QDateTime::currentMSecsSinceEpoch());
+    query.addBindValue(rootSlotLimit);
     if (!query.exec())
         return fail("storage_error", query.lastError().text());
     if (!query.next()) {

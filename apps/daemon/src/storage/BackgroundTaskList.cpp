@@ -102,4 +102,13 @@ QJsonObject BackgroundTaskLedger::list(const BackgroundTaskOwner& owner, const Q
             {"revision", revision},
             {"active_count", activeCount}};
 }
+
+bool BackgroundTaskLedger::ownsLiveJobs(const BackgroundTaskOwner& owner) const {
+    QSqlQuery query(database_);
+    query.prepare("SELECT 1 FROM managed_jobs WHERE owner_session_id=? AND owner_generation=? "
+                  "AND state IN ('queued','starting','running','stopping') LIMIT 1");
+    query.addBindValue(owner.sessionId);
+    query.addBindValue(owner.generation);
+    return query.exec() && query.next();
+}
 } // namespace ketplus::daemon

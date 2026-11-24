@@ -31,6 +31,7 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/storage/BackgroundTaskTransitions.cpp
     src/storage/BackgroundTaskDelivery.cpp
     src/storage/BackgroundTaskWakeQueue.cpp
+    src/storage/BackgroundTaskNotices.cpp
     src/storage/BackgroundTaskQuota.cpp
     src/storage/BackgroundTaskList.cpp
     src/storage/BackgroundTaskFingerprint.cpp

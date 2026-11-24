@@ -61,12 +61,15 @@ QJsonObject BackgroundTaskLedger::suppressCompletion(const QString& eventId,
     if (!database_.transaction())
         return failure("storage_error", database_.lastError().text());
     QSqlQuery query(database_);
-    query.prepare("UPDATE managed_job_outbox SET status='suppressed',reason=? WHERE event_id=?");
-    query.addBindValue(reason);
-    query.addBindValue(eventId);
-    if (!query.exec()) {
-        database_.rollback();
-        return failure("storage_error", query.lastError().text());
+    for (const auto* table : {"managed_job_outbox", "managed_job_notices"}) {
+        query.prepare(QStringLiteral("UPDATE %1 SET status='suppressed',reason=? WHERE event_id=?")
+                          .arg(QLatin1String(table)));
+        query.addBindValue(reason);
+        query.addBindValue(eventId);
+        if (!query.exec()) {
+            database_.rollback();
+            return failure("storage_error", query.lastError().text());
+        }
     }
     query.prepare("UPDATE managed_job_wakes SET state='suppressed' WHERE event_id=?");
     query.addBindValue(eventId);

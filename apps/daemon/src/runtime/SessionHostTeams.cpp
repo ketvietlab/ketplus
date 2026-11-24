@@ -3,6 +3,7 @@
 
 #include "agents/AgentInstructions.h"
 #include "protocol/DaemonProtocol.h"
+#include "runtime/ManagedTaskBridge.h"
 #include "runtime/TeamGit.h"
 
 #include <QDir>
@@ -134,16 +135,19 @@ SessionHost::teamConversation(const QString& sessionId) const {
     if (it == sessions_.cend())
         return std::nullopt;
     const AgentConversation agent = agentConversationOf(*it);
-    return teams::TeamConversation{.sessionId = sessionId,
-                                   .generation = it->stored.generation,
-                                   .number = agent.number,
-                                   .title = it->stored.title,
-                                   .provider = it->stored.adapter,
-                                   .model = it->stored.model,
-                                   .effort = it->stored.effort,
-                                   .worktree = it->stored.worktreePath,
-                                   .executionPolicy = it->stored.executionPolicy,
-                                   .idle = agent.idle};
+    return teams::TeamConversation{
+        .sessionId = sessionId,
+        .generation = it->stored.generation,
+        .number = agent.number,
+        .title = it->stored.title,
+        .provider = it->stored.adapter,
+        .model = it->stored.model,
+        .effort = it->stored.effort,
+        .worktree = it->stored.worktreePath,
+        .executionPolicy = it->stored.executionPolicy,
+        .idle = agent.idle,
+        .backgroundJobs =
+            managedTasks_ && managedTasks_->ownsLiveJobs({sessionId, it->stored.generation, {}})};
 }
 
 std::optional<teams::TeamConversation>

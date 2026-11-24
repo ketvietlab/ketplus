@@ -66,7 +66,14 @@ bool BackgroundTaskLedger::initialize(QString* error) {
           "TEXT)",
           "CREATE TABLE IF NOT EXISTS managed_job_wakes (event_id TEXT PRIMARY KEY,"
           "owner_session_id TEXT NOT NULL,owner_generation INTEGER NOT NULL,"
-          "turn_record BLOB NOT NULL,state TEXT NOT NULL)"}) {
+          "turn_record BLOB NOT NULL,state TEXT NOT NULL)",
+          // Owner notices of a nonterminal job (needs_attention, still queued). The event id
+          // makes each one idempotent; the completion outbox keeps one event per task.
+          "CREATE TABLE IF NOT EXISTS managed_job_notices (event_id TEXT PRIMARY KEY,"
+          "task_id TEXT NOT NULL,kind TEXT NOT NULL,owner_session_id TEXT NOT NULL,"
+          "owner_generation INTEGER NOT NULL,payload BLOB NOT NULL,status TEXT NOT NULL,"
+          "reason TEXT)",
+          "CREATE INDEX IF NOT EXISTS managed_job_notices_task ON managed_job_notices(task_id)"}) {
         if (!query.exec(QLatin1String(statement))) {
             if (error)
                 *error = query.lastError().text();

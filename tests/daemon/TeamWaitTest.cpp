@@ -1,6 +1,7 @@
 // ADR 0114 §8: what a member waits for outside the team. team_wait records the wait, keeps
 // the watchdog off the member and wakes it to check again; a message to a conversation
-// outside the team that failed is reported to its sender. The coordinator runs on a real
+// outside the team that failed is reported to its sender, and a managed background job keeps
+// the watchdog off its owner without ending its wait. The coordinator runs on a real
 // journal with a fake runtime. No provider is started.
 #include "TeamFakeHost.h"
 #include "storage/LocalJournal.h"
@@ -257,6 +258,34 @@ class TeamWaitTest final : public QObject {
         teams_->outsideMessageFailed("dev2", "#4629", "no_reply");
         teams_->outsideMessageFailed("stranger", "#4629", "no_reply");
         QCOMPARE(host_.messages.size(), 2);
+    }
+
+    // ADR 0127 §7a: a managed background job wakes its owner when it ends or needs something,
+    // so a member that ends its turn on one is at work. A team_wait it set names something
+    // else, such as a deployment, and still wakes it to check.
+    void aBackgroundJobKeepsTheWatchdogOffAndLeavesAnUnrelatedWait() {
+        (void)inProgress();
+        host_.conversations["dev1"].backgroundJobs = true;
+        teams_->checkStall(team_);
+        QVERIFY(host_.messages.isEmpty());
+
+        QVERIFY(teams_->wait(team_, "dev1", 1, "the deployment").ok());
+        QTRY_COMPARE(kinds(), QStringList{"wait>dev1"});
+        QVERIFY(host_.of("wait").first().body.contains("the deployment"));
+    }
+
+    // A job the user stops ends as cancelled and wakes no one, and no turn ends to start the
+    // watch again: the watchdog looks again on its own while only jobs hold the team.
+    void theWatchdogLooksAgainWhenTheLastJobEndsWithoutAWake() {
+        (void)inProgress();
+        teams_->setStallPeriod(20);
+        host_.conversations["dev1"].backgroundJobs = true;
+        teams_->checkStall(team_);
+        QTest::qWait(60);
+        QVERIFY(host_.messages.isEmpty());
+
+        host_.conversations["dev1"].backgroundJobs = false; // the user stopped the job
+        QTRY_COMPARE(kinds(), QStringList{"nudge>dev1"});
     }
 };
 

@@ -24,6 +24,10 @@ class ManagedTaskBridge final : public QObject {
     void resume(const BackgroundTaskOwner& owner);
     QJsonObject prepareTurn(const BackgroundTaskOwner& owner);
     [[nodiscard]] bool hasExecutions() const;
+    // Whether `owner` has a job that is not ended and will wake it (needs_attention excluded).
+    [[nodiscard]] bool ownsLiveJobs(const BackgroundTaskOwner& owner) const {
+        return ledger_.ownsLiveJobs(owner);
+    }
     [[nodiscard]] QJsonObject snapshot(const BackgroundTaskOwner& owner);
     void childOutput(const QString& sessionId, qint64 generation, qint64 turn, const QString& text);
 
@@ -48,6 +52,7 @@ class ManagedTaskBridge final : public QObject {
     QTimer timer_;
     QString error_;
     qint64 outboxAfter_{0};
+    qint64 noticeAfter_{0};
     qint64 wakeAfter_{0};
     QHash<QString, QString> stoppingChildren_;
     struct Wake {

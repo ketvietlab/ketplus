@@ -35,6 +35,9 @@ struct TeamConversation final {
     QString worktree;
     QString executionPolicy;
     bool idle{false};
+    // It owns a managed background job that has not ended (ADR 0127): the job's completion or
+    // notice starts its next turn, so it is at work while it waits.
+    bool backgroundJobs{false};
 };
 
 // A task's own branch and worktree, cut from the integration branch (ADR 0114, point 1).

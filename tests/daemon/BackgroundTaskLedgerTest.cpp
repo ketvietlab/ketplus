@@ -1,5 +1,6 @@
 #include "storage/BackgroundTaskLedger.h"
 
+#include <QJsonArray>
 #include <QSqlQuery>
 #include <QTemporaryDir>
 #include <QUuid>
@@ -27,6 +28,31 @@ QJsonObject failed(BackgroundTaskLedger& ledger, const QString& id) {
     change.reason = "spawn_failed";
     change.neverLaunched = true;
     return ledger.change(id, 1, change);
+}
+// A native job that runs, at revision 4.
+QString runningJob(BackgroundTaskLedger& ledger) {
+    const auto id = taskId(ledger.create(intent()));
+    BackgroundTaskChange approval;
+    approval.state = "queued";
+    approval.permissionApproved = true;
+    if (!ledger.change(id, 1, approval).value("ok").toBool() || taskId(ledger.claimNext()) != id)
+        return {};
+    BackgroundTaskChange running;
+    running.state = "running";
+    running.handshakeCommitted = true;
+    running.executionIdentity = {{"process_birth_identity", "birth"},
+                                 {"executor_lease_identity", "lease"}};
+    return ledger.change(id, 3, running).value("ok").toBool() ? id : QString();
+}
+int count(QSqlDatabase database, const QString& sql) {
+    QSqlQuery query(database);
+    return query.exec(sql) && query.next() ? query.value(0).toInt() : -1;
+}
+QString wakeState(QSqlDatabase database, const QString& eventId) {
+    QSqlQuery query(database);
+    query.prepare("SELECT state FROM managed_job_wakes WHERE event_id=?");
+    query.addBindValue(eventId);
+    return query.exec() && query.next() ? query.value(0).toString() : QString();
 }
 } // namespace
 
@@ -376,7 +402,7 @@ class BackgroundTaskLedgerTest final : public QObject {
         QSqlDatabase::removeDatabase(name);
     }
 
-    void nativeCleanupAttentionAndUserAuditAreDurableAndNeverWake() {
+    void nativeCleanupAttentionAndUserAuditAreDurableAndQueueNoCompletion() {
         const auto name = QUuid::createUuid().toString();
         {
             auto db = QSqlDatabase::addDatabase("QSQLITE", name);
@@ -446,6 +472,176 @@ class BackgroundTaskLedgerTest final : public QObject {
             QCOMPARE(query.value(0).toString(), "user");
             QCOMPARE(query.value(1).toString(), "local-user");
             QCOMPARE(query.value(2).toInt(), 7);
+        }
+        QSqlDatabase::removeDatabase(name);
+    }
+
+    // ADR 0127 §7a: entering needs_attention queues one owner notice; another update of the
+    // same incident adds none, and the user's acknowledgement supersedes its wake.
+    void attentionNotifiesItsOwnerOncePerIncidentUntilTheUserAcknowledges() {
+        const auto name = QUuid::createUuid().toString();
+        {
+            auto db = QSqlDatabase::addDatabase("QSQLITE", name);
+            db.setDatabaseName(":memory:");
+            QVERIFY(db.open());
+            BackgroundTaskLedger ledger(db);
+            QString error;
+            QVERIFY(ledger.initialize(&error));
+            QVERIFY(seedOwner(db));
+            const auto id = runningJob(ledger);
+            QVERIFY(!id.isEmpty());
+            BackgroundTaskChange attention;
+            attention.state = "needs_attention";
+            attention.exitCode = 0;
+            attention.executorStopped = false;
+            QVERIFY(ledger.change(id, 4, attention).value("ok").toBool());
+            attention.executorStopped = true;
+            QVERIFY(ledger.change(id, 5, attention).value("ok").toBool());
+            QCOMPARE(count(db, "SELECT count(*) FROM managed_job_notices"), 1);
+            QCOMPARE(count(db, "SELECT count(*) FROM managed_job_outbox"), 0);
+            const auto page = ledger.noticePage().value("events").toArray();
+            QCOMPARE(page.size(), 1);
+            const auto event = page.first().toObject();
+            const auto eventId = event.value("event_id").toString();
+            QCOMPARE(eventId, id + ":attention:5");
+            QCOMPARE(event.value("owner_session_id"), "owner");
+            const auto turn = event.value("turn_record").toObject();
+            QCOMPARE(turn.value("event"), "needs_attention");
+            QCOMPARE(turn.value("task_id"), id);
+            QCOMPARE(turn.value("reason"), "cleanup_unverified");
+            QCOMPARE(turn.value("cleanup_status"), "unverified");
+            QCOMPARE(turn.value("exit_code").toInt(), 0);
+            QVERIFY(!turn.value("manual_guidance").toString().isEmpty());
+            QVERIFY(ledger.noticeCurrent(turn));
+
+            // The same fences as a completion: a held owner does not accept it yet.
+            QVERIFY(ledger.holdOwner(intent().owner, "user_stopped", &error));
+            QCOMPARE(ledger.acceptNotice(eventId, intent().owner).value("error_code"),
+                     "owner_held");
+            QVERIFY(ledger.holdOwner(intent().owner, {}, &error));
+            QCOMPARE(ledger.acceptNotice(eventId, {"other", 1, {}}).value("error_code"),
+                     "stale_owner");
+            const auto accepted = ledger.acceptNotice(eventId, intent().owner);
+            QVERIFY(accepted.value("ok").toBool());
+            QVERIFY(!accepted.value("duplicate").toBool());
+            QVERIFY(ledger.acceptNotice(eventId, intent().owner).value("duplicate").toBool());
+            QCOMPARE(wakeState(db, eventId), "accepted");
+            QVERIFY(ledger.noticePage().value("events").toArray().isEmpty());
+
+            QVERIFY(ledger.resolveCleanup(id, 6, "local-user").value("ok").toBool());
+            QCOMPARE(wakeState(db, eventId), "suppressed");
+            QVERIFY(!ledger.noticeCurrent(turn));
+        }
+        QSqlDatabase::removeDatabase(name);
+    }
+
+    void attentionOfACancelledJobWakesNoOne() {
+        const auto name = QUuid::createUuid().toString();
+        {
+            auto db = QSqlDatabase::addDatabase("QSQLITE", name);
+            db.setDatabaseName(":memory:");
+            QVERIFY(db.open());
+            BackgroundTaskLedger ledger(db);
+            QString error;
+            QVERIFY(ledger.initialize(&error));
+            QVERIFY(seedOwner(db));
+            const auto id = runningJob(ledger);
+            QVERIFY(!id.isEmpty());
+            BackgroundTaskChange stopping;
+            stopping.state = "stopping";
+            stopping.reason = "cancelled";
+            stopping.terminalTarget = "cancelled";
+            QVERIFY(ledger.change(id, 4, stopping).value("ok").toBool());
+            BackgroundTaskChange attention;
+            attention.state = "needs_attention";
+            attention.executorStopped = true;
+            QVERIFY(ledger.change(id, 5, attention).value("ok").toBool());
+            QCOMPARE(count(db, "SELECT count(*) FROM managed_job_notices WHERE "
+                               "status='suppressed' AND reason='cancelled'"),
+                     1);
+            QVERIFY(ledger.noticePage().value("events").toArray().isEmpty());
+        }
+        QSqlDatabase::removeDatabase(name);
+    }
+
+    // ADR 0127 §7a: an approved job still queued at queuedNoticeAfterMs gets one notice that
+    // names the jobs holding its root's slots; it is stale once the job starts.
+    void queuedNoticeNamesTheFullRootOnceAndGoesStaleWhenTheJobStarts() {
+        QCOMPARE(BackgroundTaskLedger::queuedNoticeAfterMs(60000), 30000);
+        QCOMPARE(BackgroundTaskLedger::queuedNoticeAfterMs(24LL * 60 * 60 * 1000), 120000);
+        QCOMPARE(BackgroundTaskLedger::queuedNoticeAfterMs(1), 1);
+        const auto name = QUuid::createUuid().toString();
+        {
+            auto db = QSqlDatabase::addDatabase("QSQLITE", name);
+            db.setDatabaseName(":memory:");
+            QVERIFY(db.open());
+            BackgroundTaskLedger ledger(db);
+            QString error;
+            QVERIFY(ledger.initialize(&error));
+            QVERIFY(seedOwner(db));
+            BackgroundTaskChange approval;
+            approval.state = "queued";
+            approval.permissionApproved = true;
+            QStringList jobs;
+            for (int i = 0; i <= BackgroundTaskLedger::rootSlotLimit; ++i) {
+                auto start = intent();
+                start.clientRequestId = QString::number(i);
+                const auto id = taskId(ledger.create(start));
+                jobs.append(id);
+                QVERIFY(ledger.change(id, 1, approval).value("ok").toBool());
+            }
+            for (int i = 0; i < BackgroundTaskLedger::rootSlotLimit; ++i)
+                QCOMPARE(taskId(ledger.claimNext()), jobs[i]);
+            const auto queued = jobs.last();
+            const auto createdAt = ledger.get(queued, intent().owner)
+                                       .value("task")
+                                       .toObject()
+                                       .value("created_at")
+                                       .toInteger();
+            const auto due = createdAt + BackgroundTaskLedger::queuedNoticeAfterMs(60000);
+            auto reply = ledger.noticeQueued(queued, due - 1);
+            QVERIFY(reply.value("ok").toBool());
+            QVERIFY(!reply.value("queued").toBool());
+            // A permission request is the user's: no notice while it is unanswered.
+            auto unapproved = intent();
+            unapproved.clientRequestId = "unapproved";
+            const auto waiting = taskId(ledger.create(unapproved));
+            QVERIFY(!ledger.noticeQueued(waiting, due + 60000).value("queued").toBool());
+
+            reply = ledger.noticeQueued(queued, due);
+            QVERIFY(reply.value("queued").toBool());
+            QCOMPARE(reply.value("queue_reason"), "root_slot_limit");
+            QCOMPARE(ledger.noticeQueued(queued, due + 1000).value("queue_reason"),
+                     "root_slot_limit");
+            QCOMPARE(count(db, "SELECT count(*) FROM managed_job_notices"), 1);
+            const auto page = ledger.noticePage().value("events").toArray();
+            QCOMPARE(page.size(), 1);
+            QCOMPARE(page.first().toObject().value("event_id").toString(), queued + ":queued");
+            const auto turn = page.first().toObject().value("turn_record").toObject();
+            QCOMPARE(turn.value("event"), "queued");
+            QCOMPARE(turn.value("queued_ms").toInteger(),
+                     BackgroundTaskLedger::queuedNoticeAfterMs(60000));
+            QStringList holders;
+            for (const auto holder : turn.value("slot_holders").toArray())
+                holders.append(holder.toObject().value("task_id").toString());
+            QCOMPARE(holders, jobs.mid(0, BackgroundTaskLedger::rootSlotLimit));
+            QVERIFY(ledger.noticeCurrent(turn));
+
+            BackgroundTaskChange cancel;
+            cancel.state = "stopping";
+            cancel.cleanupPending = true;
+            QVERIFY(ledger.change(jobs.first(), 3, cancel).value("ok").toBool());
+            cancel.state = "cancelled";
+            cancel.cleanupConfirmed = true;
+            QVERIFY(ledger.change(jobs.first(), 4, cancel).value("ok").toBool());
+            QCOMPARE(taskId(ledger.claimNext()), queued);
+            QVERIFY(!ledger.noticeCurrent(turn));
+            QCOMPARE(ledger
+                         .suppressCompletion(page.first().toObject().value("event_id").toString(),
+                                             "superseded")
+                         .value("ok"),
+                     true);
+            QVERIFY(ledger.noticePage().value("events").toArray().isEmpty());
         }
         QSqlDatabase::removeDatabase(name);
     }
