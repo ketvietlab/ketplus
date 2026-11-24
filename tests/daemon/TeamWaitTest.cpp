@@ -110,7 +110,8 @@ class TeamWaitTest final : public QObject {
         QCOMPARE(team().automaticTurns, turns);
         QVERIFY(teams_->update(team_, {{"paused", false}}, "user").ok());
         QCOMPARE(kinds(), QStringList{"waiting_for_leader>lead"});
-        QCOMPARE(team().automaticTurns, turns + 1);
+        // Resume resets the budget, then delivery uses the first turn.
+        QCOMPARE(team().automaticTurns, 1);
     }
 
     void aWaitingMemberIsLeftAloneThenWokenToCheck() {
