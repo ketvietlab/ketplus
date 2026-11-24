@@ -56,7 +56,9 @@ QVariantMap backgroundJobSummary(const QVariantList& tasks) {
     QString title;
     for (const auto& value : tasks) {
         const auto task = value.toMap();
-        if (!live(task))
+        // A job stopping toward cancellation has its completion wake suppressed.
+        if (!live(task) ||
+            (state(task) == "stopping" && task.value("terminal_target") == "cancelled"))
             continue;
         ++count;
         queued += state(task) == "queued";
@@ -71,6 +73,16 @@ QVariantMap backgroundJobSummary(const QVariantList& tasks) {
             {"queuedJobs", queued},
             {"attentionJobs", attention},
             {"jobTitle", title}};
+}
+
+QVariantMap backgroundJobSummary(const QJsonObject& daemonSummary) {
+    const int count = daemonSummary.value("live_jobs").toInt();
+    if (count <= 0)
+        return {};
+    return {{"liveJobs", count},
+            {"queuedJobs", daemonSummary.value("queued_jobs").toInt()},
+            {"attentionJobs", daemonSummary.value("attention_jobs").toInt()},
+            {"jobTitle", daemonSummary.value("job_title").toString()}};
 }
 
 QVariantMap AgentSessionManager::backgroundTaskState(const QString& worktreePath) const {

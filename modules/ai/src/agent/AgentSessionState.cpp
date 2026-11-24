@@ -66,7 +66,8 @@ void AgentSessionManager::emitBackgroundTasks(const SessionPtr& session) {
     if (isActiveSession(session))
         emit backgroundTasksChanged(session->path, session->backgroundTasks);
     // Any conversation's row says whether its turn waits on a job, not only the open one's.
-    auto summary = backgroundJobSummary(session->backgroundTasks);
+    auto summary = session->daemonJobSummaryKnown ? session->daemonJobSummary
+                                                  : backgroundJobSummary(session->backgroundTasks);
     if (summary != session->backgroundJobSummary) {
         session->backgroundJobSummary = std::move(summary);
         emit conversationsChanged(session->path, conversations(session->path));

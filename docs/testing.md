@@ -1365,7 +1365,9 @@ and temporary journals; they consume no account quota. They cover independent
 child sessions/output/approval, foreground Stop fencing without cancelling process
 jobs, busy-owner durable enqueue without steering, duplicate completion/start
 requests, actual IPC token authentication, owner forgery, retired-generation
-local administration and complete registry pagination beyond 16 rows. The ledger
+local administration, complete registry pagination beyond 16 rows, and an owner job
+summary in `tasks.changed` and the session catalog that counts all 17 live jobs and
+returns to `{live_jobs: 0}` once they end. The ledger
 suite also injects prune failure and reopens tombstones to verify expired requests
 cannot execute again after defaults change.
 

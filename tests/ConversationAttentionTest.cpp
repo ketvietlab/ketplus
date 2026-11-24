@@ -18,6 +18,8 @@
 #include <QToolButton>
 #include <QtTest>
 
+#include <algorithm>
+
 using namespace ketplus;
 
 class ConversationAttentionTest final : public QObject {
@@ -301,6 +303,47 @@ for line in sys.stdin:
         QTRY_COMPARE(
             (icon = bar.findChild<ket::SidebarRow*>("productConversationButton"))->status(),
             ket::ConversationStatus::Completed);
+
+        // A daemon owner summary covers the whole registry: it wins over the cached rows,
+        // which keep a live record the bounded projection has dropped (ADR 0127 §8).
+        const auto projected = [&](const QString& id, const QString& state, int revision,
+                                   const QJsonObject& summary) {
+            QJsonArray tasks;
+            tasks.append(QJsonObject{{"task_id", id},
+                                     {"schema_version", 1},
+                                     {"kind", "shell"},
+                                     {"title", "Hidden " + id},
+                                     {"state", state},
+                                     {"revision", revision}});
+            server.notificationReceived(
+                "thread/backgroundTasks/updated",
+                {{"threadId", "job-thread"}, {"tasks", tasks}, {"summary", summary}});
+        };
+        projected("job-2", "running", 1, {{"live_jobs", 1}, {"job_title", "Hidden job-2"}});
+        QTRY_COMPARE(
+            (icon = bar.findChild<ket::SidebarRow*>("productConversationButton"))->status(),
+            ket::ConversationStatus::WaitingOnTask);
+        // job-2 ends outside the projection: its cached row still reads running.
+        projected("job-old", "completed", 1, {{"live_jobs", 0}});
+        QVERIFY(std::any_of(manager.backgroundTasks(path).cbegin(),
+                            manager.backgroundTasks(path).cend(), [](const QVariant& value) {
+                                return value.toMap().value("task_id") == "job-2" &&
+                                       value.toMap().value("state") == "running";
+                            }));
+        QVERIFY(!row().contains("liveJobs"));
+        QTRY_COMPARE(
+            (icon = bar.findChild<ket::SidebarRow*>("productConversationButton"))->status(),
+            ket::ConversationStatus::Completed);
+        // A job needing attention beyond the projection still makes the row wait on the user.
+        projected("job-old", "completed", 1,
+                  {{"live_jobs", 2},
+                   {"queued_jobs", 0},
+                   {"attention_jobs", 1},
+                   {"job_title", "Check cleanup"}});
+        QTRY_COMPARE(
+            (icon = bar.findChild<ket::SidebarRow*>("productConversationButton"))->status(),
+            ket::ConversationStatus::TaskNeedsAttention);
+        QVERIFY(icon->stateText().contains(QStringLiteral("Check cleanup and 1 more")));
     }
 
     void nativeStatusMarks() {

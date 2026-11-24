@@ -1700,6 +1700,8 @@ void AgentSessionManager::handleDaemonSession(const QJsonObject& stored) {
         session->backgroundTaskMetadataReads.clear();
         session->backgroundTasks.clear();
         session->backgroundTaskProjection.clear();
+        session->daemonJobSummaryKnown = false;
+        session->daemonJobSummary.clear();
     }
     session->daemonGeneration = generation;
     if (!discovered)

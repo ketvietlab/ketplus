@@ -168,8 +168,18 @@ void AgentWorkspaceViewTest::managedTaskWaitIsShown() {
     };
     capture("job-waiting");
 
+    // A job stopping toward cancellation wakes no one (ADR 0127): the pane says so.
+    auto cancelling = task("job", "stopping");
+    cancelling.insert("revision", 22);
+    cancelling.insert("terminal_target", "cancelled");
+    view.setBackgroundTasks({cancelling});
+    QTRY_COMPARE(facts->property("rows").toList().last().toList().value(1).toString(),
+                 QStringLiteral("It ends as cancelled; the agent is not woken"));
+
     view.setConversations({conversation(1)});
-    view.setBackgroundTasks({task("job", "needs_attention")});
+    auto attention = task("job", "needs_attention");
+    attention.insert("revision", 23);
+    view.setBackgroundTasks({attention});
     QCOMPARE(badge->property("label").toString(), QStringLiteral("Needs attention"));
     QTRY_VERIFY(facts->property("rows").toList().last().toList().value(0).toString() == "Next");
     capture("job-attention");

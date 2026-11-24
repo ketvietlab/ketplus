@@ -352,6 +352,14 @@ List/get read the complete registry and paginate collections. List returns
 revision is used for gap detection/refetch. A 16-row UI
 projection does not determine whether a job exists, is active, is eligible for
 cleanup or may be stopped. Snapshots include `revision` and `active_count`.
+`tasks.changed` snapshots and every session catalog row (`background_task_summary`)
+also carry an owner summary over the whole registry:
+`{live_jobs, queued_jobs, attention_jobs, job_title}`, just `{live_jobs: 0}` when
+nothing is live. It counts the owner's
+queued through stopping and `needs_attention` jobs, except a job stopping toward
+`cancelled`, whose completion wake is suppressed, and names one job, a job needing
+attention first. Clients show whether an ended turn still waits on a job from this
+summary, never from the bounded rows.
 An event gap or reconnect requires refetch, rather than reconstructing membership
 from a partial event stream.
 

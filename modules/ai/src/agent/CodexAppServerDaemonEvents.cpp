@@ -241,9 +241,11 @@ void CodexAppServer::dispatchDaemonEvent(const QJsonObject& envelope) {
         return;
     }
     if (type == QStringLiteral("tasks.changed")) {
-        emit notificationReceived(QStringLiteral("thread/backgroundTasks/updated"),
-                                  {{QStringLiteral("threadId"), sessionId},
-                                   {QStringLiteral("tasks"), data.value(QStringLiteral("tasks"))}});
+        emit notificationReceived(
+            QStringLiteral("thread/backgroundTasks/updated"),
+            {{QStringLiteral("threadId"), sessionId},
+             {QStringLiteral("tasks"), data.value(QStringLiteral("tasks"))},
+             {QStringLiteral("summary"), data.value(QStringLiteral("summary"))}});
         return;
     }
     if (type == QStringLiteral("usage.session")) {

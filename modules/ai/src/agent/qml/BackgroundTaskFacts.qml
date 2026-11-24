@@ -4,7 +4,8 @@ import QtQuick.Layouts
 
 // The opened managed job's facts, one a line: when it was queued or created, its timeout,
 // a verified cleanup, and what happens when it ends. A turn that ends on a live job waits
-// on it, so the reader learns here that the agent continues with its result (ADR 0127).
+// on it, so the reader learns here that the agent continues with its result, or, for a
+// job stopping toward cancellation, that it does not (ADR 0127).
 // Legacy tasks have none of these fields and show nothing.
 GridLayout {
     id: facts
@@ -39,6 +40,9 @@ GridLayout {
             result.push(["Cleanup", "Verified"]);
         if (taskBar.attention(task))
             result.push(["Next", "Only you can acknowledge its cleanup; the agent will not start it again"]);
+        else if (state === "stopping" && task.terminal_target === "cancelled")
+            // A cancelled job's completion wake is suppressed (ADR 0127).
+            result.push(["When it ends", "It ends as cancelled; the agent is not woken"]);
         else if (live)
             result.push(["When it ends", "The agent gets its result and continues this conversation"]);
         return result;
