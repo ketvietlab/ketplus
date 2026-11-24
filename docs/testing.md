@@ -508,6 +508,12 @@ already read changes nothing. Run it with `ketplus_team_page_tests` after changi
 
 ## Minimum verification
 
+Team wait changes run `ketplus_team_wait_tests`, `ketplus_team_agent_tools_tests`,
+and `ketplus_team_protocol_tests`.
+The coordinator fixture uses a local journal and fake host to check validation,
+timed reminders, leader notification and deduplication, paused delivery, and
+automatic-turn accounting. Shared daemon headers retain the full Pro checks.
+
 Linux Pro packaging changes run `tests/packaging/test_linux_desktop_packages.py`,
 the offscreen bundled-browser/Claude-adapter tests and production build-info
 checks through `packaging/linux/build-desktop.sh`. Verify both actual package

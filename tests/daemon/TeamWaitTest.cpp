@@ -66,6 +66,53 @@ class TeamWaitTest final : public QObject {
         QVERIFY(team_ > 0);
     }
 
+    void waitTargetIsValidated() {
+        QCOMPARE(refused(teams_->wait(team_, "dev1", 5, "CI", {}, "other")),
+                 QStringLiteral("invalid_payload"));
+        QCOMPARE(refused(teams_->wait(team_, "lead", 5, "merge", {}, "leader")),
+                 QStringLiteral("not_allowed"));
+        QVERIFY(!teams_->isWaiting("lead"));
+        QVERIFY(teams_->wait(team_, "dev1", 5, "leader", {}, "external").ok());
+        QVERIFY(teams_->wait(team_, "dev2", 5, "leader", {}, "user").ok());
+        QVERIFY(host_.messages.isEmpty());
+    }
+
+    void developerNotifiesLeaderOnceAcrossReminders() {
+        const QString id = inProgress();
+        const int turns = team().automaticTurns;
+        QVERIFY(teams_->wait(team_, "lead", 60, "the deployment").ok());
+        QVERIFY(teams_->wait(team_, "dev1", 1, "merge the PR", {}, "leader").ok());
+        QCOMPARE(kinds(), QStringList{"waiting_for_leader>lead"});
+        const auto notice = host_.messages.first();
+        QCOMPARE(notice.taskId, id);
+        QVERIFY(notice.body.contains("Dev 1"));
+        QVERIFY(notice.body.contains(id));
+        QVERIFY(notice.body.contains("merge the PR"));
+        QCOMPARE(team().automaticTurns, turns + 1);
+        QVERIFY(teams_->wait(team_, "dev1", 1, "merge  the PR", id, "leader").ok());
+        QCOMPARE(host_.of("waiting_for_leader").size(), 1);
+        QTRY_VERIFY(!teams_->isWaiting("dev1"));
+        QCOMPARE(host_.of("wait").size(), 1);
+        QVERIFY(teams_->wait(team_, "dev1", 60, "merge the PR", id, "leader").ok());
+        QCOMPARE(host_.of("waiting_for_leader").size(), 1);
+        QVERIFY(teams_->wait(team_, "dev1", 60, "decide on the PR", id, "leader").ok());
+        QCOMPARE(host_.of("waiting_for_leader").size(), 2);
+    }
+
+    void pausedTeamHoldsOneLeaderNotificationUntilResume() {
+        const QString id = inProgress();
+        const int turns = team().automaticTurns;
+        QVERIFY(teams_->update(team_, {{"paused", true}}, "user").ok());
+        QVERIFY(teams_->wait(team_, "dev1", 60, "merge the PR", id, "leader").ok());
+        QVERIFY(teams_->wait(team_, "dev1", 60, "merge the PR", id, "leader").ok());
+        QVERIFY(host_.messages.isEmpty());
+        QCOMPARE(team().held.size(), 1);
+        QCOMPARE(team().automaticTurns, turns);
+        QVERIFY(teams_->update(team_, {{"paused", false}}, "user").ok());
+        QCOMPARE(kinds(), QStringList{"waiting_for_leader>lead"});
+        QCOMPARE(team().automaticTurns, turns + 1);
+    }
+
     void aWaitingMemberIsLeftAloneThenWokenToCheck() {
         const QString id = inProgress();
         const int turns = team().automaticTurns;

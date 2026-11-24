@@ -178,9 +178,9 @@ QJsonArray teamTools() {
               {QStringLiteral("branch_slug"), branchSlug}},
              {QStringLiteral("task_id")}),
         tool(QStringLiteral("team_wait"),
-             QStringLiteral("Leader and developers: you wait for something outside the team "
-                            "that KetPlus does not track (a deployment, another conversation's "
-                            "answer). Records it for the team and starts your turn again after "
+             QStringLiteral("Leader and developers: record what you wait for. Developers can "
+                            "notify the leader by setting waiting_on to leader. This starts your "
+                            "turn again after "
                             "`minutes` so you check. Call it, then end your turn; do not poll and "
                             "do not end the turn without it. For a build or test, start it with "
                             "background_task_start and end your turn instead: its result wakes "
@@ -192,6 +192,14 @@ QJsonArray teamTools() {
                            {QStringLiteral("maximum"), 60},
                            {QStringLiteral("description"),
                             QStringLiteral("When to check again, 1 to 60.")}}},
+              {QStringLiteral("waiting_on"),
+               QJsonObject{
+                   {QStringLiteral("type"), QStringLiteral("string")},
+                   {QStringLiteral("enum"),
+                    QJsonArray{QStringLiteral("leader"), QStringLiteral("user"),
+                               QStringLiteral("external")}},
+                   {QStringLiteral("description"),
+                    QStringLiteral("Who or what you are waiting on. Defaults to external.")}}},
               {QStringLiteral("task_id"), text(QStringLiteral("The task it holds up, if any."))}},
              {QStringLiteral("reason"), QStringLiteral("minutes")}),
         tool(QStringLiteral("team_task_create"),

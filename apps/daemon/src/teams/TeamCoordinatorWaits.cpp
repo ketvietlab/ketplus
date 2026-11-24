@@ -1,7 +1,7 @@
-// ADR 0114 §8: what a member waits for outside the team. A member that waits for a build, a
-// deployment or another conversation says so with team_wait and is woken to check again;
-// a message it sent outside the team that failed is reported back to it. Both are turns the
-// team starts, counted against the budget of automatic turns and held while it is paused.
+// ADR 0114 §8: timed reminders and developer waits on the leader. A member that waits for a build,
+// a deployment or another conversation says so with team_wait and is woken to check again; a
+// message it sent outside the team that failed is reported back to it. Both are turns the team
+// starts, counted against the budget of automatic turns and held while it is paused.
 #include "teams/TeamCoordinator.h"
 
 #include <QTimer>
@@ -11,7 +11,8 @@
 namespace ketplus::daemon::teams {
 
 TeamResult TeamCoordinator::wait(const qint64 teamId, const QString& sessionId, const int minutes,
-                                 const QString& reason, const QString& taskId) {
+                                 const QString& reason, const QString& requestedTaskId,
+                                 const QString& waitingOn) {
     Team* team = mutableTeam(teamId);
     const Member* member = team ? team->member(sessionId) : nullptr;
     if (!member)
@@ -21,6 +22,26 @@ TeamResult TeamCoordinator::wait(const qint64 teamId, const QString& sessionId, 
         return {.error = TeamError{QStringLiteral("not_allowed"),
                                    QStringLiteral("A reviewer is sent its reviews; it does not "
                                                   "wait.")}};
+    const bool waitsForLeader = waitingOn == QStringLiteral("leader");
+    if (!waitsForLeader && waitingOn != QStringLiteral("user") &&
+        waitingOn != QStringLiteral("external"))
+        return {.error =
+                    TeamError{QStringLiteral("invalid_payload"),
+                              QStringLiteral("waiting_on must be leader, user, or external.")}};
+    if (waitsForLeader && member->role != role::developer)
+        return {.error = TeamError{QStringLiteral("not_allowed"),
+                                   QStringLiteral("Only a developer can wait on the leader.")}};
+    const Member* leader = waitsForLeader ? team->memberWithRole(role::leader) : nullptr;
+    if (waitsForLeader && !leader)
+        return {.error = TeamError{QStringLiteral("not_found"),
+                                   QStringLiteral("The team has no leader to notify.")}};
+    const QString leaderSession = leader ? leader->sessionId : QString{};
+    QString taskId = requestedTaskId;
+    if (waitsForLeader && taskId.isEmpty()) {
+        for (const Task& task : team->tasks)
+            if (task.owner == sessionId && task.state == state::inProgress)
+                taskId = task.id;
+    }
     const QString name = member->name;
     const QString why = reason.simplified();
     if (why.isEmpty())
@@ -37,8 +58,8 @@ TeamResult TeamCoordinator::wait(const qint64 teamId, const QString& sessionId, 
     const Team before = *team;
     // A task-specific wait lets the leader acknowledge a reported block as external.
     if (Task* task = taskId.isEmpty() ? nullptr : team->task(taskId);
-        task && member->role == role::leader && task->state == state::blocked &&
-        !task->question.isEmpty()) {
+        task && waitingOn == QStringLiteral("external") && member->role == role::leader &&
+        task->state == state::blocked && !task->question.isEmpty()) {
         const Member* leader = team->memberWithRole(role::leader);
         if (leader && journal_->teamQuestionWasDigested(teamId, taskId, leader->sessionId,
                                                         questionKey(task->question)))
@@ -54,13 +75,31 @@ TeamResult TeamCoordinator::wait(const qint64 teamId, const QString& sessionId, 
                      .taskId = taskId}}))
         return {.error = failed};
 
+    const Wait previous = waits_.value(sessionId);
+    const bool notifyLeader =
+        waitsForLeader && (previous.notifiedLeader != leaderSession || previous.reason != why ||
+                           previous.taskId != taskId);
     // One wait per member: a new one replaces the old.
     cancelWait(sessionId);
     auto* timer = new QTimer(this);
     timer->setSingleShot(true);
     connect(timer, &QTimer::timeout, this, [this, sessionId] { waitEnded(sessionId); });
-    waits_.insert(sessionId, {.timer = timer, .reason = why, .taskId = taskId});
+    waits_.insert(
+        sessionId,
+        {.timer = timer, .reason = why, .taskId = taskId, .notifiedLeader = leaderSession});
     timer->start(minutes * waitMinuteMs_);
+    if (notifyLeader)
+        wake(*team,
+             {.teamId = teamId,
+              .teamName = team->name,
+              .toSession = leaderSession,
+              .kind = QStringLiteral("waiting_for_leader"),
+              .taskId = taskId,
+              .body = QStringLiteral("Team %1: %2 is waiting for you%3. Reason: %4")
+                          .arg(team->name, name,
+                               taskId.isEmpty() ? QString{} : QStringLiteral(" on %1").arg(taskId),
+                               why)});
+
     return {.teamId = teamId};
 }
 
@@ -73,11 +112,15 @@ void TeamCoordinator::cancelWait(const QString& sessionId) {
 }
 
 void TeamCoordinator::waitEnded(const QString& sessionId) {
-    const auto found = waits_.constFind(sessionId);
-    if (found == waits_.cend())
+    const auto found = waits_.find(sessionId);
+    if (found == waits_.end() || !found->timer)
         return;
     const Wait wait = *found;
-    waits_.erase(found);
+    // Keep the notification identity across reminder turns so polling cannot notify again.
+    if (wait.notifiedLeader.isEmpty())
+        waits_.erase(found);
+    else
+        found->timer = nullptr;
     wait.timer->deleteLater();
     const Team* team = teamOf(sessionId);
     if (!team)
