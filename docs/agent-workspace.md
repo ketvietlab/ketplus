@@ -1376,9 +1376,9 @@ one **reviewer** (a Claude conversation). A conversation is on at most one team.
 - **Waiting for builds.** A member runs a long build or test as a managed background job
   (`background_task_start`) and ends its turn: the job's completion, or a notice that it
   needs attention or is still queued, starts its next turn. While it owns such a job the
-  watchdog counts it as at work, and the job's wake ends any `team_wait` it set.
-  `team_wait` with minutes is for what KetPlus does not track, such as a deployment or
-  another conversation's answer.
+  watchdog counts it as at work and looks again later, since a job the user stops wakes
+  no one. `team_wait` with minutes is for what KetPlus does not track, such as a
+  deployment or another conversation's answer; a job's wake leaves such a wait in place.
 - **Decisions.** Only the leader raises one; the user answers on the team page. The
   folder in the sidebar shows the count.
 - **Commands from the page.** Every control that sends a team command (a decision's

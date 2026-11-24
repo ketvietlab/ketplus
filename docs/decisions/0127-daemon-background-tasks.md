@@ -385,10 +385,12 @@ with `superseded`, and a terminal transition suppresses the job's pending notice
 their accepted wakes in its own transaction, so retention is never held by them. The
 wake's origin kind is `background_task_notice`.
 
-A team member woken by a job's completion or notice no longer has a pending `team_wait`:
-the delivered wake ends it, instead of a timer starting a second turn to check again. The
-team watchdog counts a member that owns a queued, starting, running or stopping job as at
-work, so ending a turn on a job is a valid way to wait. Agent and team instructions say to
+A job's wake leaves a `team_wait` the member set: the wait names something KetPlus does
+not track, such as a deployment, and nothing ties it to the job. The team watchdog counts
+a member that owns a queued, starting, running or stopping job as at work, so ending a
+turn on a job is a valid way to wait. While only such jobs hold the team, the watchdog
+looks again each stall period: a job the user stops ends as cancelled and wakes no one,
+and no turn's end would start the watch again. Agent and team instructions say to
 start long builds and tests as jobs and end the turn rather than guess minutes;
 `team_wait` stays for what KetPlus does not track, such as a deployment or another
 conversation's answer.
@@ -399,9 +401,10 @@ bound.
 
 **Alternatives.** Reusing the completion outbox for notices needs a table rebuild to drop
 its one-row-per-task constraint and changes every reader of that projection. A periodic
-"still running" heartbeat would bring back the guessing this removes. `team_wait` with a
-background task id would tie a wait to one job, but a delivered wake ending any wait gives
-the same result for every job without a second registry lookup.
+"still running" heartbeat would bring back the guessing this removes. Ending every
+`team_wait` on a job's wake would save a check turn when the member set the wait for that
+job, but it drops a reminder set for unrelated work; `team_wait` with a background task id
+could tie a wait to one job if the extra turn turns out to matter.
 
 ### 8. Queries, output, retention and admission limits
 

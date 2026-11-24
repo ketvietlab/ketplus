@@ -1372,8 +1372,9 @@ queued behind its root's full slots wakes its idle owner once with a notice befo
 timeout (ADR 0127 §7a). The attention recovery suite checks that entering
 `needs_attention` wakes the owner exactly once, also across restarts. The ledger and
 runtime suites cover each notice's idempotence, reason and suppression once the job
-moves on, and `ketplus_team_wait_tests` that a delivered wake ends a `team_wait` and that
-a member owning a live job is not nudged. The ledger
+moves on, and `ketplus_team_wait_tests` that a member owning a live job is not nudged,
+that its `team_wait` for unrelated work still fires, and that the watchdog nudges it once
+its last job ends without a wake, as after the user's Stop. The ledger
 suite also injects prune failure and reopens tombstones to verify expired requests
 cannot execute again after defaults change.
 

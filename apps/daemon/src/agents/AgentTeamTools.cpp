@@ -184,7 +184,7 @@ QJsonArray teamTools() {
                             "`minutes` so you check. Call it, then end your turn; do not poll and "
                             "do not end the turn without it. For a build or test, start it with "
                             "background_task_start and end your turn instead: its result wakes "
-                            "you and ends a wait you set."),
+                            "you."),
              {{QStringLiteral("reason"), text(QStringLiteral("What you wait for."))},
               {QStringLiteral("minutes"),
                QJsonObject{{QStringLiteral("type"), QStringLiteral("integer")},

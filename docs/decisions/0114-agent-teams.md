@@ -405,8 +405,10 @@ A worker that exits without a new turn changes nothing.
 
 **Waiting for something outside the team.** A build or test runs as a managed
 background job and its completion or notice wakes the member (ADR 0127 §7a): the member
-ends its turn on the job, the watchdog counts it as at work while it owns a job that has
-not ended, and that wake ends a wait it set. For what KetPlus does not track, such as a
+ends its turn on the job, and the watchdog counts it as at work while it owns a job that
+has not ended and looks again a stall period later, since a job the user stops ends as
+cancelled and wakes no one. A job's wake leaves a wait the member set: that wait names
+something else. For what KetPlus does not track, such as a
 deployment or another conversation, a leader or developer calls `team_wait` with what it
 waits for and 1 to 60 minutes, then ends its turn. The wait is an entry in Updates. Until it ends the
 watchdog treats that member as at work: it is not nudged and the leader is not woken on

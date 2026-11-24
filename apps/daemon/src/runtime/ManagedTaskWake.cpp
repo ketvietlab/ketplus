@@ -188,12 +188,10 @@ void ManagedTaskBridge::dispatchWakes() {
                     owner.sessionId, owner.generation,
                     {{"kind", "background_wake_failed"}, {"task_id", id}, {"event_id", eventId}});
             } else {
+                // A team_wait the member set stays: it names something KetPlus does not
+                // track, such as a deployment, which this job's wake says nothing about.
                 activeWakes_.insert(owner.sessionId, {eventId, owner.generation,
                                                       accepted->stored.currentTurnSequence});
-                // The member is awake on what it waited for: a timer it set with team_wait
-                // would only start a second turn to check again.
-                if (host_->teams_)
-                    host_->teams_->endWait(owner.sessionId);
             }
         }
     }

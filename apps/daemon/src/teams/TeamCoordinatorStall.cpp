@@ -56,18 +56,27 @@ void TeamCoordinator::checkStall(const qint64 teamId) {
 
     // Who is working. A conversation the runtime no longer knows is not.
     bool anyoneWorking = false;
+    bool onlyJobs = false;
     QStringList idle;
     for (const Member& member : team->members) {
         const auto conversation = host_->teamConversation(member.sessionId);
         // A member that said what it waits for (team_wait), or whose managed background job
         // will wake it, counts as at work until it is woken: it is not nudged and the leader
         // is not woken on its account.
-        if (isWaiting(member.sessionId) ||
-            (conversation && (!conversation->idle || conversation->backgroundJobs)))
+        if (isWaiting(member.sessionId) || (conversation && !conversation->idle)) {
             anyoneWorking = true;
-        else
+        } else if (conversation && conversation->backgroundJobs) {
+            anyoneWorking = true;
+            onlyJobs = true;
+        } else {
             idle.append(member.sessionId);
+        }
     }
+    // A turn's end or a wait's end starts the watch again; a job's end may not. A job the
+    // user stops ends as cancelled and wakes no one (ADR 0127), so while an idle member's
+    // jobs keep the team from counting as stopped, look again later.
+    if (onlyJobs)
+        watchForStall(teamId);
 
     // A member whose turn ended with its own work open is told so once, whoever else works.
     // The user's Stop is respected: that member is left to the leader and the user.
