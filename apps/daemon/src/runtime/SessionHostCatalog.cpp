@@ -1,4 +1,5 @@
 #include "protocol/DaemonProtocol.h"
+#include "runtime/BackgroundTaskSummary.h"
 #include "runtime/SessionHost.h"
 #include "teams/TeamCoordinator.h"
 
@@ -176,6 +177,12 @@ QJsonObject SessionHost::listSessions(const QJsonObject& request) const {
                                                   : taskSnapshot.value("tasks").toArray();
         if (!tasks.isEmpty())
             value.insert(QStringLiteral("background_tasks"), tasks);
+        // What the conversation's ended turn still waits on, beyond the bounded rows above.
+        const QJsonObject summary = taskSnapshot.isEmpty()
+                                        ? backgroundTaskSummary({}, session.backgroundTasks)
+                                        : taskSnapshot.value(QStringLiteral("summary")).toObject();
+        // Always sent, so a zero tells a client that its cached live rows have ended.
+        value.insert(QStringLiteral("background_task_summary"), summary);
         if (livePaged) {
             const qsizetype bytes = QJsonDocument(value).toJson(QJsonDocument::Compact).size() + 1;
             if (!values.isEmpty() && (values.size() >= maximumLiveSessionPageRows ||

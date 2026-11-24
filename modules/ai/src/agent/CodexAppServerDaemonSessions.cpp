@@ -585,7 +585,9 @@ void CodexAppServer::refreshDaemonSessions() {
             emit notificationReceived(
                 QStringLiteral("thread/backgroundTasks/updated"),
                 {{QStringLiteral("threadId"), sessionId},
-                 {QStringLiteral("tasks"), stored.value(QStringLiteral("background_tasks"))}});
+                 {QStringLiteral("tasks"), stored.value(QStringLiteral("background_tasks"))},
+                 {QStringLiteral("summary"),
+                  stored.value(QStringLiteral("background_task_summary"))}});
             if (!daemonHasTranscriptWindow_)
                 emit daemonSessionRestoreStarted(sessionId);
         }

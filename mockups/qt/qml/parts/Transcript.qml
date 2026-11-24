@@ -27,7 +27,8 @@ Item {
                                      "team-digest": TranscriptFixtures.teamDigest,
                                      "team-review": TranscriptFixtures.teamReview,
                                      "team-verdict": TranscriptFixtures.teamVerdict,
-                                     "team-decision": TranscriptFixtures.teamDecision })[kind] || null
+                                     "team-decision": TranscriptFixtures.teamDecision })[kind]
+                                   || (Fixtures.jobStates[kind] ? TranscriptFixtures.jobTurn(kind) : null)
 
     signal openDetails(string tab)
 

@@ -1,6 +1,7 @@
 #include "runtime/SessionHost.h"
 
 #include "providers/ClaudeAdapter.h"
+#include "runtime/BackgroundTaskSummary.h"
 
 #include <QSet>
 
@@ -100,7 +101,7 @@ void SessionHost::recordBackgroundTasks(Session& session, const QJsonArray& sour
                  qUtf8Printable(journal_->errorString()));
     auto projection = managedTaskSnapshot(session.stored.id, session.stored.generation);
     if (projection.isEmpty())
-        projection = {{"tasks", tasks}};
+        projection = {{"tasks", tasks}, {"summary", backgroundTaskSummary({}, tasks)}};
     (void)appendEvent(session, QStringLiteral("tasks.changed"), projection);
 }
 

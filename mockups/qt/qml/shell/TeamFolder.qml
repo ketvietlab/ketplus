@@ -250,6 +250,7 @@ Column {
                     text: item.title
                     number: item.number
                     status: folder.window.planStatus ? folder.window.planStatus(item.number, item.status) : item.status
+                    job: folder.window.jobFor ? folder.window.jobFor(item.number) : null
                     checked: folder.window.screen === "workspace"
                              && folder.window.conversation.number === item.number
                     role: folder.roleTags[modelData.role].label

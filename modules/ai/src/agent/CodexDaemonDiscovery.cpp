@@ -73,7 +73,9 @@ void CodexAppServer::discoverDaemonSessions() {
                     emit daemonSessionDiscovered(stored);
                     emit notificationReceived(
                         "thread/backgroundTasks/updated",
-                        {{"threadId", id}, {"tasks", stored.value("background_tasks")}});
+                        {{"threadId", id},
+                         {"tasks", stored.value("background_tasks")},
+                         {"summary", stored.value("background_task_summary")}});
                     if (!daemonHasTranscriptWindow_) {
                         daemonRestoreQueue_.append(id);
                         emit daemonSessionRestoreStarted(id);

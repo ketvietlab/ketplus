@@ -30,6 +30,7 @@ class AgentWorkspaceViewTest final : public QObject {
     void backgroundTaskBar();
     void managedTaskCleanupRequiresUserConfirmation();
     void managedTaskOutputFencesRequestsAndKeepsCursors();
+    void managedTaskWaitIsShown();
     void managedTaskOutputRetriesAfterReadError();
     void managedTaskStatesRender_data();
     void managedTaskStatesRender();

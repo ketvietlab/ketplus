@@ -358,6 +358,11 @@ void AgentSessionManager::handleNotification(const QString& method, const QJsonO
 
     if (method == QStringLiteral("thread/backgroundTasks/updated")) {
         const QVariantList tasks = params.value(QStringLiteral("tasks")).toArray().toVariantList();
+        // The daemon's owner summary covers the whole registry; an older daemon sends none,
+        // and the row then reads the cached rows instead.
+        const QJsonValue summary = params.value(QStringLiteral("summary"));
+        session->daemonJobSummaryKnown = summary.isObject();
+        session->daemonJobSummary = backgroundJobSummary(summary.toObject());
         updateBackgroundTaskProjection(session, tasks);
         return;
     }

@@ -1,5 +1,6 @@
 #include "FakeCodex.h"
 #include "providers/CodexAdapter.h"
+#include "runtime/BackgroundTaskSummary.h"
 #include "runtime/SessionHost.h"
 #include "storage/BackgroundTaskLedger.h"
 #include "storage/LocalJournal.h"
@@ -67,6 +68,80 @@ QJsonObject task(SessionHost& host, const QString& id, const QString& owner = "o
 class ManagedTaskHostTest final : public QObject {
     Q_OBJECT
   private slots:
+    // ADR 0127 §8: the owner summary counts every live job, prefers one needing attention
+    // for its title, and leaves out a job stopping toward cancellation (no wake follows).
+    void ownerSummaryCountsWhatTheTurnWaitsOn() {
+        QList<QJsonObject> managed;
+        for (int i = 0; i < 20; ++i)
+            managed.append(
+                {{"state", i < 15 ? "queued" : "running"}, {"title", QString("Job %1").arg(i)}});
+        managed.append({{"state", "stopping"}, {"terminal_target", "cancelled"}, {"title", "x"}});
+        managed.append({{"state", "stopping"}, {"terminal_target", "timed_out"}, {"title", "y"}});
+        managed.append({{"state", "needs_attention"}, {"title", "Check cleanup"}});
+        const QJsonArray legacy{QJsonObject{{"status", "running"}, {"title", "Legacy"}},
+                                QJsonObject{{"status", "completed"}, {"title", "Done"}}};
+        const auto summary = backgroundTaskSummary(managed, legacy);
+        QCOMPARE(summary.value("live_jobs").toInt(), 23);
+        QCOMPARE(summary.value("queued_jobs").toInt(), 15);
+        QCOMPARE(summary.value("attention_jobs").toInt(), 1);
+        QCOMPARE(summary.value("job_title").toString(), QStringLiteral("Check cleanup"));
+        QCOMPARE(backgroundTaskSummary({}, {}), (QJsonObject{{"live_jobs", 0}}));
+    }
+
+    // The task projection stops at 16 rows; the summary in tasks.changed and the catalog
+    // still counts every live job, and reads zero once they have ended.
+    void ownerSummaryCoversJobsBeyondTheProjection() {
+        QTemporaryDir directory;
+        const auto cwd = QFileInfo(directory.path()).canonicalFilePath();
+        const auto log = directory.filePath("provider.log");
+        QVERIFY(writeFakeCodex(directory.filePath(fixtureName("fake-codex")), log));
+        LocalJournal journal(directory.filePath("journal.sqlite"));
+        QVERIFY(seed(journal, cwd));
+        CodexAdapter adapter(directory.filePath(fixtureName("fake-codex")));
+        SessionHost host(&journal, &adapter);
+        const auto cleanup = qScopeGuard([&] { adapter.stop(); });
+        QStringList ids;
+        for (int i = 0; i < 17; ++i) {
+            auto input = process(cwd, {"/bin/sleep", "30"});
+            input.insert("client_request_id", QString("request-%1").arg(i));
+            const auto started = command(host, "session.task.start", input);
+            QVERIFY2(started.value("ok").toBool(),
+                     qPrintable(started.value("error_message").toString()));
+            ids << started.value("task").toObject().value("task_id").toString();
+        }
+        const auto latest = [&] {
+            // A replay page is bounded in bytes, and each event carries 16 rows: page through.
+            QJsonObject found;
+            qint64 cursor = 0;
+            for (auto page = journal.eventsAfter("owner", 1, cursor); !page.isEmpty();
+                 page = journal.eventsAfter("owner", 1, cursor)) {
+                for (const auto value : std::as_const(page)) {
+                    const auto event = value.toObject();
+                    cursor = event.value("cursor").toInteger();
+                    if (event.value("event_type") == "tasks.changed")
+                        found = event.value("payload").toObject();
+                }
+            }
+            return found;
+        };
+        const auto listed = [&] {
+            for (const auto value : command(host, "session.list").value("sessions").toArray())
+                if (value.toObject().value("session_id") == "owner")
+                    return value.toObject().value("background_task_summary").toObject();
+            return QJsonObject{};
+        };
+        QTRY_COMPARE_WITH_TIMEOUT(latest().value("summary").toObject().value("live_jobs").toInt(),
+                                  17, 5000);
+        QCOMPARE(latest().value("tasks").toArray().size(), 16);
+        QVERIFY(latest().value("summary").toObject().value("queued_jobs").toInt() > 0);
+        QCOMPARE(listed().value("live_jobs").toInt(), 17);
+        for (const auto& id : std::as_const(ids))
+            QVERIFY(command(host, "session.task.stop", {{"task_id", id}}).value("ok").toBool());
+        QTRY_COMPARE_WITH_TIMEOUT(latest().value("summary").toObject(),
+                                  (QJsonObject{{"live_jobs", 0}}), 10000);
+        QCOMPARE(listed(), (QJsonObject{{"live_jobs", 0}}));
+    }
+
     void ownerApprovalHoldsCompletionUntilTheDecisionIsAnswered() {
         QTemporaryDir directory;
         const auto cwd = QFileInfo(directory.path()).canonicalFilePath();

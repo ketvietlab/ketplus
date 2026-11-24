@@ -118,8 +118,14 @@ Item {
                     return KetTheme.ConversationStatus.AwaitingReply
                 if (agentHost.sessionRunning)
                     return KetTheme.ConversationStatus.Working
+                // The turn ended on a live job: it needs the user, else it wakes this
+                // conversation when it ends (the task bar under the transcript names it).
+                if ((conversation.attentionJobs || 0) > 0)
+                    return KetTheme.ConversationStatus.TaskNeedsAttention
                 if (/fail|error|disconnect|missing|not found/.test(text))
                     return KetTheme.ConversationStatus.Error
+                if ((conversation.liveJobs || 0) > 0)
+                    return KetTheme.ConversationStatus.WaitingOnTask
                 if (text.indexOf("stop") >= 0)
                     return KetTheme.ConversationStatus.Stopped
                 return conversation.started === true ? KetTheme.ConversationStatus.Completed : KetTheme.ConversationStatus.NotStarted
@@ -136,6 +142,8 @@ Item {
                 case KetTheme.ConversationStatus.Working: return KetTheme.BadgeTone.Accent
                 case KetTheme.ConversationStatus.NeedsInput: return KetTheme.BadgeTone.Warning
                 case KetTheme.ConversationStatus.AwaitingReply: return KetTheme.BadgeTone.Info
+                case KetTheme.ConversationStatus.WaitingOnTask: return KetTheme.BadgeTone.Info
+                case KetTheme.ConversationStatus.TaskNeedsAttention: return KetTheme.BadgeTone.Warning
                 case KetTheme.ConversationStatus.Error: return KetTheme.BadgeTone.Danger
                 }
                 return KetTheme.BadgeTone.Neutral

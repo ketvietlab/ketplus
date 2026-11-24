@@ -1,5 +1,6 @@
 #include "cloud/CloudEventProjection.h"
 #include "runtime/ApprovalBroker.h"
+#include "runtime/BackgroundTaskSummary.h"
 #include "runtime/ManagedTaskBridge.h"
 #include "runtime/SessionHost.h"
 
@@ -125,11 +126,16 @@ QJsonObject ManagedTaskBridge::snapshot(const BackgroundTaskOwner& owner) {
         projected.append(task);
     }
     const auto current = host_->sessions_.constFind(owner.sessionId);
-    if (current != host_->sessions_.cend() && current->stored.generation == owner.generation) {
+    const bool owned =
+        current != host_->sessions_.cend() && current->stored.generation == owner.generation;
+    if (owned) {
         for (const auto value : current->backgroundTasks)
             if (projected.size() < 16)
                 projected.append(value);
     }
+    // The projection is bounded; the summary covers every job the owner's turn waits on.
+    page.insert("summary",
+                backgroundTaskSummary(active, owned ? current->backgroundTasks : QJsonArray{}));
     for (const auto value : page.value("tasks").toArray()) {
         auto task = value.toObject();
         if (projected.size() == 16)
@@ -166,6 +172,7 @@ void ManagedTaskBridge::changed(const QJsonObject& task) {
     const auto page = snapshot({owner, generation, {}});
     host_->appendEvent(*current, "tasks.changed",
                        {{"tasks", page.value("tasks")},
+                        {"summary", page.value("summary")},
                         {"revision", page.value("revision")},
                         {"active_count", page.value("active_count")}});
     if (task.value("state") == "needs_attention")

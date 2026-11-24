@@ -1134,6 +1134,24 @@ captured when the confirmation opened. A conflict keeps the warning and asks for
 fresh decision. Acknowledgement remains labelled as unverified user acknowledgement;
 the UI never automatically resolves cleanup or starts a follow-up agent.
 
+A turn that ends while the conversation still owns a live job (queued through
+stopping, or `needs_attention`) is not finished. A job stopping toward `cancelled`
+does not count: its completion wake is suppressed. The daemon's owner summary
+(ADR 0127 §8), carried by the session catalog and every `tasks.changed`, covers the
+whole registry, so a job beyond the 16-row projection still counts and one that ended
+outside it stops counting, for every conversation and not only the open one. The
+session manager maps it to `liveJobs`, `queuedJobs`, `attentionJobs` and `jobTitle` on
+the conversation entry (from a daemon that sends no summary, it counts the cached
+rows) and republishes the conversation list only when that changes. The sidebar rows
+and the header badge read it after a pending question, a reply the user owes and a
+running turn: a job that needs attention is the kit's `TaskNeedsAttention` ("Needs
+attention", warning tone), which counts as waiting for the user; another live job is
+`WaitingOnTask` ("Waiting on job", info tone), which is neither unread nor waiting
+for the user because the job wakes the agent when it ends. The row's detail names
+the job (`Queued · title`, or `title and N more`). The opened output lists the job's
+facts above its output: when it was queued or created, its timeout, a verified
+cleanup and what happens when it ends, including that a cancelled job wakes no one.
+
 Output is plain text for both managed process and agent jobs. Reads return at most
 8 KiB and the UI passes `next_cursor` back unchanged. Read more/Refresh and live
 polling append pages to a bounded 64K-character display; spool truncation and display

@@ -52,6 +52,8 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/runtime/ManagedTaskSpec.cpp
     src/runtime/ManagedTaskBridge.cpp
     src/runtime/ManagedTaskPermissions.cpp
+    src/runtime/BackgroundTaskSummary.cpp
+    src/runtime/BackgroundTaskSummary.h
     src/runtime/ManagedTaskChildren.cpp
     src/runtime/ManagedTaskChildOutput.cpp
     src/runtime/ManagedTaskWake.cpp

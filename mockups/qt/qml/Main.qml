@@ -28,6 +28,8 @@ Basic.ApplicationWindow {
         // What the team sends into its members' conversations (#468, TranscriptFixtures.team*).
         "workspace/team-assignment", "workspace/team-digest", "workspace/team-review",
         "workspace/team-verdict", "workspace/team-decision",
+        // A member's turn ended on a managed job it still owns (Fixtures.jobStates, ADR 0127 §7a).
+        "workspace/job-running", "workspace/job-queued", "workspace/job-attention", "workspace/job-woke",
         "connections", "connections/devices", "connections/machines", "connections/no-activity", "connections/signed-out",
         "connections/expired", "connections/sign-in", "settings", "settings/typography", "settings/account",
         "settings/browser", "settings/computer", "settings/providers", "settings/archived",
@@ -104,6 +106,12 @@ Basic.ApplicationWindow {
     readonly property var teamTranscripts: ({ "team-assignment": "8213", "team-digest": "4821",
                                               "team-review": "4583", "team-verdict": "8215",
                                               "team-decision": "4821" })
+    // The workspace/job-* state shown, and the job of its owner (Fixtures.jobStates).
+    property string jobState: ""
+    function jobFor(number) {
+        return jobState && number === Fixtures.jobOwner ? Fixtures.jobStates[jobState] : null
+    }
+    function showJob() { workspace.jobOpen = true }
     function openTeamMember(id, number) {
         teams.showTeam(id)
         teams.openConversation(number)
@@ -338,6 +346,7 @@ Basic.ApplicationWindow {
     function showScreen(id) {
         schedules.hide()
         scheduledTranscript = false
+        jobState = ""
         if (String(id).startsWith("schedules")) {
             screen = "workspace"
             schedules.showState(String(id).split("/")[1] || "")
@@ -362,6 +371,14 @@ Basic.ApplicationWindow {
         const parts = String(id).split("/")
         const name = parts[0]
         const state = parts[1] || ""
+        jobState = name === "workspace" && Fixtures.jobStates[state] ? state : ""
+        if (jobState) {
+            setCompact(false)
+            workspace.detailsOpen = false
+            const found = findConversation(Fixtures.jobOwner)
+            openConversation(found.repository, Object.assign({}, found.conversation, { transcript: state }))
+            return
+        }
         if (name === "workspace" && ["content-tabs", "content-terminal", "content-file"].includes(state)) {
             setCompact(false)
             const repo = Fixtures.repositories[0]
@@ -521,6 +538,8 @@ Basic.ApplicationWindow {
             Qt.callLater(() => teams.openDialog(Mock.initialPanel))
         else if (["pair", "linux", "linux-hostkey", "linux-relay", "linux-details", "signin"].includes(Mock.initialPanel) && screen === "connections")
             Qt.callLater(() => connections.openDialog(Mock.initialPanel))
+        else if (Mock.initialPanel === "job" && jobState)
+            Qt.callLater(showJob)
         else if (Mock.initialPanel && screen === "workspace")
             Qt.callLater(() => workspace.openComposerPanel(Mock.initialPanel))
     }

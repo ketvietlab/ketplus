@@ -161,7 +161,7 @@ set_source_files_properties(
     PROPERTIES QT_RESOURCE_ALIAS "AgentProductNavigation.qml"
 )
 foreach(component AgentWorkspaceHeader AgentRunStatus AgentScopeNotice AgentEmptyState
-        BackgroundTaskBar BackgroundTaskItem AgentComposer AgentComposerAction AgentPermissionMenu AgentSkillsMenu AgentAttachmentChip)
+        BackgroundTaskBar BackgroundTaskItem BackgroundTaskFacts AgentComposer AgentComposerAction AgentPermissionMenu AgentSkillsMenu AgentAttachmentChip)
     set_source_files_properties(src/agent/qml/${component}.qml
         PROPERTIES QT_RESOURCE_ALIAS "${component}.qml"
     )
@@ -297,6 +297,7 @@ qt_add_resources(ketplus_ai "ketplus_ai_resources"
         src/agent/qml/AgentScopeNotice.qml
         src/agent/qml/AgentEmptyState.qml
         src/agent/qml/BackgroundTaskItem.qml
+        src/agent/qml/BackgroundTaskFacts.qml
         src/agent/qml/BackgroundTaskBar.qml
         src/agent/qml/AgentComposer.qml
         src/agent/qml/AgentComposerAction.qml

@@ -6,6 +6,7 @@
 
 #include <QDateTime>
 #include <QJsonArray>
+#include <QJsonObject>
 #include <QJsonValue>
 #include <QSet>
 #include <QStringList>
@@ -71,6 +72,13 @@ struct AgentSessionManager::Session final {
     bool backgroundTaskLoading{false};
     bool backgroundTaskRefreshAgain{false};
     int backgroundTaskCursorRetries{0};
+    // The daemon's owner summary of every job this turn waits on (ADR 0127 §8), beyond the
+    // bounded rows above; unknown from a daemon that sends none.
+    QVariantMap daemonJobSummary;
+    bool daemonJobSummaryKnown{false};
+    // What the sidebar last heard of these jobs (backgroundJobSummary), so a change to the
+    // jobs republishes the conversation list only when its row would change.
+    QVariantMap backgroundJobSummary;
     QString pendingPrompt;
     // Pairs the locally shown prompt with its journaled user.message echo.
     QString pendingClientMessageId;
@@ -193,6 +201,14 @@ struct AgentSessionManager::Session final {
     QSet<QString> copyTurns;
     QSet<QString> copyCursors;
 };
+
+// The jobs a conversation still waits on, as its sidebar row and header word them:
+// liveJobs (queued through stopping, attention included, but not a job stopping toward
+// cancellation, which wakes no one), queuedJobs, attentionJobs and jobTitle, the job the
+// row names (one needing attention first). Empty when none is live. From the cached rows,
+// or from the daemon's owner summary ({live_jobs, queued_jobs, attention_jobs, job_title}).
+QVariantMap backgroundJobSummary(const QVariantList& tasks);
+QVariantMap backgroundJobSummary(const QJsonObject& daemonSummary);
 
 // A daemon journal timestamp (UTC ISO 8601 with milliseconds) as ms since epoch, 0 if invalid.
 inline qint64 daemonTimestamp(const QString& value) {

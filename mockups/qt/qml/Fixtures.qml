@@ -368,6 +368,75 @@ QtObject {
           status: KetTheme.TaskStatus.Failed }
     ]
 
+    // ADR 0127 §7a: @agent/8213 ended its turn on a managed job it still owns. Each
+    // workspace/job-* state is one moment of that job; the sidebar row, the header, the
+    // turn's last line and the task bar read it (Main.jobFor), with the kit's WaitingOnTask
+    // and TaskNeedsAttention statuses.
+    readonly property string jobOwner: "8213"
+    readonly property string jobTitle: "Large library picker check"
+    readonly property var jobStates: ({
+        "job-running": {
+            status: KetTheme.ConversationStatus.WaitingOnTask, label: "Waiting on job", tone: KetTheme.BadgeTone.Info,
+            hint: "Waiting on 1 background job\n" + jobTitle + " · running 3m 14s",
+            line: "waiting on 1 background job · running 3m 14s", action: "Show job",
+            tasks: [{ title: jobTitle, meta: "Shell · 3m 14s · @agent/8213 wakes when it ends",
+                      kindIcon: "terminal", current: true, status: KetTheme.TaskStatus.Running }],
+            detail: { id: jobId, state: "Running", tone: KetTheme.BadgeTone.Accent, command: jobCommand,
+                facts: [["Started", "3m 14s ago by @agent/8213"], ["Timeout", "30m · stops in 26m 46s"],
+                        ["Cleanup", "Process group · contained"], ["When it ends", "@agent/8213 wakes and gets its result"]],
+                output: jobOutput + "\nRUN    scrollToLastTrail (200 trails)", footer: "Output read · refreshes every 2 s", actions: ["Stop task"] } },
+        "job-queued": {
+            status: KetTheme.ConversationStatus.WaitingOnTask, label: "Waiting on job", tone: KetTheme.BadgeTone.Info,
+            hint: "1 background job queued\n" + jobTitle + " · 4 of 4 slots held",
+            line: "1 background job queued · 4 of 4 slots held", action: "Show job",
+            tasks: [{ title: jobTitle, meta: "Queued 2m 05s · 4 of 4 slots held · @agent/8213 was told",
+                      kindIcon: "terminal", current: true, status: KetTheme.TaskStatus.Running }],
+            detail: { id: jobId, state: "Queued", tone: KetTheme.BadgeTone.Info, command: jobCommand,
+                facts: [["Queued", "2m 05s ago by @agent/8213 · not started"],
+                        ["Why", "Its root holds all 4 execution slots; it starts when one ends"],
+                        ["Slots held by", "Profile the trail index (running 12m) · Offline smoke test (running 9m) · "
+                                          + "Index the bundled dataset (running 7m) · Measure the first frame (stopping)"],
+                        ["Timeout", "30m from creation · 27m 55s left"],
+                        ["Agent", "@agent/8213 was told it is still queued, and why"]],
+                output: "", footer: "Starts when a slot frees", actions: ["Stop task"] } },
+        // Only the user can acknowledge cleanup, so this one waits for the user.
+        "job-attention": {
+            status: KetTheme.ConversationStatus.TaskNeedsAttention, label: "Needs attention", tone: KetTheme.BadgeTone.Warning,
+            hint: "1 background job needs attention\n" + jobTitle + " · cleanup unverified",
+            line: "1 background job needs attention · cleanup unverified", action: "Show job",
+            tasks: [{ title: jobTitle, meta: "Cleanup unverified · check its processes, then acknowledge",
+                      kindIcon: "terminal", current: true, status: KetTheme.TaskStatus.Stopping }],
+            detail: { id: jobId, state: "Needs attention", tone: KetTheme.BadgeTone.Warning, command: jobCommand,
+                banner: { title: "Cleanup unverified",
+                          message: "The job stopped, but KetPlus could not verify that its processes ended. "
+                                   + "Check for ctest and trail_picker_large, then acknowledge. Only you can do this." },
+                facts: [["Ended", "Root exit code 0 · cleanup remains unverified"],
+                        ["Limits", "Still holds 1 of 4 slots until cleanup is acknowledged"],
+                        ["Agent", "@agent/8213 was told and will not start it again"]],
+                output: jobOutput + "\nPASS   scrollToLastTrail (200 trails)       455 ms\n100% tests passed, 0 tests failed out of 1",
+                footer: "Output read", actions: ["Retry cleanup", "I checked it"] } },
+        // The job ended and woke its owner: the wake turn is an ordinary running turn.
+        "job-woke": {
+            status: KetTheme.ConversationStatus.Working, label: "Working", tone: KetTheme.BadgeTone.Accent,
+            hint: "Working\nWoken by " + jobTitle + " · completed in 6m 40s",
+            line: "waited 6m 40s on 1 background job", action: "",
+            tasks: [{ title: jobTitle, meta: "Completed in 6m 40s · follow-up delivered",
+                      kindIcon: "terminal", status: KetTheme.TaskStatus.Completed }],
+            detail: { id: jobId, state: "Completed", tone: KetTheme.BadgeTone.Success, command: jobCommand,
+                facts: [["Ended", "Completed in 6m 40s · exit code 0"],
+                        ["Cleanup", "Process group · verified"],
+                        ["Follow-up", "Delivered: woke @agent/8213"]],
+                output: jobOutput + "\nPASS   scrollToLastTrail (200 trails)       455 ms\n100% tests passed, 0 tests failed out of 1",
+                footer: "Output read", actions: ["Dismiss"] } }
+    })
+    readonly property string jobId: "bt-7f3a2c"
+    readonly property string jobCommand: "ctest --test-dir build -R trail_picker_large --output-on-failure"
+    readonly property string jobOutput: "Test project /workspace/cinder-trail/build\n"
+        + "    Start 42: trail_picker_large\n"
+        + "Loading 200 trails from fixtures/large-library.json\n"
+        + "PASS   filterKeepsFocus (200 trails)        412 ms\n"
+        + "PASS   openSelectedTrail (200 trails)       388 ms"
+
     // Atlas builder.
     readonly property var atlasFlows: [
         {

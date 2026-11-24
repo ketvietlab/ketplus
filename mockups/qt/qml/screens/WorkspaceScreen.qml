@@ -42,7 +42,12 @@ Item {
         return setup && setup.blocking ? id : ""
     }
     readonly property var providerSetup: Fixtures.providerSetup[window.providerIssues[providerId] || ""] || null
-    property bool showTasks: running
+    // A job the conversation still owns after its turn (Main.jobFor) keeps the task bar up.
+    readonly property var job: window.jobFor ? window.jobFor(conversation.number) : null
+    property bool showTasks: running || !!job
+    // That job's details, opened from its task bar row or the turn's Show job.
+    property bool jobOpen: false
+    onJobChanged: if (!job) jobOpen = false
 
     property var planRun: null
     readonly property string planState: planRun ? planRun.status : ""
@@ -188,7 +193,7 @@ Item {
                     visible: screen.showTasks && tasks.tasks.length > 0
                     anchors.horizontalCenter: parent.horizontalCenter
                     width: Math.min(parent.width - screen.px(48), screen.px(760))
-                    tasks: Fixtures.backgroundTasks
+                    tasks: screen.job ? screen.job.tasks : Fixtures.backgroundTasks
                     onStopRequested: index => {
                         const next = tasks.tasks.slice()
                         next[index] = Object.assign({}, next[index],
@@ -198,6 +203,30 @@ Item {
                         screen.window.notify("Stopped " + next[index].title)
                     }
                     onDismissRequested: index => tasks.tasks = tasks.tasks.filter((t, i) => i !== index)
+
+                    // The kit's row has no open action yet: a tap on the row, left of its
+                    // Stop or Dismiss button, opens the job (JobDetail).
+                    HoverHandler {
+                        enabled: !!screen.job
+                        cursorShape: Qt.PointingHandCursor
+                    }
+                    TapHandler {
+                        enabled: !!screen.job
+                        onTapped: point => {
+                            if (point.position.y > tasks.toggleRecipe.height
+                                    && point.position.x < tasks.width - screen.px(40))
+                                screen.jobOpen = !screen.jobOpen
+                        }
+                    }
+                }
+
+                JobDetail {
+                    visible: screen.jobOpen && !!screen.job
+                    anchors.horizontalCenter: parent.horizontalCenter
+                    width: Math.min(parent.width - screen.px(48), screen.px(760))
+                    window: screen.window
+                    job: screen.job
+                    onCloseRequested: screen.jobOpen = false
                 }
 
                 Loader {
