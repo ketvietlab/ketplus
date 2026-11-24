@@ -55,6 +55,9 @@ class CloudPrivacyTestAccess {
     }
     // Starts an upload for every session behind, as each journaled event does.
     static void uploadAll(CloudControlClient& client) { client.uploadEvents(); }
+    static void signOut(CloudControlClient& client, CloudControlClient::LocalCallback callback) {
+        client.signOut(std::move(callback));
+    }
     // Ends every wait after a failed upload, as if its time had passed.
     static void expireUploadBackoff(CloudControlClient& client) {
         for (auto& backoff : client.eventUploadBackoff_)

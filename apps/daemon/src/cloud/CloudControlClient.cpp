@@ -409,6 +409,7 @@ void CloudControlClient::pruneSessionCredentials() {
         return;
     }
     QString error;
+    crypto_.forgetKeys();
     if (!sessionCredentials_.pruneDeleted(*live, &error))
         lastError_ = error;
 }

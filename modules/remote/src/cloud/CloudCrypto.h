@@ -3,6 +3,7 @@
 #include "cloud/CredentialStore.h"
 
 #include <QByteArray>
+#include <QHash>
 #include <QJsonObject>
 #include <QString>
 
@@ -77,7 +78,15 @@ class CloudCrypto final {
     // identity a pairing QR code carries and clients pin (#89, #88). Empty for invalid keys.
     [[nodiscard]] static QString keyFingerprint(const QJsonObject& keys);
 
+    // Private and session keys are kept in memory once read or made, so sealing a backlog
+    // does not read the OS store once per event. Call this whenever key accounts in the store
+    // may have been removed or replaced (sign-in, sign-out, workspace change, pruning).
+    void forgetKeys();
+
   private:
+    // The key held under account, from memory or the store; empty when there is none.
+    [[nodiscard]] QByteArray heldKey(const QString& account, QString* error);
+    bool keepKey(const QString& account, const QByteArray& key, QString* error);
     [[nodiscard]] QByteArray privateKey(const QString& account, int keyType, QString* error);
     [[nodiscard]] QByteArray publicKey(const QByteArray& privateKey, int keyType, QString* error);
     [[nodiscard]] QByteArray derive(const QByteArray& privateKey, const QByteArray& peerPublicKey,
@@ -86,6 +95,7 @@ class CloudCrypto final {
                                                    int keyEpoch);
 
     CredentialStore* store_{nullptr};
+    QHash<QString, QByteArray> keys_;
 };
 
 } // namespace ketplus::daemon

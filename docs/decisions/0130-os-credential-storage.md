@@ -22,6 +22,14 @@ synchronous callback, dispatch events, call external callbacks or perform networ
 requests. Aborting a callback discards its staged changes. Failed commits do not
 publish envelopes or retain metadata encrypted with uncommitted keys. There is no
 process-wide snapshot or TTL: each subsequent operation reads the store again.
+The one exception is key material: a `CloudCrypto` keeps the private and session keys it
+has read or created in memory, because sealing a backlog read the whole record twice per
+event on the daemon's only thread until clients timed out. Within one enrollment and
+workspace a key never changes under its account, so this cache only skips reads. The daemon client clears it
+whenever keys can be removed or replaced: sign-in, sign-out, enrollment, workspace adoption,
+transport or device revocation, and pruning of deleted conversations. Every other account is
+still read from the store. The keys stay in the process's memory for longer than one
+operation; they were already readable by that process.
 A cooperating writer that encounters the held lock receives a retryable error;
 a successful later operation sees its committed changes.
 
