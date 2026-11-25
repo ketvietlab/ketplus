@@ -4,6 +4,8 @@
 #include "AgentTestFixture.h"
 #include "TeamFakeHost.h"
 
+#include <QSqlDatabase>
+#include <QSqlQuery>
 #include <QStandardPaths>
 #include <QTest>
 
@@ -133,6 +135,21 @@ class TeamDecisionTest final : public QObject {
         QVERIFY(team().task(id)->question.isEmpty());
         QCOMPARE(recipients("decision"), (QStringList{"lead", "dev1"}));
         QVERIFY(host_.of("decision").first().body.contains("Answer: EUR"));
+        if (batch) {
+            QVERIFY(host_.of("decision")
+                        .first()
+                        .body.contains(QStringLiteral("Task %1 can go on.").arg(id)));
+            bool foundRelease = false;
+            for (const auto& update : journal_->teamUpdates(team_, false, 50)) {
+                if (update.kind == "state" && update.taskId == id &&
+                    update.data.value("from").toString() == state::blocked) {
+                    QVERIFY(!update.actionable);
+                    foundRelease = true;
+                }
+            }
+            QVERIFY(foundRelease);
+            QVERIFY(host_.of("decision").last().body.contains("Answer: EUR"));
+        }
         QCOMPARE(
             teams_->answerDecision(team_, raised, "USD", "user").error.value_or(TeamError{}).code,
             QStringLiteral("decision_closed"));
@@ -156,6 +173,7 @@ class TeamDecisionTest final : public QObject {
         QVERIFY(!first.isEmpty() && !second.isEmpty() && !skipped.isEmpty());
         const QJsonArray batch{QJsonObject{{"decision_id", first}, {"answer", "EUR"}},
                                QJsonObject{{"decision_id", "missing"}, {"answer", "USD"}},
+                               QJsonObject{{"decision_id", first}, {"answer", "duplicate"}},
                                QJsonObject{{"decision_id", second}, {"answer", "USD"}},
                                QJsonObject{{"decision_id", skipped}, {"answer", " "}}};
         QJsonArray rejected;
@@ -165,7 +183,8 @@ class TeamDecisionTest final : public QObject {
         const auto revision = team().revision;
         QVERIFY(teams_->answerDecisions(team_, batch, "user", &rejected, &accepted).ok());
         QCOMPARE(accepted, QJsonArray({first, second}));
-        QCOMPARE(rejected.size(), 2);
+        QCOMPARE(rejected.size(), 3);
+        QCOMPARE(rejected.at(1).toObject().value("error_code").toString(), "decision_closed");
         QCOMPARE(decision(skipped).state, "open");
         QCOMPARE(decision(first).answer, "EUR");
         QCOMPARE(decision(second).answer, "USD");
@@ -181,6 +200,64 @@ class TeamDecisionTest final : public QObject {
             if (update.kind == "decision_answered")
                 ++count;
         QCOMPARE(count, 2);
+    }
+
+    void allRejectedAnswersLeaveTheTeamAndWakeUnchanged() {
+        start();
+        const QString id = raise();
+        const auto revision = team().revision;
+        QJsonArray rejected;
+        QJsonArray accepted;
+        QVERIFY(teams_
+                    ->answerDecisions(team_,
+                                      {QJsonObject{{"decision_id", id},
+                                                   {"answer", QString(4001, QLatin1Char('a'))}}},
+                                      "user", &rejected, &accepted)
+                    .ok());
+        QCOMPARE(rejected.size(), 1);
+        QVERIFY(accepted.isEmpty());
+        QCOMPARE(decision(id).state, "open");
+        QCOMPARE(team().revision, revision);
+        QVERIFY(host_.of("decision").isEmpty());
+    }
+
+    void aFailedSecondUpdateRollsBackTheWholeBatch() {
+        start();
+        const QString first = raise();
+        const QString second = raise();
+        QVERIFY(!first.isEmpty() && !second.isEmpty());
+        const auto revision = team().revision;
+        bool installed = false;
+        {
+            auto database = QSqlDatabase::addDatabase("QSQLITE", "decision-rollback");
+            database.setDatabaseName(directory_.filePath("journal.sqlite3"));
+            installed =
+                database.open() &&
+                QSqlQuery(database).exec(
+                    "CREATE TRIGGER reject_second_answer BEFORE INSERT ON team_updates "
+                    "WHEN NEW.kind = 'decision_answered' AND NEW.text LIKE 'D-2 answered:%' "
+                    "BEGIN SELECT RAISE(ABORT, 'test failure'); END");
+        }
+        QSqlDatabase::removeDatabase("decision-rollback");
+        QVERIFY(installed);
+        QJsonArray accepted;
+        QVERIFY(!teams_
+                     ->answerDecisions(team_,
+                                       {QJsonObject{{"decision_id", first}, {"answer", "EUR"}},
+                                        QJsonObject{{"decision_id", second}, {"answer", "USD"}}},
+                                       "user", nullptr, &accepted)
+                     .ok());
+        QVERIFY(accepted.isEmpty());
+        QCOMPARE(team().revision, revision);
+        QCOMPARE(decision(first).state, "open");
+        QCOMPARE(decision(second).state, "open");
+        QVERIFY(host_.of("decision").isEmpty());
+        for (const auto& update : journal_->teamUpdates(team_, false, 50))
+            QVERIFY(update.kind != "decision_answered");
+        teams_->load();
+        QCOMPARE(team().revision, revision);
+        QCOMPARE(decision(first).state, "open");
+        QCOMPARE(decision(second).state, "open");
     }
 
     void theLeaderWithdrawsOnlyItsOwnQuestionsWithAReason() {
@@ -297,6 +374,43 @@ class TeamDecisionTest final : public QObject {
         QVERIFY(team().paused);
         QCOMPARE(team().pausedReason, QStringLiteral("user"));
         QVERIFY(!team().held.isEmpty());
+    }
+
+    void aPauseWinsOverResumeRegardlessOfOrder_data() {
+        QTest::addColumn<bool>("pauseFirst");
+        QTest::newRow("pause first") << true;
+        QTest::newRow("continue first") << false;
+    }
+
+    void aPauseWinsOverResumeRegardlessOfOrder() {
+        QFETCH(bool, pauseFirst);
+        start();
+        Team paused = team();
+        paused.paused = true;
+        paused.pausedReason = "budget";
+        paused.decisions = {
+            {.id = "D-1",
+             .kind = "budget",
+             .question = "Continue?",
+             .choices = {"Continue", "Stop"}},
+            {.id = "D-2", .kind = "stalled", .question = "Wake?", .choices = {"Wake", "Pause"}},
+        };
+        QString error;
+        const auto revision = paused.revision++;
+        QVERIFY2(
+            journal_->saveTeam(team_, revision, toJson(paused), paused.memberSessions(), &error),
+            qPrintable(error));
+        teams_->load();
+
+        const QJsonObject keepGoing{{"decision_id", "D-1"}, {"answer", "Continue"}};
+        const QJsonObject pause{{"decision_id", "D-2"}, {"answer", "Pause"}};
+        const QJsonArray batch =
+            pauseFirst ? QJsonArray{pause, keepGoing} : QJsonArray{keepGoing, pause};
+        QJsonArray accepted;
+        QVERIFY(teams_->answerDecisions(team_, batch, "user", nullptr, &accepted).ok());
+        QCOMPARE(accepted.size(), 2);
+        QVERIFY(team().paused);
+        QCOMPARE(team().pausedReason, "user");
     }
 
     void decisionsOverTheProtocolAndTheLeadersTool() {

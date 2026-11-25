@@ -137,6 +137,7 @@ TeamResult TeamCoordinator::answerDecisions(const qint64 teamId, const QJsonArra
     QStringList leaderBodies;
     QString leaderTask;
     bool resume = false;
+    bool pauseRequested = false;
     bool resetStall = false;
     bool wakeStalledLeader = false;
     const Member* leader = team->memberWithRole(role::leader);
@@ -186,17 +187,15 @@ TeamResult TeamCoordinator::answerDecisions(const qint64 teamId, const QJsonArra
         if (kind == QStringLiteral("budget")) {
             // "Continue (N more turns)", the first choice, resumes; anything else leaves the team
             // paused by the user.
-            resume = chose(0);
-            if (!resume)
-                team->pausedReason = QStringLiteral("user");
+            resume |= chose(0);
+            pauseRequested |= !chose(0);
         } else if (kind == QStringLiteral("stalled")) {
             // The user moves a stopped team on, or pauses it; the watchdog starts over.
             // Members the user stopped stay stopped, except the leader the user now wakes.
             resetStall = true;
             if (chose(1)) {
                 team->paused = true;
-                team->pausedReason = QStringLiteral("user");
-                resume = false;
+                pauseRequested = true;
             } else {
                 wakeStalledLeader = true;
             }
@@ -247,6 +246,8 @@ TeamResult TeamCoordinator::answerDecisions(const qint64 teamId, const QJsonArra
     if (applied.isEmpty())
         return {.teamId = teamId};
     // A human answer resets the budget and opens the digest lock once per submit.
+    if (pauseRequested)
+        team->pausedReason = QStringLiteral("user");
     team->automaticTurns = 0;
     team->quiescedReason.clear();
     if (batch) {
@@ -273,7 +274,7 @@ TeamResult TeamCoordinator::answerDecisions(const qint64 teamId, const QJsonArra
         if (wakeStalledLeader)
             stall.stopped.remove(leaderSession);
     }
-    if (resume)
+    if (resume && !pauseRequested)
         (void)update(teamId, {{"paused", false}}, actor);
 
     const auto notify = [&](const QString& to, const QString& taskId, const QStringList& bodies) {

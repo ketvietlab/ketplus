@@ -202,7 +202,8 @@ goes to Updates as "D-N answered: <text>", as a choice does. The card no longer 
 "Answer in the conversation"; a decision is answered on its card. The phone sends choices only
 for now; the phone app tracks a written answer as a follow-up.
 
-**Decision batches.** The team page stages choice and free-text answers locally. Skip
+**Decision batches.** The team page stages choice and free-text answers locally. The Other editor keeps
+Enter for typing and has no Cancel or Escape action. Skip
 clears that draft and leaves the question open. Submit all sends
 `team.decisions.answer_batch {team_id, answers: [{decision_id, answer}]}` once.
 The user is the only caller. Each valid open answer is applied in the same journal
@@ -210,10 +211,16 @@ transaction as its Updates entry. The response includes accepted decision IDs an
 rejected entries with their IDs and error reasons. An empty or all-rejected submit
 does not wake anyone. The leader receives one decision digest with every accepted
 answer and the questions still open. Each affected owner receives one message about
-its own answered questions. User submission reopens quiescence, while staging or
+its own answered questions. If an answer releases a blocked task, the task transition
+is recorded in the same transaction and described in the decision wake. Those batch
+Updates are recorded as `actionable=false` and do not schedule an additional digest. The batch rejects a trimmed answer
+longer than 4,000 characters, while the legacy operation truncates it. User
+submission reopens quiescence, while staging or
 skipping answers leaves the lock in place. The older `team.decision.answer`
-operation remains available to existing clients. Authorized paired devices may submit
-the same batch using the existing team revision fence.
+operation remains available to existing clients. Paired devices continue to answer
+individually with `team.decision.answer`. Batch submission for paired devices is a
+separate follow-up. If several budget or stall answers are submitted together, a
+pause answer takes precedence over a resume answer regardless of their order.
 
 ### 4. A lane is a name; the leader renames it (decided, amended by T-10)
 

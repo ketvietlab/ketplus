@@ -74,7 +74,14 @@ class TeamStallTest final : public QObject {
         QCOMPARE(host_.messages.size(), 1);
     }
 
+    void aStandingTeamWakesTheLeaderTwiceThenAsksTheUser_data() {
+        QTest::addColumn<bool>("batch");
+        QTest::newRow("legacy") << false;
+        QTest::newRow("batch") << true;
+    }
+
     void aStandingTeamWakesTheLeaderTwiceThenAsksTheUser() {
+        QFETCH(bool, batch);
         const QString id = task("Cart");
         teams_->checkStall(team_);
         teams_->checkStall(team_);
@@ -94,19 +101,39 @@ class TeamStallTest final : public QObject {
         QCOMPARE(host_.messages.size(), 2);
         QCOMPARE(team().decisions.size(), 1);
         // The answer reaches the leader and the watchdog starts over.
-        QVERIFY(teams_->answerDecision(team_, asked.id, wakeLeaderChoice, "user").ok());
+        const QString decisionId = asked.id;
+        const auto result =
+            batch ? teams_->answerDecisions(
+                        team_,
+                        {QJsonObject{{"decision_id", decisionId}, {"answer", wakeLeaderChoice}}},
+                        "user", nullptr, nullptr)
+                  : teams_->answerDecision(team_, decisionId, wakeLeaderChoice, "user");
+        QVERIFY(result.ok());
         QCOMPARE(kinds().last(), QStringLiteral("decision>lead"));
         teams_->checkStall(team_);
         QCOMPARE(kinds().last(), QStringLiteral("stall>lead"));
     }
 
+    void pausingFromTheQuestionPausesTheTeam_data() {
+        QTest::addColumn<bool>("batch");
+        QTest::newRow("legacy") << false;
+        QTest::newRow("batch") << true;
+    }
+
     void pausingFromTheQuestionPausesTheTeam() {
+        QFETCH(bool, batch);
         (void)task("Cart");
         for (int round = 0; round < 3; ++round)
             teams_->checkStall(team_);
         QCOMPARE(team().openDecisions(), 1);
-        QVERIFY(teams_->answerDecision(team_, team().decisions.last().id, pauseTeamChoice, "user")
-                    .ok());
+        const QString decisionId = team().decisions.last().id;
+        const auto result =
+            batch ? teams_->answerDecisions(
+                        team_,
+                        {QJsonObject{{"decision_id", decisionId}, {"answer", pauseTeamChoice}}},
+                        "user", nullptr, nullptr)
+                  : teams_->answerDecision(team_, decisionId, pauseTeamChoice, "user");
+        QVERIFY(result.ok());
         QVERIFY(team().paused);
         QCOMPARE(team().pausedReason, QStringLiteral("user"));
         const int sent = static_cast<int>(host_.messages.size());
@@ -124,7 +151,14 @@ class TeamStallTest final : public QObject {
         QCOMPARE(team().openDecisions(), 0);
     }
 
+    void theUsersStopIsRespected_data() {
+        QTest::addColumn<bool>("batch");
+        QTest::newRow("legacy") << false;
+        QTest::newRow("batch") << true;
+    }
+
     void theUsersStopIsRespected() {
+        QFETCH(bool, batch);
         (void)inProgress();
         teams_->memberTurnEnded("dev1", true);
         teams_->checkStall(team_);
@@ -139,8 +173,14 @@ class TeamStallTest final : public QObject {
         QCOMPARE(team().decisions.last().kind, QStringLiteral("stalled"));
         // Waking the leader lifts the leader's Stop, not the developer's; neither does a
         // worker that exits without a new turn.
-        QVERIFY(teams_->answerDecision(team_, team().decisions.last().id, wakeLeaderChoice, "user")
-                    .ok());
+        const QString decisionId = team().decisions.last().id;
+        const auto result =
+            batch ? teams_->answerDecisions(
+                        team_,
+                        {QJsonObject{{"decision_id", decisionId}, {"answer", wakeLeaderChoice}}},
+                        "user", nullptr, nullptr)
+                  : teams_->answerDecision(team_, decisionId, wakeLeaderChoice, "user");
+        QVERIFY(result.ok());
         teams_->memberTurnEnded("dev1", std::nullopt);
         host_.messages.clear();
         teams_->checkStall(team_);

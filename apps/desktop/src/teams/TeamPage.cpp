@@ -59,10 +59,16 @@ QString pausedReason(const QString& reason) {
 
 } // namespace
 
+TeamPage::~TeamPage() { flushDecisionAnswers(); }
+
 TeamPage::TeamPage(TeamDirectory* teams, const QString& teamId, const QString& repository,
                    QWidget* parent)
     : QWidget(parent), teams_(teams), teamId_(teamId), repository_(repository),
       scroll_(new QScrollArea(this)) {
+    decisionSaveTimer_ = new QTimer(this);
+    decisionSaveTimer_->setSingleShot(true);
+    decisionSaveTimer_->setInterval(250);
+    connect(decisionSaveTimer_, &QTimer::timeout, this, &TeamPage::flushDecisionAnswers);
     setObjectName(QStringLiteral("teamPage"));
     auto* outer = new QVBoxLayout(this);
     outer->setContentsMargins(0, 0, 0, 0);

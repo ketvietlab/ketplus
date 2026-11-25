@@ -67,7 +67,7 @@ QString TeamPage::decisionSettingsKey() const {
 }
 
 QJsonArray TeamPage::stagedDecisionAnswers() const {
-    const auto drafts = QSettings().value(decisionSettingsKey()).toMap();
+    const auto drafts = decisionAnswers();
     QJsonArray answers;
     for (const auto& id : openDecisionIds_) {
         const auto answer = drafts.value(id).toString().trimmed();
@@ -86,27 +86,59 @@ void TeamPage::refreshDecisionSubmit() {
         count > 0 && !teams_->commands()->isPending(commandKey(QStringLiteral("decision-batch"))));
 }
 
-void TeamPage::stageDecisionAnswer(const QString& id, const QString& answer) {
-    QSettings settings;
-    const auto key = decisionSettingsKey();
-    auto drafts = settings.value(key).toMap();
-    if (answer.isEmpty())
-        drafts.remove(id);
+QVariantMap TeamPage::decisionAnswers() const {
+    auto drafts = QSettings().value(decisionSettingsKey()).toMap();
+    for (auto it = pendingDecisionAnswers_.cbegin(); it != pendingDecisionAnswers_.cend(); ++it) {
+        if (it.value().toString().isEmpty())
+            drafts.remove(it.key());
+        else
+            drafts.insert(it.key(), it.value());
+    }
+    return drafts;
+}
+
+void TeamPage::flushDecisionAnswers() {
+    decisionSaveTimer_->stop();
+    if (pendingDecisionAnswers_.isEmpty())
+        return;
+    if (teams_->team(teamId_)) {
+        const auto drafts = decisionAnswers();
+        QSettings settings;
+        if (drafts.isEmpty())
+            settings.remove(decisionSettingsKey());
+        else
+            settings.setValue(decisionSettingsKey(), drafts);
+    }
+    pendingDecisionAnswers_.clear();
+}
+
+void TeamPage::stageDecisionAnswer(const QString& id, const QString& answer, const bool debounce) {
+    pendingDecisionAnswers_.insert(id, answer);
+    if (debounce)
+        decisionSaveTimer_->start();
     else
-        drafts.insert(id, answer);
-    settings.setValue(key, drafts);
+        flushDecisionAnswers();
     refreshDecisionSubmit();
 }
 
 void TeamPage::buildDecisions(const QJsonObject& team) {
     QList<QJsonObject> open;
     openDecisionIds_.clear();
-    for (const auto& value : team.value(QStringLiteral("decisions")).toArray())
-        if (value.toObject().value(QStringLiteral("state")).toString() == QStringLiteral("open")) {
-            open.append(value.toObject());
-            openDecisionIds_.append(value.toObject().value("id").toString());
+    const auto decisions = team.value(QStringLiteral("decisions")).toArray();
+    const auto drafts = decisionAnswers();
+    for (const auto& value : decisions) {
+        const auto decision = value.toObject();
+        const auto id = decision.value("id").toString();
+        if (decision.value("state").toString() == "open") {
+            open.append(decision);
+            openDecisionIds_.append(id);
+        } else if (drafts.contains(id) || pendingDecisionAnswers_.contains(id)) {
+            pendingDecisionAnswers_.insert(id, QString{});
         }
-    const auto staged = QSettings().value(decisionSettingsKey()).toMap();
+    }
+    if (!decisionSaveTimer_->isActive())
+        flushDecisionAnswers();
+    const auto staged = decisionAnswers();
     const auto submitKey = commandKey(QStringLiteral("decision-batch"));
     // A written answer is kept only while its decision is open.
     for (auto it = decisionDrafts_.begin(); it != decisionDrafts_.end();)
@@ -241,6 +273,10 @@ void TeamPage::buildDecisions(const QJsonObject& team) {
     status->hide();
     layout_->addWidget(status);
     teams_->commands()->bindStatus(status, submitKey);
+    if (!decisionRejections_.isEmpty()) {
+        status->setText(decisionRejections_);
+        status->show();
+    }
     decisionSubmit_ = new ket::Button({}, ket::ButtonVariant::Primary, column_);
     decisionSubmit_->setObjectName(QStringLiteral("teamDecisionSubmitAll"));
     layout_->addWidget(decisionSubmit_, 0, Qt::AlignLeft);
@@ -255,6 +291,8 @@ void TeamPage::buildDecisions(const QJsonObject& team) {
         const auto answers = stagedDecisionAnswers();
         if (answers.isEmpty())
             return;
+        flushDecisionAnswers();
+        decisionRejections_.clear();
         const auto key = decisionSettingsKey();
         const QPointer<TeamPage> page(this);
         teams_->commands()->send(
@@ -265,18 +303,22 @@ void TeamPage::buildDecisions(const QJsonObject& team) {
                 auto drafts = settings.value(key).toMap();
                 for (const auto& id : result.value("accepted").toArray())
                     drafts.remove(id.toString());
-                settings.setValue(key, drafts);
-                if (page)
-                    page->refreshDecisionSubmit();
-                if (auto* label = page ? page->findChild<QLabel*>("teamDecisionError") : nullptr) {
-                    QStringList errors;
-                    for (const auto& error : result.value("rejected").toArray())
-                        errors.append(error.toObject().value("error_message").toString());
-                    if (!errors.isEmpty()) {
-                        label->setText(errors.join(QLatin1Char('\n')));
+                if (drafts.isEmpty())
+                    settings.remove(key);
+                else
+                    settings.setValue(key, drafts);
+                if (!page)
+                    return;
+                page->refreshDecisionSubmit();
+                QStringList errors;
+                for (const auto& error : result.value("rejected").toArray())
+                    errors.append(error.toObject().value("error_message").toString());
+                page->decisionRejections_ = errors.join(QLatin1Char('\n'));
+                if (!errors.isEmpty())
+                    if (auto* label = page->findChild<QLabel*>("teamDecisionError")) {
+                        label->setText(page->decisionRejections_);
                         label->show();
                     }
-                }
             });
     });
 }

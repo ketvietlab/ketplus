@@ -256,6 +256,32 @@ class TeamCommandsTest final : public QObject {
         QCOMPARE(decisionStatus(page)->text(), QStringLiteral("Try again."));
     }
 
+    void aPartialRefusalKeepsTheDraftAndErrorAcrossARebuild() {
+        start(fixture());
+        TeamPage page(teams_.get(), "7", "/work/shop");
+        daemon_.answers.insert(
+            "team.decisions.answer_batch",
+            {{"ok", true},
+             {"accepted", QJsonArray{}},
+             {"rejected",
+              QJsonArray{QJsonObject{{"decision_id", "D-1"}, {"error_message", "Try again."}}}}});
+        choices(page).at(0)->click();
+        page.findChild<ket::Button*>("teamDecisionSubmitAll")->click();
+        QTRY_VERIFY(decisionStatus(page) && decisionStatus(page)->text() == "Try again.");
+
+        QJsonObject next = fixture(5);
+        auto decisions = next.value("decisions").toArray();
+        auto decision = decisions.at(0).toObject();
+        decision.insert("context", "Updated context.");
+        decisions.replace(0, decision);
+        next.insert("decisions", decisions);
+        const QPointer<QLabel> old = decisionStatus(page);
+        teams_->applyEvent("team.changed", {{"team", next}});
+        QTRY_VERIFY(old.isNull());
+        QTRY_VERIFY(decisionStatus(page) && decisionStatus(page)->text() == "Try again.");
+        QVERIFY(choices(page).at(0)->isChecked());
+    }
+
     // The leader's choice: after the limit the control says it is still waiting and stays
     // pending; the answer still ends it.
     void aSlowAnswerSaysItIsStillWaiting() {

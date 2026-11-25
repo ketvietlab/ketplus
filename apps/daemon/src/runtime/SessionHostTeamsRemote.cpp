@@ -38,9 +38,6 @@ const QHash<QString, QSet<QString>>& allowedFields() {
         {QStringLiteral("team.decision.answer"),
          {QStringLiteral("team_id"), QStringLiteral("decision_id"), QStringLiteral("choice"),
           QStringLiteral("text"), QStringLiteral("expected_revision")}},
-        {QStringLiteral("team.decisions.answer_batch"),
-         {QStringLiteral("team_id"), QStringLiteral("answers"),
-          QStringLiteral("expected_revision")}},
         {QStringLiteral("team.update"),
          {QStringLiteral("team_id"), QStringLiteral("paused"), QStringLiteral("merge_policy"),
           QStringLiteral("turn_budget"), QStringLiteral("language"),
@@ -371,11 +368,6 @@ QJsonObject SessionHost::remoteTeamAnswer(const QString& type, const QJsonObject
     } else if (type == QStringLiteral("team.delete")) {
         result = {{QStringLiteral("ok"), true},
                   {QStringLiteral("team_id"), answer.value(QStringLiteral("team_id"))}};
-    } else if (type == QStringLiteral("team.decisions.answer_batch")) {
-        result = {{"ok", true},
-                  {"team", remote::summary(answer.value("team").toObject(), ids)},
-                  {"accepted", answer.value("accepted")},
-                  {"rejected", answer.value("rejected")}};
     } else if (type == QStringLiteral("team.provider.set")) {
         // What happened to each chosen member, as the local client reads it.
         result = {{QStringLiteral("ok"), true},

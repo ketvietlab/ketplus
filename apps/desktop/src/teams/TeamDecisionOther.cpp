@@ -85,7 +85,7 @@ QWidget* TeamPage::decisionDraft(QWidget* card, const QString& id, const QString
         if (!alive)
             return;
         decisionDrafts_[id].text = alive->text();
-        stageDecisionAnswer(id, alive->text());
+        stageDecisionAnswer(id, alive->text(), true);
     });
     field->setEnabled(!teams_->commands()->isPending(key));
     connect(teams_->commands(), &TeamCommands::pendingChanged, field,

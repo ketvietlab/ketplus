@@ -191,7 +191,14 @@ class TeamMergeTest final : public QObject {
         QCOMPARE(updates("goal_reached"), 1);
     }
 
+    void underTheUserOneDecisionAllowsExactlyThatMerge_data() {
+        QTest::addColumn<bool>("batch");
+        QTest::newRow("legacy") << false;
+        QTest::newRow("batch") << true;
+    }
+
     void underTheUserOneDecisionAllowsExactlyThatMerge() {
+        QFETCH(bool, batch);
         QVERIFY(teams_->update(team_, {{"merge_policy", "user"}}, "user").ok());
         const QString id = task("Cart");
         pass(id, "dev1");
@@ -200,8 +207,14 @@ class TeamMergeTest final : public QObject {
         QCOMPARE(merges().first()->choices.last(), leaderMergesChoice);
         QVERIFY(!get(id).leaderMayMerge);
         host_.messages.clear();
-        QVERIFY(
-            teams_->answerDecision(team_, merges().first()->id, leaderMergesChoice, "user").ok());
+        const QString decisionId = merges().first()->id;
+        const auto result =
+            batch ? teams_->answerDecisions(
+                        team_,
+                        {QJsonObject{{"decision_id", decisionId}, {"answer", leaderMergesChoice}}},
+                        "user", nullptr, nullptr)
+                  : teams_->answerDecision(team_, decisionId, leaderMergesChoice, "user");
+        QVERIFY(result.ok());
         QVERIFY(get(id).leaderMayMerge);
         QCOMPARE(host_.of("decision").size(), 1);
         QCOMPARE(host_.of("decision").first().toSession, QStringLiteral("lead"));

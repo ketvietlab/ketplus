@@ -551,6 +551,29 @@ class TeamPageTest final : public QObject {
         QCOMPARE(daemon_.count("team.decisions.answer_batch"), 0);
     }
 
+    void closedDecisionsAndDeletedTeamsDropTheirDrafts() {
+        start(fixture());
+        const QString key = QStringLiteral("teams/decisionAnswers/7");
+        TeamPage page(teams_.get(), "7", "/work/shop");
+        page.findChild<QAbstractButton*>("teamDecisionOther")->click();
+        QTRY_VERIFY(page.findChild<ket::TextArea*>("teamDecisionOtherText"));
+        page.findChild<ket::TextArea*>("teamDecisionOtherText")->setText("Adyen");
+        QTRY_VERIFY(QSettings().contains(key));
+
+        auto updated = fixture(2);
+        auto decisions = updated.value("decisions").toArray();
+        auto closed = decisions.at(0).toObject();
+        closed.insert("state", "answered");
+        decisions.replace(0, closed);
+        updated.insert("decisions", decisions);
+        teams_->applyEvent("team.changed", {{"team", updated}});
+        QTRY_VERIFY(!QSettings().contains(key));
+
+        QSettings().setValue(key, QVariantMap{{"D-2", "Stripe"}});
+        teams_->applyEvent("team.removed", {{"team_id", "7"}});
+        QVERIFY(!QSettings().contains(key));
+    }
+
     // T-55 review M1: the team changes while the answer is being written. The page rebuilds, and
     // the new field has the text, the cursor, the selection and the keyboard where they were. A
     // word the input method is still composing holds the rebuild until it is committed.
