@@ -4,6 +4,7 @@
 #include "storage/LocalJournal.h"
 #include "teams/TeamBranchNames.h"
 
+#include <QCryptographicHash>
 #include <QDir>
 
 #include <utility>
@@ -372,6 +373,14 @@ bool TeamCoordinator::blockAtLoweredLimit(Team& team, Task& task, QList<Update>&
     return true;
 }
 
+QString TeamCoordinator::questionKey(const QString& question) {
+    return QString::fromLatin1(
+        QCryptographicHash::hash(
+            question.simplified().normalized(QString::NormalizationForm_C).toUtf8(),
+            QCryptographicHash::Sha256)
+            .toHex());
+}
+
 void TeamCoordinator::applyMove(Team& team, Task& task, const QString& to, const QString& actor,
                                 const QString& reason, QList<Update>& updates) {
     const QString from = task.state;
@@ -383,7 +392,17 @@ void TeamCoordinator::applyMove(Team& team, Task& task, const QString& to, const
                    .arg(stateName(team.language, from), stateName(team.language, to),
                         reason.isEmpty() ? QString{} : QStringLiteral(": ") + reason),
                {{QStringLiteral("from"), from}, {QStringLiteral("to"), to}});
-    const bool actionable = to == state::ready || to == state::blocked || to == state::done;
+    bool actionable = to == state::ready || to == state::blocked || to == state::done;
+    QJsonObject data{{QStringLiteral("from"), from}, {QStringLiteral("to"), to}};
+    const Member* leader = team.memberWithRole(role::leader);
+    if (to == state::blocked && leader && actor != leader->sessionId && actor == task.owner &&
+        !reason.isEmpty()) {
+        const QString key = questionKey(reason);
+        data.insert(QStringLiteral("question_key"), key);
+        actionable = !journal_->teamQuestionWasDigested(team.id, task.id, leader->sessionId, key);
+        if (actionable)
+            task.externalWaitQuestion.clear();
+    }
     updates.append(
         {.kind = QStringLiteral("state"),
          .text = QStringLiteral("%1 %2 → %3%4")
@@ -391,7 +410,7 @@ void TeamCoordinator::applyMove(Team& team, Task& task, const QString& to, const
                           reason.isEmpty() ? QString{} : QStringLiteral(": ") + reason),
          .taskId = task.id,
          .actionable = actionable,
-         .data = {{QStringLiteral("from"), from}, {QStringLiteral("to"), to}},
+         .data = std::move(data),
          .actor = actor});
     // T-19: a task handed to review again starts its replies without a verdict from zero.
     if (to == state::inReview)

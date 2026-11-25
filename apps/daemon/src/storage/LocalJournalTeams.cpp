@@ -32,6 +32,8 @@ bool LocalJournal::initializeTeams() {
                        "NULL, data TEXT NOT NULL DEFAULT '{}', actionable INTEGER NOT NULL DEFAULT "
                        "0, digested INTEGER NOT NULL DEFAULT 0)"),
         QStringLiteral("CREATE INDEX IF NOT EXISTS team_updates_team ON team_updates(team_id, id)"),
+        QStringLiteral("CREATE INDEX IF NOT EXISTS team_updates_task ON "
+                       "team_updates(team_id, task_id, id)"),
         QStringLiteral("CREATE TABLE IF NOT EXISTS team_history_texts (team_id INTEGER NOT "
                        "NULL, task_id TEXT NOT NULL, entry INTEGER NOT NULL, text TEXT NOT NULL, "
                        "PRIMARY KEY (team_id, task_id, entry))"),
@@ -329,6 +331,27 @@ QList<TeamUpdateRecord> LocalJournal::teamUpdates(const qint64 teamId, const boo
                         .actionable = query.value(7).toInt() != 0,
                         .digested = query.value(8).toInt() != 0});
     return updates;
+}
+
+bool LocalJournal::teamQuestionWasDigested(const qint64 teamId, const QString& taskId,
+                                           const QString& leader, const QString& key) const {
+    QSqlQuery query(database_);
+    query.prepare(QStringLiteral(
+        "SELECT 1 FROM team_updates WHERE team_id = ? AND task_id = ? "
+        "AND kind = 'state' AND actionable = 1 AND digested = 1 AND actor <> ? "
+        "AND json_extract(data, '$.question_key') = ? "
+        "AND id > COALESCE((SELECT MAX(id) FROM team_updates WHERE team_id = ? AND task_id = ? "
+        "AND (actor = ? OR actor = 'user') AND kind IN "
+        "('task_assigned','task_handover','criteria','met','decision_raised','decision_answered',"
+        "'decision_withdrawn','state')), 0) LIMIT 1"));
+    query.addBindValue(teamId);
+    query.addBindValue(taskId);
+    query.addBindValue(leader);
+    query.addBindValue(key);
+    query.addBindValue(teamId);
+    query.addBindValue(taskId);
+    query.addBindValue(leader);
+    return query.exec() && query.next();
 }
 
 bool LocalJournal::markTeamUpdatesDigested(const qint64 teamId, const qint64 throughId) {

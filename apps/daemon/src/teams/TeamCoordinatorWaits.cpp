@@ -6,6 +6,8 @@
 
 #include <QTimer>
 
+#include "storage/LocalJournal.h"
+
 namespace ketplus::daemon::teams {
 
 TeamResult TeamCoordinator::wait(const qint64 teamId, const QString& sessionId, const int minutes,
@@ -33,6 +35,15 @@ TeamResult TeamCoordinator::wait(const qint64 teamId, const QString& sessionId, 
                                    QStringLiteral("There is no task %1.").arg(taskId)}};
 
     const Team before = *team;
+    // A task-specific wait lets the leader acknowledge a reported block as external.
+    if (Task* task = taskId.isEmpty() ? nullptr : team->task(taskId);
+        task && member->role == role::leader && task->state == state::blocked &&
+        !task->question.isEmpty()) {
+        const Member* leader = team->memberWithRole(role::leader);
+        if (leader && journal_->teamQuestionWasDigested(teamId, taskId, leader->sessionId,
+                                                        questionKey(task->question)))
+            task->externalWaitQuestion = task->question;
+    }
     if (auto failed =
             commit(*team, before, sessionId,
                    {{.kind = QStringLiteral("wait"),
@@ -71,6 +82,8 @@ void TeamCoordinator::waitEnded(const QString& sessionId) {
     const Team* team = teamOf(sessionId);
     if (!team)
         return;
+    if (const Member* member = team->member(sessionId); member && member->role == role::leader)
+        unquiesce(team->id);
     // A member that works again got there by itself; its turn's end starts the watch.
     const qint64 teamId = team->id;
     watchForStall(teamId);

@@ -373,6 +373,32 @@ reason is also noted on the task. A command that names a member standing in a ta
 worktree finds that worktree's repository from the team, without git, so a handover is
 answered before any git runs.
 
+**Repeated blocks and quiescence.** A task owner's block question is keyed by its
+task, destination state, and the SHA-256 digest of its whitespace-normalized NFC
+text. Once included in a digest, an identical question stays in history without
+requesting a new digest until the leader or user changes the task's assignment,
+criteria, decision, or state. A different question can request a digest.
+
+A team is quiesced when it has tasks and every task is done or explicitly parked
+on an external event. To park a blocked task, the leader records a task-specific
+`team_wait` after the current question has appeared in a digest. An open decision
+keeps the team active. The routine updates are `idle_developer`, `goal_reached`,
+and state transitions to done with `completion: merged`. They remain in the log
+and ride along with the next actionable digest. Merge observations have a
+separate actionable update. A non-merge completion retains its actionability.
+Quiescence suppresses digest and stall wakes. A direct user message to the team
+leader, new work, an actionable change such as a new block or review outcome, or
+the leader's wait ending reopens the team. Scheduled turns and direct messages
+to developers or reviewers leave the lock in place. Pause, turn budget, and role
+checks still apply. Team summaries expose `quiesced` and
+`quiesced_reason` (`tasks_done` or `waiting_for_external_event`).
+
+A merge conflict reaches the leader when the developer reports it as a blocked
+task with a reason. A new report reopens the team and an already digested reason
+does not request another wake. Pull request conflict detection belongs to the
+pull request task tracking work (T-12) and must reopen the team when it signals
+a new conflict.
+
 ### 8. A team that stops is moved on (decided 2026-11-11)
 
 The table above is event-driven: a turn that ends with work left and no event to follow

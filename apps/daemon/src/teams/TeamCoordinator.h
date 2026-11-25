@@ -513,6 +513,8 @@ class TeamCoordinator : public QObject {
     [[nodiscard]] QString actorRole(const Team& team, const QString& actor) const;
     [[nodiscard]] QString actorName(const Team& team, const QString& actor) const;
 
+    void userMessageReceived(const QString& sessionId);
+
     // A member's turn ended (ADR 0114 §7): after the leader's turn the waiting digest is sent,
     // and the team is watched for a stall (§8). `stoppedByUser` is the user's Stop; nothing
     // keeps what the member's last turn said (its worker exited, no turn ended).
@@ -655,6 +657,11 @@ class TeamCoordinator : public QObject {
     void teamRemoved(const QString& teamId, const QString& repository);
 
   protected:
+    [[nodiscard]] static QString questionKey(const QString& question);
+    [[nodiscard]] static QString quiescenceReason(const Team& team);
+
+    void unquiesce(qint64 teamId);
+
     // One Updates entry to store with the next commit.
     struct Update final {
         QString kind;

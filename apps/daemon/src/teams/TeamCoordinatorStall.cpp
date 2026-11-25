@@ -45,7 +45,8 @@ void TeamCoordinator::watchForStall(const qint64 teamId) {
 void TeamCoordinator::checkStall(const qint64 teamId) {
     const Team* team = this->team(teamId);
     // A paused team and a team that waits for the user's answer stand still on purpose.
-    if (!team || team->paused || team->openDecisions() > 0 || !hasWorkLeft(*team))
+    if (!team || team->paused || !team->quiescedReason.isEmpty() || team->openDecisions() > 0 ||
+        !hasWorkLeft(*team))
         return;
     Stall& stall = stalls_[teamId];
     if (const QString signature = signatureOf(*team); signature != stall.signature) {

@@ -277,6 +277,9 @@ class TeamReviewTest final : public QObject {
         teams_->reviewTampered("rev", "other-request", changes); // not the bound request
         QCOMPARE(task(id).history.last().kind == QStringLiteral("review_tampered"), false);
         teams_->reviewTampered("rev", firstReviews(team()).message, changes);
+        teams_->memberTurnEnded("lead");
+        QTRY_VERIFY(!host_.of("digest").isEmpty());
+        QVERIFY(host_.of("digest").last().body.contains("[needs you]"));
         QCOMPARE(task(id).state, state::blocked);
         QCOMPARE(task(id).round, 0);
         QCOMPARE(reviewsTo("rev").size(), 1);

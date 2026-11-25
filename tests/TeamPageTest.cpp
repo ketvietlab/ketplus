@@ -367,6 +367,17 @@ class TeamPageTest final : public QObject {
                  QStringLiteral("Theo từng sản phẩm: mỗi món hết tồn mở một lệnh riêng"));
     }
 
+    void quiescedTeamShowsWhyItIsIdle() {
+        QJsonObject data = fixture(1, 1, false, false);
+        data.insert("quiesced", true);
+        data.insert("quiesced_reason", "waiting_for_external_event");
+        start(data);
+        TeamPage page(teams_.get(), "7", "/work/shop");
+        auto* banner = page.findChild<ket::Banner*>("teamQuiescedBanner");
+        QVERIFY(banner);
+        QVERIFY(banner->message().contains("external event"));
+    }
+
     void pausedAndQueueBannersAndTheEmptyPage() {
         start(fixture(1, 4, true, false));
         TeamPage page(teams_.get(), "7", "/work/shop");

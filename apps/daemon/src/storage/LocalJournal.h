@@ -546,6 +546,8 @@ class LocalJournal final {
     // only those older than it.
     [[nodiscard]] QList<TeamUpdateRecord> teamUpdates(qint64 teamId, bool undigestedOnly, int limit,
                                                       qint64 beforeId = 0) const;
+    [[nodiscard]] bool teamQuestionWasDigested(qint64 teamId, const QString& taskId,
+                                               const QString& leader, const QString& key) const;
     bool markTeamUpdatesDigested(qint64 teamId, qint64 throughId);
     // ADR 0106: audit ledger plus the latest accepted direct-user request marker.
     // Before its first report the ledger can contain scope metadata without items.
