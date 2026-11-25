@@ -34,6 +34,8 @@ class NativeJobClient final : public QObject {
     void send(const QJsonObject& message);
     void tick();
     void recoverLostSupervisor();
+    void channelClosed();
+    bool supervisorGone(const QJsonObject& record);
     void reportLost(bool stopped, const QString& issue);
     // A supervisor that left neither a receipt nor a control socket: no workload exists.
     void reportNeverStarted();
@@ -67,5 +69,6 @@ class NativeJobClient final : public QObject {
     QString recoveryIssue_;
     bool recoveryStopped_{false};
     bool recoveryReported_{false};
+    bool recoveryVerified_{false};
 };
 } // namespace ketplus::daemon::executor

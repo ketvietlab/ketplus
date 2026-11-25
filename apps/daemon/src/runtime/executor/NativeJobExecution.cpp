@@ -241,20 +241,15 @@ void NativeJobSupervisor::tick() {
             QCoreApplication::quit();
         return;
     }
+    // Losing the daemon is a reason to stop, not evidence of a leak. Whether
+    // anything survived is decided by the OS: the process group (verifyGroupEmpty).
     if (supervisorStopRequested()) {
-        if (launchAttempted_) {
-            cleanupError_ = true;
-            metadata_.insert("cleanup_issue", "supervisor_termination_requested");
-        }
+        if (stopCause_.isEmpty())
+            stopCause_ = "supervisor_termination_requested";
         requestStop("interrupted");
     }
-    if (checkLease()) {
-        if (launchAttempted_) {
-            cleanupError_ = true;
-            metadata_.insert("cleanup_issue", "lease_expired");
-        }
+    if (leaseOrChannelExpired())
         requestStop("interrupted");
-    }
     if (deadline_ > 0 && clock_.elapsed() >= deadline_)
         requestStop("timed_out");
     if (stopping_ && clock_.elapsed() >= killAt_)
@@ -267,6 +262,23 @@ void NativeJobSupervisor::tick() {
     } else if (rootExited_ && known_.isEmpty()) {
         finish();
     }
+}
+
+bool NativeJobSupervisor::leaseOrChannelExpired() {
+    // A closed channel is noticed at once (channelLostAt_) but never stops the job: a
+    // restarted daemon reconnects to the live executor (ADR 0127). Only the lease,
+    // which a re-adopting daemon renews, bounds how long the supervisor waits.
+    if (!checkLease())
+        return false;
+    if (stopCause_.isEmpty())
+        stopCause_ = channelLostAt_ >= 0 ? "lease_expired_after_channel_closed" : "lease_expired";
+    return true;
+}
+
+bool NativeJobSupervisor::verifyGroupEmpty() {
+    if (!root_)
+        return !launchAttempted_ || !metadata_.value("root_started").toBool();
+    return inspectGroup(root_->group) == GroupState::Empty;
 }
 
 void NativeJobSupervisor::finish() {
@@ -287,6 +299,15 @@ void NativeJobSupervisor::finish() {
     // is the final fence; earlier lease/signal errors cannot weaken it.
     cleanupError_ = false;
 #endif
+#ifndef Q_OS_LINUX
+    if (!stopCause_.isEmpty()) {
+        metadata_.insert("stop_cause", stopCause_);
+        if (!cleanupError_ && !verifyGroupEmpty()) {
+            cleanupError_ = true;
+            metadata_.insert("cleanup_issue", "process_group_not_verified_empty");
+        }
+    }
+#endif
     finalized_ = true;
     const auto state = cleanupError_            ? "needs_attention"
                        : !stopReason_.isEmpty() ? stopReason_
@@ -303,6 +324,13 @@ void NativeJobSupervisor::finish() {
 #ifdef Q_OS_LINUX
     metadata_.insert("cleanup_status", "verified");
     metadata_.insert("cleanup_pending", false);
+#else
+    if (!cleanupError_ && !stopCause_.isEmpty() && metadata_.value("root_started").toBool()) {
+        // The daemon went away but the OS reports no live member in the job group.
+        metadata_.insert("cleanup_status", "verified");
+        metadata_.insert("cleanup_verification", "process_group_empty");
+        qInfo("Job cleanup verified by empty process group after %s.", qUtf8Printable(stopCause_));
+    }
 #endif
     if (cleanupError_) {
         metadata_.insert("reason", "cleanup_unverified");

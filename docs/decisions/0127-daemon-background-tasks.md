@@ -282,6 +282,46 @@ while the cause of delayed heartbeats is investigated; the target remains five
 seconds on every platform. Executor receipts record
 the largest observed heartbeat gap in milliseconds when it exceeds two seconds.
 
+#### Native cleanup is verified by the OS, not guessed (macOS)
+
+Every native job runs in its own session and process group (`setsid`). The
+supervisor records the root's PID, process group and process birth time before the
+root executes; the birth time keeps a reused PID from being mistaken for the job.
+
+Losing the daemon is a reason to stop the job, not evidence of a leak. When the
+heartbeat lapses, the control channel closes, or the supervisor itself is lost, the
+job is stopped and the OS is asked whether any live (non-zombie) process remains in
+the recorded group (`proc_listpgrppids`) and whether every recorded incarnation is
+gone. The answer decides the outcome:
+
+- Group empty and every recorded identity gone: cleanup is **verified**
+  (`cleanup_status=verified`, `cleanup_verification=process_group_empty`). The job
+  ends `interrupted` with no `needs_attention`, no `cleanup_unverified` and no
+  blocked slot; the daemon only logs it. This is process-group evidence, not the
+  kernel containment of Linux (`fullScopeVerified` stays false).
+- A live process remains, the group or an identity cannot be listed or inspected
+  completely (another UID, truncated listing), the recorded PID now has a different
+  birth time, or the receipt is missing: unchanged, `needs_attention` with
+  `cleanup_unverified`. A reused PID is never signalled.
+
+A process that called `setsid` leaves the group, so the group alone cannot see it.
+The supervisor therefore keeps tracking descendants by parentage, signals every
+recorded incarnation, and verifies the group only after they are gone. A child that
+detached before it was ever observed is not detectable and remains a best-effort
+limit, as documented above.
+
+Detection uses the closed channel. The supervisor holds the control connection; EOF/
+HUP on either end is noticed immediately. The supervisor never stops the job
+because the channel closed: a restarted or upgraded daemon reconnects to the live
+executor, and only the lease bounds that wait (a stop after a closed channel
+records `stop_cause=lease_expired_after_channel_closed`). The daemon starts
+recovery at once when it sees EOF and the supervisor process is gone, then waits
+`NativeJobRecoverySettleMs` (3.5 s) for signalled processes to exit before it
+declares a loss unverified. The heartbeat and its lease (above) remain
+the fallback for a hung peer, whose connection stays open but silent
+(`stop_cause=lease_expired`). The Linux executor shares the channel detection; its
+cleanup evidence is still the cgroup.
+
 Lease loss terminates contained work, then escalates to kill after a finite
 grace period. Containment includes descendants, not just the direct QProcess.
 An implementation must demonstrate the platform's containment behavior,

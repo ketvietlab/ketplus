@@ -4,8 +4,10 @@
 #include "runtime/executor/LinuxJobContainment.h"
 #include "runtime/executor/NativeJobClient.h"
 #include "runtime/executor/NativeJobControlAddress.h"
+#include "runtime/executor/NativeJobLease.h"
 #include "runtime/executor/NativeProcessIdentity.h"
 
+#include <QDebug>
 #include <QFileInfo>
 #include <QJsonArray>
 #include <cerrno>
@@ -100,6 +102,8 @@ void NativeJobClient::recoverLostSupervisor() {
     if (!persisted.isEmpty())
         lastReceipt_ = persisted;
     const auto state = lastReceipt_.value("state").toString();
+    if (recoveryVerified_)
+        return;
     if (!state.isEmpty() && state != "needs_attention" && state != "stopping" &&
         recoveryStarted_ < 0) {
 
@@ -136,6 +140,38 @@ void NativeJobClient::recoverLostSupervisor() {
         !supervisor.isEmpty() && stopped(supervisor) && (root.isEmpty() || stopped(root));
     for (const auto value : identities)
         knownStopped = knownStopped && stopped(value.toObject());
+    // Every recorded incarnation is gone. Ask the OS whether the job's process group
+    // still has a live member; only an empty group is verified cleanup. A launch that
+    // never recorded a root (and never attempted one) has no group to inspect.
+    const bool neverLaunched = root.isEmpty() && !lastReceipt_.value("launch_attempted").toBool();
+    const auto group = root.value("process_group").toInteger();
+    if (knownStopped &&
+        (neverLaunched || (!root.isEmpty() && inspectGroup(group) == GroupState::Empty))) {
+        qInfo("Job %s cleanup verified by empty process group after the supervisor was lost.",
+              qUtf8Printable(taskId_));
+        auto result = lastReceipt_;
+        result.insert("task_id", taskId_);
+        result.insert("executor_lease_identity", lease_);
+        result.insert("event", "done");
+        result.insert("state", "interrupted");
+        result.insert("cleanup_status", "verified");
+        result.insert("cleanup_verification", "process_group_empty");
+        result.insert("cleanup_pending", false);
+        result.insert("executor_stopped", true);
+        result.insert("error", lastReceipt_.isEmpty() ? "executor_receipt_unavailable"
+                                                      : "executor_connection_lost");
+        result.remove("reason");
+        result.remove("cleanup_issue");
+        recoveryVerified_ = true;
+        finished_ = true;
+        if (event_)
+            event_(result);
+        return;
+    }
+    // Signals were just sent; give the processes a moment to exit before declaring
+    // the loss unverified, so a normal stop does not raise needs_attention.
+    if (!recoveryReported_ && clock_.elapsed() - recoveryStarted_ < NativeJobRecoverySettleMs)
+        return;
     reportLost(knownStopped, lastReceipt_.isEmpty() ? "executor_receipt_unavailable"
                                                     : "executor_connection_lost");
 #endif
