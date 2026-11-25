@@ -173,6 +173,11 @@ void TeamCoordinator::wake(const Team& snapshot, const TeamMessage& sent) {
     Team* team = mutableTeam(teamId);
     if (!team)
         return;
+    // T-12: a leader's wait that ends after another turn reached the leader has nothing to add.
+    if (message.kind != QStringLiteral("wait") && !team->paused)
+        if (const Member* leader = team->memberWithRole(role::leader);
+            leader && leader->sessionId == message.toSession)
+            ++leaderWakes_[teamId];
     const Team before = *team;
     QList<Update> updates;
     pauseIfBudgetUsed(*team, updates);

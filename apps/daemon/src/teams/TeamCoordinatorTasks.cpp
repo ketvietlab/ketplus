@@ -427,13 +427,19 @@ void TeamCoordinator::applyMove(Team& team, Task& task, const QString& to, const
             busy = busy || (other.owner == task.owner && other.id != task.id &&
                             (other.state == state::todo || other.state == state::inProgress ||
                              other.state == state::blocked));
+        // T-12: the line is always recorded, but it wakes the leader only when there is a task
+        // the leader can hand out: one nobody owns, or a blocked one of another member.
+        bool assignable = false;
+        for (const Task& other : team.tasks)
+            assignable = assignable || (other.state == state::todo && other.owner.isEmpty()) ||
+                         (other.state == state::blocked && other.owner != task.owner);
         if (!busy)
             updates.append(
                 {.kind = QStringLiteral("idle_developer"),
                  .text = say(team.language, QT_TRANSLATE_NOOP("Team", "%1 has no task left."))
                              .arg(actorName(team, task.owner)),
                  .taskId = task.id,
-                 .actionable = true,
+                 .actionable = assignable,
                  .data = {{QStringLiteral("session_id"), task.owner}},
                  .actor = QStringLiteral("daemon")});
     }

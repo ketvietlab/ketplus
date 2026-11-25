@@ -957,7 +957,15 @@ class TeamCoordinator : public QObject {
         QString notifiedLeader;
         // The task's state when the leader was notified: a task that moved on is a new wait.
         QString taskState;
+        // T-12: a leader's wait is dropped when another wake reached the leader after it was
+        // set, and postponed once when the team did not change since.
+        quint64 leaderWakes{0};
+        qint64 revision{0};
+        bool postponed{false};
+        int minutes{0};
     };
+    // Turns started for each team's leader other than its own waits (T-12).
+    QHash<qint64, quint64> leaderWakes_;
     void cancelWait(const QString& sessionId);
     void forgetEndedWait(const QString& sessionId);
     void waitEnded(const QString& sessionId);

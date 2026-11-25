@@ -75,6 +75,7 @@ TeamResult TeamCoordinator::wait(const qint64 teamId, const QString& sessionId, 
                      .taskId = taskId}}))
         return {.error = failed};
 
+    const bool leaderWait = member->role == role::leader;
     const Task* waitTask = taskId.isEmpty() ? nullptr : team->task(taskId);
     const QString taskState = waitTask ? waitTask->state : QString{};
     const Wait previous = waits_.value(sessionId);
@@ -90,7 +91,10 @@ TeamResult TeamCoordinator::wait(const qint64 teamId, const QString& sessionId, 
                               .reason = why,
                               .taskId = taskId,
                               .notifiedLeader = leaderSession,
-                              .taskState = taskState});
+                              .taskState = taskState,
+                              .leaderWakes = leaderWakes_.value(teamId),
+                              .revision = team->revision,
+                              .minutes = leaderWait ? minutes : 0});
     timer->start(minutes * waitMinuteMs_);
     if (notifyLeader)
         wake(*team,
@@ -138,8 +142,28 @@ void TeamCoordinator::waitEnded(const QString& sessionId) {
     const Team* team = teamOf(sessionId);
     if (!team)
         return;
-    if (const Member* member = team->member(sessionId); member && member->role == role::leader)
+    if (const Member* member = team->member(sessionId); member && member->role == role::leader) {
+        // T-12: the leader was woken since it waited, so it has looked already; the wait ends
+        // without a turn. When nothing changed in the team, the wait is moved once.
+        const bool woken = leaderWakes_.value(team->id) != wait.leaderWakes;
+        if (!woken && team->quiescedReason.isEmpty() && !wait.postponed && wait.minutes > 0 &&
+            team->revision == wait.revision) {
+            auto* again = new QTimer(this);
+            again->setSingleShot(true);
+            connect(again, &QTimer::timeout, this, [this, sessionId] { waitEnded(sessionId); });
+            Wait moved = wait;
+            moved.timer = again;
+            moved.postponed = true;
+            waits_.insert(sessionId, moved);
+            again->start(wait.minutes * waitMinuteMs_);
+            return;
+        }
+        if (woken) {
+            watchForStall(team->id);
+            return;
+        }
         unquiesce(team->id);
+    }
     // A member that works again got there by itself; its turn's end starts the watch.
     const qint64 teamId = team->id;
     watchForStall(teamId);

@@ -413,6 +413,16 @@ to developers or reviewers leave the lock in place. Pause, turn budget, and role
 checks still apply. Team summaries expose `quiesced` and
 `quiesced_reason` (`tasks_done` or `waiting_for_external_event`).
 
+**Wakes the leader cannot use (T-12).** `idle_developer` is always recorded, but it
+is actionable only while a task exists that the leader can hand out: a `todo` task
+nobody owns, or a blocked task of another member. Otherwise it rides along with the
+next actionable digest like the other routine updates. A leader's own `team_wait`
+ends without a turn when any other turn (a digest, a developer's wait notice, a
+failed-message notice) reached the leader after the wait was set. When the team did
+not change since the wait was set and is not quiesced, the first expiry only moves
+the wait by its own length; the next expiry wakes the leader as before. Waits of
+developers and the stall watchdog are unchanged.
+
 A merge conflict reaches the leader when the developer reports it as a blocked
 task with a reason. A new report reopens the team and an already digested reason
 does not request another wake. Pull request conflict detection belongs to the
