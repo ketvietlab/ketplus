@@ -299,6 +299,20 @@ void TeamCoordinator::sendFromOutbox() {
         return;
     QList<qint64> ids = teams_.keys();
     std::sort(ids.begin(), ids.end());
+    // A quiet mark whose member has nothing left in any outbox (the member or its team was
+    // removed) is void: its hold is released so the member is not left held.
+    for (const QString& session : outboxQuiet_.keys()) {
+        const bool waiting =
+            std::any_of(teams_.cbegin(), teams_.cend(), [&](const Team& candidate) {
+                return std::any_of(candidate.outbox.cbegin(), candidate.outbox.cend(),
+                                   [&](const QJsonValue& value) {
+                                       return heldMessage(candidate, value.toObject())
+                                                  .toSession == session;
+                                   });
+            });
+        if (!waiting && outboxQuiet_.remove(session))
+            host_->holdTeamDelivery(session, false);
+    }
     for (const qint64 id : std::as_const(ids)) {
         const Team* team = this->team(id);
         if (!team || team->outbox.isEmpty())
