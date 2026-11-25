@@ -108,6 +108,32 @@ class TeamDigestActorTest final : public QObject {
         host_.messages.clear();
     }
 
+    void repeatedQuestionOnlyWakesOnce() {
+        const QString id = newTask("Cart", "dev1");
+        QVERIFY(!id.isEmpty());
+        const int initialTurns = team().automaticTurns;
+        for (const QString& question : {"Which endpoint?", "Which  endpoint?", "Which endpoint?"}) {
+            QVERIFY(teams_->moveTask(team_, id, state::inProgress, "dev1").ok());
+            QVERIFY(teams_->moveTask(team_, id, state::blocked, "dev1", question).ok());
+            leaderTurnEnds();
+        }
+        QCOMPARE(host_.of("digest").size(), 1);
+        QCOMPARE(team().automaticTurns, initialTurns + 1);
+
+        QVERIFY(teams_->moveTask(team_, id, state::inProgress, "dev1").ok());
+        QVERIFY(teams_->moveTask(team_, id, state::blocked, "dev1", "Which region?").ok());
+        leaderTurnEnds();
+        QCOMPARE(host_.of("digest").size(), 2);
+        QCOMPARE(team().automaticTurns, initialTurns + 2);
+
+        QVERIFY(teams_->setCriteria(team_, id, {"Works in both regions"}, "lead").ok());
+        QVERIFY(teams_->moveTask(team_, id, state::inProgress, "dev1").ok());
+        QVERIFY(teams_->moveTask(team_, id, state::blocked, "dev1", "Which endpoint?").ok());
+        leaderTurnEnds();
+        QCOMPARE(host_.of("digest").size(), 3);
+        QCOMPARE(team().automaticTurns, initialTurns + 3);
+    }
+
     // Criterion 1: only the leader's own updates, with or without a wait: no digest, no turn.
     void theLeadersOwnUpdatesAloneSendNoDigest() {
         const QString id = newTask("Cart", "dev1");
