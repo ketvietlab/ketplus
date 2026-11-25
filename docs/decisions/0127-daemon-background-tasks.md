@@ -278,7 +278,7 @@ The macOS native lease is 15 seconds. Lease expiry accounted for 39 of 67
 unverified-cleanup receipts (58%) in one local sample. The longer lease tolerates
 short heartbeat gaps above five seconds and can delay detection of a genuinely
 lost heartbeat by up to ten additional seconds. This is a temporary measure
-while the cause of delayed heartbeats is investigated. Executor receipts record
+while the cause of delayed heartbeats is investigated; the target remains five seconds on every platform. Executor receipts record
 the largest observed heartbeat gap in milliseconds when it exceeds two seconds.
 
 Lease loss terminates contained work, then escalates to kill after a finite

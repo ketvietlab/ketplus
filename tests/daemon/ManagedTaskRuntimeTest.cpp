@@ -1,4 +1,5 @@
 #include "runtime/ManagedTaskRuntime.h"
+#include "runtime/executor/NativeJobLease.h"
 #include "storage/BackgroundTaskLedger.h"
 
 #include <QDir>
@@ -51,7 +52,7 @@ class Fixture final {
     }
     BackgroundTaskIntent intent(const QString& key = "start") const {
         return {{"owner", 1, "turn"}, key,   "process",        "Fixture",
-                key.toUtf8(),         10000, {{"cwd", path()}}};
+                key.toUtf8(),         60000, {{"cwd", path()}}};
     }
     QJsonObject start(const BackgroundTaskIntent& intent, const QJsonObject& execution) {
         QJsonObject reply;
@@ -257,7 +258,8 @@ class ManagedTaskRuntimeTest final : public QObject {
             const auto id = reply.value("task").toObject().value("task_id").toString();
             QTRY_COMPARE(fixture.permissionRequests, 1);
             fixture.runtime->permissionResolved(id, true);
-            QTRY_COMPARE_WITH_TIMEOUT(fixture.get(id).value("state"), "failed", 10000);
+            QTRY_COMPARE_WITH_TIMEOUT(fixture.get(id).value("state"), "failed",
+                                      ketplus::daemon::executor::NativeJobLeaseMs + 5000);
             const auto task = fixture.get(id);
             QCOMPARE(task.value("reason"), "handshake_failed");
             QCOMPARE(task.value("error"), "executor_never_started");
@@ -287,7 +289,8 @@ class ManagedTaskRuntimeTest final : public QObject {
             const auto stopped = fixture.runtime->stop(id, request.owner, false);
             QVERIFY(stopped.value("ok").toBool());
             QCOMPARE(fixture.get(id).value("state"), "stopping");
-            QTRY_COMPARE_WITH_TIMEOUT(fixture.get(id).value("state"), "cancelled", 10000);
+            QTRY_COMPARE_WITH_TIMEOUT(fixture.get(id).value("state"), "cancelled",
+                                      ketplus::daemon::executor::NativeJobLeaseMs + 5000);
             const auto task = fixture.get(id);
             QCOMPARE(task.value("error"), "executor_never_started");
             QCOMPARE(task.value("cleanup_status"), "not_required");
@@ -331,7 +334,8 @@ class ManagedTaskRuntimeTest final : public QObject {
             QCOMPARE(fixture.ledger.list(request.owner).value("active_count").toInt(), 1);
 
             QVERIFY2(fixture.startRuntime(&error), qPrintable(error));
-            QTRY_COMPARE_WITH_TIMEOUT(fixture.get(id).value("state"), "failed", 10000);
+            QTRY_COMPARE_WITH_TIMEOUT(fixture.get(id).value("state"), "failed",
+                                      ketplus::daemon::executor::NativeJobLeaseMs + 5000);
             QCOMPARE(fixture.get(id).value("reason"), "handshake_failed");
             QCOMPARE(fixture.ledger.list(request.owner).value("active_count").toInt(), 0);
         }

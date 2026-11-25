@@ -232,7 +232,10 @@ void NativeJobSupervisor::send(const QString& event, const QJsonObject& data) {
 
 void NativeJobSupervisor::renewLease() {
     const auto now = clock_.elapsed();
-    maxPingGap_ = qMax(maxPingGap_, now - lastPulse_);
+    // The first renewal is the authentication; the time since start is startup latency, not a gap.
+    if (pulsed_)
+        maxPingGap_ = qMax(maxPingGap_, now - lastPulse_);
+    pulsed_ = true;
     lastPulse_ = now;
 }
 

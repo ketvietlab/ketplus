@@ -382,7 +382,7 @@ class NativeJobExecutorTest final : public QObject {
                      },
                      &error),
                  qPrintable(error));
-        QTRY_VERIFY_WITH_TIMEOUT(!result.isEmpty(), 10000);
+        QTRY_VERIFY_WITH_TIMEOUT(!result.isEmpty(), NativeJobLeaseMs + 5000);
         QCOMPARE(result.value("state"), "failed");
         QCOMPARE(result.value("error"), "handshake_failed");
         QVERIFY(!result.value("root_started").toBool());
@@ -407,7 +407,7 @@ class NativeJobExecutorTest final : public QObject {
                      },
                      &error),
                  qPrintable(error));
-        QTRY_VERIFY_WITH_TIMEOUT(!result.isEmpty(), 10000);
+        QTRY_VERIFY_WITH_TIMEOUT(!result.isEmpty(), NativeJobLeaseMs + 5000);
         QCOMPARE(result.value("state"), "failed");
         QCOMPARE(result.value("cleanup_issue"), "executor_never_started");
         QVERIFY(result.value("executor_stopped").toBool());
@@ -503,6 +503,8 @@ class NativeJobExecutorTest final : public QObject {
     }
 
     void authenticatedHeartbeatCanResumeAfterFiveSeconds() {
+        if (NativeJobLeaseMs <= 5500)
+            QSKIP("The lease on this platform is not longer than the 5.5 second heartbeat gap");
         Executor executor;
         QVERIFY(executor.start());
         executor.execute({"/bin/sleep", "60"});
