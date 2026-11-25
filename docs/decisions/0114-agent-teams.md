@@ -382,11 +382,15 @@ criteria, decision, or state. A different question can request a digest.
 A team is quiesced when it has tasks and every task is done or explicitly parked
 on an external event. To park a blocked task, the leader records a task-specific
 `team_wait` after the current question has appeared in a digest. An open decision
-keeps the team active. Routine completion updates remain in the log and ride
-along with the next actionable digest. Quiescence suppresses digest and stall
-wakes. A user message, new work, an actionable change such as a new block or
-review outcome, or the leader's wait ending reopens the team. Pause, turn budget,
-and role checks still apply. Team summaries expose `quiesced` and
+keeps the team active. The routine updates are `idle_developer`, `goal_reached`,
+and state transitions to done with `completion: merged`. They remain in the log
+and ride along with the next actionable digest. Merge observations have a
+separate actionable update. A non-merge completion retains its actionability.
+Quiescence suppresses digest and stall wakes. A direct user message to the team
+leader, new work, an actionable change such as a new block or review outcome, or
+the leader's wait ending reopens the team. Scheduled turns and direct messages
+to developers or reviewers leave the lock in place. Pause, turn budget, and role
+checks still apply. Team summaries expose `quiesced` and
 `quiesced_reason` (`tasks_done` or `waiting_for_external_event`).
 
 A merge conflict reaches the leader when the developer reports it as a blocked

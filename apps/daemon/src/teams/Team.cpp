@@ -341,7 +341,6 @@ QJsonObject toJson(const Task& task, const bool withHistory) {
                      {QStringLiteral("owner"), task.owner},
                      {QStringLiteral("state"), task.state},
                      {QStringLiteral("resume_state"), task.resumeState},
-                     {QStringLiteral("external_wait_question"), task.externalWaitQuestion},
                      {QStringLiteral("question"), task.question},
                      {QStringLiteral("review_block"), task.reviewBlock},
                      {QStringLiteral("branch"), task.branch},
@@ -378,6 +377,8 @@ QJsonObject toJson(const Task& task, const bool withHistory) {
         json.insert(QStringLiteral("branch_slug"), task.branchSlug);
     }
     if (withHistory) {
+        if (!task.externalWaitQuestion.isEmpty())
+            json.insert(QStringLiteral("external_wait_question"), task.externalWaitQuestion);
         QJsonArray history;
         for (const HistoryEntry& entry : task.history)
             history.append(toJson(entry));

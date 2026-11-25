@@ -32,6 +32,8 @@ bool LocalJournal::initializeTeams() {
                        "NULL, data TEXT NOT NULL DEFAULT '{}', actionable INTEGER NOT NULL DEFAULT "
                        "0, digested INTEGER NOT NULL DEFAULT 0)"),
         QStringLiteral("CREATE INDEX IF NOT EXISTS team_updates_team ON team_updates(team_id, id)"),
+        QStringLiteral("CREATE INDEX IF NOT EXISTS team_updates_task ON "
+                       "team_updates(team_id, task_id, id)"),
         QStringLiteral("CREATE TABLE IF NOT EXISTS team_history_texts (team_id INTEGER NOT "
                        "NULL, task_id TEXT NOT NULL, entry INTEGER NOT NULL, text TEXT NOT NULL, "
                        "PRIMARY KEY (team_id, task_id, entry))"),

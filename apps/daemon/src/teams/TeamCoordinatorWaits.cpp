@@ -83,7 +83,7 @@ void TeamCoordinator::waitEnded(const QString& sessionId) {
     if (!team)
         return;
     if (const Member* member = team->member(sessionId); member && member->role == role::leader)
-        userMessageReceived(sessionId);
+        unquiesce(team->id);
     // A member that works again got there by itself; its turn's end starts the watch.
     const qint64 teamId = team->id;
     watchForStall(teamId);

@@ -9,8 +9,20 @@
 #include <QTemporaryDir>
 #include <QTest>
 
+#include <algorithm>
+
 using namespace ketplus::daemon;
 using namespace team_test;
+
+namespace {
+
+class DigestCoordinator final : public TeamCoordinator {
+  public:
+    using TeamCoordinator::mutableTeam;
+    using TeamCoordinator::TeamCoordinator;
+};
+
+} // namespace
 
 class TeamDigestActorTest final : public QObject {
     Q_OBJECT
@@ -19,7 +31,7 @@ class TeamDigestActorTest final : public QObject {
     QTemporaryDir directory_;
     FakeHost host_;
     std::unique_ptr<LocalJournal> journal_;
-    std::unique_ptr<TeamCoordinator> teams_;
+    std::unique_ptr<DigestCoordinator> teams_;
     qint64 team_{0};
 
     const Team& team() { return *teams_->team(team_); }
@@ -100,7 +112,7 @@ class TeamDigestActorTest final : public QObject {
             host_.add(id);
         host_.add("rev", "claude");
         journal_ = std::make_unique<LocalJournal>(directory_.filePath("journal.sqlite3"));
-        teams_ = std::make_unique<TeamCoordinator>(journal_.get(), &host_);
+        teams_ = std::make_unique<DigestCoordinator>(journal_.get(), &host_);
         teams_->setQuietPeriod(60 * 60 * 1000);
         teams_->load();
         team_ = teams_->create(standardTeam(), "user").teamId;
@@ -166,11 +178,18 @@ class TeamDigestActorTest final : public QObject {
         QVERIFY(team().quiescedReason.isEmpty());
         QVERIFY(teams_->wait(team_, "lead", 30, "deployment", id).ok());
         QCOMPARE(team().quiescedReason, "waiting_for_external_event");
+        const auto& task = *team().task(id);
+        QVERIFY(toJson(task).contains("external_wait_question"));
+        QVERIFY(!toJson(task, false).contains("external_wait_question"));
         const int turns = team().automaticTurns;
         leaderTurnEnds();
         QVERIFY(host_.of("digest").isEmpty());
         QCOMPARE(team().automaticTurns, turns);
 
+        teams_->userMessageReceived("dev1");
+        QCOMPARE(team().quiescedReason, "waiting_for_external_event");
+        teams_->userMessageReceived("rev");
+        QCOMPARE(team().quiescedReason, "waiting_for_external_event");
         teams_->userMessageReceived("lead");
         QVERIFY(team().quiescedReason.isEmpty());
         leaderTurnEnds();
@@ -198,6 +217,57 @@ class TeamDigestActorTest final : public QObject {
         leaderTurnEnds();
         QCOMPARE(host_.of("digest").size(), 1);
         QCOMPARE(team().automaticTurns, turnsBeforeConflict + 1);
+    }
+
+    void manualClosureStaysActionableInTheJournalWhenTheTeamQuiesces() {
+        const QString id = newTask("Cart", "dev1");
+        QVERIFY(teams_->moveTask(team_, id, state::inProgress, "dev1").ok());
+        QVERIFY(teams_->closeTask(team_, id, "abcdef1234567", "Closed by hand.", "lead").ok());
+        QCOMPARE(team().quiescedReason, "tasks_done");
+        const auto updates = journal_->teamUpdates(team_, true, 100);
+        const auto closure = std::find_if(updates.cbegin(), updates.cend(), [&](const auto& entry) {
+            return entry.taskId == id && entry.data.value("completion").toString() == "closed";
+        });
+        QVERIFY(closure != updates.cend());
+        QVERIFY(closure->actionable);
+    }
+
+    void newDecisionReopensAQuiescedTeamForTheUsersAnswer() {
+        const QString id = newTask("Cart", "dev1");
+        QVERIFY(teams_->moveTask(team_, id, state::inProgress, "dev1").ok());
+        QVERIFY(teams_->closeTask(team_, id, "abcdef1234567", "Finished.", "lead").ok());
+        settle();
+        QCOMPARE(team().quiescedReason, "tasks_done");
+
+        QString decision;
+        QVERIFY(teams_
+                    ->raiseQuestion(
+                        team_,
+                        {{"question", "Which currency?"}, {"choices", QJsonArray{"EUR", "USD"}}},
+                        "lead", &decision)
+                    .ok());
+        QVERIFY(team().quiescedReason.isEmpty());
+        QCOMPARE(team().openDecisions(), 1);
+        QVERIFY(teams_->answerDecision(team_, decision, "EUR", "user").ok());
+        QTRY_COMPARE(host_.of("decision").size(), 1);
+        QCOMPARE(host_.of("decision").first().toSession, "lead");
+    }
+
+    void reviewFindingsClearAStaleQuiesceLockAndWakeTheLeader() {
+        const QString id = newTask("Cart", "dev1");
+        QVERIFY(teams_->moveTask(team_, id, state::inProgress, "dev1").ok());
+        QVERIFY(teams_->moveTask(team_, id, state::inReview, "dev1").ok());
+        settle();
+
+        // An in-review task normally prevents quiescence. Inject a stale marker to
+        // exercise the verdict handler's recovery rather than opening a real review in it.
+        QVERIFY(team().quiescedReason.isEmpty());
+        teams_->mutableTeam(team_)->quiescedReason = "waiting_for_external_event";
+        finishReview(*teams_, "rev", "web/cart.txt:3 high: wrong.\nVerdict: findings", false);
+        QVERIFY(team().quiescedReason.isEmpty());
+        leaderTurnEnds();
+        QCOMPARE(host_.of("digest").size(), 1);
+        QVERIFY(digestTo("lead").contains("Verdict on"));
     }
 
     // Criterion 1: only the leader's own updates, with or without a wait: no digest, no turn.
@@ -345,7 +415,7 @@ class TeamDigestActorTest final : public QObject {
         QVERIFY2(!body.isEmpty(), "A merge seen outside the app starts a digest.");
         const QStringList lines = linesWith(body, "integration contains it");
         QVERIFY2(!lines.isEmpty(), qPrintable(body));
-        QVERIFY2(lines.first().contains("[needs you]"), qPrintable(body));
+        QCOMPARE(lines.filter("[needs you]").size(), 1);
     }
 
     // Criterion 4: the filter follows the leader at the time of sending. The former leader's

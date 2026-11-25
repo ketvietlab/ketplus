@@ -407,8 +407,14 @@ void TeamCoordinator::sendDigest(const qint64 teamId) {
 }
 
 void TeamCoordinator::userMessageReceived(const QString& sessionId) {
-    const Team* current = teamOf(sessionId);
-    Team* team = current ? mutableTeam(current->id) : nullptr;
+    const Team* team = teamOf(sessionId);
+    const Member* member = team ? team->member(sessionId) : nullptr;
+    if (member && member->role == role::leader)
+        unquiesce(team->id);
+}
+
+void TeamCoordinator::unquiesce(const qint64 teamId) {
+    Team* team = mutableTeam(teamId);
     if (!team || team->quiescedReason.isEmpty())
         return;
     const Team before = *team;

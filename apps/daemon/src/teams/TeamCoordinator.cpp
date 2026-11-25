@@ -270,7 +270,7 @@ std::optional<TeamError> TeamCoordinator::commit(Team& team, const Team& before,
                update.kind == QStringLiteral("goal_reached") ||
                (update.kind == QStringLiteral("state") &&
                 update.data.value(QStringLiteral("to")).toString() == state::done &&
-                update.data.value(QStringLiteral("completion")).toString() !=
+                update.data.value(QStringLiteral("completion")).toString() ==
                     QStringLiteral("merged"));
     };
     if (!updates.isEmpty()) {
