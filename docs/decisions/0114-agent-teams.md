@@ -685,6 +685,15 @@ conversation never reaches that point.
   transcript boundaries approximate team wakes, the recorded trace already
   includes provider behavior, and a real reset can change later requests and
   cache costs.
+- **Amended 2026-11-25 (T-9): the leader is never reset.** `context_reset::decide` returns
+  no reason for a member whose role is `leader`, under every policy and idle, including
+  `cache_cold` and `context_size`; the daemon writes no mark for the leader, and a stored
+  leader mark is read and ignored. The fresh-context briefing is produced for developers and
+  reviewers only. The leader's context stays bounded by sending it less: its digest holds at
+  most 40 update lines and 8 KiB, the updates that need the leader first, and a longer
+  backlog is summarised as "N older updates on tasks …, read them with `team_tasks`". Settings
+  and wire (`context_reset*`) are unchanged and still govern the other roles. See
+  [the batched delivery decision](2026-11-25-team-batched-delivery-and-leader-interrupt.md).
 - The team keeps each member's context mark (`contexts`: its task, its native thread, and
   the conversation's turn count when it began) in the team document. Clients and `team_get`
   do not need it; `team_get` leaves it out. A thread the team has not seen, such as one a

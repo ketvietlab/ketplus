@@ -5,6 +5,7 @@
 #include "TeamFakeHost.h"
 #include "storage/LocalJournal.h"
 
+#include <QRegularExpression>
 #include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QTest>
@@ -144,6 +145,45 @@ class TeamDigestActorTest final : public QObject {
         leaderTurnEnds();
         QCOMPARE(host_.of("digest").size(), 3);
         QCOMPARE(team().automaticTurns, initialTurns + 3);
+    }
+
+    // ADR 0114 §11 as amended: a digest costs the leader a fixed amount of context. A burst of
+    // updates is cut to 40 lines and 8 KiB, the oldest first, and what is cut is counted; the
+    // updates that need the leader are kept ahead of the others, whatever their age.
+    void aLargeBacklogIsBoundedAndKeepsWhatNeedsTheLeader() {
+        const QString first = newTask("Cart", "dev1");
+        QVERIFY(!first.isEmpty());
+        QVERIFY(teams_->moveTask(team_, first, state::inProgress, "dev1").ok());
+        settle();
+        // The oldest update of the backlog is the one that needs the leader.
+        QVERIFY(teams_->moveTask(team_, first, state::blocked, "dev1", "Which endpoint for cart?")
+                    .ok());
+        for (int index = 0; index < 60; ++index)
+            QVERIFY(
+                !newTask(QStringLiteral("Noise %1 ").arg(index) + QString(150, 'x'), {}).isEmpty());
+        leaderTurnEnds();
+        const QString body = digestTo("lead");
+        QVERIFY(!body.isEmpty());
+        QVERIFY2(body.toUtf8().size() <= 8192, qPrintable(QString::number(body.toUtf8().size())));
+        int updateLines = 0;
+        for (const QString& line : body.split('\n'))
+            updateLines += line.startsWith(QStringLiteral("- ")) ? 1 : 0;
+        QVERIFY2(updateLines <= 40, qPrintable(QString::number(updateLines)));
+        QVERIFY(body.contains(QRegularExpression(
+            QStringLiteral(R"(\d+ older updates.* are not listed; read them with team_tasks)"))));
+        const QStringList needing = linesWith(body, "Which endpoint for cart?");
+        QCOMPARE(needing.size(), 1);
+        QVERIFY(needing.first().startsWith("- [needs you]"));
+    }
+
+    void aSmallBacklogIsListedWhole() {
+        const QString id = newTask("Cart", "dev1");
+        QVERIFY(teams_->moveTask(team_, id, state::inProgress, "dev1").ok());
+        QVERIFY(teams_->moveTask(team_, id, state::blocked, "dev1", "Which region?").ok());
+        leaderTurnEnds();
+        const QString body = digestTo("lead");
+        QVERIFY(body.contains("Which region?"));
+        QVERIFY(!body.contains("older updates"));
     }
 
     void completingTheTeamKeepsUpdatesForTheNextDigest() {

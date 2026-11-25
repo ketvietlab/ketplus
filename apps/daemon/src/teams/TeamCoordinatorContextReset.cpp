@@ -13,7 +13,8 @@ TeamCoordinator::planContextReset(const QString& sessionId, const QString& taskH
                                   const context_reset::ThreadActivity& activity) {
     Team* team = mutableTeamOf(sessionId);
     const Member* member = team ? team->member(sessionId) : nullptr;
-    if (!member)
+    // The leader is never reset and keeps no context mark (ADR 0114 §11 as amended).
+    if (!member || member->role == role::leader)
         return std::nullopt;
     const QString task = context_reset::memberTask(*team, *member, taskHint);
     std::optional<ContextMark> mark;
@@ -39,7 +40,8 @@ TeamCoordinator::planContextReset(const QString& sessionId, const QString& taskH
 void TeamCoordinator::noteContextReset(const QString& sessionId, const QString& task,
                                        const qint64 turnSequence) {
     Team* team = mutableTeamOf(sessionId);
-    if (!team)
+    const Member* member = team ? team->member(sessionId) : nullptr;
+    if (!member || member->role == role::leader)
         return;
     const Team before = *team;
     team->contexts.insert(sessionId, {.task = task, .thread = {}, .since = turnSequence});

@@ -42,7 +42,22 @@ bool needsLeader(const TeamUpdateRecord& update, const QString& leaderSession) {
     return update.actionable && (leaderSession.isEmpty() || update.actor != leaderSession);
 }
 
+// The most a digest costs the leader's context (ADR 0114 §11 as amended): update lines and bytes.
+constexpr qsizetype maximumDigestLines = 40;
+constexpr qsizetype maximumDigestBytes = 8192;
+// Room kept for the heading, the closing line and the summary of what was left out.
+constexpr qsizetype digestFixedBytes = 1024;
+
+struct DigestLine {
+    QString key;
+    QString text;
+    bool needsLeader = false;
+    bool kept = false;
+};
+
 // Every update since the last digest, grouped by task, the ones that need the leader marked.
+// At most maximumDigestLines lines and maximumDigestBytes: the lines that need the leader are
+// kept first, newest first, then the newest of the rest; what is left out is counted in one line.
 QString digestText(const Team& team, const QList<TeamUpdateRecord>& updates,
                    const QString& leaderSession) {
     // T-39: a member's wait replaces its earlier one, so only the latest wait of each member is
@@ -51,14 +66,11 @@ QString digestText(const Team& team, const QList<TeamUpdateRecord>& updates,
     for (const TeamUpdateRecord& update : updates)
         if (update.kind == QStringLiteral("wait"))
             latestWait.insert(update.actor, update.id);
-    QStringList order;
-    QHash<QString, QStringList> lines;
+    QList<DigestLine> all;
     for (const TeamUpdateRecord& update : updates) {
         if (update.kind == QStringLiteral("wait") && latestWait.value(update.actor) != update.id)
             continue;
         const QString key = update.taskId;
-        if (!lines.contains(key))
-            order.append(key);
         QString text = update.text;
         if (update.kind == QStringLiteral("risk_route")) {
             if (const auto decision = risk::fromJson(update.data)) {
@@ -72,19 +84,65 @@ QString digestText(const Team& team, const QList<TeamUpdateRecord>& updates,
                              task ? task->state : QStringLiteral("team"));
             }
         }
-        lines[key].append(QStringLiteral("%1 %2").arg(needsLeader(update, leaderSession)
-                                                          ? QStringLiteral("- [needs you]")
-                                                          : QStringLiteral("-"),
-                                                      text.left(400)));
+        const bool needs = needsLeader(update, leaderSession);
+        all.append(
+            {.key = key,
+             .text = QStringLiteral("%1 %2").arg(
+                 needs ? QStringLiteral("- [needs you]") : QStringLiteral("-"), text.left(400)),
+             .needsLeader = needs});
+    }
+    // Two passes, newest first: the lines that need the leader, then the others.
+    qsizetype count = 0;
+    qsizetype bytes = digestFixedBytes;
+    QSet<QString> headed;
+    for (const bool needing : {true, false}) {
+        for (qsizetype index = all.size() - 1; index >= 0; --index) {
+            DigestLine& entry = all[index];
+            if (entry.needsLeader != needing)
+                continue;
+            // A task heading costs its bytes once, with the first line kept under it.
+            const qsizetype cost =
+                entry.text.toUtf8().size() + 1 + (headed.contains(entry.key) ? 0 : 200);
+            if (count >= maximumDigestLines || bytes + cost > maximumDigestBytes)
+                continue;
+            entry.kept = true;
+            ++count;
+            bytes += cost;
+            headed.insert(entry.key);
+        }
+    }
+    QStringList order;
+    QHash<QString, QStringList> lines;
+    QStringList leftOut;
+    qsizetype omitted = 0;
+    for (const DigestLine& entry : all) {
+        if (!entry.kept) {
+            ++omitted;
+            if (!entry.key.isEmpty() && !leftOut.contains(entry.key))
+                leftOut << entry.key;
+            continue;
+        }
+        if (!lines.contains(entry.key))
+            order.append(entry.key);
+        lines[entry.key].append(entry.text);
     }
     QStringList text{
         QStringLiteral("Team %1: what changed since your last digest.").arg(team.name)};
+    if (omitted > 0)
+        text << QStringLiteral("%1 older updates%2 are not listed; read them with team_tasks.")
+                    .arg(omitted)
+                    .arg(leftOut.isEmpty()
+                             ? QString{}
+                             : QStringLiteral(" on tasks %1")
+                                   .arg(leftOut.mid(0, 12).join(QStringLiteral(", ")) +
+                                        (leftOut.size() > 12 ? QStringLiteral(", …") : QString{})));
     for (const QString& key : order) {
         const Task* task = key.isEmpty() ? nullptr : team.task(key);
         text << QString{}
              << (key.isEmpty() ? QStringLiteral("Team")
-                 : task ? QStringLiteral("%1 \"%2\" (%3)").arg(task->id, task->title, task->state)
-                        : key);
+                 : task        ? QStringLiteral("%1 \"%2\" (%3)")
+                                     .arg(task->id, task->title.left(160), task->state)
+                               : key);
         text << lines.value(key);
     }
     text << QString{}
