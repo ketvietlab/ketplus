@@ -126,20 +126,15 @@ class RemoteJobsStopTest final : public QObject {
         QCOMPARE(r.e.h.f.state(r.id), state::timedOut);
     }
 
-    void twentyMinutesWithoutTheRunnerNeedAttention() {
+    void twentyMinutesWithoutTheRunnerEndTheJob() {
         Running r;
         QVERIFY(r.start(2 * 60 * 60 * 1000));
         r.end->lose();
         r.e.h.clock.advance(20 * 60 * 1000 - 1);
         QCOMPARE(r.e.h.jobs->record(r.id)->state, state::running);
         r.e.h.clock.advance(1);
-        QCOMPARE(r.e.h.jobs->record(r.id)->state, state::needsAttention);
-        QCOMPARE(r.e.h.f.state(r.id), state::needsAttention);
-
-        QVERIFY(!r.e.h.jobs->resolveCleanup(r.id, {}).ok());
-        QCOMPARE(r.e.h.jobs->record(r.id)->state, state::needsAttention);
-        QVERIFY(r.e.h.jobs->resolveCleanup(r.id, QStringLiteral("client-1")).ok());
         QCOMPARE(r.e.h.jobs->record(r.id)->state, state::interrupted);
+        QCOMPARE(r.e.h.jobs->record(r.id)->cleanupStatus, cleanup::unverified);
         QCOMPARE(r.e.h.f.state(r.id), state::interrupted);
         QCOMPARE(outboxOf(r.e.h.f, r.id), 1);
     }
@@ -174,74 +169,25 @@ class RemoteJobsStopTest final : public QObject {
         QCOMPARE(outboxOf(r.e.h.f, r.id), 1);
     }
 
-    // needs_attention waits through a restart: no window, no Relay call, and only the user's
-    // acknowledgement moves it on.
-    void aRecordThatNeedsAttentionWaitsAcrossARestart() {
+    // A record ended for want of its runner stays ended through a restart: no window and no
+    // Relay call.
+    void aRecordEndedWithoutItsRunnerStaysEndedAcrossARestart() {
         Running r;
         QVERIFY(r.start(2 * 60 * 60 * 1000));
         r.end->lose();
         r.e.h.clock.advance(20 * 60 * 1000);
         const auto before = r.e.h.jobs->record(r.id);
-        QCOMPARE(before->state, state::needsAttention);
+        QCOMPARE(before->state, state::interrupted);
         const int relayCalls = int(r.e.h.relay.log.size());
 
         r.restart();
         QCOMPARE(r.e.h.jobs->record(r.id), before);
-        QCOMPARE(r.e.h.f.state(r.id), state::needsAttention);
+        QCOMPARE(r.e.h.f.state(r.id), state::interrupted);
         QCOMPARE(armedFor(r.e.h.clock, r.id), 0);
         QCOMPARE(int(r.e.h.relay.log.size()), relayCalls);
         r.e.h.clock.advance(60 * 60 * 1000);
-        QCOMPARE(r.e.h.jobs->record(r.id)->state, state::needsAttention);
-
-        QVERIFY(r.e.h.jobs->resolveCleanup(r.id, QStringLiteral("client-1")).ok());
         QCOMPARE(r.e.h.jobs->record(r.id)->state, state::interrupted);
-        QCOMPARE(r.e.h.f.state(r.id), state::interrupted);
         QCOMPARE(outboxOf(r.e.h.f, r.id), 1);
-    }
-
-    // needs_attention before job.accepted: the spec lived only in memory, so the runner that
-    // comes back after a restart is closed with spec_unavailable and the record stays.
-    void aRecordThatNeedsAttentionWithoutItsSpecClosesTheRunner() {
-        EndToEnd e;
-        const QString id = e.submit(2 * 60 * 60 * 1000);
-        QVERIFY(!id.isEmpty());
-        e.h.clock.target = &e.h.jobs->coordinator();
-        e.assign();
-        e.holdSpec = true;
-        RunnerEnd first = e.connect(1);
-        QVERIFY(e.play(first, [&] { return e.seenTypes.contains("job.spec"); }, false));
-        first.lose();
-        e.h.clock.advance(20 * 60 * 1000);
-        const auto before = e.h.jobs->record(id);
-        QCOMPARE(before->state, state::needsAttention);
-        QVERIFY(before->dispatched());
-        QCOMPARE(before->placement, placement::assigned);
-
-        e.h.build();
-        e.h.clock.due.clear();
-        e.h.clock.target = &e.h.jobs->coordinator();
-        e.h.jobs->restore();
-        QCOMPARE(e.h.jobs->record(id), before);
-        const int relayCalls = int(e.h.relay.log.size());
-
-        capturedLog.clear();
-        const auto previous = qInstallMessageHandler(captureLog);
-        e.seen.clear();
-        e.seenTypes.clear();
-        e.holdSpec = false;
-        RunnerEnd second = e.connect(2);
-        const bool closed = e.play(second, [&] { return second.closed(); }, false);
-        qInstallMessageHandler(previous);
-        QVERIFY(closed);
-        QVERIFY(framesOf<protocol::JobSpec>(e.seen).isEmpty());
-        QVERIFY(framesOf<protocol::JobResume>(e.seen).isEmpty());
-        QVERIFY(std::any_of(capturedLog.cbegin(), capturedLog.cend(), [](const QString& line) {
-            return line.contains(QStringLiteral("closed: spec_unavailable"));
-        }));
-        QCOMPARE(e.h.jobs->record(id), before);
-        QCOMPARE(e.h.f.state(id), state::needsAttention);
-        QCOMPARE(int(e.h.relay.log.size()), relayCalls);
-        QCOMPARE(outboxOf(e.h.f, id), 0);
     }
 
     // A stop the runner accepted goes on after a restart: the window counts again, and the
@@ -300,7 +246,7 @@ class RemoteJobsStopTest final : public QObject {
         const auto record = r.e.h.jobs->record(r.id);
         QVERIFY(record);
         QCOMPARE(record->state, state::interrupted);
-        QCOMPARE(record->reason, QStringLiteral("cleanup_acknowledged"));
+        QCOMPARE(record->reason, QStringLiteral("runner_removed"));
         QCOMPARE(record->cleanupStatus, cleanup::unverified);
         QCOMPARE(r.e.h.f.state(r.id), state::interrupted);
         QCOMPARE(outboxOf(r.e.h.f, r.id), 1);
@@ -379,8 +325,8 @@ class RemoteJobsStopTest final : public QObject {
         QCOMPARE(outboxOf(r.e.h.f, r.id), 1);
     }
 
-    // Both the Relay and the runner's peer gone for 20 minutes: the record needs attention.
-    void aRunningJobWithoutRelayOrPeerNeedsAttention() {
+    // Both the Relay and the runner's peer gone for 20 minutes: the record ends.
+    void aRunningJobWithoutRelayOrPeerEnds() {
         Running r;
         QVERIFY(r.start(2 * 60 * 60 * 1000));
         r.e.h.relay.offered = false;
@@ -388,8 +334,8 @@ class RemoteJobsStopTest final : public QObject {
         r.e.h.clock.advance(20 * 60 * 1000 - 1);
         QCOMPARE(r.e.h.jobs->record(r.id)->state, state::running);
         r.e.h.clock.advance(1);
-        QCOMPARE(r.e.h.jobs->record(r.id)->state, state::needsAttention);
-        QCOMPARE(r.e.h.f.state(r.id), state::needsAttention);
+        QCOMPARE(r.e.h.jobs->record(r.id)->state, state::interrupted);
+        QCOMPARE(r.e.h.f.state(r.id), state::interrupted);
     }
 };
 

@@ -150,19 +150,6 @@ bool ManagedTaskRuntime::initialize(QString* error) {
     return true;
 }
 
-QJsonObject ManagedTaskRuntime::resolveCleanup(const QString& id, qint64 revision,
-                                               const QString& clientId) {
-    const auto result = ledger_.resolveCleanup(id, revision, clientId);
-    if (result.value("ok").toBool()) {
-        live_.remove(id);
-        if (live_.isEmpty())
-            timer_.stop();
-        if (changed_)
-            changed_(result.value("task").toObject());
-    }
-    return result;
-}
-
 void ManagedTaskRuntime::maintain() {
     const auto result = ledger_.prune(QDateTime::currentMSecsSinceEpoch());
     if (!result.value("ok").toBool()) {
@@ -347,7 +334,7 @@ void ManagedTaskRuntime::pump() {
             observeProcess(id, pending);
             live = live_.value(id);
         }
-        if (!live || live->record.value("state") == "needs_attention")
+        if (!live)
             continue;
         const qint64 createdAt = live->record.value("created_at").toInteger();
         const qint64 timeoutMs = live->record.value("timeout_ms").toInteger();
@@ -387,14 +374,6 @@ QJsonObject ManagedTaskRuntime::stop(const QString& id, const BackgroundTaskOwne
     if (!authorized.value("ok").toBool())
         return authorized;
     const auto state = authorized.value("task").toObject().value("state").toString();
-    if (state == "needs_attention") {
-        const auto live = live_.value(id);
-        if (live && live->executor)
-            live->executor->stop("interrupted");
-        else if (live && !live->record.value("executor_stopped").toBool())
-            reconcileProcess(id);
-        return authorized;
-    }
     if (terminal(state) || state == "stopping")
         return authorized;
     stopTask(id, "cancelled");
@@ -403,8 +382,7 @@ QJsonObject ManagedTaskRuntime::stop(const QString& id, const BackgroundTaskOwne
 
 void ManagedTaskRuntime::stopTask(const QString& id, const QString& reason) {
     const auto live = live_.value(id);
-    if (!live || live->record.value("state") == "stopping" ||
-        live->record.value("state") == "needs_attention")
+    if (!live || live->record.value("state") == "stopping")
         return;
     if (remote_job_rows::phaseOf(ledger_.database(), id) == remote_job_rows::Phase::Started) {
         if (reason != "timed_out" && remoteJobs_) // the runner keeps the job's time

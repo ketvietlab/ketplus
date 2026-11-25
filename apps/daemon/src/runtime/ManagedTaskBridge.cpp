@@ -1,6 +1,5 @@
 #include "runtime/ManagedTaskBridge.h"
 #include "providers/ProviderAdapter.h"
-#include "runner/entry/RemoteCleanup.h"
 #include "runner/entry/RemoteJobPort.h"
 #include "runner/entry/RunsOnRequest.h"
 #include "runtime/ManagedTaskSpec.h"
@@ -88,11 +87,6 @@ bool ManagedTaskBridge::initialize(QString* error) {
 void ManagedTaskBridge::command(const QJsonObject& request, const QString& clientId, Done done,
                                 bool agentCaller, std::optional<AgentMutationGrant> origin) {
     const auto type = request.value("message_type").toString();
-    if (type == "session.task.resolve_cleanup" && (agentCaller || clientId == "cloud-control-v2")) {
-        done(
-            failure("forbidden", "Cleanup acknowledgement requires the authenticated local user."));
-        return;
-    }
     if (!error_.isEmpty()) {
         done(failure("registry_unavailable", error_));
         return;
@@ -170,13 +164,6 @@ void ManagedTaskBridge::command(const QJsonObject& request, const QString& clien
         done(runtime_->stop(id, owner, localAdministration));
     else if (type == "session.task.output")
         done(runtime_->output(id, owner, payload.value("cursor").toString(), localAdministration));
-    else if (const auto code = type == "session.task.resolve_cleanup" && remoteJobs_
-                                   ? runner::entry::resolveRemoteCleanup(*remoteJobs_, id, payload,
-                                                                         authorized, clientId)
-                                   : std::nullopt)
-        remote(code);
-    else if (type == "session.task.resolve_cleanup")
-        done(runtime_->resolveCleanup(id, payload.value("revision").toInteger(-1), clientId));
     else
         done(failure("unknown_command", "Unknown managed task operation."));
 }

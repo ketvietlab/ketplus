@@ -15,14 +15,11 @@ struct RemoteStep {
     };
     Kind kind = Kind::Refused;
     BackgroundTaskChange change;
-    bool acknowledgement = false; // the step uses a cleanup acknowledgement
 };
 
 // Whether a record's state and placement go together.
 [[nodiscard]] bool isRecordedPair(const QString& state, const QString& placement);
 // The step from `from` (a reserved task reads as queued and submitting) to `to`.
-// `acknowledged`: a cleanup acknowledgement is held for the task.
-[[nodiscard]] RemoteStep remoteStep(const RemoteJobRecord& from, const RemoteJobRecord& to,
-                                    bool acknowledged);
+[[nodiscard]] RemoteStep remoteStep(const RemoteJobRecord& from, const RemoteJobRecord& to);
 
 } // namespace ketplus::daemon::runner::jobs

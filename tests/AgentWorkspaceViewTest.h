@@ -28,7 +28,7 @@ class AgentWorkspaceViewTest final : public QObject {
     void apiKeyUsageShowsCostDetailsOpen();
     void usageLimitsFollowConversationProvider();
     void backgroundTaskBar();
-    void managedTaskCleanupRequiresUserConfirmation();
+    void managedTaskNeverShowsCleanupToTheUser();
     void managedTaskOutputFencesRequestsAndKeepsCursors();
     void managedTaskWaitIsShown();
     void managedTaskOutputRetriesAfterReadError();

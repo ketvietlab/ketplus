@@ -22,7 +22,6 @@ inline const QString failed = QStringLiteral("failed");
 inline const QString cancelled = QStringLiteral("cancelled");
 inline const QString timedOut = QStringLiteral("timed_out");
 inline const QString interrupted = QStringLiteral("interrupted");
-inline const QString needsAttention = QStringLiteral("needs_attention");
 } // namespace state
 
 namespace placement {
@@ -94,7 +93,7 @@ struct JobResult {
     QString cleanupStatus; // verified or unverified
 };
 
-// The record after `result`; a result without verified cleanup leaves it in needs_attention.
+// The record after `result`; a result without verified cleanup still ends the job.
 [[nodiscard]] RemoteJobRecord applyResult(RemoteJobRecord record, const JobResult& result);
 
 // The record after a Relay view of its job, for a record whose spec was never dispatched.

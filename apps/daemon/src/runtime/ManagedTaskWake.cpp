@@ -61,16 +61,7 @@ namespace {
 QString wakePrompt(const QJsonObject& turn) {
     const QString event = turn.value("event").toString();
     QString lead;
-    if (event == QLatin1String("needs_attention"))
-        lead = QStringLiteral(
-            "A managed background task needs attention: it stopped, but KetPlus could not "
-            "verify that its processes were cleaned up (cleanup unverified). It has not ended "
-            "and still counts against your background limits. Do not start it again and do not "
-            "assume its processes are gone. Only the user acknowledges cleanup, in the task UI; "
-            "you have no cleanup acknowledgement tool. Read its status or output if needed. Tell "
-            "the user, then go on with work that does not depend "
-            "on it.");
-    else if (event == QLatin1String("queued"))
+    if (event == QLatin1String("queued"))
         lead = QStringLiteral(
             "A managed background task is still queued and has not started. queue_reason says "
             "why: root_slot_limit means this conversation's jobs and those of its managed "
@@ -89,8 +80,6 @@ QString wakePrompt(const QJsonObject& turn) {
 QString wakeHeadline(const QJsonObject& turn) {
     const QString event = turn.value("event").toString();
     const QString id = turn.value("task_id").toString();
-    if (event == QLatin1String("needs_attention"))
-        return "Background task " + id + ": needs attention";
     if (event == QLatin1String("queued"))
         return "Background task " + id + ": still queued";
     return "Background task " + id + ": " + turn.value("state").toString();

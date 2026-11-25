@@ -53,34 +53,21 @@ class ManagedTaskRemoteJobsTest final : public QObject {
         QVERIFY(!j.runtime()->isLive(id));
     }
 
-    // Twenty minutes without the runner: needs_attention with the remote guidance; the user's
-    // acknowledgement needs the task's revision and ends the task once.
-    void aRunnerLostNeedsAttentionUntilTheUserResolvesIt() {
+    // Twenty minutes without the runner: the daemon ends the task interrupted, its completion
+    // wakes the owner once, and no cleanup acknowledgement exists to ask for.
+    void aRunnerLostEndsTheTaskWithoutAUser() {
         Joined j;
         std::unique_ptr<RunnerEnd> end;
         const QString id = j.running(end, 2 * hour);
         QVERIFY(!id.isEmpty());
         end->lose();
         j.e->h.clock.advance(20 * minute);
-        QVERIFY(j.until([&] { return j.state(id) == "needs_attention"; }));
-        const QJsonObject attention = j.task(id);
-        QCOMPARE(attention.value("cleanup_status").toString(), QStringLiteral("unverified"));
-        QCOMPARE(attention.value("manual_guidance").toString(),
-                 runner::entry::remoteManualGuidance());
-        QCOMPARE(j.completions(id), 0);
-
-        const qint64 revision = attention.value("revision").toInteger();
-        const auto stale =
-            j.run("session.task.resolve_cleanup", {{"task_id", id}, {"revision", revision - 1}});
-        QCOMPARE(stale.value("error_code").toString(), QStringLiteral("revision_conflict"));
-        QCOMPARE(j.state(id), QStringLiteral("needs_attention"));
-        const auto missing = j.run("session.task.resolve_cleanup", {{"task_id", id}});
-        QCOMPARE(missing.value("error_code").toString(), QStringLiteral("revision_conflict"));
-
-        const auto resolved =
-            j.run("session.task.resolve_cleanup", {{"task_id", id}, {"revision", revision}});
-        QVERIFY2(resolved.value("ok").toBool(), QJsonDocument(resolved).toJson());
         QVERIFY(j.until([&] { return j.state(id) == "interrupted"; }));
+        const QJsonObject ended = j.task(id);
+        QCOMPARE(ended.value("cleanup_status").toString(), QStringLiteral("best_effort_complete"));
+        QVERIFY(!ended.contains("manual_guidance"));
+        QCOMPARE(j.run("session.task.resolve_cleanup", {{"task_id", id}}).value("error_code"),
+                 "unknown_operation");
         QVERIFY(j.until([&] { return j.completions(id) == 1; }));
         QTest::qWait(600);
         QCOMPARE(j.completions(id), 1);
@@ -158,8 +145,8 @@ class ManagedTaskRemoteJobsTest final : public QObject {
     }
 
     // N2: the deadline after the runner was lost still counts the job as outstanding, and the
-    // runner's absence ends in needs_attention, never in a clean end.
-    void theDeadlineWithoutTheRunnerNeedsAttention() {
+    // runner's absence ends interrupted, never in a clean end.
+    void theDeadlineWithoutTheRunnerEndsInterrupted() {
         Joined j;
         std::unique_ptr<RunnerEnd> end;
         const QString id = j.running(end, minute);
@@ -170,10 +157,11 @@ class ManagedTaskRemoteJobsTest final : public QObject {
         QCOMPARE(j.e->h.jobs->record(id)->stopReason, QStringLiteral("deadline"));
         QCOMPARE(j.e->h.jobs->outstanding(), 1);
         j.e->h.clock.advance(20 * minute);
-        QVERIFY(j.until([&] { return j.state(id) == "needs_attention"; }));
-        QCOMPARE(j.task(id).value("cleanup_status").toString(), QStringLiteral("unverified"));
-        QCOMPARE(j.e->h.jobs->outstanding(), 1);
-        QCOMPARE(j.completions(id), 0);
+        QVERIFY(j.until([&] { return j.state(id) == "interrupted"; }));
+        QCOMPARE(j.task(id).value("cleanup_status").toString(),
+                 QStringLiteral("best_effort_complete"));
+        QCOMPARE(j.e->h.jobs->outstanding(), 0);
+        QVERIFY(j.until([&] { return j.completions(id) == 1; }));
     }
 
     // N3 (1): a refusal or a network error of the Relay after the record exists goes through the
@@ -346,47 +334,6 @@ class ManagedTaskRemoteJobsTest final : public QObject {
         QCOMPARE(ended.value("exit_code").toInt(-1), 0);
         QCOMPARE(j.completions(id), 1);
         QVERIFY(!j.runtime()->isLive(id));
-    }
-
-    // A caller that is not the user cannot acknowledge a remote job's cleanup, with the reply a
-    // local task gives; the record stays as it was.
-    void aCleanupNotFromTheUserIsRefusedAsOnALocalTask() {
-        Joined j;
-        std::unique_ptr<RunnerEnd> end;
-        const QString id = j.running(end, 2 * hour);
-        QVERIFY(!id.isEmpty());
-        end->lose();
-        j.e->h.clock.advance(20 * minute);
-        QVERIFY(j.until([&] { return j.state(id) == "needs_attention"; }));
-        const qint64 revision = j.task(id).value("revision").toInteger();
-        const auto started = j.run("session.task.start", j.process(QStringLiteral("local")));
-        QVERIFY2(started.value("ok").toBool(), QJsonDocument(started).toJson());
-        const QString local = started.value("task").toObject().value("task_id").toString();
-        const qint64 localRevision = j.task(local).value("revision").toInteger();
-
-        for (const QString client : {QString(), QStringLiteral("cloud-control-v2")}) {
-            const auto remote =
-                j.run("session.task.resolve_cleanup", {{"task_id", id}, {"revision", revision}},
-                      QStringLiteral("owner"), 1, client);
-            const auto expected = j.run("session.task.resolve_cleanup",
-                                        {{"task_id", local}, {"revision", localRevision}},
-                                        QStringLiteral("owner"), 1, client);
-            QVERIFY2(!expected.value("ok").toBool(true), QJsonDocument(expected).toJson());
-            QCOMPARE(remote.keys(), expected.keys());
-            QCOMPARE(remote.value("ok"), expected.value("ok"));
-            QCOMPARE(remote.value("error_code").toString(),
-                     expected.value("error_code").toString());
-        }
-        QCOMPARE(j.run("session.task.resolve_cleanup", {{"task_id", id}, {"revision", revision}},
-                       QStringLiteral("owner"), 1, QString())
-                     .value("error_code")
-                     .toString(),
-                 QStringLiteral("user_action_required"));
-        const QJsonObject after = j.task(id);
-        QCOMPARE(after.value("state").toString(), QStringLiteral("needs_attention"));
-        QCOMPARE(after.value("revision").toInteger(), revision);
-        QCOMPARE(j.e->h.jobs->record(id)->state, QStringLiteral("needs_attention"));
-        QCOMPARE(j.completions(id), 0);
     }
 
     // When the placement of a started remote task cannot be read, its output is unavailable

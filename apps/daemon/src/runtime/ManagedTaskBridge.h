@@ -24,7 +24,7 @@ class ManagedTaskBridge final : public QObject {
     void resume(const BackgroundTaskOwner& owner);
     QJsonObject prepareTurn(const BackgroundTaskOwner& owner);
     [[nodiscard]] bool hasExecutions() const;
-    // Whether `owner` has a job that is not ended and will wake it (needs_attention excluded).
+    // Whether `owner` has a job that is not ended and will wake it.
     [[nodiscard]] bool ownsLiveJobs(const BackgroundTaskOwner& owner) const {
         return ledger_.ownsLiveJobs(owner);
     }
@@ -62,7 +62,6 @@ class ManagedTaskBridge final : public QObject {
     };
     QHash<QString, Wake> activeWakes_;
     QHash<QString, QList<QByteArray>> streamedItems_;
-    QHash<QString, QJsonObject> attentionNotices_;
     bool deliveryPending_{false};
 };
 } // namespace ketplus::daemon

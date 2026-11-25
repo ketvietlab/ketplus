@@ -1119,55 +1119,43 @@ request. Offline, mutations and live reads are disabled while the snapshot and
 already loaded output remain available. The UI does not infer permissions from
 Codex, Claude or Cursor identity.
 
-A native job whose supervisor or daemon connection was lost is not sent to
-`needs_attention` when the OS reports its process group empty: it ends `interrupted`
-with `cleanup_status=verified` (process group) and only a log line. `needs_attention`
-remains for live leftover processes or cleanup that could not be verified. A closed
-control channel is noticed at once on both ends, but the supervisor stops a job only
+The daemon owns cleanup (ADR 0127 §4a); the UI never mentions it. A native job whose
+supervisor or daemon connection was lost is retried for a bounded window and always ends
+at its real state: `interrupted` with `cleanup_status=verified` (process group) when the OS
+reports its process group empty, otherwise `interrupted` with `best_effort_complete` once
+the window elapses, with the gap only in the daemon log and its internal diagnostics. A
+closed control channel is noticed at once on both ends, but the supervisor stops a job only
 when the lease expires, so a restarted daemon can reconnect to a running job; the
 supervisor's stop is bounded by the lease, not by the channel.
-The ledger accepts that verified result only with `cleanup_verification=process_group_empty`
+The ledger accepts the verified result only with `cleanup_verification=process_group_empty`
 (the record stays native best effort, never `cgroup_v2`). A stopped supervisor records the
 signal and sender (`stop_signal`, `stop_sender_pid`, `stop_sender_uid`). A recorded process
 that is gone or whose PID another user reuses no longer raises `process_identity_lost`.
 
-On native macOS, the bar labels the assurance as best effort, including
-`best_effort_complete`; this never claims absence of unobserved descendants. The
-label is a property of the machine, so the bar states it once under the rows; the
-opened output names the task id and that task's assurance. Notes under a row are
-only about that task (cleanup warnings, acknowledgement, follow-up delivery). They
-use the row's meta size in a muted colour (warning for cleanup) and line up with
-the row's content, or with the warning banner that replaces the row.
-`needs_attention` is a warning banner with `cleanup_unverified`, retained root exit
-code and manual-check guidance. A root exit code of zero does not turn that warning
-into success. Retry cleanup uses Stop without replaying the command. Only an
-explicit user confirmation calls `session.task.resolve_cleanup`, with the revision
-captured when the confirmation opened. A conflict keeps the warning and asks for a
-fresh decision. Acknowledgement remains labelled as unverified user acknowledgement;
-the UI never automatically resolves cleanup or starts a follow-up agent.
+The bar shows one row per task with its title, status and elapsed time. It has no
+warning banner, no assurance line, no cleanup dialog, no acknowledgement or retry
+control, and `session.task.resolve_cleanup` no longer exists. The opened output names the
+task id only. Notes under a row are only about that task (follow-up delivery). They use the
+row's meta size in a muted colour and line up with the row's content. A record an earlier
+daemon left in the retired `needs_attention` state is ended by the daemon when it starts;
+a client that still receives one treats it as an ended task.
 
 A turn that ends while the conversation still owns a live job (queued through
-stopping, or `needs_attention`) is not finished. A job stopping toward `cancelled`
+stopping) is not finished. A job stopping toward `cancelled`
 does not count: its completion wake is suppressed. The daemon's owner summary
 (ADR 0127 §8), carried by the session catalog and every `tasks.changed`, covers the
 whole registry, so a job beyond the 16-row projection still counts and one that ended
 outside it stops counting, for every conversation and not only the open one. The
-session manager maps it to `liveJobs`, `queuedJobs`, `attentionJobs` and `jobTitle` on
+session manager maps it to `liveJobs`, `queuedJobs` and `jobTitle` on
 the conversation entry (from a daemon that sends no summary, it counts the cached
 rows) and republishes the conversation list only when that changes. The sidebar rows
 and the header badge read it after a pending question, a reply the user owes and a
-running turn: a job that needs attention is the kit's `TaskNeedsAttention` ("Needs
-attention", warning tone), which counts as waiting for the user; another live job is
-`WaitingOnTask` ("Waiting on job", info tone), which is neither unread nor waiting
-for the user because the job wakes the agent when it ends. The row's detail names
+running turn: a live job is `WaitingOnTask` ("Waiting on job", info tone), which is
+neither unread nor waiting for the user because the job wakes the agent when it ends. The row's detail names
 the job (`Queued · title`, or `title and N more`). The opened output lists the job's
-facts above its output: when it was queued or created, its timeout, a verified
-cleanup and what happens when it ends, including that a cancelled job wakes no one.
+facts above its output: when it was queued or created, its timeout and what happens when it ends, including that a cancelled job wakes no one.
 
 The owner agent is told too ([ADR 0127 §7a](decisions/0127-daemon-background-tasks.md#7a-owner-notices-of-nonterminal-jobs)).
-Entering `needs_attention` queues one attention wake. The job is still open and
-cleanup is unverified. The agent can read its status or output and report it to the
-user. Only the user can acknowledge cleanup, and acknowledgement starts no turn.
 An approved job still queued after half its timeout (at most two minutes) queues
 one notice naming why: its root's four slots are held (the notice lists the jobs
 holding them), it waits for a runner, or it is not admitted yet.

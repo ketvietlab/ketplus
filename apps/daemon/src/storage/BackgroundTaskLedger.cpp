@@ -67,7 +67,7 @@ bool BackgroundTaskLedger::initialize(QString* error) {
           "CREATE TABLE IF NOT EXISTS managed_job_wakes (event_id TEXT PRIMARY KEY,"
           "owner_session_id TEXT NOT NULL,owner_generation INTEGER NOT NULL,"
           "turn_record BLOB NOT NULL,state TEXT NOT NULL)",
-          // Owner notices of a nonterminal job (needs_attention, still queued). The event id
+          // Owner notices of a nonterminal job (still queued). The event id
           // makes each one idempotent; the completion outbox keeps one event per task.
           "CREATE TABLE IF NOT EXISTS managed_job_notices (event_id TEXT PRIMARY KEY,"
           "task_id TEXT NOT NULL,kind TEXT NOT NULL,owner_session_id TEXT NOT NULL,"
@@ -80,9 +80,9 @@ bool BackgroundTaskLedger::initialize(QString* error) {
             return false;
         }
     }
-    if (!query.exec("CREATE TABLE IF NOT EXISTS managed_job_cleanup_audit(task_id TEXT NOT NULL,"
-                    "revision INTEGER NOT NULL,source TEXT NOT NULL,user_client_id TEXT NOT NULL,"
-                    "recorded_at INTEGER NOT NULL,PRIMARY KEY(task_id,revision))")) {
+    if (!query.exec("CREATE TABLE IF NOT EXISTS managed_job_diagnostics(task_id TEXT NOT NULL,"
+                    "revision INTEGER NOT NULL,issue TEXT NOT NULL,recorded_at INTEGER NOT NULL,"
+                    "PRIMARY KEY(task_id,revision))")) {
         if (error)
             *error = query.lastError().text();
         return false;
@@ -115,6 +115,90 @@ bool BackgroundTaskLedger::initialize(QString* error) {
     }
     if (!remote_job_rows::initialize(database_, error))
         return false;
+    return migrateRetiredAttention(error);
+}
+
+// Older daemons parked a job whose cleanup could not be verified in needs_attention and waited
+// for the user. The daemon now settles every job itself, so such a row ends here as interrupted,
+// with its slot released and its former state kept in the internal diagnostics table.
+bool BackgroundTaskLedger::migrateRetiredAttention(QString* error) {
+    QSqlQuery rows(database_);
+    if (!rows.exec("SELECT task_id,record FROM managed_jobs WHERE state='needs_attention'")) {
+        if (error)
+            *error = rows.lastError().text();
+        return false;
+    }
+    QList<QPair<QString, QJsonObject>> retired;
+    while (rows.next())
+        retired.append({rows.value(0).toString(),
+                        QJsonDocument::fromJson(rows.value(1).toByteArray()).object()});
+    rows.finish();
+    if (retired.isEmpty())
+        return true;
+    const auto fail = [&](const QString& message) {
+        database_.rollback();
+        if (error)
+            *error = message;
+        return false;
+    };
+    if (!database_.transaction())
+        return fail(database_.lastError().text());
+    const auto now = QDateTime::currentMSecsSinceEpoch();
+    QSqlQuery query(database_);
+    for (auto& [id, record] : retired) {
+        const auto revision = record.value("revision").toInteger() + 1;
+        const auto issue = record.value("error").toString("unverified_before_upgrade");
+        record.insert("state", "interrupted");
+        record.insert("reason", "daemon_upgrade");
+        record.insert("revision", revision);
+        record.insert("updated_at", now);
+        record.insert("ended_at", now);
+        record.insert("cleanup_status", "best_effort_complete");
+        record.insert("executor_stopped", true);
+        record.insert("slot_held", false);
+        record.insert("parked", false);
+        record.remove("manual_guidance");
+        record.remove("cleanup_verification");
+        record.insert("completion_event_id", id + ":" + QString::number(revision));
+        query.prepare("UPDATE managed_jobs SET record=?,state='interrupted',holds_slot=0,"
+                      "parked=0 WHERE task_id=?");
+        query.addBindValue(json(record));
+        query.addBindValue(id);
+        if (!query.exec())
+            return fail(query.lastError().text());
+        // The owner was told when the incident began; the migration wakes no one.
+        query.prepare("INSERT OR IGNORE INTO managed_job_outbox(event_id,task_id,owner_session_id,"
+                      "owner_generation,payload,status,reason) VALUES(?,?,?,?,?,'suppressed',"
+                      "'daemon_upgrade')");
+        query.addBindValue(record.value("completion_event_id").toString());
+        query.addBindValue(id);
+        query.addBindValue(record.value("owner_session_id").toString());
+        query.addBindValue(record.value("owner_generation").toInteger());
+        query.addBindValue(
+            json({{"task_id", id}, {"state", "interrupted"}, {"output_reference", id}}));
+        if (!query.exec())
+            return fail(query.lastError().text());
+        query.prepare("INSERT OR REPLACE INTO managed_job_diagnostics(task_id,revision,issue,"
+                      "recorded_at) VALUES(?,?,?,?)");
+        query.addBindValue(id);
+        query.addBindValue(revision);
+        query.addBindValue("migrated_" + issue);
+        query.addBindValue(now);
+        if (!query.exec())
+            return fail(query.lastError().text());
+        if (const auto superseded = supersedeNotices(id); !superseded.value("ok").toBool())
+            return fail(superseded.value("error_message").toString());
+        qWarning("Background task %s left the retired attention state; ended as interrupted.",
+                 qUtf8Printable(id));
+    }
+    // A remote job's own record follows its task.
+    if (!query.exec(
+            "UPDATE remote_jobs SET record=json_set(CAST(record AS TEXT),'$.state','interrupted',"
+            "'$.reason','daemon_upgrade','$.cleanupStatus','unverified') WHERE "
+            "json_extract(CAST(record AS TEXT),'$.state')='needs_attention'"))
+        return fail(query.lastError().text());
+    if (!database_.commit())
+        return fail(database_.lastError().text());
     return true;
 }
 
@@ -281,19 +365,7 @@ QJsonObject BackgroundTaskLedger::create(const BackgroundTaskIntent& intent) {
 
 QJsonObject BackgroundTaskLedger::change(const QString& id, qint64 expectedRevision,
                                          const BackgroundTaskChange& change) {
-    return changeImpl(id, expectedRevision, change, {});
-}
-
-QJsonObject BackgroundTaskLedger::resolveCleanup(const QString& id, qint64 revision,
-                                                 const QString& userClientId) {
-    if (userClientId.isEmpty())
-        return failure("user_action_required", "Only a local user may acknowledge cleanup.");
-    BackgroundTaskChange change;
-    change.state = "interrupted";
-    change.reason = "cleanup_acknowledged";
-    change.cleanupStatus = "unverified";
-    change.suppressReason = "cleanup_acknowledged";
-    return changeImpl(id, revision, change, userClientId);
+    return changeImpl(id, expectedRevision, change);
 }
 
 } // namespace ketplus::daemon

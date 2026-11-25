@@ -42,9 +42,8 @@ bool SessionHost::acknowledgeManagedTaskOrigin(Session& session, const QString& 
 }
 
 bool SessionHost::isManagedTaskCommand(const QString& type) {
-    static const QSet<QString> types{"session.task.start",  "session.task.list",
-                                     "session.task.get",    "session.task.stop",
-                                     "session.task.output", "session.task.resolve_cleanup"};
+    static const QSet<QString> types{"session.task.start", "session.task.list", "session.task.get",
+                                     "session.task.stop", "session.task.output"};
     return types.contains(type);
 }
 

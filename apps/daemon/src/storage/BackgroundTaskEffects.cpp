@@ -1,4 +1,3 @@
-#include "runner/entry/RemoteGuidance.h"
 #include "storage/BackgroundTaskLedger.h"
 #include "storage/RemoteJobRows.h"
 
@@ -53,19 +52,6 @@ QJsonObject BackgroundTaskLedger::applyTransition(const QString& id, QJsonObject
         record.insert("cleanup_status", "pending");
     if (!change.cleanupStatus.isEmpty())
         record.insert("cleanup_status", change.cleanupStatus);
-    if (change.state == "needs_attention") {
-        record.insert("cleanup_status", "unverified");
-        record.insert("reason", "cleanup_unverified");
-        if (stopped.value_or(false)) {
-            record.insert("slot_held", false);
-            record.insert("parked", false);
-        }
-        record.insert("manual_guidance", "Check the recorded executor and descendants, then "
-                                         "acknowledge cleanup in the task UI.");
-        if (remote_job_rows::phaseOf(database_, id).value_or(remote_job_rows::Phase::Local) !=
-            remote_job_rows::Phase::Local)
-            record.insert("manual_guidance", runner::entry::remoteManualGuidance());
-    }
     if (change.permissionApproved)
         record.insert("permission_approved", true);
     if (change.handshakeCommitted)
@@ -74,13 +60,11 @@ QJsonObject BackgroundTaskLedger::applyTransition(const QString& id, QJsonObject
     if (terminal(change.state)) {
         record.insert("slot_held", false);
         record.insert("parked", false);
-        if (!effects.userAcknowledgement) {
-            stop(true);
-            record.insert("cleanup_status", change.neverLaunched              ? "not_required"
-                                            : !change.cleanupStatus.isEmpty() ? change.cleanupStatus
-                                            : effects.native ? "best_effort_complete"
-                                                             : "verified");
-        }
+        stop(true);
+        record.insert("cleanup_status", change.neverLaunched              ? "not_required"
+                                        : !change.cleanupStatus.isEmpty() ? change.cleanupStatus
+                                        : effects.native                  ? "best_effort_complete"
+                                                                          : "verified");
     }
     // The evidence kind lives only as long as the verified status it supports.
     if (change.groupVerified && record.value("cleanup_status") == "verified")
@@ -92,22 +76,16 @@ QJsonObject BackgroundTaskLedger::applyTransition(const QString& id, QJsonObject
     if (!change.executionIdentity.isEmpty())
         record.insert("execution_identity", change.executionIdentity);
     QSqlQuery query(database_);
-    if (effects.userAcknowledgement) {
-        query.prepare(
-            "INSERT INTO managed_job_cleanup_audit(task_id,revision,source,user_client_id,"
-            "recorded_at) VALUES(?,?,?,?,?)");
+    if (!change.cleanupDiagnostic.isEmpty()) {
+        // Internal diagnostics only: never part of the task record clients and agents read.
+        query.prepare("INSERT OR REPLACE INTO managed_job_diagnostics(task_id,revision,issue,"
+                      "recorded_at) VALUES(?,?,?,?)");
         query.addBindValue(id);
         query.addBindValue(revision + 1);
-        query.addBindValue(effects.auditSource);
-        query.addBindValue(effects.auditClientId);
+        query.addBindValue(change.cleanupDiagnostic);
         query.addBindValue(QDateTime::currentMSecsSinceEpoch());
         if (!query.exec())
             return failure("storage_error", query.lastError().text());
-    }
-    if (change.state == "needs_attention") {
-        const auto noticed = noticeAttention(id, record, previous);
-        if (!noticed.value("ok").toBool())
-            return noticed;
     }
     if (terminal(change.state)) {
         const auto superseded = supersedeNotices(id);
@@ -142,8 +120,7 @@ QJsonObject BackgroundTaskLedger::applyTransition(const QString& id, QJsonObject
                   "parked=CASE WHEN ? THEN 0 ELSE parked END WHERE task_id=?");
     query.addBindValue(json(record));
     query.addBindValue(change.state);
-    const bool releaseSlot =
-        terminal(change.state) || (change.state == "needs_attention" && stopped.value_or(false));
+    const bool releaseSlot = terminal(change.state);
     query.addBindValue(releaseSlot);
     query.addBindValue(releaseSlot);
     query.addBindValue(id);

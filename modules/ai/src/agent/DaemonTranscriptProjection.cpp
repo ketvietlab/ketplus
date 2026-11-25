@@ -244,20 +244,9 @@ QString agentMessageNoticeTitle() { return QStringLiteral("Agent message"); }
 QString agentMessageStateText(const QJsonObject& data) {
     const auto kind = data.value("kind");
     const auto taskId = data.value("task_id").toString();
-    if (kind == "background_task_attention") {
-        auto text = QStringLiteral("Background task %1 needs a manual check: process cleanup "
-                                   "could not be verified")
-                        .arg(taskId);
-        if (const auto issue = data.value("cleanup_issue").toString(); !issue.isEmpty())
-            text += QStringLiteral(" (%1)").arg(issue);
-        text += QStringLiteral(".");
-        const auto guidance =
-            data.value("manual_guidance")
-                .toString(QStringLiteral(
-                    "Check the recorded executor and descendants, then acknowledge cleanup "
-                    "in the task UI."));
-        return text + QStringLiteral(" ") + guidance;
-    }
+    // Journal compatibility: earlier daemons wrote this kind. It reads as a plain ending now.
+    if (kind == "background_task_attention")
+        return QStringLiteral("Background task %1 was ended by KetPlus.").arg(taskId);
     if (kind == "background_wake_held") {
         if (data.value("reason") == "team_budget")
             return QStringLiteral("Background task %1's follow-up is on hold because the team "

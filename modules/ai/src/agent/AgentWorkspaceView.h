@@ -326,7 +326,6 @@ class AgentWorkspaceView final : public QWidget {
     void setBackgroundTaskState(const QVariantMap& value);
     Q_INVOKABLE void loadBackgroundTasks(bool more = false) { emit backgroundTasksRequested(more); }
     Q_INVOKABLE void stopBackgroundTask(const QString& taskId);
-    Q_INVOKABLE void resolveBackgroundTaskCleanup(const QString& taskId, qint64 revision);
     Q_INVOKABLE void requestBackgroundTaskOutput(const QString& taskId);
     Q_INVOKABLE void closeBackgroundTaskOutput() {
         ++backgroundTaskRequest_;
@@ -647,7 +646,6 @@ class AgentWorkspaceView final : public QWidget {
     void backgroundTaskStopRequested(const QString& taskId);
     void backgroundTaskOutputRequested(const QString& taskId, const QString& cursor,
                                        quint64 request);
-    void backgroundTaskCleanupResolutionRequested(const QString& taskId, qint64 revision);
     void backgroundTasksRequested(bool more);
     void backgroundTaskFailed(const QString& message);
     void weeklyLimitRequested();

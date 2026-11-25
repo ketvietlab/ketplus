@@ -77,7 +77,7 @@ class RemoteJobSpecsTest final : public QObject {
         QVERIFY(specs.store(taskA, specOf("one")));
         QVERIFY(specs.store(taskB, specOf("two")));
         specs.recorded(recordOf(taskA, "job-a"));
-        specs.recorded(recordOf(taskB, "job-b", state::needsAttention));
+        specs.recorded(recordOf(taskB, "job-b", state::stopping));
         QVERIFY(specs.spec("job-b", 1)); // not ended
         specs.recorded(recordOf(taskA, "job-a", state::cancelled));
         QCOMPARE(specs.spec("job-a", 1), std::nullopt);

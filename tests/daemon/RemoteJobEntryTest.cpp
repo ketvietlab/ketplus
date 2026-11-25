@@ -385,23 +385,6 @@ class RemoteJobEntryTest final : public QObject {
         QCOMPARE(e.h.relay.pending("cancel"), 0); // not on the Relay yet: no job id
     }
 
-    void cleanupOfATaskWithoutARecordIsTheRuntimes() {
-        Entry e;
-        const QString id = e.h.f.remoteTask();
-        QVERIFY(!e.entry->resolveCleanup(id, "user-client"));
-        QVERIFY(!e.entry->resolveCleanup("unknown", "user-client"));
-    }
-
-    void cleanupOfARecordNotInAttentionIsInvalidState() {
-        Entry e;
-        Worktree w;
-        e.h.prepare = [&](const sync::PrepareRequest&) { return preparedIn(e.h, w.root); };
-        const QString id = e.h.f.remoteTask();
-        e.entry->submit(id, execution(w.inside));
-        QCOMPARE(e.entry->resolveCleanup(id, "user-client"),
-                 std::optional<QString>("invalid_state"));
-    }
-
     void repliesNameThePlacementAndRunner() {
         Entry e;
         const QString id = e.h.f.remoteTask();
@@ -444,8 +427,6 @@ class RemoteJobEntryTest final : public QObject {
         }
         qInstallMessageHandler(previous);
     }
-
-    void theGuidanceSpeaksOfTheRunner() { QVERIFY(remoteManualGuidance().contains("runner")); }
 };
 
 QTEST_GUILESS_MAIN(RemoteJobEntryTest)

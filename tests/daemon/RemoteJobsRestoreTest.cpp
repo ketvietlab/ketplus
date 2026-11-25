@@ -201,7 +201,8 @@ class RemoteJobsRestoreTest final : public QObject {
         h.jobs->restore();
         QCOMPARE(h.f.state(id), state::interrupted);
         QCOMPARE(h.f.task(id).value("reason").toString(), QStringLiteral("record_unreadable"));
-        QCOMPARE(h.f.task(id).value("cleanup_status").toString(), cleanup::unverified);
+        QCOMPARE(h.f.task(id).value("cleanup_status").toString(),
+                 QStringLiteral("best_effort_complete"));
         QCOMPARE(outboxOf(h.f, id), 1);
         QVERIFY(cancelled(h.relay, QStringLiteral("job-u")));
 

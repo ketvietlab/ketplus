@@ -41,9 +41,6 @@ class RemoteJobPort {
     // nullopt when the task has no remote record; otherwise the code of the stop, empty when it
     // was taken or there was nothing to stop.
     [[nodiscard]] virtual std::optional<QString> stop(const QString& taskId) = 0;
-    // nullopt when the task has no remote record; otherwise the acknowledgement's code.
-    [[nodiscard]] virtual std::optional<QString> resolveCleanup(const QString& taskId,
-                                                                const QString& userClientId) = 0;
 
     // `placement` and `runner` added to the task or tasks of a get or list reply.
     [[nodiscard]] virtual QJsonObject withPlacement(QJsonObject reply) const = 0;

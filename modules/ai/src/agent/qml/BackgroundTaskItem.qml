@@ -8,16 +8,14 @@ ColumnLayout {
     required property var taskBar
     readonly property var action: (agentHost.backgroundTaskActions || {})[modelData.task_id] || ({})
     readonly property bool confirming: taskBar.confirmingStop === modelData.task_id
-    // Notes under a card line up with its content; under the attention banner, which
-    // replaces the card, they line up with the banner and its actions.
-    readonly property real noteInset: taskBar.attention(modelData) ? 0 : taskRow.recipe.paddingStart
+    // Notes under a card line up with its content.
+    readonly property real noteInset: taskRow.recipe.paddingStart
     readonly property real notePixels: taskRow.recipe.metaPixels
     Layout.fillWidth: true
     spacing: KetTheme.px(4, KetTheme.zoom)
     objectName: "backgroundTask_" + modelData.task_id
     KetTaskRow {
         id: taskRow
-        visible: !taskBar.attention(row.modelData)
         objectName: "backgroundTaskCard_" + row.modelData.task_id
         Layout.fillWidth: true
         // A row opens its output or the subagent's progress, as the mock's
@@ -59,7 +57,7 @@ ColumnLayout {
             cursorShape: Qt.PointingHandCursor
             onClicked: taskBar.openTask(row.modelData)
         }
-        enabled: !taskBar.live(row.modelData) || taskBar.attention(row.modelData) || (!taskBar.offline && taskBar.canControl && !row.action.pending)
+        enabled: !taskBar.live(row.modelData) || (!taskBar.offline && taskBar.canControl && !row.action.pending)
         title: row.modelData.title
         meta: row.action.pending ? "Requesting stop…" : taskBar.meta(row.modelData)
         kindIcon: row.modelData.kind === "agent" ? "bot" : "terminal"
@@ -77,40 +75,15 @@ ColumnLayout {
             taskBar.dismissedTasks = taskBar.dismissedTasks.concat([key]);
         }
     }
-    KetBanner {
-        objectName: "backgroundTaskAttention_" + row.modelData.task_id
-        visible: taskBar.attention(row.modelData)
-        Layout.fillWidth: true
-        tone: KetTheme.BannerTone.Warning
-        title: "Cleanup unverified"
-        message: row.modelData.title
-    }
     Flow {
-        visible: taskBar.attention(row.modelData) || (!taskBar.canControl && taskBar.canRead)
+        visible: !taskBar.canControl && taskBar.canRead
         Layout.fillWidth: true
         spacing: KetTheme.px(4, KetTheme.zoom)
         KetButton {
-            visible: taskBar.attention(row.modelData) || (!taskBar.canControl && taskBar.canRead)
             text: taskBar.pane.taskId === row.modelData.task_id ? "Hide output" : "Show output"
             controlSize: KetTheme.ControlSize.Small
             enabled: !taskBar.offline
             onClicked: taskBar.openTask(row.modelData)
-        }
-        KetButton {
-            visible: taskBar.attention(row.modelData)
-            objectName: "retryTaskCleanup_" + row.modelData.task_id
-            text: row.action.pending ? "Requesting…" : "Retry cleanup"
-            controlSize: KetTheme.ControlSize.Small
-            enabled: !taskBar.offline && taskBar.canControl && !row.action.pending
-            onClicked: agentHost.stopBackgroundTask(row.modelData.task_id)
-        }
-        KetButton {
-            visible: taskBar.attention(row.modelData)
-            objectName: "resolveTaskCleanup_" + row.modelData.task_id
-            text: "I've handled cleanup…"
-            controlSize: KetTheme.ControlSize.Small
-            enabled: !taskBar.offline && taskBar.canResolve && !row.action.pending
-            onClicked: taskBar.confirmCleanup(row.modelData)
         }
     }
     Text {
@@ -125,8 +98,8 @@ ColumnLayout {
         font.pixelSize: row.notePixels
         wrapMode: Text.Wrap
     }
-    // A note on this task at the card's meta size. Only a cleanup warning takes a status
-    // colour: a failed card's red meta line is not the colour of its follow-up notes.
+    // A note on this task at the card's meta size, in the muted note colour: a failed card's
+    // red meta line is not the colour of its follow-up notes.
     Text {
         objectName: "backgroundTaskDetails_" + row.modelData.task_id
         Layout.fillWidth: true
@@ -135,7 +108,7 @@ ColumnLayout {
         rightPadding: taskRow.recipe.paddingEnd
         text: taskBar.details(row.modelData)
         textFormat: Text.PlainText
-        color: taskBar.attention(row.modelData) ? KetTheme.t.warning : KetTheme.t.textMuted
+        color: KetTheme.t.textMuted
         font.family: KetTheme.fontFamily
         font.pixelSize: row.notePixels
         wrapMode: Text.Wrap

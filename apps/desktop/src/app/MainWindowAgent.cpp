@@ -315,11 +315,6 @@ void MainWindow::ensureAgentWorkspace() {
                 agentManager_->readBackgroundTaskOutput(agentWorkspace_->activePath(), taskId,
                                                         cursor, request);
             });
-    connect(agentWorkspace_, &AgentWorkspaceView::backgroundTaskCleanupResolutionRequested, this,
-            [this](const QString& taskId, qint64 revision) {
-                agentManager_->resolveBackgroundTaskCleanup(agentWorkspace_->activePath(), taskId,
-                                                            revision);
-            });
     connect(agentWorkspace_, &AgentWorkspaceView::backgroundTasksRequested, this,
             [this](bool more) {
                 agentManager_->loadBackgroundTasks(agentWorkspace_->activePath(), more);

@@ -798,8 +798,12 @@ Linux store policy, signed upgrade prompts and platform release acceptance remai
   sidecar and real-SDK control checks are implementation evidence, not live-model
   or shared desktop UI acceptance. Registry completion uses the durable owner-wake
   path instead of a retained Claude query or a watchdog. The same path carries one owner
-  notice when a job enters `needs_attention` or stays queued past half its timeout
-  (at most two minutes), naming why (ADR 0127 §7a). Start/stop require an
+  notice when a job stays queued past half its timeout
+  (at most two minutes), naming why (ADR 0127 §7a). The daemon owns native cleanup (§4a):
+  it retries for a bounded window, then always ends the job and keeps any unconfirmed
+  cleanup in internal diagnostics; there is no cleanup warning, dialog, acknowledgement
+  command or `needs_attention` state, and daemon 0.1.56 ends such records from earlier
+  daemons when it starts. Start/stop require an
   immutable per-turn mutation capability; review origins receive no grant and
   accepted jobs retain their effective-policy snapshot. Claude waits for actual
   SDK process exit; Codex/ACP use dedicated per-conversation processes before

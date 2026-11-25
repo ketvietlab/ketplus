@@ -159,25 +159,8 @@ void RemoteJobs::prepared(const QString& taskId, const SubmitRequest& request,
 
 jobs::JobDecision RemoteJobs::stop(const QString& taskId) { return coordinator_.stop(taskId); }
 
-jobs::JobDecision RemoteJobs::resolveCleanup(const QString& taskId, const QString& userClientId) {
-    const auto current = coordinator_.record(taskId);
-    if (!current)
-        return {QStringLiteral("not_found")};
-    if (current->state != jobs::state::needsAttention)
-        return {invalidState};
-    if (userClientId.isEmpty() || !store_.acknowledge(taskId, QStringLiteral("user"), userClientId))
-        return {invalidRequest};
-    return coordinator_.resolveCleanup(taskId);
-}
-
 jobs::JobDecision RemoteJobs::runnerRemoved(const QString& runnerId, const QString& clientId) {
-    const QString client = clientId.isEmpty() ? QStringLiteral("daemon") : clientId;
-    // The records the coordinator ends for this runner leave needs_attention acknowledged.
-    for (const QString& taskId : std::as_const(live_)) {
-        const auto current = coordinator_.record(taskId);
-        if (current && !current->terminal() && current->dispatchedTo == runnerId)
-            (void)store_.acknowledge(taskId, QStringLiteral("runner_removed"), client);
-    }
+    Q_UNUSED(clientId)
     const jobs::JobDecision decision = coordinator_.runnerRemoved(runnerId);
     ports_.stores->releaseRunner(runnerId);
     return decision;
