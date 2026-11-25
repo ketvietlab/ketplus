@@ -250,6 +250,24 @@ void SessionHost::askPullRequests(const teams::Team& team, const QStringList& ur
     });
 }
 
+// T-3: the pull request opened from each task's branch, on the same worker and bounds.
+void SessionHost::askPullRequestLinks(const teams::Team& team, const QList<teams::Task>& tasks,
+                                      teams::PullRequestLinksDone done) {
+    QList<team_pull_requests::Lookup> lookups;
+    for (const teams::Task& task : tasks)
+        lookups.append({.taskId = task.id,
+                        .directory = teams::taskScope(team, task).repository,
+                        .branch = task.branch});
+    teamRemote_.start([guard = QPointer<SessionHost>(this), lookups = std::move(lookups),
+                       stopping = teamRemoteStopping_, done = std::move(done)]() mutable {
+        QHash<QString, QString> links =
+            team_pull_requests::findLinks(lookups, {}, {}, stopping.get());
+        QMetaObject::invokeMethod(
+            guard, [done = std::move(done), links = std::move(links)] { done(links); },
+            Qt::QueuedConnection);
+    });
+}
+
 // T-40: on the same worker as the pull request probe, bounded, so a slow network holds no
 // question to git and no client.
 void SessionHost::askPostReviewComment(const teams::Team& team, const teams::Task& task,

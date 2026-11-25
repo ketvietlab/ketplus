@@ -175,6 +175,18 @@ class FakeHost final : public TeamHostPort {
         else
             done(facts);
     }
+    // T-3: the pull request each branch has on the remote, by branch; none when absent.
+    void askPullRequestLinks(const Team& team, const QList<Task>& tasks,
+                             PullRequestLinksDone done) override {
+        (void)team;
+        QHash<QString, QString> links;
+        for (const Task& task : tasks) {
+            linkAsks.append(task.id);
+            if (branchPullRequests.contains(task.branch))
+                links.insert(task.id, branchPullRequests.value(task.branch));
+        }
+        done(links);
+    }
     // T-40: a review on the pull request posts its findings there; the comment gets a link
     // unless `commentError` is set. Held like git with `holdAnswers`.
     void askPostReviewComment(const Team& team, const Task& task, const QString& body,
@@ -251,6 +263,8 @@ class FakeHost final : public TeamHostPort {
     QSet<QString> unreadableHeads;
     QHash<QString, PullRequestFact> pullRequests;
     QList<QStringList> pullRequestAsks;
+    QHash<QString, QString> branchPullRequests;
+    QStringList linkAsks;
     QSet<QString> dirty;
     QSet<QString> unreadable;
     QSet<QString> hangingPullRequests;

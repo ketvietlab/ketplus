@@ -385,6 +385,82 @@ class TeamDoneTest final : public QObject {
         QVERIFY(!garbage.error.isEmpty());
     }
 
+    // T-3: a pull request a workflow opened from the task's branch is recorded on that task
+    // (and no other), once, and wakes the leader. A person's own record is never replaced.
+    void aPullRequestOpenedFromATasksBranchIsLinkedToThatTask() {
+        const QString id = task("Cart");
+        const QString other = task("Checkout");
+        bringTo(id, state::inProgress);
+        QVERIFY(teams_->assignTask(team_, other, "dev2", "lead").ok());
+        QVERIFY(teams_->moveTask(team_, other, state::inProgress, "dev2").ok());
+        QVERIFY(!get(id).branch.isEmpty());
+        QVERIFY(get(id).branch != get(other).branch);
+        host_.branchPullRequests.insert(get(id).branch, pullRequest);
+        teams_->checkPullRequests(team_);
+        QCOMPARE(get(id).pullRequest, pullRequest);
+        QVERIFY(get(other).pullRequest.isEmpty());
+        QCOMPARE(history(id, "pull_request").size(), 1);
+        QCOMPARE(updates("pull_request_linked"), 1);
+        bool woke = false;
+        for (const TeamUpdateRecord& update : journal_->teamUpdates(team_, false, 300))
+            woke = woke || (update.kind == "pull_request_linked" && update.actionable);
+        QVERIFY(woke);
+        // Linked: it is checked like any recorded pull request, and not looked for again.
+        host_.linkAsks.clear();
+        teams_->checkPullRequests(team_);
+        QVERIFY(!host_.linkAsks.contains(id));
+        QCOMPARE(updates("pull_request_linked"), 1);
+        merge();
+        teams_->checkPullRequests(team_);
+        QCOMPARE(get(id).state, state::done);
+    }
+
+    void aRecordedPullRequestIsNotReplacedByTheOneFoundForTheBranch() {
+        const QString id = task("Cart");
+        recordPullRequest(id);
+        bringTo(id, state::inProgress);
+        host_.branchPullRequests.insert(get(id).branch,
+                                        QStringLiteral("https://example.invalid/shop/pull/99"));
+        teams_->checkPullRequests(team_);
+        QCOMPARE(get(id).pullRequest, pullRequest);
+        QVERIFY(!host_.linkAsks.contains(id));
+    }
+
+    // T-3: a pull request closed and then open again changes state: the leader is woken.
+    void aReopenedPullRequestWakesTheLeader() {
+        const QString id = task("Cart");
+        recordPullRequest(id);
+        bringTo(id, state::inReview);
+        host_.pullRequests.insert(pullRequest, {.state = "closed", .mergeCommit = {}, .error = {}});
+        teams_->checkPullRequests(team_);
+        QCOMPARE(updates("pull_request_changed"), 0);
+        host_.pullRequests.insert(pullRequest, {.state = "open", .mergeCommit = {}, .error = {}});
+        teams_->checkPullRequests(team_);
+        QCOMPARE(updates("pull_request_changed"), 1);
+        bool woke = false;
+        for (const TeamUpdateRecord& update : journal_->teamUpdates(team_, false, 300))
+            woke = woke || (update.kind == "pull_request_changed" && update.actionable);
+        QVERIFY(woke);
+        teams_->checkPullRequests(team_);
+        QCOMPARE(updates("pull_request_changed"), 1);
+        QCOMPARE(get(id).state, state::inReview);
+    }
+
+    void theProbeReadsThePullRequestOfABranch() {
+        QCOMPARE(team_pull_requests::parseLink("[]"), QString{});
+        QCOMPARE(team_pull_requests::parseLink("nonsense"), QString{});
+        const QByteArray closed =
+            R"({"url":"https://h/p/1","state":"CLOSED","createdAt":"2026-01-02"})";
+        const QByteArray open =
+            R"({"url":"https://h/p/2","state":"OPEN","createdAt":"2026-01-01"})";
+        const QByteArray merged =
+            R"({"url":"https://h/p/3","state":"MERGED","createdAt":"2026-01-03"})";
+        QCOMPARE(team_pull_requests::parseLink("[" + closed + "," + open + "," + merged + "]"),
+                 QStringLiteral("https://h/p/2"));
+        QCOMPARE(team_pull_requests::parseLink("[" + closed + "," + merged + "]"),
+                 QStringLiteral("https://h/p/3"));
+    }
+
     void theProbeRunsTheToolOncePerPullRequestAndReportsItsFailure() {
         KETPLUS_SKIP_ON_WINDOWS(
             "the fixture is a POSIX shell script (fake git/gh) that Windows cannot run");

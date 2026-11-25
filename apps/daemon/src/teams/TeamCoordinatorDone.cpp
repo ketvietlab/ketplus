@@ -32,6 +32,15 @@ QString lastPullRequestNote(const Task& task) {
     return {};
 }
 
+// The state the board last saw the task's pull request in, from its history entries.
+QString lastPullRequestState(const Task& task) {
+    for (auto it = task.history.crbegin(); it != task.history.crend(); ++it)
+        if (it->kind == pullRequestKind &&
+            !it->data.value(QStringLiteral("state")).toString().isEmpty())
+            return it->data.value(QStringLiteral("state")).toString();
+    return {};
+}
+
 } // namespace
 
 bool TeamCoordinator::recordsPullRequest(const Task& task) {
@@ -66,13 +75,32 @@ void TeamCoordinator::checkPullRequests(const qint64 teamId) {
         if (task.state != state::done && isPullRequestUrl(task.pullRequest) &&
             !urls.contains(task.pullRequest.trimmed()))
             urls.append(task.pullRequest.trimmed());
-    if (urls.isEmpty())
+    // T-3: a task with work and a branch but no pull request may have one a workflow opened.
+    QList<Task> unlinked;
+    for (const Task& task : team->tasks)
+        if (task.state != state::done && task.state != state::todo &&
+            task.pullRequest.trimmed().isEmpty() && !task.branch.trimmed().isEmpty())
+            unlinked.append(task);
+    if (urls.isEmpty() && unlinked.isEmpty())
         return;
     const qint64 now = QDateTime::currentMSecsSinceEpoch();
     const auto last = pullRequestCheckedAt_.constFind(teamId);
     if (last != pullRequestCheckedAt_.cend() && now - *last < pullRequestGap_)
         return;
     pullRequestCheckedAt_.insert(teamId, now);
+    if (!unlinked.isEmpty() && !pullRequestLinks_.contains(teamId)) {
+        pullRequestLinks_.insert(teamId);
+        host_->askPullRequestLinks(
+            *team, unlinked,
+            [self = QPointer<TeamCoordinator>(this), teamId](const QHash<QString, QString>& links) {
+                if (!self)
+                    return;
+                self->pullRequestLinks_.remove(teamId);
+                self->applyPullRequestLinks(teamId, links);
+            });
+    }
+    if (urls.isEmpty())
+        return;
     // Bounded: one request per pull request, at most a page of them per check. The page starts
     // where the last check stopped asking, in sorted order and wrapping around, so the board is
     // gone through in turn and a pull request that never answers (it ends its batch) is asked
@@ -135,6 +163,19 @@ void TeamCoordinator::applyPullRequestFacts(const qint64 teamId,
             finished = true;
             continue;
         }
+        // T-3: a pull request that is open again after it was closed wakes the leader.
+        const QString seen = lastPullRequestState(task);
+        if (fact->state == QStringLiteral("open") && seen == QStringLiteral("closed")) {
+            const QString text = QStringLiteral("%1 is open again.").arg(task.pullRequest);
+            addHistory(task, QStringLiteral("daemon"), pullRequestKind, text,
+                       {{QStringLiteral("pull_request"), task.pullRequest},
+                        {QStringLiteral("state"), QStringLiteral("open")}});
+            updates.append({.kind = QStringLiteral("pull_request_changed"),
+                            .text = QStringLiteral("%1: %2").arg(task.id, text),
+                            .taskId = task.id,
+                            .actionable = true});
+            continue;
+        }
         // Open: nothing to say. Closed unmerged or unknown: said once, until the reason changes.
         QString note;
         if (fact->state == QStringLiteral("closed"))
@@ -161,6 +202,37 @@ void TeamCoordinator::applyPullRequestFacts(const qint64 teamId,
         offerMerges(*team, updates);
         noteGoalReached(*team, updates);
     }
+    if (commit(*team, before, QStringLiteral("daemon"), updates))
+        qWarning("Unable to record the pull requests of team %lld.",
+                 static_cast<long long>(teamId));
+}
+
+void TeamCoordinator::applyPullRequestLinks(const qint64 teamId,
+                                            const QHash<QString, QString>& links) {
+    Team* team = mutableTeam(teamId);
+    if (!team)
+        return;
+    const Team before = *team;
+    QList<Update> updates;
+    for (Task& task : team->tasks) {
+        const auto link = links.constFind(task.id);
+        // Only a task still without one: the person's own record is never replaced.
+        if (link == links.cend() || task.state == state::done ||
+            !task.pullRequest.trimmed().isEmpty() || !isPullRequestUrl(*link))
+            continue;
+        task.pullRequest = link->trimmed();
+        const QString text = QStringLiteral("%1 was opened from branch %2 and is linked.")
+                                 .arg(task.pullRequest, task.branch);
+        addHistory(task, QStringLiteral("daemon"), pullRequestKind, text,
+                   {{QStringLiteral("pull_request"), task.pullRequest},
+                    {QStringLiteral("state"), QStringLiteral("open")}});
+        updates.append({.kind = QStringLiteral("pull_request_linked"),
+                        .text = QStringLiteral("%1: %2").arg(task.id, text),
+                        .taskId = task.id,
+                        .actionable = true});
+    }
+    if (updates.isEmpty())
+        return;
     if (commit(*team, before, QStringLiteral("daemon"), updates))
         qWarning("Unable to record the pull requests of team %lld.",
                  static_cast<long long>(teamId));
