@@ -127,6 +127,9 @@ struct PullRequestFact final {
     QString error;
 };
 using PullRequestsDone = std::function<void(const QHash<QString, PullRequestFact>&)>;
+// T-3: the pull request the remote has for a task's branch, by task id: an unknown task has
+// none (or the remote could not tell, which is asked again at the next check).
+using PullRequestLinksDone = std::function<void(const QHash<QString, QString>&)>;
 // T-40: the comment a review on the pull request left there: its link, or the error in
 // words when it could not be posted.
 struct ReviewComment final {
@@ -191,6 +194,15 @@ class TeamHostPort {
                                .mergeCommit = {},
                                .error = QStringLiteral("Pull requests cannot be checked here.")});
         done(facts);
+    }
+    // T-3: looks for the pull request opened from each task's branch (by a workflow or by hand)
+    // and answers `done` on the caller's thread with its URL by task id. Without a way to
+    // ask, no task has one.
+    virtual void askPullRequestLinks(const Team& team, const QList<Task>& tasks,
+                                     PullRequestLinksDone done) {
+        (void)team;
+        (void)tasks;
+        done({});
     }
     // T-40: posts `body` as a comment on the task's pull request and answers its link on the
     // caller's thread. The reviewer stays read-only (ADR 0067): the daemon posts its words.
@@ -585,8 +597,8 @@ class TeamCoordinator : public QObject {
     // Whether a merge check, a review's diff or a prepared command is still with git.
     [[nodiscard]] bool checksOpen() const {
         return !mergeChecks_.isEmpty() || !pullRequestChecks_.isEmpty() ||
-               !reviewDiffs_.isEmpty() || !reviewComments_.isEmpty() || !worktreeWaits_.isEmpty() ||
-               handoffsAsked_ > 0;
+               !pullRequestLinks_.isEmpty() || !reviewDiffs_.isEmpty() ||
+               !reviewComments_.isEmpty() || !worktreeWaits_.isEmpty() || handoffsAsked_ > 0;
     }
 
     // ADR 0114 §2: the team's reviewer answered the review it was sent, or its turn failed
@@ -750,6 +762,8 @@ class TeamCoordinator : public QObject {
     void applyMergeFacts(qint64 teamId, const QList<Task>& asked,
                          const QHash<QString, TaskFacts>& facts);
     void applyPullRequestFacts(qint64 teamId, const QHash<QString, PullRequestFact>& facts);
+    // T-3: records the pull request found for a task's branch on the task, once.
+    void applyPullRequestLinks(qint64 teamId, const QHash<QString, QString>& links);
     // Moves a task that is not done to done (ADR 0118): withdraws its merge decisions and its
     // place with the reviewer, and records `kind` with `data` in its history.
     void finishTask(Team& team, Task& task, const QString& actor, const QString& reason,
@@ -845,6 +859,7 @@ class TeamCoordinator : public QObject {
     QSet<qint64> mergeChecks_;
     QSet<qint64> mergeChecksAgain_;
     QSet<qint64> pullRequestChecks_;
+    QSet<qint64> pullRequestLinks_;
     QHash<qint64, qint64> pullRequestCheckedAt_;
     // Per team, the pull request the next check starts at: the one after the last asked, so
     // one that never answers cannot keep the others from being asked.

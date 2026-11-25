@@ -77,6 +77,19 @@ The leader had no way to close a task either.
 - A daemon without `gh` behaves as before for local merges, says once why it cannot check a
   pull request, and relies on the leader's tool.
 
+## Amendment (T-3): pull requests a workflow opens
+
+8. **Linking.** A task that has work (In progress, In review, Ready or Blocked), a branch and
+   no recorded pull request is looked up at each pull request check:
+   `gh pr list --head <branch> --state all --json url,state,createdAt` (only an open one counts: a closed or merged one may come from an earlier use of the branch name), run in the task's
+   repository on the same worker and bounds as the probe. The newest pull request that is open now is recorded on that task only (branches are unique per task), with a
+   `pull_request` history entry and an actionable `pull_request_linked` update that wakes the
+   leader. A pull request someone recorded is never replaced, and a lookup that errors or
+   times out links nothing. From then on the task is checked like any recorded pull request.
+9. **State changes.** A pull request open again after it was closed without merging adds a
+   `pull_request` history entry and an actionable `pull_request_changed` update. Merged and
+   closed already wake the leader (points 1 and 2).
+
 ## Alternatives considered
 
 - *Git against the remote only*: fetch the pull request's base and test ancestry. It sees

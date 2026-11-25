@@ -23,6 +23,22 @@ struct Limits final {
 ask(const QString& directory, const QStringList& urls, const QString& program = {},
     Limits limits = {}, const std::atomic_bool* cancelled = nullptr);
 
+// T-3: where to look for the pull request opened from a task's branch.
+struct Lookup final {
+    QString taskId;
+    QString directory;
+    QString branch;
+};
+// The pull request URL in the answer of `gh pr list --head <branch> --state all --json
+// url,state,createdAt`: the newest one that is open; nothing for none (a closed or merged one may
+// belong to an earlier use of the branch name).
+[[nodiscard]] QString parseLink(const QByteArray& json);
+// Asks for the pull request of each task's branch, bounded as `ask` is; a task whose answer
+// is none or an error is left out. Never touches a checkout.
+[[nodiscard]] QHash<QString, QString> findLinks(const QList<Lookup>& lookups,
+                                                const QString& program = {}, Limits limits = {},
+                                                const std::atomic_bool* cancelled = nullptr);
+
 // T-40: the comment's link in what `gh pr comment` printed, or nothing.
 [[nodiscard]] QString commentUrl(const QByteArray& output);
 // Posts `body` as a comment on the pull request at `url` through `gh pr comment`, reading

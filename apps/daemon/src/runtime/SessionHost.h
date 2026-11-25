@@ -424,6 +424,8 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
                   teams::TaskQuestion question, teams::TaskFactsDone done) override;
     void askPullRequests(const teams::Team& team, const QStringList& urls,
                          teams::PullRequestsDone done) override;
+    void askPullRequestLinks(const teams::Team& team, const QList<teams::Task>& tasks,
+                             teams::PullRequestLinksDone done) override;
     void askPostReviewComment(const teams::Team& team, const teams::Task& task, const QString& body,
                               teams::ReviewCommentDone done) override;
     void askDiff(const teams::Team& team, const teams::Task& task,

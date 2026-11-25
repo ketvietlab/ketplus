@@ -117,6 +117,77 @@ QHash<QString, teams::PullRequestFact> ask(const QString& directory, const QStri
     return facts;
 }
 
+QString parseLink(const QByteArray& json) {
+    const QJsonDocument document = QJsonDocument::fromJson(json);
+    if (!document.isArray())
+        return {};
+    // Only a pull request that is open now: a closed or merged one may come from an earlier
+    // use of the same branch name, and must not be recorded as the task's.
+    QString best;
+    QString bestAt;
+    for (const QJsonValue& value : document.array()) {
+        const QJsonObject object = value.toObject();
+        const QString url = object.value(QStringLiteral("url")).toString();
+        if (!url.startsWith(QStringLiteral("http")) ||
+            object.value(QStringLiteral("state")).toString().toLower() != QStringLiteral("open"))
+            continue;
+        const QString at = object.value(QStringLiteral("createdAt")).toString();
+        if (best.isEmpty() || at > bestAt) {
+            best = url;
+            bestAt = at;
+        }
+    }
+    return best;
+}
+
+QHash<QString, QString> findLinks(const QList<Lookup>& lookups, const QString& program,
+                                  const Limits limits, const std::atomic_bool* cancelled) {
+    QHash<QString, QString> links;
+    const QString tool = program.isEmpty() ? findGh() : program;
+    if (tool.isEmpty())
+        return links;
+    QElapsedTimer clock;
+    clock.start();
+    for (const Lookup& lookup : lookups) {
+        const qint64 left = limits.batchMs - clock.elapsed();
+        if (left <= 0 || (cancelled && cancelled->load()))
+            break;
+        if (lookup.branch.isEmpty())
+            continue;
+        QProcess process;
+        if (!lookup.directory.isEmpty())
+            process.setWorkingDirectory(lookup.directory);
+        QProcessEnvironment environment = QProcessEnvironment::systemEnvironment();
+        environment.insert(QStringLiteral("GH_PROMPT_DISABLED"), QStringLiteral("1"));
+        environment.insert(QStringLiteral("GH_NO_UPDATE_NOTIFIER"), QStringLiteral("1"));
+        environment.insert(QStringLiteral("GIT_TERMINAL_PROMPT"), QStringLiteral("0"));
+        process.setProcessEnvironment(environment);
+        process.start(tool, {QStringLiteral("pr"), QStringLiteral("list"), QStringLiteral("--head"),
+                             lookup.branch, QStringLiteral("--state"), QStringLiteral("all"),
+                             QStringLiteral("--json"), QStringLiteral("url,state,createdAt")});
+        if (!process.waitForStarted(5000))
+            break;
+        const qint64 limit = std::min<qint64>(limits.requestMs, left);
+        QElapsedTimer request;
+        request.start();
+        bool finished = false;
+        while (!(finished = process.waitForFinished(200)) && request.elapsed() < limit &&
+               !(cancelled && cancelled->load()))
+            ;
+        if (!finished) {
+            process.kill();
+            process.waitForFinished(1000);
+            break; // the network is likely gone: the rest waits for the next check
+        }
+        if (process.exitStatus() != QProcess::NormalExit || process.exitCode() != 0)
+            continue;
+        const QString url = parseLink(process.readAllStandardOutput());
+        if (!url.isEmpty())
+            links.insert(lookup.taskId, url);
+    }
+    return links;
+}
+
 QString commentUrl(const QByteArray& output) {
     const QStringList lines = QString::fromUtf8(output).split(u'\n', Qt::SkipEmptyParts);
     for (auto it = lines.crbegin(); it != lines.crend(); ++it) {
