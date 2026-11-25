@@ -311,10 +311,13 @@ detached before it was ever observed is not detectable and remains a best-effort
 limit, as documented above.
 
 Detection uses the closed channel. The supervisor holds the control connection; EOF/
-HUP on either end is noticed immediately. The supervisor stops the job after a
-one-second window in which a restarted daemon may reconnect (a `stop_cause` of
-`channel_closed` is recorded); the daemon starts recovery at once when it sees EOF
-and the supervisor process is gone. The heartbeat and its lease (above) remain
+HUP on either end is noticed immediately. The supervisor never stops the job
+because the channel closed: a restarted or upgraded daemon reconnects to the live
+executor, and only the lease bounds that wait (a stop after a closed channel
+records `stop_cause=lease_expired_after_channel_closed`). The daemon starts
+recovery at once when it sees EOF and the supervisor process is gone, then waits
+`NativeJobRecoverySettleMs` (3.5 s) for signalled processes to exit before it
+declares a loss unverified. The heartbeat and its lease (above) remain
 the fallback for a hung peer, whose connection stays open but silent
 (`stop_cause=lease_expired`). The Linux executor shares the channel detection; its
 cleanup evidence is still the cgroup.

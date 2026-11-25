@@ -4,6 +4,7 @@
 #include "runtime/executor/LinuxJobContainment.h"
 #include "runtime/executor/NativeJobClient.h"
 #include "runtime/executor/NativeJobControlAddress.h"
+#include "runtime/executor/NativeJobLease.h"
 #include "runtime/executor/NativeProcessIdentity.h"
 
 #include <QDebug>
@@ -169,7 +170,7 @@ void NativeJobClient::recoverLostSupervisor() {
     }
     // Signals were just sent; give the processes a moment to exit before declaring
     // the loss unverified, so a normal stop does not raise needs_attention.
-    if (!recoveryReported_ && clock_.elapsed() - recoveryStarted_ < 3500)
+    if (!recoveryReported_ && clock_.elapsed() - recoveryStarted_ < NativeJobRecoverySettleMs)
         return;
     reportLost(knownStopped, lastReceipt_.isEmpty() ? "executor_receipt_unavailable"
                                                     : "executor_connection_lost");

@@ -265,16 +265,13 @@ void NativeJobSupervisor::tick() {
 }
 
 bool NativeJobSupervisor::leaseOrChannelExpired() {
-    const auto now = clock_.elapsed();
-    QString cause;
-    if (channelLostAt_ >= 0 && now - channelLostAt_ >= 1000)
-        cause = "channel_closed";
-    else if (checkLease())
-        cause = "lease_expired";
-    if (cause.isEmpty())
+    // A closed channel is noticed at once (channelLostAt_) but never stops the job: a
+    // restarted daemon reconnects to the live executor (ADR 0127). Only the lease,
+    // which a re-adopting daemon renews, bounds how long the supervisor waits.
+    if (!checkLease())
         return false;
     if (stopCause_.isEmpty())
-        stopCause_ = cause;
+        stopCause_ = channelLostAt_ >= 0 ? "lease_expired_after_channel_closed" : "lease_expired";
     return true;
 }
 

@@ -1122,7 +1122,10 @@ Codex, Claude or Cursor identity.
 A native job whose supervisor or daemon connection was lost is not sent to
 `needs_attention` when the OS reports its process group empty: it ends `interrupted`
 with `cleanup_status=verified` (process group) and only a log line. `needs_attention`
-remains for live leftover processes or cleanup that could not be verified.
+remains for live leftover processes or cleanup that could not be verified. A closed
+control channel is noticed at once on both ends, but the supervisor stops a job only
+when the lease expires, so a restarted daemon can reconnect to a running job; the
+supervisor's stop is bounded by the lease, not by the channel.
 
 On native macOS, the bar labels the assurance as best effort, including
 `best_effort_complete`; this never claims absence of unobserved descendants. The

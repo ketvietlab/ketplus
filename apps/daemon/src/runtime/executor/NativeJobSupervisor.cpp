@@ -165,7 +165,7 @@ void NativeJobSupervisor::acceptConnection() {
         connect(client_, &QLocalSocket::disconnected, this, [this, socket] {
             if (client_ == socket) {
                 // EOF/HUP is seen at once; the lease is only the fallback for a
-                // hung peer. A short window lets a restarted daemon re-adopt.
+                // hung peer. The job keeps running so a restarted daemon can re-adopt it.
                 if (authenticated_ && !finalized_ && channelLostAt_ < 0)
                     channelLostAt_ = clock_.elapsed();
                 client_ = nullptr;

@@ -526,28 +526,46 @@ class NativeJobExecutorTest final : public QObject {
         QVERIFY(executor.receipt().value("max_ping_gap_ms").toInteger() >= 5500);
     }
 
-    void closedChannelStopsTheJobAtOnceAndVerifiesTheGroup() {
+    void closedChannelDoesNotStopTheJobAndADaemonReconnectingLateKeepsIt() {
+        if (NativeJobLeaseMs <= 3500)
+            QSKIP("The lease on this platform is too short for a late reconnect");
         Executor executor;
         QVERIFY(executor.start());
         executor.execute({"/bin/sleep", "60"});
-        const auto running = executor.receive("running");
-        const auto root = running.value("root_identity").toObject();
+        const auto root = executor.receive("running").value("root_identity").toObject();
+        QVERIFY(!root.isEmpty());
+        executor.socket.abort(); // Abrupt EOF: the daemon restarts.
+        // Well past the old one-second window, still inside the lease.
+        QTest::qWait(2500);
+        const auto live = inspect(root.value("pid").toInteger());
+        QVERIFY(live && live->birth == root.value("birth").toString() && !live->zombie);
+        QVERIFY(executor.reconnect());
+        QVERIFY(!executor.receive("ready").isEmpty());
+        executor.send({{"op", "ping"}});
+        QVERIFY(!executor.receive("pong").isEmpty());
+        executor.send({{"op", "stop"}, {"reason", "cancelled"}});
+        QVERIFY(!executor.receive("done").isEmpty());
+        QCOMPARE(executor.receipt().value("state"), "cancelled");
+        QVERIFY(executor.receipt().value("stop_cause").toString().isEmpty());
+    }
+
+    void closedChannelWithoutAReturnEndsAtTheLeaseAndVerifiesTheGroup() {
+        Executor executor;
+        QVERIFY(executor.start());
+        executor.execute({"/bin/sleep", "60"});
+        const auto root = executor.receive("running").value("root_identity").toObject();
         QVERIFY(!root.isEmpty());
         QElapsedTimer elapsed;
         elapsed.start();
-        executor.socket.abort(); // Abrupt EOF: the daemon vanished.
-        // The supervisor lingers for the lease to serve an acknowledgement; the
-        // receipt is what the daemon recovers from.
+        executor.socket.abort();
         QTRY_COMPARE_WITH_TIMEOUT(executor.receipt().value("state").toString(), "interrupted",
-                                  3500);
-        // Detected from the closed channel, far ahead of the lease.
-        QVERIFY2(elapsed.elapsed() < 3500, qPrintable(QString::number(elapsed.elapsed())));
+                                  NativeJobLeaseMs + 4000);
+        QVERIFY2(elapsed.elapsed() >= NativeJobLeaseMs - 1000,
+                 qPrintable(QString::number(elapsed.elapsed())));
         const auto receipt = executor.receipt();
-        QCOMPARE(receipt.value("state"), "interrupted");
         QCOMPARE(receipt.value("cleanup_status"), "verified");
         QCOMPARE(receipt.value("cleanup_verification"), "process_group_empty");
-        QCOMPARE(receipt.value("stop_cause"), "channel_closed");
-        QVERIFY(receipt.value("executor_stopped").toBool());
+        QCOMPARE(receipt.value("stop_cause"), "lease_expired_after_channel_closed");
         QVERIFY(receipt.value("reason").toString().isEmpty());
         const auto current = inspect(root.value("pid").toInteger());
         QVERIFY(!current || current->birth != root.value("birth").toString() || current->zombie);
@@ -585,7 +603,7 @@ class NativeJobExecutorTest final : public QObject {
         const auto known = executor.receipt().value("known_processes").toArray();
         executor.socket.abort();
         QTRY_COMPARE_WITH_TIMEOUT(executor.receipt().value("state").toString(), "interrupted",
-                                  6000);
+                                  NativeJobLeaseMs + 6000);
         const auto receipt = executor.receipt();
         QCOMPARE(receipt.value("state"), "interrupted");
         QCOMPARE(receipt.value("cleanup_status"), "verified");
@@ -693,8 +711,9 @@ class NativeJobExecutorTest final : public QObject {
             {supervisor.value("pid").toInteger(), 0, 0, supervisor.value("birth").toString()},
             SIGKILL, &signalError));
         QTRY_VERIFY_WITH_TIMEOUT(!done.isEmpty(), 10000);
-        // EOF started recovery at once; the lease-length silence window was not needed.
-        QVERIFY2(elapsed.elapsed() < 4500, qPrintable(QString::number(elapsed.elapsed())));
+        // EOF started recovery at once; the lease-length silence window was not needed,
+        // and only the named settle window delays the report.
+        QVERIFY2(elapsed.elapsed() < NativeJobRecoverySettleMs + 1000, qPrintable(QString::number(elapsed.elapsed())));
         QCOMPARE(done.value("state"), "interrupted");
         QCOMPARE(done.value("cleanup_status"), "verified");
         const auto current = inspect(root.value("pid").toInteger());
