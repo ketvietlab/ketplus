@@ -205,6 +205,41 @@ class TeamAgentToolsTest final : public QObject {
                  QStringLiteral("not_on_team"));
     }
 
+    void developerWaitNotifiesAnIdleLeaderThroughTheAgentTool() {
+        Fixture fixture;
+        QVERIFY(fixture.open());
+        const Team team = create(fixture);
+        QVERIFY(!team.id.isEmpty());
+        QCOMPARE(fixture
+                     .agents(team.developer, "agents.team_wait",
+                             {{"reason", "CI"}, {"minutes", 5}, {"waiting_on", 1}})
+                     .value("error_code")
+                     .toString(),
+                 QStringLiteral("invalid_payload"));
+        QCOMPARE(fixture
+                     .agents(team.leader, "agents.team_wait",
+                             {{"reason", "CI"}, {"minutes", 5}, {"waiting_on", "leader"}})
+                     .value("error_code")
+                     .toString(),
+                 QStringLiteral("not_allowed"));
+        const QJsonObject args{
+            {"reason", "merge the PR"}, {"minutes", 5}, {"waiting_on", "leader"}};
+        QVERIFY(fixture.agents(team.developer, "agents.team_wait", args).value("ok").toBool());
+        QVERIFY(fixture.agents(team.developer, "agents.team_wait", args).value("ok").toBool());
+        const auto notices = [&] {
+            int count = 0;
+            for (const AgentMessageRecord& message :
+                 fixture.journal->agentMessagesOf(team.leader, 1, 20))
+                if (message.kind == QStringLiteral("waiting_for_leader") &&
+                    message.body.contains(QStringLiteral("merge the PR")))
+                    ++count;
+            return count;
+        };
+        QTRY_COMPARE_WITH_TIMEOUT(notices(), 1, 5000);
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(team.leader, "turn.completed"), 1, 5000);
+        QCOMPARE(notices(), 1);
+    }
+
     // ADR 0114 §8: a member says what it waits for; a message it sent outside the team that
     // failed comes back to it as a turn.
     void aMemberWaitsAndHearsOfAFailedOutsideMessage() {

@@ -207,7 +207,10 @@ QJsonObject SessionHost::teamOperation(const QString& sessionId, const QString& 
             return onlyFor(QStringLiteral("the leader and developers"), operation);
         const int minutes = payload.value(QStringLiteral("minutes")).toInt();
         const auto result = teams_->wait(
-            teamId, sessionId, minutes, payload.value(QStringLiteral("reason")).toString(), taskId);
+            teamId, sessionId, minutes, payload.value(QStringLiteral("reason")).toString(), taskId,
+            payload.value(QStringLiteral("waiting_on")).isUndefined()
+                ? QStringLiteral("external")
+                : payload.value(QStringLiteral("waiting_on")).toString());
         if (!result.ok())
             return refusal(result.error->code, result.error->message);
         return {{QStringLiteral("ok"), true}, {QStringLiteral("wakes_in_minutes"), minutes}};

@@ -449,7 +449,7 @@ leader the user stopped is not woken, so step 3 follows at once. A member's next
 that ends by itself lifts that, and "Wake the leader again" lifts it for the leader only.
 A worker that exits without a new turn changes nothing.
 
-**Waiting for something outside the team.** A build or test runs as a managed
+**Waiting for a dependency.** A build or test runs as a managed
 background job and its completion or notice wakes the member (ADR 0127 §7a): the member
 ends its turn on the job, and the watchdog counts it as at work while it owns a job that
 has not ended and looks again a stall period later, since a job the user stops ends as
@@ -466,6 +466,20 @@ wake that is held because the wait ended while the team was paused. Resume asks 
 a held `wait`, `message_failed`, `nudge` or `stall` is not delivered to a member that
 is stopped at that moment. Waits are kept in memory: a
 daemon restart loses them and the watchdog takes over. The reviewer does not wait.
+
+`team_wait` accepts `waiting_on`: `external` (the default) for an untracked
+deployment or another conversation, `user` for a user response, and `leader` for a developer
+waiting on the leader to merge or decide. All three keep the timed reminder.
+Only `leader` sends an immediate team message to the leader with the developer's
+name, reason and task ID when available. If the developer omits the task ID, the
+daemon uses their in-progress task when one exists. The notification starts a
+turn when the leader is idle, uses one automatic turn and is held while the
+team is paused. For developers `user` and `external` behave identically: both
+only keep the timed reminder. Repeating the same leader, task, task state and
+reason does not send a second notification, even after the developer's reminder
+fires. The record ends when the developer's turn ends without a new wait, when
+the wait is cancelled (the user's Stop), and when the member leaves the team, so a
+later wait for the same thing notifies the leader again.
 
 **An urgent message to a member that cannot be steered (decided 2026-11-12).** A
 member's turn may be over while a command it started in the background still runs. A

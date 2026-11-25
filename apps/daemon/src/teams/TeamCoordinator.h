@@ -526,15 +526,16 @@ class TeamCoordinator : public QObject {
     static constexpr int maxStallWakes = 2;
     void setStallPeriod(int milliseconds) { stallPeriod_ = milliseconds; }
     void checkStall(qint64 teamId);
-    // ADR 0114 §8 (TeamCoordinatorWaits.cpp). A leader or developer that waits for something
-    // outside the team says so and is woken after `minutes` to check again. Until then the
+    // ADR 0114 §8 (TeamCoordinatorWaits.cpp). A leader or developer can ask to check again after
+    // `minutes`. A developer waiting on the leader can also notify them immediately. Until then the
     // watchdog leaves it, and the team it keeps waiting, alone. Kept in memory: after a
     // restart the watchdog takes over.
     static constexpr int maxWaitMinutes = 60;
     TeamResult wait(qint64 teamId, const QString& sessionId, int minutes, const QString& reason,
-                    const QString& taskId = {});
+                    const QString& taskId = {},
+                    const QString& waitingOn = QStringLiteral("external"));
     [[nodiscard]] bool isWaiting(const QString& sessionId) const {
-        return waits_.contains(sessionId);
+        return waits_.value(sessionId).timer != nullptr;
     }
     void setWaitMinuteForTesting(int milliseconds) { waitMinuteMs_ = milliseconds; }
     // A message the member sent to `peer`, a conversation outside its team, failed or was
@@ -913,8 +914,12 @@ class TeamCoordinator : public QObject {
         QTimer* timer{nullptr};
         QString reason;
         QString taskId;
+        QString notifiedLeader;
+        // The task's state when the leader was notified: a task that moved on is a new wait.
+        QString taskState;
     };
     void cancelWait(const QString& sessionId);
+    void forgetEndedWait(const QString& sessionId);
     void waitEnded(const QString& sessionId);
     // By member session.
     QHash<QString, Wait> waits_;
