@@ -304,6 +304,26 @@ gone. The answer decides the outcome:
   birth time, or the receipt is missing: unchanged, `needs_attention` with
   `cleanup_unverified`. A reused PID is never signalled.
 
+The ledger accepts this result by evidence kind, not by trusting the status word. A
+native result carrying `cleanup_status=verified` is committed only with
+`cleanup_verification=process_group_empty` (`groupVerified`) or kernel verification;
+`verified` alone on a native job is still refused (`invalid_cleanup_evidence`). The task
+record keeps `cleanup_verification=process_group_empty` and a native `containment_mode`,
+so the weaker assurance is never raised to `cgroup_v2`. A result that could not be
+verified still ends in `needs_attention`.
+
+The supervisor records who stopped it. Its SIGTERM/SIGINT handler (`sigaction`,
+`SA_SIGINFO`) only stores the signal number and the kernel-reported sender PID and UID
+in async-signal-safe variables; the main loop adds `stop_signal`, `stop_sender_pid`,
+`stop_sender_uid` and, when the sender can be inspected, `stop_sender_birth` to the
+receipt and logs them next to `stop_cause=supervisor_termination_requested`.
+
+`process_identity_lost` means the recorded process may still be alive beyond our
+control. The OS reporting the PID gone, or the PID held by another user's process with a
+different birth time (a reused PID), proves the original exited and raises no alarm. An
+unchanged birth under another user, or a PID that cannot be read but still answers
+`kill(pid, 0)`, still blocks as `needs_attention`.
+
 A process that called `setsid` leaves the group, so the group alone cannot see it.
 The supervisor therefore keeps tracking descendants by parentage, signals every
 recorded incarnation, and verifies the group only after they are gone. A child that

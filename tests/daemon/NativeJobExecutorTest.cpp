@@ -571,6 +571,66 @@ class NativeJobExecutorTest final : public QObject {
         QVERIFY(!current || current->birth != root.value("birth").toString() || current->zombie);
     }
 
+    void supervisorRecordsWhichProcessSentTheStopSignal_data() {
+        QTest::addColumn<int>("number");
+        QTest::addColumn<QString>("name");
+        QTest::newRow("SIGTERM") << int(SIGTERM) << QString("SIGTERM");
+        QTest::newRow("SIGINT") << int(SIGINT) << QString("SIGINT");
+    }
+
+    void supervisorRecordsWhichProcessSentTheStopSignal() {
+        QFETCH(int, number);
+        QFETCH(QString, name);
+        Executor executor;
+        QVERIFY(executor.start());
+        executor.execute({"/bin/sleep", "60"});
+        QVERIFY(!executor.receive("running").value("root_identity").toObject().isEmpty());
+        // This test process is a different process from the supervisor: it is the sender.
+        QCOMPARE(kill(pid_t(executor.helper.processId()), number), 0);
+        QTRY_VERIFY_WITH_TIMEOUT(!executor.receipt().value("state").toString().isEmpty(),
+                                 NativeJobLeaseMs + 5000);
+        const auto receipt = executor.receipt();
+        QCOMPARE(receipt.value("stop_cause"), "supervisor_termination_requested");
+        QCOMPARE(receipt.value("stop_signal"), name);
+        QCOMPARE(receipt.value("stop_sender_pid").toInteger(), qint64(getpid()));
+        QCOMPARE(receipt.value("stop_sender_uid").toInteger(), qint64(geteuid()));
+        QCOMPARE(receipt.value("stop_sender_birth").toString(), inspect(getpid())->birth);
+    }
+
+    void vanishedAndReusedPidsAreNotLostButUnchangedForeignBirthIs() {
+        const NativeProcessIdentity known{4242, 1, 4242, "100:1", false};
+        // The OS reports no such process: it exited.
+        QVERIFY(!originalMayBeAlive(known, {ProcessPresence::Gone, {}}, false));
+        // Another user's process holds the PID with a different birth: a reused PID.
+        NativeProcessIdentity reused = known;
+        reused.birth = "200:2";
+        QVERIFY(!originalMayBeAlive(known, {ProcessPresence::Foreign, reused}, true));
+        // Same birth under another user: alive beyond our control, still blocks.
+        QVERIFY(originalMayBeAlive(known, {ProcessPresence::Foreign, known}, true));
+        // Same birth but already a zombie: it exited.
+        NativeProcessIdentity zombie = known;
+        zombie.zombie = true;
+        QVERIFY(!originalMayBeAlive(known, {ProcessPresence::Foreign, zombie}, true));
+        // Unreadable but still signalable: cannot be shown stopped.
+        QVERIFY(originalMayBeAlive(known, {ProcessPresence::Unknown, {}}, true));
+        QVERIFY(!originalMayBeAlive(known, {ProcessPresence::Unknown, {}}, false));
+    }
+
+    void probeTellsOwnedGoneAndForeignProcessesApart() {
+        QCOMPARE(probe(getpid()).presence, ProcessPresence::Owned);
+        QProcess child;
+        child.start("/usr/bin/true");
+        QVERIFY(child.waitForStarted());
+        const auto gone = child.processId();
+        QVERIFY(child.waitForFinished());
+        QCOMPARE(probe(gone).presence, ProcessPresence::Gone);
+        if (geteuid() != 0) {
+            const auto init = probe(1);
+            QCOMPARE(init.presence, ProcessPresence::Foreign);
+            QVERIFY(init.identity && !init.identity->birth.isEmpty());
+        }
+    }
+
     void hungChannelFallsBackToTheLease() {
         Executor executor;
         QVERIFY(executor.start());

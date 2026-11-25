@@ -127,8 +127,17 @@ void NativeJobSupervisor::refreshKnown() {
     for (const auto& identity : previous) {
         const auto current = inspect(identity.pid);
         if (!current || current->birth != identity.birth || current->zombie) {
-            if ((current && current->birth != identity.birth) ||
-                (!current && (kill(pid_t(identity.pid), 0) == 0 || errno != ESRCH))) {
+            // Uninspectable is only an alarm when the original may still be alive beyond our
+            // control. A vanished process, and a PID another user's process reuses (different
+            // birth), prove the original is gone; an unchanged birth under another user means it
+            // lives on with different rights and still blocks.
+            bool lost = current && current->birth != identity.birth;
+            if (!current) {
+                const auto seen = probe(identity.pid);
+                lost = originalMayBeAlive(identity, seen,
+                                          kill(pid_t(identity.pid), 0) == 0 || errno != ESRCH);
+            }
+            if (lost) {
                 cleanupError_ = true;
                 metadata_.insert("cleanup_issue", "process_identity_lost");
                 if (!current)
@@ -185,6 +194,28 @@ void NativeJobSupervisor::refreshKnown() {
     }
     if (changed)
         persist();
+}
+
+// Runs in the main loop, never in the handler: the sender may be inspected and logged here.
+void NativeJobSupervisor::recordStopSender() {
+    const auto stop = supervisorStopSignal();
+    if (stop.signal == 0)
+        return;
+    const QString name = stop.signal == SIGTERM ? "SIGTERM"
+                         : stop.signal == SIGINT ? "SIGINT"
+                                                 : QString::number(stop.signal);
+    metadata_.insert("stop_signal", name);
+    metadata_.insert("stop_sender_pid", stop.senderPid);
+    metadata_.insert("stop_sender_uid", stop.senderUid);
+    QString detail;
+    if (stop.senderPid > 0) {
+        if (const auto sender = inspect(stop.senderPid)) {
+            metadata_.insert("stop_sender_birth", sender->birth);
+            detail = " birth " + sender->birth;
+        }
+    }
+    qInfo("Supervisor for job %s stopped by %s from pid %lld uid %lld%s.", qUtf8Printable(taskId_),
+          qUtf8Printable(name), stop.senderPid, stop.senderUid, qUtf8Printable(detail));
 }
 
 void NativeJobSupervisor::signalKnown(int signal) {
@@ -244,8 +275,10 @@ void NativeJobSupervisor::tick() {
     // Losing the daemon is a reason to stop, not evidence of a leak. Whether
     // anything survived is decided by the OS: the process group (verifyGroupEmpty).
     if (supervisorStopRequested()) {
-        if (stopCause_.isEmpty())
+        if (stopCause_.isEmpty()) {
             stopCause_ = "supervisor_termination_requested";
+            recordStopSender();
+        }
         requestStop("interrupted");
     }
     if (leaseOrChannelExpired())

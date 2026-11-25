@@ -17,11 +17,29 @@
 
 namespace ketplus::daemon::executor {
 namespace {
+// The handler only stores integers; the main loop inspects and logs the sender. The first
+// signal wins, and stopRequested is written last so a reader never sees a half record.
 volatile sig_atomic_t stopRequested = 0;
-void stopSignal(int) { stopRequested = 1; }
+volatile sig_atomic_t stopSignalNumber = 0;
+volatile sig_atomic_t stopSenderPid = 0;
+volatile sig_atomic_t stopSenderUid = 0;
+void stopSignal(int number, siginfo_t* info, void*) {
+    if (stopRequested)
+        return;
+    stopSignalNumber = number;
+    stopSenderPid = info ? sig_atomic_t(info->si_pid) : 0;
+    stopSenderUid = info ? sig_atomic_t(info->si_uid) : 0;
+    stopRequested = 1;
+}
 } // namespace
 
 bool supervisorStopRequested() { return stopRequested != 0; }
+
+SupervisorStopSignal supervisorStopSignal() {
+    if (!stopRequested)
+        return {};
+    return {int(stopSignalNumber), qint64(stopSenderPid), qint64(stopSenderUid)};
+}
 
 NativeJobSupervisor::NativeJobSupervisor(QString directory, QString taskId, QString lease,
                                          QObject* parent)
@@ -144,8 +162,14 @@ bool NativeJobSupervisor::initialize(QString* error) {
     timer_.setInterval(100);
     connect(&timer_, &QTimer::timeout, this, [this] { tick(); });
     timer_.start();
-    signal(SIGTERM, stopSignal);
-    signal(SIGINT, stopSignal);
+    struct sigaction action {};
+    action.sa_sigaction = stopSignal;
+    action.sa_flags = SA_SIGINFO;
+    sigemptyset(&action.sa_mask);
+    sigaddset(&action.sa_mask, SIGTERM);
+    sigaddset(&action.sa_mask, SIGINT);
+    sigaction(SIGTERM, &action, nullptr);
+    sigaction(SIGINT, &action, nullptr);
     signal(SIGPIPE, SIG_IGN); // A pre-exec gate peer may die before the release write.
     return true;
 }

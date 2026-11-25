@@ -17,6 +17,8 @@ void NativeJobSupervisor::linuxTick() {
             QCoreApplication::quit();
         return;
     }
+    if (supervisorStopRequested() && !metadata_.contains("stop_signal"))
+        recordStopSender();
     if (leaseOrChannelExpired() || supervisorStopRequested())
         requestStop("interrupted");
     if (deadline_ > 0 && clock_.elapsed() >= deadline_)

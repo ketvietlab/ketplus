@@ -49,6 +49,9 @@ struct BackgroundTaskChange final {
     std::optional<int> exitCode;
     QString errorCode;
     bool fullScopeVerified{false};
+    // Native: the job process group was verified empty by the OS. Weaker than kernel
+    // verification (fullScopeVerified) and recorded as such.
+    bool groupVerified{false};
     std::optional<qint64> outputSize;
     std::optional<bool> outputTruncated;
 };

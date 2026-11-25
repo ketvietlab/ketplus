@@ -750,6 +750,46 @@ class BackgroundTaskLedgerTest final : public QObject {
         QSqlDatabase::removeDatabase(name);
     }
 
+    void nativeProcessGroupEmptyEvidenceIsAcceptedWithoutKernelAssurance() {
+        const auto name = QUuid::createUuid().toString();
+        {
+            auto db = QSqlDatabase::addDatabase("QSQLITE", name);
+            db.setDatabaseName(":memory:");
+            QVERIFY(db.open());
+            BackgroundTaskLedger ledger(db);
+            QString error;
+            QVERIFY(ledger.initialize(&error));
+            QVERIFY(seedOwner(db));
+            const auto id = taskId(ledger.create(intent()));
+            BackgroundTaskChange change;
+            change.state = "queued";
+            change.permissionApproved = true;
+            QVERIFY(ledger.change(id, 1, change).value("ok").toBool());
+            QCOMPARE(taskId(ledger.claimNext()), id);
+            change = {};
+            change.state = "running";
+            change.handshakeCommitted = true;
+            change.executionIdentity = {{"process_birth_identity", "birth"},
+                                        {"executor_lease_identity", "lease"}};
+            QVERIFY(ledger.change(id, 3, change).value("ok").toBool());
+            // Verified without kernel or process-group evidence is still refused.
+            change = {};
+            change.state = "interrupted";
+            change.cleanupConfirmed = true;
+            change.cleanupStatus = "verified";
+            QCOMPARE(ledger.change(id, 4, change).value("error_code"), "invalid_cleanup_evidence");
+            // An empty process group verified by the OS is accepted for the target state.
+            change.groupVerified = true;
+            const auto task = ledger.change(id, 4, change).value("task").toObject();
+            QCOMPARE(task.value("state"), "interrupted");
+            QCOMPARE(task.value("cleanup_status"), "verified");
+            QCOMPARE(task.value("cleanup_verification"), "process_group_empty");
+            QVERIFY(task.value("containment_mode").toString() != "cgroup_v2");
+            QVERIFY(task.value("reason").toString() != "cleanup_unverified");
+        }
+        QSqlDatabase::removeDatabase(name);
+    }
+
     void paginationIncludesMoreThanSixteenAndRefetchesChangedSnapshot() {
         const auto name = QUuid::createUuid().toString();
         {

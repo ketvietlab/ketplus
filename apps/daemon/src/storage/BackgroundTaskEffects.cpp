@@ -53,6 +53,8 @@ QJsonObject BackgroundTaskLedger::applyTransition(const QString& id, QJsonObject
         record.insert("cleanup_status", "pending");
     if (!change.cleanupStatus.isEmpty())
         record.insert("cleanup_status", change.cleanupStatus);
+    if (change.groupVerified && change.cleanupStatus == "verified")
+        record.insert("cleanup_verification", "process_group_empty");
     if (change.state == "needs_attention") {
         record.insert("cleanup_status", "unverified");
         record.insert("reason", "cleanup_unverified");

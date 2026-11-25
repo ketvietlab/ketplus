@@ -26,37 +26,65 @@ QJsonObject NativeProcessIdentity::json() const {
     return {{"pid", pid}, {"parent_pid", parent}, {"process_group", group}, {"birth", birth}};
 }
 
-std::optional<NativeProcessIdentity> inspect(qint64 pid) {
+ProcessProbe probe(qint64 pid) {
     if (pid <= 0 || pid > std::numeric_limits<pid_t>::max())
         return {};
 #ifdef Q_OS_MACOS
     proc_bsdinfo info{};
-    if (proc_pidinfo(int(pid), PROC_PIDTBSDINFO, 0, &info, sizeof(info)) != int(sizeof(info)) ||
-        info.pbi_uid != geteuid())
-        return {};
-    return NativeProcessIdentity{pid, info.pbi_ppid, info.pbi_pgid,
-                                 QString::number(info.pbi_start_tvsec) + ":" +
-                                     QString::number(info.pbi_start_tvusec),
-                                 info.pbi_status == SZOMB};
+    errno = 0;
+    if (proc_pidinfo(int(pid), PROC_PIDTBSDINFO, 0, &info, sizeof(info)) != int(sizeof(info)))
+        return {errno == ESRCH ? ProcessPresence::Gone : ProcessPresence::Unknown, {}};
+    NativeProcessIdentity identity{pid, info.pbi_ppid, info.pbi_pgid,
+                                   QString::number(info.pbi_start_tvsec) + ":" +
+                                       QString::number(info.pbi_start_tvusec),
+                                   info.pbi_status == SZOMB};
+    return {info.pbi_uid == geteuid() ? ProcessPresence::Owned : ProcessPresence::Foreign,
+            identity};
 #elif defined(Q_OS_LINUX)
     const auto path = "/proc/" + QString::number(pid);
-    if (QFileInfo(path).ownerId() != geteuid())
-        return {};
+    const QFileInfo directory(path);
+    if (!directory.exists())
+        return {ProcessPresence::Gone, {}};
+    const bool owned = directory.ownerId() == geteuid();
     QFile stat(path + "/stat"), boot("/proc/sys/kernel/random/boot_id");
     if (!stat.open(QIODevice::ReadOnly) || !boot.open(QIODevice::ReadOnly))
-        return {};
+        return {owned ? ProcessPresence::Unknown : ProcessPresence::Foreign, {}};
     const auto bytes = stat.read(8192);
     const auto close = bytes.lastIndexOf(')');
     const auto fields = bytes.mid(close + 2).simplified().split(' ');
     if (close < 0 || fields.size() < 20 || fields[19].isEmpty())
         return {};
-    return NativeProcessIdentity{pid, fields[1].toLongLong(), fields[2].toLongLong(),
-                                 QString::fromLatin1(boot.read(128).trimmed()) + ':' +
-                                     QString::fromLatin1(fields[19]),
-                                 fields[0] == "Z"};
+    NativeProcessIdentity identity{pid, fields[1].toLongLong(), fields[2].toLongLong(),
+                                   QString::fromLatin1(boot.read(128).trimmed()) + ':' +
+                                       QString::fromLatin1(fields[19]),
+                                   fields[0] == "Z"};
+    return {owned ? ProcessPresence::Owned : ProcessPresence::Foreign, identity};
 #else
     return {};
 #endif
+}
+
+bool originalMayBeAlive(const NativeProcessIdentity& known, const ProcessProbe& seen,
+                        bool existsByKill) {
+    switch (seen.presence) {
+    case ProcessPresence::Gone:
+        return false;
+    case ProcessPresence::Foreign:
+        if (seen.identity)
+            return seen.identity->birth == known.birth && !seen.identity->zombie;
+        return existsByKill;
+    case ProcessPresence::Owned:
+    case ProcessPresence::Unknown:
+        break;
+    }
+    return existsByKill;
+}
+
+std::optional<NativeProcessIdentity> inspect(qint64 pid) {
+    auto result = probe(pid);
+    if (result.presence != ProcessPresence::Owned)
+        return {};
+    return result.identity;
 }
 
 namespace {

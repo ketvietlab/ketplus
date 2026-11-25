@@ -18,6 +18,22 @@ struct NativeProcessIdentity final {
 };
 
 [[nodiscard]] std::optional<NativeProcessIdentity> inspect(qint64 pid);
+// Why inspect() found nothing. Owned: inspect() succeeds. Gone: the OS reports no such
+// process. Foreign: a process of another user holds the PID (identity carries its birth, so
+// a reused PID is told apart from the original that changed user). Unknown: cannot tell.
+enum class ProcessPresence { Owned, Gone, Foreign, Unknown };
+struct ProcessProbe final {
+    ProcessPresence presence{ProcessPresence::Unknown};
+    std::optional<NativeProcessIdentity> identity;
+};
+[[nodiscard]] ProcessProbe probe(qint64 pid);
+// Whether a recorded process that inspect() can no longer read may still be alive beyond our
+// control. Gone, or a PID that another user's process reuses (a different birth), proves the
+// original exited; an unchanged birth under another user, or an unreadable PID that kill(0)
+// still reports, cannot be shown stopped and stays an alarm (process_identity_lost).
+// existsByKill: kill(pid, 0) did not fail with ESRCH.
+[[nodiscard]] bool originalMayBeAlive(const NativeProcessIdentity& known, const ProcessProbe& seen,
+                                      bool existsByKill);
 [[nodiscard]] QList<qint64> children(qint64 pid, bool* complete);
 [[nodiscard]] QList<qint64> groupMembers(qint64 group, bool* complete);
 enum class GroupState { Empty, Occupied, Unknown };

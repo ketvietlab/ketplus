@@ -16,6 +16,14 @@
 class QSocketNotifier;
 
 namespace ketplus::daemon::executor {
+// Who asked the supervisor to stop: the signal and the sender the kernel reported.
+struct SupervisorStopSignal final {
+    int signal{0}; // 0: none received
+    qint64 senderPid{0};
+    qint64 senderUid{0};
+};
+[[nodiscard]] SupervisorStopSignal supervisorStopSignal();
+
 class NativeJobSupervisor final : public QObject {
   public:
     NativeJobSupervisor(QString directory, QString taskId, QString lease,
@@ -38,6 +46,7 @@ class NativeJobSupervisor final : public QObject {
     void drainOutput();
     void refreshKnown();
     void signalKnown(int signal);
+    void recordStopSender();
     void requestStop(const QString& reason);
     void tick();
     void linuxTick();
