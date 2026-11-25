@@ -168,8 +168,10 @@ void NativeJobClient::connectSocket() {
 void NativeJobClient::connectVerified(const QJsonObject& record) {
     const auto self = record.value("supervisor_identity").toObject();
     const auto identity = inspect(self.value("pid").toInteger());
-    if (!identity || identity->birth != self.value("birth").toString() || identity->zombie)
+    if (!identity || identity->birth != self.value("birth").toString() || identity->zombie) {
+        supervisorGone(record);
         return;
+    }
     lastReceipt_ = record;
     socket_.connectToServer(controlAddress(directory_, lease_));
 }
@@ -181,14 +183,24 @@ void NativeJobClient::channelClosed() {
     authenticated_ = false;
     if (acknowledged_ || !timer_.isActive())
         return;
-    const auto record = receipt();
+    if (supervisorGone(receipt()))
+        QTimer::singleShot(0, this, [this] { tick(); });
+}
+
+// True only for a recorded supervisor identity that is verifiably gone (exited, or its
+// PID now has another birth). A missing receipt is not evidence of anything.
+bool NativeJobClient::supervisorGone(const QJsonObject& record) {
     const auto self = record.value("supervisor_identity").toObject();
+    if (self.isEmpty())
+        return false;
     const auto identity = inspect(self.value("pid").toInteger());
     const bool alive =
         identity && identity->birth == self.value("birth").toString() && !identity->zombie;
-    if (!alive && !self.isEmpty() && clock_.elapsed() - lastMessage_ < NativeJobLeaseMs + 500)
-        lastMessage_ = clock_.elapsed() - NativeJobLeaseMs - 500;
-    QTimer::singleShot(0, this, [this] { tick(); });
+    if (alive)
+        return false;
+    // Skip the silence window: recovery may start now.
+    lastMessage_ = qMin(lastMessage_, clock_.elapsed() - NativeJobLeaseMs - 500);
+    return true;
 }
 
 void NativeJobClient::send(const QJsonObject& message) {

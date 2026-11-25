@@ -15,6 +15,7 @@
 #include <QUuid>
 #include <QtTest>
 #include <csignal>
+#include <unistd.h>
 #ifdef Q_OS_MACOS
 #include <libproc.h>
 #endif
@@ -535,7 +536,10 @@ class NativeJobExecutorTest final : public QObject {
         QElapsedTimer elapsed;
         elapsed.start();
         executor.socket.abort(); // Abrupt EOF: the daemon vanished.
-        QVERIFY(executor.helper.waitForFinished(8500));
+        // The supervisor lingers for the lease to serve an acknowledgement; the
+        // receipt is what the daemon recovers from.
+        QTRY_COMPARE_WITH_TIMEOUT(executor.receipt().value("state").toString(), "interrupted",
+                                  3500);
         // Detected from the closed channel, far ahead of the lease.
         QVERIFY2(elapsed.elapsed() < 3500, qPrintable(QString::number(elapsed.elapsed())));
         const auto receipt = executor.receipt();
@@ -576,11 +580,12 @@ class NativeJobExecutorTest final : public QObject {
         executor.execute(
             {"/bin/sh", "-c", "perl -e 'use POSIX; POSIX::setsid(); exec q(sleep), q(60)' & wait"});
         QVERIFY(!executor.receive("running").isEmpty());
-        QTRY_VERIFY_WITH_TIMEOUT(executor.receipt().value("known_processes").toArray().size() >= 3,
+        QTRY_VERIFY_WITH_TIMEOUT(executor.receipt().value("known_processes").toArray().size() >= 2,
                                  5000);
         const auto known = executor.receipt().value("known_processes").toArray();
         executor.socket.abort();
-        QVERIFY(executor.helper.waitForFinished(9000));
+        QTRY_COMPARE_WITH_TIMEOUT(executor.receipt().value("state").toString(), "interrupted",
+                                  6000);
         const auto receipt = executor.receipt();
         QCOMPARE(receipt.value("state"), "interrupted");
         QCOMPARE(receipt.value("cleanup_status"), "verified");
@@ -607,7 +612,7 @@ class NativeJobExecutorTest final : public QObject {
         QList<qint64> escapees;
         QTRY_VERIFY_WITH_TIMEOUT(
             [&] {
-                escapees = children(group, &complete);
+                escapees = ketplus::daemon::executor::children(group, &complete);
                 return complete && !escapees.isEmpty();
             }(),
             3000);

@@ -35,6 +35,7 @@ class NativeJobClient final : public QObject {
     void tick();
     void recoverLostSupervisor();
     void channelClosed();
+    bool supervisorGone(const QJsonObject& record);
     void reportLost(bool stopped, const QString& issue);
     // A supervisor that left neither a receipt nor a control socket: no workload exists.
     void reportNeverStarted();
