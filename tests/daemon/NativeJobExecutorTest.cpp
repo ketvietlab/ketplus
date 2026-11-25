@@ -777,7 +777,8 @@ class NativeJobExecutorTest final : public QObject {
         QTRY_VERIFY_WITH_TIMEOUT(!done.isEmpty(), 10000);
         // EOF started recovery at once; the lease-length silence window was not needed,
         // and only the named settle window delays the report.
-        QVERIFY2(elapsed.elapsed() < NativeJobRecoverySettleMs + 1000, qPrintable(QString::number(elapsed.elapsed())));
+        QVERIFY2(elapsed.elapsed() < NativeJobRecoverySettleMs + 1000,
+                 qPrintable(QString::number(elapsed.elapsed())));
         QCOMPARE(done.value("state"), "interrupted");
         QCOMPARE(done.value("cleanup_status"), "verified");
         const auto current = inspect(root.value("pid").toInteger());
@@ -798,6 +799,21 @@ class NativeJobExecutorTest final : public QObject {
         QCOMPARE(process.state(), QProcess::Running);
         process.kill();
         QVERIFY(process.waitForFinished());
+    }
+
+    // A member that belongs to another user cannot be signalled: the refusal is reported, not
+    // forced, and nothing is sent to it (signal 0 only probes). A real foreign-uid group
+    // member needs a second account, so this holds at unit level with a process the user does
+    // not own (pid 1).
+    void aProcessOfAnotherUserIsNeverSignalled() {
+        if (geteuid() == 0)
+            QSKIP("Root may signal any process");
+        const auto init = inspect(1);
+        if (!init)
+            QSKIP("Process 1 cannot be inspected here");
+        QString error;
+        QVERIFY(!signalIdentity(*init, 0, &error));
+        QVERIFY(!error.isEmpty());
     }
 };
 

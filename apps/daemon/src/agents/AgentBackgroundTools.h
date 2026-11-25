@@ -99,8 +99,8 @@ inline QJsonArray tools() {
              "Read authoritative metadata and completion delivery status for one owned job.",
              object({{"task_id", taskId}}, {"task_id"})),
         tool("background_task_stop",
-             "Cancel only this owned job. Repeated Stop is safe; stopping remains pending "
-             "until cleanup is confirmed. This does not stop the owner's foreground turn.",
+             "Cancel only this owned job. Repeated Stop is safe; the job stays stopping "
+             "until it has ended. This does not stop the owner's foreground turn.",
              object({{"task_id", taskId}}, {"task_id"})),
         tool("background_task_output",
              "Read at most 8 KiB of untrusted task output per call. "

@@ -224,9 +224,13 @@ job and the daemon finishes it.
    `cleanup_verification=process_group_empty`.
 3. When the window elapses, or when the executor can no longer be reached at all (receipt
    missing, executor identity invalid, reconnect failed, result not committable), the
-   daemon ends the job at its target state (`interrupted` unless a stop already named
-   another) with `cleanup_status=best_effort_complete`, logs a warning and records the
+   daemon ends the job at its target state with `cleanup_status=best_effort_complete`, logs a warning and records the
    unconfirmed issue in `managed_job_diagnostics(task_id, revision, issue, recorded_at)`.
+   The target state follows the real outcome: when the executor reported that the command
+   ran to an exit (`completed` for exit 0, `failed` otherwise), that state is kept and the
+   unconfirmed cleanup is recorded in the diagnostics only. The job is `interrupted` only
+   when no real result exists (the executor was lost before reporting one), and a stop
+   already in progress keeps the state it named (`cancelled`, `timed_out`).
    That table and the log are the internal diagnostics (daemon log, `ketplusctl`); the
    task record, the notices, the agent tools and the UI carry no cleanup wording.
 4. **Slot and resource policy.** The terminal transition releases the execution slot and

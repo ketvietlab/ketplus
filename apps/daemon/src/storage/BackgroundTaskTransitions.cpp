@@ -82,7 +82,12 @@ QJsonObject BackgroundTaskLedger::changeImpl(const QString& id, qint64 expectedR
     else if (change.state == "needs_attention")
         allowed = false; // Retired: the daemon settles cleanup itself and always ends the job.
     else if (change.state == "completed")
-        allowed = previous == "running" && change.cleanupConfirmed;
+        // From stopping only when the daemon kept a real exit-0 result whose cleanup it could
+        // not confirm (ADR 0127 4a).
+        allowed =
+            change.cleanupConfirmed &&
+            (previous == "running" ||
+             (previous == "stopping" && record.value("terminal_target").toString() == "completed"));
     else if (change.state == "failed") {
         const bool prelaunchFailure = change.reason == "permission_denied" ||
                                       change.reason == "spawn_failed" ||
