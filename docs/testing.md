@@ -2426,6 +2426,42 @@ briefing at 4,096 bytes, and the context reset suite covers multibyte
 truncation. Live request counts and context measurements require a separate
 provider usage sample.
 
+### Post-reset measurement after the richer briefing
+
+Measured on 2026-11-25 with the method above, on local Claude JSONL
+transcripts written after the richer briefing merged (2026-11-23 20:21 UTC).
+The measurement reads existing transcripts only and consumes no provider quota.
+
+**Main result: the Team Improve v2 sample.** At measurement time only one
+reset segment existed among its members; the others had not reset yet. The
+sample is therefore too small to support a conclusion.
+
+| Metric | Segments | Value |
+| --- | ---: | ---: |
+| Requests observed | 1 | 13 |
+| Discovery requests among the first 20 | 1 | 1 |
+| Input context tokens at request #10 | 1 | 55,770 |
+| Input context tokens at request #20 | 0 | not reached |
+
+Remeasure once the team has accumulated at least five reset segments that
+reached request #20, and replace this table.
+
+**Reference only: all other post-merge resets on the same machine.** These
+187 segments come from many teams and projects and are not Team Improve's
+sample. Whether each ran a build that included the richer briefing could not
+be verified, so do not read them as an effect of the briefing.
+
+| Metric | Segments | Median | Range |
+| --- | ---: | ---: | ---: |
+| Discovery requests among the first 20 | 187 | 1 | 0–7 |
+| Input context tokens at request #10 | 159 | 65,972 | 35,398–133,667 |
+| Input context tokens at request #20 | 126 | 81,337 | 55,935–164,230 |
+
+The reference set recorded 231 qualifying discovery requests. Discovery
+medians match the offline baseline (1); the baseline's extreme context
+values above 300,000 tokens do not appear. Without a matched before and after
+sample this is not evidence of improvement.
+
 ## English chrome and multilingual team content (T30)
 
 See [the inventory](team-content-language.md). Run `ketplus_team_page_language_tests`,
