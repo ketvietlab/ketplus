@@ -340,6 +340,54 @@ class TeamWaitTest final : public QObject {
         QCOMPARE(host_.messages.size(), 1);
     }
 
+    // T-12: the leader's wait is dropped when a turn reached the leader after it was set.
+    void aLeadersWaitEndsQuietlyWhenAnotherTurnReachedTheLeaderMeanwhile() {
+        teams_->setQuietPeriod(5);
+        const QString id = inProgress();
+        QVERIFY(teams_->wait(team_, "lead", 5, "the build").ok());
+        QVERIFY(teams_->moveTask(team_, id, state::blocked, "dev1", "Which endpoint?").ok());
+        QTRY_COMPARE_WITH_TIMEOUT(kinds(), QStringList{"digest>lead"}, 2000);
+        QTest::qWait(150);
+        QCOMPARE(kinds(), QStringList{"digest>lead"});
+        QVERIFY(!teams_->isWaiting("lead"));
+    }
+
+    // T-12: a turn that is only held while the team is paused did not reach the leader, so the
+    // leader's wait still ends with its own turn (held as well).
+    void aHeldWakeDoesNotDropALeadersWait() {
+        const QString id = inProgress();
+        QVERIFY(teams_->wait(team_, "lead", 5, "the build").ok());
+        QVERIFY(teams_->update(team_, {{"paused", true}}, "user").ok());
+        QVERIFY(teams_->wait(team_, "dev1", 30, "an answer", id, "leader").ok());
+        QTRY_VERIFY_WITH_TIMEOUT(!teams_->isWaiting("lead"), 2000);
+        QStringList held;
+        for (const QJsonValue& value : team().held)
+            held.append(value.toObject().value("kind").toString() + ">" +
+                        value.toObject().value("to").toString());
+        QVERIFY2(held.contains("waiting_for_leader>lead"), qPrintable(held.join(",")));
+        QVERIFY2(held.contains("wait>lead"), qPrintable(held.join(",")));
+        QVERIFY(host_.messages.isEmpty());
+    }
+
+    // T-12: nothing changed in the team, so the wait moves once and ends with the turn.
+    void aLeadersWaitOnAnUnchangedTeamIsMovedOnce() {
+        (void)inProgress();
+        QVERIFY(teams_->wait(team_, "lead", 5, "the build").ok());
+        QTest::qWait(80);
+        QVERIFY2(host_.messages.isEmpty(), "The first end of an unchanged wait starts no turn.");
+        QVERIFY(teams_->isWaiting("lead"));
+        QTRY_COMPARE_WITH_TIMEOUT(kinds(), QStringList{"wait>lead"}, 2000);
+    }
+
+    // T-12: a developer's wait keeps waking its member, whatever reached the leader.
+    void aDevelopersWaitIsNotDroppedByALeaderWake() {
+        const QString id = inProgress();
+        QVERIFY(teams_->wait(team_, "dev1", 5, "CI", id).ok());
+        QVERIFY(teams_->wait(team_, "dev2", 5, "a device").ok());
+        QTRY_VERIFY_WITH_TIMEOUT(kinds().contains("wait>dev1") && kinds().contains("wait>dev2"),
+                                 2000);
+    }
+
     void aFailedMessageOutsideTheTeamWakesItsSender() {
         (void)inProgress();
         const int turns = team().automaticTurns;

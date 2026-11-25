@@ -416,6 +416,8 @@ class TeamDigestActorTest final : public QObject {
             // dev2 keeps a task, so only dev1 runs out of work.
             const QString other = newTask("Billing", "dev2");
             QVERIFY(teams_->moveTask(team_, other, state::inProgress, "dev2").ok());
+            // T-12: an idle developer needs the leader while a task waits to be handed out.
+            QVERIFY(!newTask("Search", "").isEmpty());
         } else if (what == "merge") {
             // dev1 keeps a task; Billing waits for Cart, reviewed and ready.
             QVERIFY(!newTask("Search", "dev1").isEmpty());
@@ -439,6 +441,51 @@ class TeamDigestActorTest final : public QObject {
         const QStringList closed = linesWith(body, "closed by");
         QCOMPARE(closed.size(), 1);
         QVERIFY2(!closed.first().contains("[needs you]"), qPrintable(body));
+    }
+
+    // T-12: an idle developer is recorded either way, but wakes the leader only when there is a
+    // task to hand out.
+    void anIdleDeveloperWakesTheLeaderOnlyWhenThereIsWorkToHandOut_data() {
+        QTest::addColumn<bool>("workLeft");
+        QTest::newRow("a todo task nobody owns") << true;
+        QTest::newRow("nothing left to hand out") << false;
+    }
+    void anIdleDeveloperWakesTheLeaderOnlyWhenThereIsWorkToHandOut() {
+        QFETCH(bool, workLeft);
+        const QString id = newTask("Cart", "dev1");
+        QVERIFY(teams_->moveTask(team_, id, state::inProgress, "dev1").ok());
+        if (workLeft)
+            QVERIFY(!newTask("Search", "").isEmpty());
+        settle();
+        QVERIFY(teams_->moveTask(team_, id, state::inReview, "dev1").ok());
+        leaderTurnEnds();
+        bool recorded = false;
+        bool actionable = false;
+        for (const auto& value : teams_->updatesJson(team_)) {
+            const QJsonObject update = value.toObject();
+            if (update.value("kind").toString() == "idle_developer") {
+                recorded = true;
+                actionable = update.value("actionable").toBool();
+            }
+        }
+        QVERIFY(recorded);
+        QCOMPARE(actionable, workLeft);
+        const QString body = digestTo("lead");
+        QCOMPARE(!body.isEmpty(), workLeft);
+        if (workLeft)
+            QVERIFY(linesWith(body, "has no task left").first().contains("[needs you]"));
+        if (!workLeft) {
+            // The quiet line rides along with the next digest that has something to act on.
+            const QString other = newTask("Billing", "dev2");
+            QVERIFY(teams_->moveTask(team_, other, state::inProgress, "dev2").ok());
+            QVERIFY(teams_->moveTask(team_, other, state::blocked, "dev2", "Which endpoint?").ok());
+            leaderTurnEnds();
+            const QString next = digestTo("lead");
+            QVERIFY2(next.contains("Which endpoint?"), qPrintable(next));
+            const QStringList idle = linesWith(next, "has no task left");
+            QVERIFY2(!idle.isEmpty(), qPrintable(next));
+            QVERIFY2(!idle.first().contains("[needs you]"), qPrintable(next));
+        }
     }
 
     // Criterion 3, a merge seen outside the app is the daemon's.

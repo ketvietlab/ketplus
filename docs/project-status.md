@@ -151,7 +151,11 @@ Linux store policy, signed upgrade prompts and platform release acceptance remai
   team and be woken to check; a build runs as a managed background job instead, whose
   wake ends that wait and keeps the watchdog off the member (ADR 0127 §7a). A member's message to a conversation outside the team
   that failed or was never answered wakes that member (message kinds `wait` and
-  `message_failed`). Waits are in memory only; neither has run on a live team yet.
+  `message_failed`). A leader's wait ends without a turn when another turn was delivered to
+  the leader after it was set (it is not re-armed: the leader calls `team_wait` again if it
+  still waits), and moves once when the team did not change; `idle_developer` wakes the
+  leader only while a task is left to hand out (ADR 0114 §7, T-12). Waits are in memory
+  only; neither has run on a live team yet.
   Disk and done worktrees (ADR 0114 §10, `teams.storage/1`): the team page warns below
   20 GB free and says builds should stop below 12 GB, naming the free space; nothing is
   paused or removed on its own. It lists each done task's worktree still on disk with its
