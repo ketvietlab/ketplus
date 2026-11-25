@@ -18,12 +18,11 @@ inline const QString cacheCold = QStringLiteral("cache_cold");
 inline constexpr qint64 minimumColdContextTokens = 50000;
 // The most a briefing takes of the first prompt after a reset.
 inline constexpr qsizetype maximumBriefingBytes = 4096;
-inline constexpr qsizetype briefingOpenTasks = 20;
 inline constexpr qsizetype briefingHistory = 5;
 
 // The task a turn the team starts for `member` is about: `hint` (what the team's message
 // named) when it is one of the team's, else the developer's task in progress or the task the
-// reviewer reviews now. Empty for the leader, who works across tasks.
+// reviewer reviews now. Empty for the leader, who works across tasks and is never reset.
 [[nodiscard]] QString memberTask(const Team& team, const Member& member, const QString& hint);
 
 // Whether that turn starts a fresh context: the reason (taskChanged, thresholdReached,
@@ -41,8 +40,8 @@ inline constexpr qsizetype briefingHistory = 5;
 [[nodiscard]] bool cacheWentCold(const Team& team, const ThreadActivity& activity);
 
 // The briefing, at most maximumBriefingBytes of UTF-8: the goal, the member's role and lane,
-// its task (state, round, criteria and the last history entries) or, for the leader, the
-// first open tasks, and where to read more.
+// its task (state, round, criteria and the last history entries), and where to read more.
+// Only for developers and reviewers: the leader is never reset.
 [[nodiscard]] QString briefing(const Team& team, const Member& member, const QString& task);
 
 } // namespace ketplus::daemon::teams::context_reset

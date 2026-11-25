@@ -132,10 +132,51 @@ class TeamContextResetTest final : public QObject {
         QCOMPARE(reason("dev1", first_, "thread-a", 2), QString{});
         QCOMPARE(reason("dev1", first_, "thread-a", 13), QString{});
         QCOMPARE(reason("dev1", first_, "thread-a", 14), QStringLiteral("threshold"));
-        // The leader works across tasks: only the threshold applies.
-        QCOMPARE(reason("lead", first_, "lead-thread", 1), QString{});
-        QCOMPARE(reason("lead", second_, "lead-thread", 2), QString{});
-        QCOMPARE(reason("lead", second_, "lead-thread", 13), QStringLiteral("threshold"));
+        // The leader is never reset (ADR 0114 §11 as amended), and keeps no mark.
+        for (const qint64 turn : {1, 2, 13, 14, 500})
+            QCOMPARE(reason("lead", turn % 2 ? first_ : second_, "lead-thread", turn), QString{});
+        QVERIFY(!team().contexts.contains("lead"));
+    }
+
+    // The decision itself, for every policy and idle: no reason for the leader, and the same
+    // rules as before for the developer and the reviewer.
+    void theLeaderIsNeverResetUnderAnyPolicy() {
+        const auto cold = activity(5000, 900000);
+        for (const QString& policy : QStringList{"never", "threshold", "task_and_threshold"}) {
+            QVERIFY(teams_->update(team_, {{"context_reset", policy}}, "user").ok());
+            QVERIFY(teams_->update(team_, {{"context_reset_tokens", 1000}}, "user").ok());
+            for (const qint64 turn : {1, 2, 40}) {
+                const QString thread = QStringLiteral("t-%1").arg(policy);
+                QVERIFY2(!teams_->planContextReset("lead", second_, thread, turn, cold),
+                         qPrintable(policy));
+            }
+            QVERIFY(!team().contexts.contains("lead"));
+        }
+        // Directly, through decide: a mark the leader already holds is neither used nor changed.
+        const Member& lead = *team().member("lead");
+        std::optional<ContextMark> mark = ContextMark{.task = first_, .thread = "old", .since = 0};
+        const auto stored = mark;
+        QCOMPARE(context_reset::decide(team(), lead, mark, second_, "old", 900, cold), QString{});
+        QCOMPARE(mark, stored);
+        std::optional<ContextMark> none;
+        QCOMPARE(context_reset::decide(team(), lead, none, second_, "new", 900, cold), QString{});
+        QVERIFY(!none);
+        // The other roles are unchanged.
+        QVERIFY(teams_->update(team_, {{"context_reset", "task_and_threshold"}}, "user").ok());
+        QCOMPARE(coldReason("dev1", first_, "d", 1, cold), QString{});
+        QVERIFY(!coldReason("dev1", first_, "d", 2, cold).isEmpty());
+        QCOMPARE(coldReason("rev", first_, "r", 1, cold), QString{});
+        QVERIFY(!coldReason("rev", first_, "r", 2, cold).isEmpty());
+    }
+
+    // A team document saved before the amendment holds a mark of the leader: it reads, and is
+    // ignored.
+    void aStoredLeaderMarkIsIgnored() {
+        Team stored = team();
+        stored.contexts.insert("lead", {.task = first_, .thread = "old", .since = 0});
+        const Team read = teamFromJson(toJson(stored));
+        QVERIFY(read.contexts.contains("lead"));
+        QCOMPARE(reason("lead", second_, "old", 900), QString{});
     }
 
     void aReviewerStartsFreshForAnotherReview() {
@@ -203,26 +244,26 @@ class TeamContextResetTest final : public QObject {
     }
 
     void sizeThresholdUsesTheLastReportedRequest() {
-        QCOMPARE(coldReason("lead", first_, "size-thread", 1, activity(0, 150000)), QString{});
-        QCOMPARE(coldReason("lead", first_, "size-thread", 2, activity(0, 149999)), QString{});
-        QCOMPARE(coldReason("lead", first_, "size-thread", 2, activity(0, 150000)),
+        QCOMPARE(coldReason("dev1", first_, "size-thread", 1, activity(0, 150000)), QString{});
+        QCOMPARE(coldReason("dev1", first_, "size-thread", 2, activity(0, 149999)), QString{});
+        QCOMPARE(coldReason("dev1", first_, "size-thread", 2, activity(0, 150000)),
                  QStringLiteral("context_size"));
         QVERIFY(!teams_->update(team_, {{"context_reset_tokens", 5.5}}, "user").ok());
         QVERIFY(teams_->update(team_, {{"context_reset_tokens", 200000}}, "user").ok());
-        QCOMPARE(coldReason("lead", first_, "size-thread", 2, activity(0, 150000)), QString{});
-        QCOMPARE(coldReason("lead", first_, "size-thread", 2, activity(0, 200000)),
+        QCOMPARE(coldReason("dev1", first_, "size-thread", 2, activity(0, 150000)), QString{});
+        QCOMPARE(coldReason("dev1", first_, "size-thread", 2, activity(0, 200000)),
                  QStringLiteral("context_size"));
         load();
         QCOMPARE(team().contextResetTokens, 200000);
         QVERIFY(teams_->update(team_, {{"context_reset_tokens", 0}}, "user").ok());
-        QCOMPARE(coldReason("lead", first_, "size-thread", 2, activity(0, 200000)), QString{});
+        QCOMPARE(coldReason("dev1", first_, "size-thread", 2, activity(0, 200000)), QString{});
     }
 
     // T-10: a member woken after its thread rested an hour, with a large context, starts fresh
     // for any role. The first sight of a thread only records it.
     void aColdCacheStartsEveryRoleFresh() {
         const auto cold = activity(61, 60000);
-        for (const QString& session : QStringList{"lead", "dev1", "rev"}) {
+        for (const QString& session : QStringList{"dev1", "rev"}) {
             const QString thread = session + "-thread";
             QCOMPARE(coldReason(session, first_, thread, 1, cold), QString{});
             const auto planned = teams_->planContextReset(session, first_, thread, 2, cold);
@@ -235,9 +276,9 @@ class TeamContextResetTest final : public QObject {
     // Both must hold: an idle at least the team's setting, and a known context of 50,000
     // tokens or more.
     void aColdCacheNeedsTheIdleAndTheSize() {
-        QCOMPARE(coldReason("lead", first_, "t", 1, activity(90, 90000)), QString{});
+        QCOMPARE(coldReason("dev1", first_, "t", 1, activity(90, 90000)), QString{});
         const auto reasonFor = [&](const qint64 minutes, const qint64 tokens) {
-            return coldReason("lead", first_, "t", 2, activity(minutes, tokens));
+            return coldReason("dev1", first_, "t", 2, activity(minutes, tokens));
         };
         QCOMPARE(reasonFor(60, 50000), QStringLiteral("cache_cold"));
         QCOMPARE(reasonFor(59, 90000), QString{});
@@ -247,8 +288,8 @@ class TeamContextResetTest final : public QObject {
         QCOMPARE(reasonFor(90, -1), QString{});
         auto unknownEnd = activity(90, 90000);
         unknownEnd.lastTurnEnded = {};
-        QCOMPARE(coldReason("lead", first_, "t", 2, unknownEnd), QString{});
-        QCOMPARE(coldReason("lead", first_, "t", 2, {}), QString{});
+        QCOMPARE(coldReason("dev1", first_, "t", 2, unknownEnd), QString{});
+        QCOMPARE(coldReason("dev1", first_, "t", 2, {}), QString{});
         // The team's own setting is the idle.
         QVERIFY(teams_->update(team_, {{"context_reset_idle_minutes", 5}}, "user").ok());
         QCOMPARE(reasonFor(5, 60000), QStringLiteral("cache_cold"));
@@ -268,8 +309,8 @@ class TeamContextResetTest final : public QObject {
         QVERIFY(teams_->update(team_, {{"context_reset_idle_minutes", 60}}, "user").ok());
         QVERIFY(teams_->update(team_, {{"context_reset", "never"}}, "user").ok());
         QCOMPARE(coldReason("dev1", first_, "t", 2, cold), QString{});
-        QCOMPARE(coldReason("lead", first_, "t2", 1, cold), QString{});
-        QCOMPARE(coldReason("lead", first_, "t2", 2, cold), QString{});
+        QCOMPARE(coldReason("dev1", first_, "t2", 1, cold), QString{});
+        QCOMPARE(coldReason("dev1", first_, "t2", 2, cold), QString{});
         QVERIFY(teams_->update(team_, {{"context_reset", "threshold"}}, "user").ok());
         QCOMPARE(coldReason("dev1", first_, "t", 2, cold), QStringLiteral("cache_cold"));
     }
@@ -374,23 +415,8 @@ class TeamContextResetTest final : public QObject {
         QVERIFY(brief.contains("more characters)"));
     }
 
-    void theLeaderBriefingListsAtMostTwentyOpenTasks() {
-        Team big = team();
-        for (int index = 0; index < 25; ++index)
-            big.tasks.append({.id = QStringLiteral("X-%1").arg(index),
-                              .title = QStringLiteral("Open %1").arg(index)});
-        big.tasks.first().state = state::done;
-        const QString text = context_reset::briefing(big, *big.member("lead"), {});
-        QVERIFY(text.toUtf8().size() <= context_reset::maximumBriefingBytes);
-        QVERIFY(text.contains("Open tasks (26):"));
-        QCOMPARE(text.count(QStringLiteral("\n- ")), 21);
-        QVERIFY(text.contains("… 6 more"));
-        QVERIFY(!text.contains(QStringLiteral("%1 \"First\"").arg(first_)));
-    }
-
-    // Through the daemon: the leader's team turns start fresh past the threshold, with the
-    // transcript note and the briefing; the user's turns never do.
-    void theLeaderStartsFreshPastTheThresholdButNotForTheUser() {
+    // Through the daemon: the leader's team turns never start fresh, however many.
+    void theLeaderKeepsItsThreadPastTheThreshold() {
         agent_test::Fixture fixture;
         QVERIFY(fixture.open());
         const auto command = [&](const QString& type, const QJsonObject& payload) {
@@ -438,47 +464,29 @@ class TeamContextResetTest final : public QObject {
         QTRY_VERIFY_WITH_TIMEOUT(ready(), 5000);
         const QString firstThread = storedSession(*fixture.journal, leader)->threadId;
         QVERIFY(!firstThread.isEmpty());
-        for (int index = 0; index < 8 && fixture.count(leader, "session.context_reset") == 0;
-             ++index)
+        // Far past the threshold of four turns, the leader keeps its thread: no reset, no
+        // transcript note, no briefing.
+        for (int index = 0; index < 8; ++index)
             wake(index);
-        QCOMPARE(fixture.count(leader, "session.context_reset"), 1);
-        const QJsonObject reset = fixture.payloads(leader, "session.context_reset").first();
-        QCOMPARE(reset.value("reason").toString(), QStringLiteral("threshold"));
-        QCOMPARE(reset.value("provider").toString(), QStringLiteral("claude"));
-        QVERIFY2(prompts().last().contains("[KetPlus context reset]"),
-                 prompts().last().constData());
-        const QString transcript =
-            QDir(fixture.directory.filePath("handoff/" + leader)).filePath("transcript.md");
-        QVERIFY(QFileInfo::exists(transcript));
-        // The old thread is kept for scoped deletion; the fresh one is another.
-        const auto session = storedSession(*fixture.journal, leader);
-        QVERIFY(session->providerThreads.contains(firstThread));
-        QVERIFY(session->threadId != firstThread);
-        // The briefing follows the note in the same prompt (the log splits it into lines).
-        QVERIFY(agent_test::logText(fixture.claudeLog).contains("[KetPlus team briefing]"));
-        QVERIFY(agent_test::logText(fixture.claudeLog).contains("Goal: Ship the reset"));
-        const qsizetype resetTurns = prompts().size();
-
-        // The user's turns, past the threshold, continue the same thread.
-        for (int index = 0; index < 5; ++index) {
-            QVERIFY(
-                !fixture.start("claude", QStringLiteral("hello %1").arg(index), leader).isEmpty());
-            QTRY_VERIFY_WITH_TIMEOUT(prompts().size() > resetTurns + index, 5000);
-            QTRY_VERIFY_WITH_TIMEOUT(ready(), 5000);
-        }
-        QCOMPARE(fixture.count(leader, "session.context_reset"), 1);
-        for (qsizetype index = resetTurns; index < prompts().size(); ++index)
-            QVERIFY(!prompts().at(index).contains("[KetPlus"));
-        // The next team turn counts them, and starts fresh.
+        QCOMPARE(fixture.count(leader, "session.context_reset"), 0);
+        QCOMPARE(storedSession(*fixture.journal, leader)->threadId, firstThread);
+        QVERIFY(!QFileInfo::exists(
+            QDir(fixture.directory.filePath("handoff/" + leader)).filePath("transcript.md")));
+        for (const QByteArray& prompt : prompts())
+            QVERIFY(!prompt.contains("[KetPlus context reset]") &&
+                    !prompt.contains("[KetPlus team briefing]"));
+        // The user's turns continue the same thread too.
+        QVERIFY(!fixture.start("claude", "hello", leader).isEmpty());
+        QTRY_VERIFY_WITH_TIMEOUT(ready(), 5000);
         wake(100);
-        QCOMPARE(fixture.count(leader, "session.context_reset"), 2);
+        QCOMPARE(fixture.count(leader, "session.context_reset"), 0);
+        QCOMPARE(storedSession(*fixture.journal, leader)->threadId, firstThread);
     }
 
     // T-10, through the daemon: a leader woken after an hour of rest, with the 85,000 tokens
-    // the fake provider reports, starts fresh with reason cache_cold; the user's turns, a wake
-    // of an hour of rest too short, a zero idle and "never" do not. The rest is timed from the
-    // end of the last turn, even a long one.
-    void aColdCacheStartsAWokenLeaderFresh() {
+    // the fake provider reports, keeps its thread (ADR 0114 §11 as amended), whatever the
+    // idle setting; the rest is still timed from the end of the last turn.
+    void aColdCacheNeverResetsAWokenLeader() {
         agent_test::Fixture fixture;
         QVERIFY(fixture.open());
         const QDateTime base(QDate(2026, 1, 1), QTime(9, 0), QTimeZone::UTC);
@@ -558,25 +566,16 @@ class TeamContextResetTest final : public QObject {
         wake("Never");
         QCOMPARE(resets(), 0);
 
-        // Back on: an hour of rest and a large context start a fresh thread, with the briefing.
+        // Back on: an hour of rest and a large context still leave the leader's thread alone.
         QVERIFY(
             command("team.update", {{"team_id", teamId}, {"context_reset", "task_and_threshold"}})
                 .value("ok")
                 .toBool());
         offsetMinutes += 61;
         wake("Late");
-        QCOMPARE(resets(), 1);
-        const QJsonObject reset = fixture.payloads(leader, "session.context_reset").first();
-        QCOMPARE(reset.value("reason").toString(), QStringLiteral("cache_cold"));
-        const auto session = storedSession(*fixture.journal, leader);
-        QVERIFY(session->providerThreads.contains(firstThread));
-        QVERIFY(session->threadId != firstThread);
-        QVERIFY(QFileInfo::exists(
-            QDir(fixture.directory.filePath("handoff/" + leader)).filePath("transcript.md")));
-        QVERIFY(agent_test::logText(fixture.claudeLog).contains("[KetPlus team briefing]"));
-        // The fresh thread has not rested: the next wake continues it.
-        wake("Right after");
-        QCOMPARE(resets(), 1);
+        QCOMPARE(resets(), 0);
+        QCOMPARE(storedSession(*fixture.journal, leader)->threadId, firstThread);
+        QVERIFY(!agent_test::logText(fixture.claudeLog).contains("[KetPlus team briefing]"));
     }
 
     // A transcript that cannot be written keeps the thread: the turn runs on it.

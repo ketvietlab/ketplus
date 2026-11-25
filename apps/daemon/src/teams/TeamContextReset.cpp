@@ -82,7 +82,9 @@ bool cacheWentCold(const Team& team, const ThreadActivity& activity) {
 QString decide(const Team& team, const Member& member, std::optional<ContextMark>& mark,
                const QString& task, const QString& thread, const qint64 turnSequence,
                const ThreadActivity& activity) {
-    if (team.contextReset == never)
+    // The leader works across tasks and is never reset (ADR 0114 §11 as amended): no reason, and
+    // no mark is kept for it.
+    if (team.contextReset == never || member.role == role::leader)
         return {};
     // A context the team has not seen: a member's first, or one a provider handoff began.
     if (!mark || thread.isEmpty() || (!mark->thread.isEmpty() && mark->thread != thread)) {
@@ -92,7 +94,7 @@ QString decide(const Team& team, const Member& member, std::optional<ContextMark
     // The fresh thread of the last reset, now that the provider has named it.
     if (mark->thread.isEmpty())
         mark->thread = thread;
-    if (team.contextReset == taskAndThreshold && member.role != role::leader && !task.isEmpty()) {
+    if (team.contextReset == taskAndThreshold && !task.isEmpty()) {
         if (mark->task.isEmpty())
             mark->task = task;
         else if (mark->task != task)
@@ -148,27 +150,6 @@ QString briefing(const Team& team, const Member& member, const QString& taskId) 
                                  line(entry.text, 280));
             }
         }
-    } else if (member.role == role::leader) {
-        QStringList open;
-        qsizetype total = 0;
-        for (const Task& task : team.tasks) {
-            if (task.state == state::done)
-                continue;
-            if (++total <= briefingOpenTasks)
-                open << QStringLiteral("- %1 \"%2\": %3, round %4, owner %5")
-                            .arg(task.id, line(task.title, 160), task.state)
-                            .arg(task.round)
-                            .arg(memberName(team, task.owner));
-        }
-        text << QString{}
-             << (open.isEmpty() ? QStringLiteral("No open tasks.")
-                                : QStringLiteral("Open tasks (%1):").arg(total));
-        text << open;
-        if (total > briefingOpenTasks)
-            text << QStringLiteral("- … %1 more").arg(total - briefingOpenTasks);
-        text << QString{}
-             << QStringLiteral("Read a task with team_tasks task_id=<id>, every open task with "
-                               "team_tasks open=true, the team with team_get.");
     } else {
         text << QString{}
              << QStringLiteral("Read your tasks with team_tasks mine=true, the team with "

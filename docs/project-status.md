@@ -134,7 +134,9 @@ Linux store policy, signed upgrade prompts and platform release acceptance remai
   turns still counted. The team page shows the turns used of it.
   Context reset (ADR 0114 §11, T-1): a turn the team starts begins a fresh native thread of
   the same provider at a task boundary (developers and reviewers) or past the team's
-  threshold (every role; `context_reset_turns`, 12 by default), never for a user's turn;
+  threshold (developers and reviewers; `context_reset_turns`, 12 by default), never for a
+  user's turn and never for the leader (T-9: exempt under every policy, no context mark;
+  its digest is bounded to 40 update lines and 8 KiB);
   its first prompt points at the transcript and carries a team briefing of at most 4 KiB.
   `context_reset` (`task_and_threshold`, `threshold`, `never`) changes through
   `team.update`; the desktop and the phone have no control for it yet.
