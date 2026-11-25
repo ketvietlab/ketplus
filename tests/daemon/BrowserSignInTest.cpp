@@ -27,6 +27,26 @@ QByteArray get(const QUrl& redirect, const QByteArray& target, const QByteArray&
     return response.left(response.indexOf("\r\n"));
 }
 
+// Whether anything still answers on the redirect's port. A closed port refuses the connection;
+// some systems report a refused loopback connection as connected and then reset it, so the
+// request is sent and only an HTTP answer counts.
+bool answers(const QUrl& redirect) {
+    QTcpSocket socket;
+    socket.connectToHost(redirect.host(), static_cast<quint16>(redirect.port()));
+    if (!socket.waitForConnected(1000))
+        return false;
+    socket.write("GET /callback HTTP/1.1\r\nHost: 127.0.0.1\r\n\r\n");
+    socket.waitForBytesWritten(1000);
+    QDeadlineTimer deadline(1000);
+    QByteArray response;
+    while (!deadline.hasExpired() && socket.state() == QAbstractSocket::ConnectedState &&
+           !response.contains("\r\n")) {
+        QCoreApplication::processEvents(QEventLoop::AllEvents, 20);
+        response += socket.readAll();
+    }
+    return response.startsWith("HTTP/");
+}
+
 } // namespace
 
 class BrowserSignInTest final : public QObject {
@@ -91,9 +111,7 @@ class BrowserSignInTest final : public QObject {
         QCOMPARE(QUrl(signIn.redirectUri()), redirect);
 
         // The listener closes with the first valid callback; nothing can replay it.
-        QTcpSocket late;
-        late.connectToHost(redirect.host(), static_cast<quint16>(redirect.port()));
-        QVERIFY(!late.waitForConnected(1000));
+        QVERIFY(!answers(redirect));
         QCOMPARE(received.count(), 1);
     }
 
@@ -126,9 +144,7 @@ class BrowserSignInTest final : public QObject {
         QCOMPARE(failed.count(), 1);
         QCOMPARE(failed.at(0).at(0).toString(), message);
         QCOMPARE(received.count(), 0);
-        QTcpSocket late;
-        late.connectToHost(redirect.host(), static_cast<quint16>(redirect.port()));
-        QVERIFY(!late.waitForConnected(1000));
+        QVERIFY(!answers(redirect));
     }
 };
 
