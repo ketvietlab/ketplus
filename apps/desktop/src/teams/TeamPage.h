@@ -8,6 +8,8 @@
 #include <QJsonObject>
 #include <QPointer>
 #include <QString>
+#include <QTimer>
+#include <QVariantMap>
 #include <QWidget>
 
 #include <array>
@@ -45,6 +47,8 @@ class TeamPage final : public QWidget {
   public:
     TeamPage(TeamDirectory* teams, const QString& teamId, const QString& repository,
              QWidget* parent = nullptr);
+
+    ~TeamPage() override;
 
     [[nodiscard]] QString teamId() const { return teamId_; }
     [[nodiscard]] QScrollArea* scrollArea() const { return scroll_; }
@@ -111,6 +115,12 @@ class TeamPage final : public QWidget {
     void buildHeading(const QJsonObject& team);
     void buildBanners(const QJsonObject& team);
     void buildDecisions(const QJsonObject& team);
+    void stageDecisionAnswer(const QString& id, const QString& answer, bool debounce = false);
+    void flushDecisionAnswers();
+    [[nodiscard]] QVariantMap decisionAnswers() const;
+    void refreshDecisionSubmit();
+    [[nodiscard]] QString decisionSettingsKey() const;
+    [[nodiscard]] QJsonArray stagedDecisionAnswers() const;
     // T-55 (TeamDecisionOther.cpp): a decision's last choice, "Other…", and the field it opens.
     [[nodiscard]] QWidget* decisionOther(QWidget* card, const QString& id, const QString& what,
                                          bool sentences);
@@ -188,6 +198,11 @@ class TeamPage final : public QWidget {
         int position{-1};
     };
     QHash<QString, DecisionDraft> decisionDrafts_;
+    QStringList openDecisionIds_;
+    QVariantMap pendingDecisionAnswers_;
+    QTimer* decisionSaveTimer_;
+    QString decisionRejections_;
+    QPointer<ket::Button> decisionSubmit_;
     // A rebuild waits while a written answer is mid-composition in an input method.
     bool rebuildDeferred_{false};
     [[nodiscard]] bool composingDraft() const;

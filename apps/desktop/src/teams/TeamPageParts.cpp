@@ -322,7 +322,7 @@ void ChoiceRow::paintEvent(QPaintEvent*) {
     painter.setRenderHint(QPainter::Antialiasing);
     const bool focused = hasFocus();
     // A choice whose answer is on its way keeps its pressed look (TeamCommands).
-    const bool pressed = isDown() || property("teamCommandPending").toBool();
+    const bool pressed = isDown() || isChecked() || property("teamCommandPending").toBool();
     painter.setBrush(pressed        ? token(QStringLiteral("surface-inset"))
                      : underMouse() ? token(QStringLiteral("surface-hover"))
                      : recommended_ ? token(QStringLiteral("accent-subtle"))

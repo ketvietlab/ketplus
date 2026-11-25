@@ -260,8 +260,8 @@ QString TeamCoordinator::quiescenceReason(const Team& team) {
 }
 
 std::optional<TeamError> TeamCoordinator::commit(Team& team, const Team& before,
-                                                 const QString& actor,
-                                                 const QList<Update>& updates) {
+                                                 const QString& actor, const QList<Update>& updates,
+                                                 const bool atomicUpdates) {
     // Preserve the last persisted placement of legacy teams before execution scope changes.
     // A caller cannot relocate an already known sidebar placement through settings updates.
     team.sidebarRepository = before.sidebarRepository.value_or(before.repository);
@@ -281,14 +281,29 @@ std::optional<TeamError> TeamCoordinator::commit(Team& team, const Team& before,
                 return update.actionable && !routine(update) &&
                        (!leader || source != leader->sessionId);
             });
-        team.quiescedReason = needsLeader ? QString{} : quiescenceReason(team);
+        team.quiescedReason = needsLeader || atomicUpdates ? QString{} : quiescenceReason(team);
     }
     team.revision = before.revision + 1;
     team.changedAt = nowIso();
     stampChanges(team, before);
+    bool actionable = false;
+    QList<TeamUpdateRecord> records;
+    for (const Update& update : updates) {
+        const bool wakesLeader = !atomicUpdates && update.actionable &&
+                                 (team.quiescedReason.isEmpty() || !routine(update));
+        actionable = actionable || wakesLeader;
+        records.append({.teamId = team.id,
+                        .at = team.changedAt,
+                        .actor = update.actor.isEmpty() ? actor : update.actor,
+                        .kind = update.kind,
+                        .taskId = update.taskId,
+                        .text = boundedText(update.text),
+                        .data = boundedData(update.data),
+                        .actionable = wakesLeader});
+    }
     QString error;
-    if (!journal_->saveTeam(team.id, before.revision, toJson(team), team.memberSessions(),
-                            &error)) {
+    if (!journal_->saveTeam(team.id, before.revision, toJson(team), team.memberSessions(), &error,
+                            atomicUpdates ? records : QList<TeamUpdateRecord>{})) {
         team = before;
         return journalError(error);
     }
@@ -297,20 +312,9 @@ std::optional<TeamError> TeamCoordinator::commit(Team& team, const Team& before,
         teamBySession_.remove(session);
     for (const QString& session : team.memberSessions())
         teamBySession_.insert(session, team.id);
-    bool actionable = false;
-    for (const Update& update : updates) {
-        const bool wakesLeader =
-            update.actionable && (team.quiescedReason.isEmpty() || !routine(update));
-        actionable = actionable || wakesLeader;
-        (void)journal_->appendTeamUpdate({.teamId = team.id,
-                                          .at = team.changedAt,
-                                          .actor = update.actor.isEmpty() ? actor : update.actor,
-                                          .kind = update.kind,
-                                          .taskId = update.taskId,
-                                          .text = boundedText(update.text),
-                                          .data = boundedData(update.data),
-                                          .actionable = wakesLeader});
-    }
+    if (!atomicUpdates)
+        for (const auto& record : records)
+            (void)journal_->appendTeamUpdate(record);
     emit teamChanged(directoryJson(team));
     if (actionable)
         scheduleDigest(team.id);

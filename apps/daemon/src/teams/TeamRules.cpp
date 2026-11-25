@@ -273,6 +273,12 @@ std::optional<TeamError> fence(const Team& team, const QString& type, const QJso
         const Decision* decision =
             team.decision(payload.value(QStringLiteral("decision_id")).toString());
         changed = decision ? decision->changedRevision : 0;
+    } else if (type == QStringLiteral("team.decisions.answer_batch")) {
+        for (const auto value : payload.value("answers").toArray()) {
+            const auto id = value.toObject().value("decision_id").toString();
+            if (const auto* decision = team.decision(id))
+                changed = std::max(changed, decision->changedRevision);
+        }
     } else if (type == QStringLiteral("team.update")) {
         changed = team.settingsRevision;
     } else if (type == QStringLiteral("team.delete") ||

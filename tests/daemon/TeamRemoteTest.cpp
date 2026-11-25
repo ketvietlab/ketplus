@@ -382,6 +382,8 @@ class TeamRemoteTest final : public QObject {
                                              {"reason", " "},
                                              {"expected_revision", seen}}),
                  QStringLiteral("invalid_payload"));
+        QCOMPARE(code("team.decisions.answer_batch", {{"team_id", team.id}}),
+                 QStringLiteral("unknown_operation"));
         QCOMPARE(code("team.task.create", {{"team_id", team.id}, {"title", "x"}}),
                  QStringLiteral("unknown_operation"));
         QCOMPARE(code("team.get", {{"team_id", "999"}}), QStringLiteral("team_not_found"));

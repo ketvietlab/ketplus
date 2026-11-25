@@ -6,6 +6,7 @@
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QPointer>
+#include <QSettings>
 #include <QTimer>
 
 #include <algorithm>
@@ -115,9 +116,16 @@ void TeamDirectory::applyEvent(const QString& type, const QJsonObject& payload) 
     } else if (type == QStringLiteral("team.storage.changed")) {
         emit storageChanged(payload.value(QStringLiteral("team_id")).toString());
     } else if (type == QStringLiteral("team.removed")) {
-        if (teams_.remove(payload.value(QStringLiteral("team_id")).toString()) > 0)
-            emit changed();
+        removeTeam(payload.value(QStringLiteral("team_id")).toString());
     }
+}
+
+void TeamDirectory::removeTeam(const QString& id) {
+    if (id.isEmpty())
+        return;
+    QSettings().remove(QStringLiteral("teams/decisionAnswers/") + id);
+    if (teams_.remove(id) > 0)
+        emit changed();
 }
 
 void TeamDirectory::request(const QString& type, const QJsonObject& payload, Reply reply) {
@@ -127,20 +135,18 @@ void TeamDirectory::request(const QString& type, const QJsonObject& payload, Rep
         return;
     }
     const QPointer<TeamDirectory> alive(this);
-    transport_(
-        type, payload,
-        [alive, type, payload, reply = std::move(reply)](const QJsonObject& result,
-                                                         const QString& error) {
-            if (alive && error.isEmpty()) {
-                if (result.contains(QStringLiteral("team")))
-                    alive->store(result.value(QStringLiteral("team")).toObject());
-                if (type == QStringLiteral("team.delete") &&
-                    alive->teams_.remove(payload.value(QStringLiteral("team_id")).toString()))
-                    emit alive->changed();
-            }
-            if (reply)
-                reply(result, error);
-        });
+    transport_(type, payload,
+               [alive, type, payload, reply = std::move(reply)](const QJsonObject& result,
+                                                                const QString& error) {
+                   if (alive && error.isEmpty()) {
+                       if (result.contains(QStringLiteral("team")))
+                           alive->store(result.value(QStringLiteral("team")).toObject());
+                       if (type == QStringLiteral("team.delete") && result.value("ok").toBool())
+                           alive->removeTeam(payload.value(QStringLiteral("team_id")).toString());
+                   }
+                   if (reply)
+                       reply(result, error);
+               });
 }
 
 QList<QJsonObject> TeamDirectory::teams() const {

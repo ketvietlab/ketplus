@@ -546,6 +546,8 @@ class TeamCoordinator : public QObject {
                              QString* decisionId = nullptr);
     TeamResult answerDecision(qint64 teamId, const QString& decisionId, const QString& answer,
                               const QString& actor);
+    TeamResult answerDecisions(qint64 teamId, const QJsonArray& answers, const QString& actor,
+                               QJsonArray* rejected, QJsonArray* accepted, bool batch = true);
     TeamResult withdrawDecision(qint64 teamId, const QString& decisionId, const QString& reason,
                                 const QString& actor);
 
@@ -683,7 +685,7 @@ class TeamCoordinator : public QObject {
     // Stores `team` with revision + 1 and the updates, then emits teamChanged. On a journal
     // failure the in-memory team is restored from `before`.
     std::optional<TeamError> commit(Team& team, const Team& before, const QString& actor,
-                                    const QList<Update>& updates);
+                                    const QList<Update>& updates, bool atomicUpdates = false);
     // A team's own budget, from team.update; a team paused by its budget runs again when the
     // new one leaves turns. The turns used stay counted.
     std::optional<TeamError> changeTurnBudget(Team& team, const QJsonValue& value,

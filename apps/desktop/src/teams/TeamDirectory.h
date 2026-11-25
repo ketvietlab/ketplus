@@ -81,6 +81,7 @@ class TeamDirectory final : public QObject {
     void storageChanged(const QString& teamId);
 
   private:
+    void removeTeam(const QString& id);
     void store(const QJsonObject& received);
 
     Transport transport_;
