@@ -333,6 +333,69 @@ class ManagedTaskRemoteHostTest final : public QObject {
         QVERIFY(h.port.submitted.isEmpty());
     }
 
+    void attentionNoticesTrackMeaningfulChanges() {
+        Host h;
+        h.attach();
+        auto ledger = h.journal->backgroundTasks();
+        BackgroundTaskIntent intent{
+            {"owner", 1, "fixture"}, "attention", "process", "Attention", "fixture", 60000, {}};
+        intent.containmentMode = "native_best_effort";
+        const auto id = idOf(ledger.create(intent));
+        QVERIFY(!id.isEmpty());
+        BackgroundTaskChange approved;
+        approved.state = "queued";
+        approved.permissionApproved = true;
+        QVERIFY(ledger.change(id, 1, approved).value("ok").toBool());
+        QCOMPARE(idOf(ledger.claimNext()), id);
+
+        QSignalSpy events(h.host.get(), &SessionHost::eventReady);
+        BackgroundTaskChange attention;
+        attention.state = "needs_attention";
+        attention.errorCode = "process_identity_lost";
+        attention.executorStopped = false;
+        const auto update = [&] {
+            const auto revision = ledger.runtimeTask(id).value("revision").toInteger();
+            const auto result = ledger.change(id, revision, attention);
+            QVERIFY(result.value("ok").toBool());
+            h.port.ports.changed(id);
+        };
+        const auto notices = [&] {
+            QList<QJsonObject> result;
+            for (const auto& arguments : events) {
+                const auto event = arguments.first().toJsonObject();
+                const auto payload = event.value("payload").toObject();
+                if (event.value("event_type") == "agent_message.state" &&
+                    payload.value("kind") == "background_task_attention")
+                    result.append(payload);
+            }
+            return result;
+        };
+
+        update();
+        attention.outputSize = 20;
+        update();
+        update();
+        h.port.ports.changed(id);
+        const auto initial = notices();
+        QCOMPARE(initial.size(), 1);
+        QCOMPARE(initial.first().value("task_id"), id);
+        QCOMPARE(initial.first().value("reason"), "cleanup_unverified");
+        QCOMPARE(initial.first().value("cleanup_issue"), "process_identity_lost");
+        QCOMPARE(initial.first().value("executor_stopped"), false);
+        QVERIFY(!initial.first().value("manual_guidance").toString().isEmpty());
+
+        attention.errorCode = "process_signal_failed";
+        update();
+        update();
+        QCOMPARE(notices().size(), 2);
+        QCOMPARE(notices().last().value("cleanup_issue"), "process_signal_failed");
+        attention.executorStopped = true;
+        update();
+        update();
+        QCOMPARE(notices().size(), 3);
+        QCOMPARE(notices().last().value("executor_stopped"), true);
+    }
+
     // A submit that ends before a record exists fails the task with its code, once.
     void aFailedSubmitEndsTheTaskWithItsCode() {
         Host h;
