@@ -326,6 +326,9 @@ class LocalJournal final {
                                              const QJsonObject& prompt,
                                              const QJsonObject& configuration,
                                              QString* error = nullptr);
+    [[nodiscard]] std::optional<bool> hasBackgroundWakeHoldNotice(const QString& sessionId,
+                                                                  qint64 generation,
+                                                                  const QString& eventId) const;
     [[nodiscard]] QJsonArray eventsAfter(const QString& sessionId, qint64 generation, qint64 cursor,
                                          int limit = 500) const;
     // True when the newest turn.started has no turn.completed after it.

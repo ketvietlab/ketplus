@@ -401,6 +401,14 @@ bool LocalJournal::migrateTranscriptSchema() {
         setError(index.lastError().text());
         return false;
     }
+    if (!index.exec(
+            QStringLiteral("CREATE INDEX IF NOT EXISTS events_background_wake_held ON "
+                           "events(session_id, generation, json_extract(payload, '$.event_id')) "
+                           "WHERE event_type = 'agent_message.state' "
+                           "AND json_extract(payload, '$.kind') = 'background_wake_held'"))) {
+        setError(index.lastError().text());
+        return false;
+    }
     return true;
 }
 
@@ -1314,6 +1322,24 @@ qint64 LocalJournal::appendEventWithMutation(const QString& sessionId, const qin
         return -1;
     }
     return cursor;
+}
+
+std::optional<bool> LocalJournal::hasBackgroundWakeHoldNotice(const QString& sessionId,
+                                                              const qint64 generation,
+                                                              const QString& eventId) const {
+    QSqlQuery query(database_);
+    query.prepare(QStringLiteral(
+        "SELECT 1 FROM events WHERE session_id = ? AND generation = ? "
+        "AND event_type = 'agent_message.state' AND json_extract(payload, '$.kind') = "
+        "'background_wake_held' AND json_extract(payload, '$.event_id') = ? LIMIT 1"));
+    query.addBindValue(sessionId);
+    query.addBindValue(generation);
+    query.addBindValue(eventId);
+    if (!query.exec()) {
+        setError(query.lastError().text());
+        return std::nullopt;
+    }
+    return query.next();
 }
 
 QJsonArray LocalJournal::eventsAfter(const QString& sessionId, const qint64 generation,

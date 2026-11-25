@@ -4,6 +4,7 @@
 #include "runtime/SessionHost.h"
 #include "storage/BackgroundTaskLedger.h"
 #include "storage/LocalJournal.h"
+#include "teams/Team.h"
 
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -407,6 +408,90 @@ class ManagedTaskHostTest final : public QObject {
             QVERIFY(command(host, "session.task.stop", {{"task_id", holder}}).value("ok").toBool());
         for (const auto& holder : holders)
             QTRY_COMPARE_WITH_TIMEOUT(task(host, holder).value("state"), "cancelled", 6000);
+    }
+
+    void teamFencesReportOneHeldWakeAndResumeIt_data() {
+        QTest::addColumn<bool>("budget");
+        QTest::addColumn<bool>("restart");
+        QTest::newRow("paused_in_process") << false << false;
+        QTest::newRow("paused_after_restart") << false << true;
+        QTest::newRow("budget_in_process") << true << false;
+        QTest::newRow("budget_after_restart") << true << true;
+    }
+
+    void teamFencesReportOneHeldWakeAndResumeIt() {
+        QFETCH(bool, budget);
+        QFETCH(bool, restart);
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        const auto cwd = QFileInfo(directory.path()).canonicalFilePath();
+        const auto path = directory.filePath("journal.sqlite");
+        const auto log = directory.filePath("provider.log");
+        const auto provider = directory.filePath(fixtureName("fake-codex"));
+        QVERIFY(writeFakeCodex(provider, log));
+        QString taskId;
+        QString teamId;
+        const auto notices = [&](LocalJournal& journal) {
+            QJsonArray result;
+            for (const auto value : journal.eventsAfter("owner", 1, 0)) {
+                const auto row = value.toObject();
+                const auto payload = row.value("payload").toObject();
+                if (row.value("event_type") == "agent_message.state" &&
+                    payload.value("kind") == "background_wake_held" &&
+                    payload.value("task_id") == taskId)
+                    result.append(payload);
+            }
+            return result;
+        };
+        const auto resumeAndVerify = [&](SessionHost& host, LocalJournal& journal) {
+            QVERIFY(command(host, "team.update", {{"team_id", teamId}, {"paused", false}})
+                        .value("ok")
+                        .toBool());
+            QTRY_COMPARE_WITH_TIMEOUT(turns(log), 1, 6000);
+            QCOMPARE(notices(journal).size(), 1);
+        };
+        {
+            LocalJournal journal(path);
+            QVERIFY(seed(journal, cwd));
+            teams::Team team;
+            team.repository = cwd;
+            team.name = "Fixture";
+            team.executionPolicy = "full";
+            team.paused = !budget;
+            team.pausedReason = budget ? QString{} : QStringLiteral("user");
+            team.automaticTurns = budget ? team.turnBudget : 0;
+            team.members.append(
+                {.sessionId = "owner", .role = teams::role::leader, .name = "Owner"});
+            const auto inserted = journal.insertTeam(cwd, toJson(team), {"owner"});
+            QVERIFY(inserted);
+            teamId = QString::number(*inserted);
+            CodexAdapter adapter(provider);
+            SessionHost host(&journal, &adapter);
+            const auto stop = qScopeGuard([&] { adapter.stop(); });
+            const auto started =
+                command(host, "session.task.start", process(cwd, {"/usr/bin/printf", "done"}));
+            QVERIFY(started.value("ok").toBool());
+            taskId = started.value("task").toObject().value("task_id").toString();
+            QTRY_COMPARE_WITH_TIMEOUT(notices(journal).size(), 1, 6000);
+            const auto notice = notices(journal).first().toObject();
+            QCOMPARE(notice.value("reason"), budget ? "team_budget" : "team_paused");
+            QVERIFY(!notice.value("event_id").toString().isEmpty());
+            QCOMPARE(turns(log), 0);
+            if (!restart) {
+                resumeAndVerify(host, journal);
+                return;
+            }
+        }
+        {
+            LocalJournal journal(path);
+            CodexAdapter adapter(provider);
+            SessionHost host(&journal, &adapter);
+            const auto stop = qScopeGuard([&] { adapter.stop(); });
+            QTest::qWait(1100); // Let the reopened dispatcher revisit the held wake.
+            QCOMPARE(notices(journal).size(), 1);
+            QCOMPARE(turns(log), 0);
+            resumeAndVerify(host, journal);
+        }
     }
 
     void stoppedOwnerKeepsProcessAndHoldsWakeUntilExplicitUserTurn() {

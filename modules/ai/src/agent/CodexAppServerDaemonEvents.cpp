@@ -377,7 +377,9 @@ void CodexAppServer::dispatchDaemonEvent(const QJsonObject& envelope) {
         if (presentation.isEmpty())
             presentation = agent_message::agentMessageNotice(data, itemId);
         const auto kind = data.value("kind");
-        const auto title = kind == "background_task_attention" || kind == "background_wake_failed"
+        const auto title = kind == "background_task_attention" ||
+                                   kind == "background_wake_failed" ||
+                                   kind == "background_wake_held"
                                ? presentation.value("title").toString()
                                : agent_message::agentMessageNoticeTitle();
         emit notificationReceived(

@@ -16,14 +16,6 @@ bool ManagedTaskBridge::eligible(const BackgroundTaskOwner& owner, bool idle) co
              .toArray()
              .isEmpty())
         return false;
-    auto team = host_->teams_ ? host_->teams_->teamOf(owner.sessionId) : nullptr;
-    if (!team && host_->teams_) {
-        const auto parent =
-            ledger_.linkedTask(owner.sessionId, owner.generation).value("task").toObject();
-        team = host_->teams_->teamOf(parent.value("root_owner_session_id").toString());
-    }
-    if (team && (team->paused || team->automaticTurns >= team->turnBudget))
-        return false;
     return !idle ||
            (!current->startingTurn && current->stored.state != "starting" &&
             current->stored.state != "running" && current->stored.state != "waiting_for_input" &&
@@ -75,7 +67,8 @@ QString wakePrompt(const QJsonObject& turn) {
             "verify that its processes were cleaned up (cleanup unverified). It has not ended "
             "and still counts against your background limits. Do not start it again and do not "
             "assume its processes are gone. Only the user acknowledges cleanup, in the task UI; "
-            "you cannot do it for them. Tell the user, then go on with work that does not depend "
+            "you have no cleanup acknowledgement tool. Read its status or output if needed. Tell "
+            "the user, then go on with work that does not depend "
             "on it.");
     else if (event == QLatin1String("queued"))
         lead = QStringLiteral(
@@ -145,6 +138,29 @@ void ManagedTaskBridge::dispatchWakes() {
             }
             if (!eligible(owner, wakes))
                 continue;
+            QString teamMember = owner.sessionId;
+            auto* team = host_->teams_ ? host_->teams_->teamOf(teamMember) : nullptr;
+            if (!team && host_->teams_ && !parent.isEmpty()) {
+                teamMember = parent.value("root_owner_session_id").toString();
+                team = host_->teams_->teamOf(teamMember);
+            }
+            if (team && (team->paused || team->automaticTurns >= team->turnBudget)) {
+                const QString reason = team->paused && team->pausedReason != "budget"
+                                           ? QStringLiteral("team_paused")
+                                           : QStringLiteral("team_budget");
+                // Apply the existing budget pause so the user's Resume can reset the budget.
+                if (!team->paused)
+                    (void)host_->teams_->takeMemberTurn(teamMember);
+                const auto recorded = host_->journal_->hasBackgroundWakeHoldNotice(
+                    owner.sessionId, owner.generation, eventId);
+                if (recorded && !*recorded)
+                    host_->appendAgentNotice(owner.sessionId, owner.generation,
+                                             {{"kind", "background_wake_held"},
+                                              {"event_id", eventId},
+                                              {"task_id", turn.value("task_id")},
+                                              {"reason", reason}});
+                continue;
+            }
             if (!wakes) {
                 const auto accepted = pass == Completions ? ledger_.acceptCompletion(eventId, owner)
                                                           : ledger_.acceptNotice(eventId, owner);

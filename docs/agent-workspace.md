@@ -1153,12 +1153,16 @@ facts above its output: when it was queued or created, its timeout, a verified
 cleanup and what happens when it ends, including that a cancelled job wakes no one.
 
 The owner agent is told too ([ADR 0127 §7a](decisions/0127-daemon-background-tasks.md#7a-owner-notices-of-nonterminal-jobs)).
-Entering `needs_attention` queues one owner notice that says cleanup is unverified and
-that only the user acknowledges it. An approved job still queued after half its timeout
-(at most two minutes) queues one notice naming why: its root's four slots are held (the
-notice lists the jobs holding them), it waits for a runner, or it is not admitted yet.
+Entering `needs_attention` queues one attention wake. The job is still open and
+cleanup is unverified. The agent can read its status or output and report it to the
+user. Only the user can acknowledge cleanup, and acknowledgement starts no turn.
+An approved job still queued after half its timeout (at most two minutes) queues
+one notice naming why: its root's four slots are held (the notice lists the jobs
+holding them), it waits for a runner, or it is not admitted yet.
 Both go through the completion wake's acceptance and fences, and are dropped when the
-job has moved on before the owner could take them.
+job has moved on before the owner could take them. If the team is paused or has
+used all its automatic turns, the conversation shows one notice per held wake.
+Resume the team to release eligible wakes.
 
 Output is plain text for both managed process and agent jobs. Reads return at most
 8 KiB and the UI passes `next_cursor` back unchanged. Read more/Refresh and live
