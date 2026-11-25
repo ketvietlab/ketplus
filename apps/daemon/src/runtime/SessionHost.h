@@ -180,6 +180,8 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
         bool interruptPending{false};
         // A client's Stop is ending this turn, so its interrupted end says so.
         bool stopRequested{false};
+        // Who asked for that Stop when it was not a client: "leader" (ADR 0114 §11).
+        QString stoppedBy;
         // #125: this turn's last answer, and whether the agent asked the user to decide.
         QString lastAnswerText;
         bool decisionRequested{false};
@@ -383,6 +385,9 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     [[nodiscard]] QJsonObject steer(const QJsonObject& request, CommandCallback outcome = {},
                                     bool localClient = true, const QJsonObject& agentOrigin = {});
     [[nodiscard]] QJsonObject interrupt(const QJsonObject& request);
+    // ADR 0114 §11 (SessionHostTeamInterrupt.cpp): team_member_interrupt of the leader.
+    [[nodiscard]] QJsonObject teamMemberInterrupt(const QString& leaderSession,
+                                                  const QJsonObject& payload);
     // A turn.completed payload; it takes the session's pending Stop and carries the work report
     // the turn ended with (ADR 0106).
     [[nodiscard]] QJsonObject turnCompletion(Session& session, const QString& status);

@@ -186,6 +186,9 @@ Linux store policy, signed upgrade prompts and platform release acceptance remai
   `team_lane_set` (logged with its reason). Lane paths, shared and allowed paths, the
   outside-lane check and `team_paths_allow` were removed (ADR 0114 §4); a team stored with
   them still loads, and paths an older client sends are ignored.
+  Leader interrupt (T-11): `team_member_interrupt` stops a member's running turn with
+  `stopped_by: leader` (its waits and background jobs stay), puts the leader's message first
+  in the next batch, and is limited to 3 per member per hour (ADR 0114 §11).
   Decisions (#462): the leader raises a question with two to four choices
   (`team_decision_raise`, `team_decision_withdraw`); only the user answers through
   `team.decisions.answer_batch` or the legacy `team.decision.answer`. A submit

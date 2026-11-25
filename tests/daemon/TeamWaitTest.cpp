@@ -192,6 +192,41 @@ class TeamWaitTest final : public QObject {
         QVERIFY(host_.of("wait").isEmpty());
     }
 
+    // ADR 0114 §11: the leader's interrupt is checked, recorded and limited by the coordinator.
+    void theLeadersInterruptIsCheckedRecordedAndLimited() {
+        const QString id = inProgress();
+        QVERIFY(teams_->wait(team_, "dev1", 1, "CI").ok());
+        QCOMPARE(refused(teams_->noteLeaderInterrupt(team_, "dev2", "why", "dev1")),
+                 QStringLiteral("role_forbidden"));
+        QCOMPARE(refused(teams_->noteLeaderInterrupt(team_, "lead", "why", "lead")),
+                 QStringLiteral("not_allowed"));
+        QCOMPARE(refused(teams_->noteLeaderInterrupt(team_, "stranger", "why", "lead")),
+                 QStringLiteral("not_member"));
+        QCOMPARE(refused(teams_->noteLeaderInterrupt(team_, "dev1", "  ", "lead")),
+                 QStringLiteral("invalid_payload"));
+        QVERIFY(teams_->update(team_, {{"paused", true}}, "user").ok());
+        QCOMPARE(refused(teams_->noteLeaderInterrupt(team_, "dev1", "why", "lead")),
+                 QStringLiteral("team_paused"));
+        QVERIFY(teams_->update(team_, {{"paused", false}}, "user").ok());
+        const qsizetype before = team().task(id)->history.size();
+        const QString stateBefore = team().task(id)->state;
+        QVERIFY(teams_->noteLeaderInterrupt(team_, "dev1", "wrong_way", "lead").ok());
+        const Task& task = *team().task(id);
+        QCOMPARE(task.history.size(), before + 1);
+        QVERIFY(task.history.last().text.contains("leader interrupted"));
+        QVERIFY(task.history.last().text.contains("wrong_way"));
+        QCOMPARE(task.state, stateBefore);
+        QCOMPARE(task.owner, QStringLiteral("dev1"));
+        // The leader's stop is a normal end of the turn: the member's wait stays.
+        teams_->memberTurnEnded("dev1", false);
+        QVERIFY(teams_->isWaiting("dev1"));
+        QVERIFY(teams_->noteLeaderInterrupt(team_, "dev1", "again", "lead").ok());
+        QVERIFY(teams_->noteLeaderInterrupt(team_, "dev1", "third", "lead").ok());
+        QCOMPARE(refused(teams_->noteLeaderInterrupt(team_, "dev1", "fourth", "lead")),
+                 QStringLiteral("interrupt_limit"));
+        QVERIFY(teams_->noteLeaderInterrupt(team_, "dev2", "other", "lead").ok());
+    }
+
     void aMemberThatWorksAgainIsNotInterrupted() {
         (void)inProgress();
         QVERIFY(teams_->wait(team_, "dev1", 1, "CI").ok());

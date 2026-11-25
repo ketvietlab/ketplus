@@ -90,6 +90,15 @@ QString teamInstructions(const QString& role) {
                    "Never accept a URL/freeform assertion, cancel active review, waive P0/P1 or "
                    "mandatory risks, or use targeted checks instead of the required full matrix.")
             << QStringLiteral(
+                   "A normal message to a member waits for the end of its turn. Only when a "
+                   "member is going the wrong way and cannot wait, stop its turn with "
+                   "team_member_interrupt (member, text, a short reason code): its running turn "
+                   "ends, your message comes first and starts its next turn at once, queued "
+                   "messages follow in that turn, and its worktree, task state, team_wait and "
+                   "background jobs are untouched. At most 3 interrupts per member per hour; "
+                   "after that send a normal message. Do not use it for status or for "
+                   "what can wait.")
+            << QStringLiteral(
                    "The team only moves when a turn ends in an action. Before you end a "
                    "turn, every task that is not done must have an owner working on it, be "
                    "blocked with what it waits for, or wait on a decision you raised. Run a "

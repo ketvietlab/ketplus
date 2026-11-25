@@ -473,6 +473,13 @@ class TeamCoordinator : public QObject {
     // T-10: renames a developer's lane; a lane holds no paths.
     TeamResult updateMember(qint64 teamId, const QString& sessionId, const QString& lane,
                             const QString& actor, const QString& reason = {});
+    // T-11 (TeamCoordinatorInterrupt.cpp, ADR 0114 §11): the leader interrupts a member. Checks
+    // the member, the pause and the hourly limit, then records `leader interrupted <member>:
+    // <reason>` in the history of the member's open tasks and in Updates. Errors: not_member,
+    // not_allowed, team_paused, invalid_payload, interrupt_limit.
+    TeamResult noteLeaderInterrupt(qint64 teamId, const QString& sessionId, const QString& reason,
+                                   const QString& actor);
+    static constexpr int maximumInterruptsPerHour = 3;
     TeamResult removeMember(qint64 teamId, const QString& sessionId, const QString& actor);
     // T-2 (TeamCoordinatorProviders.cpp): team.provider.set. The members of `chosen` forget an
     // earlier pending switch; those of `switching` move to `target` when their next turn starts.
@@ -926,6 +933,8 @@ class TeamCoordinator : public QObject {
     int quietPeriod_{defaultQuietPeriodMs};
     // Members whose burst of messages waits in the outbox until the time: session → release.
     QHash<QString, QDateTime> outboxQuiet_;
+    // The times of the leader's interrupts of each member in the last hour. Not stored.
+    QHash<QString, QList<QDateTime>> interrupts_;
 
     // What the watchdog did since the team's work last changed. Not stored: a restart
     // starts the count again, which only costs one more wake.

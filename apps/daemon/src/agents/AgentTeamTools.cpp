@@ -61,7 +61,8 @@ const QStringList& names() {
                                    QStringLiteral("team_lane_set"),
                                    QStringLiteral("team_repository_set"),
                                    QStringLiteral("team_decision_raise"),
-                                   QStringLiteral("team_decision_withdraw")};
+                                   QStringLiteral("team_decision_withdraw"),
+                                   QStringLiteral("team_member_interrupt")};
     return value;
 }
 
@@ -309,7 +310,24 @@ QJsonArray teamTools() {
                            "with the reason."),
             {{QStringLiteral("decision_id"), text(QStringLiteral("The decision id, such as D-2."))},
              {QStringLiteral("reason"), text(QStringLiteral("Why it is no longer needed."))}},
-            {QStringLiteral("decision_id"), QStringLiteral("reason")})};
+            {QStringLiteral("decision_id"), QStringLiteral("reason")}),
+        tool(QStringLiteral("team_member_interrupt"),
+             QStringLiteral(
+                 "Leader: stop a developer's or reviewer's running turn and send it a priority "
+                 "message that starts its next turn at once, ahead of anything queued for it. "
+                 "Use it only to redirect a member that is going the wrong way; a normal "
+                 "agents_send waits for the end of its turn. Its worktree, task state, "
+                 "team_wait timers and background jobs are untouched. A member with no running "
+                 "turn just gets the message (interrupted=false). Counts as one automatic turn; "
+                 "at most 3 interrupts per member per hour, then interrupt_limit: send a normal "
+                 "message. Receipt: interrupted, message_id, delivery."),
+             {{QStringLiteral("member"),
+               text(QStringLiteral("The member's conversation number or name."))},
+              {QStringLiteral("text"),
+               text(QStringLiteral("The priority message: what to do instead, and why."))},
+              {QStringLiteral("reason"),
+               text(QStringLiteral("A short code for the audit trail, at most 64 characters."))}},
+             {QStringLiteral("member"), QStringLiteral("text"), QStringLiteral("reason")})};
 }
 
 QString teamOperationFor(const QString& tool) {

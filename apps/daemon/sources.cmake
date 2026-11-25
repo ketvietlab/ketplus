@@ -243,6 +243,7 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/teams/TeamCoordinatorCleanup.cpp
     src/teams/TeamCoordinatorStorage.cpp
     src/teams/TeamCoordinatorWaits.cpp
+    src/teams/TeamCoordinatorInterrupt.cpp
     src/teams/TeamCoordinatorMerges.cpp
     src/teams/TeamCoordinatorProviders.cpp
     src/teams/TeamCoordinatorSettings.cpp
@@ -277,6 +278,7 @@ set(KETPLUS_DAEMON_CORE_SOURCES
     src/runtime/TeamPullRequests.cpp
     src/runtime/TeamPullRequests.h
     src/runtime/SessionHostTeamAgents.cpp
+    src/runtime/SessionHostTeamInterrupt.cpp
     src/runtime/SessionHostContextReset.cpp
     src/storage/LocalJournalAgentRelease.cpp
     src/runtime/SessionHostUsage.cpp

@@ -334,6 +334,8 @@ QJsonObject SessionHost::teamOperation(const QString& sessionId, const QString& 
                            payload.value(QStringLiteral("integration_branch")).toString());
         return answer(teams_->update(teamId, changes, sessionId), {});
     }
+    if (operation == QStringLiteral("team_member_interrupt"))
+        return teamMemberInterrupt(sessionId, payload);
     return teamDecisionOperation(sessionId, operation, payload);
 }
 
