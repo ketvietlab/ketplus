@@ -705,7 +705,8 @@ class ManagedTaskRuntimeTest final : public QObject {
                                    .toInteger();
             const auto cleanup = qScopeGuard([&] { ::kill(-pid_t(group), SIGKILL); });
             fixture.runtime->setCleanupWindow(0);
-            QJsonObject receipt{{"state", "needs_attention"},
+            QJsonObject receipt{{"event", "done"},
+                                {"state", "needs_attention"},
                                 {"cleanup_issue", "process_group_not_verified_empty"},
                                 {"root_started", true},
                                 {"exit_code", exitCode},
