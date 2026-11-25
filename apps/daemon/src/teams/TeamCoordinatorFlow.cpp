@@ -451,6 +451,7 @@ void TeamCoordinator::memberTurnEnded(const QString& sessionId,
     } else if (stoppedByUser == false) {
         stalls_[teamId].stopped.remove(sessionId);
     }
+    forgetEndedWait(sessionId);
     // The turn is over: a conversation that could not leave a handed-over worktree can now,
     // before the next message to it starts a turn (the outbox waits for this switch).
     settleRelocations(teamId, sessionId, {});

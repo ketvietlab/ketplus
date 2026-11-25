@@ -193,13 +193,14 @@ QJsonArray teamTools() {
                            {QStringLiteral("description"),
                             QStringLiteral("When to check again, 1 to 60.")}}},
               {QStringLiteral("waiting_on"),
-               QJsonObject{
-                   {QStringLiteral("type"), QStringLiteral("string")},
-                   {QStringLiteral("enum"),
-                    QJsonArray{QStringLiteral("leader"), QStringLiteral("user"),
-                               QStringLiteral("external")}},
-                   {QStringLiteral("description"),
-                    QStringLiteral("Who or what you are waiting on. Defaults to external.")}}},
+               QJsonObject{{QStringLiteral("type"), QStringLiteral("string")},
+                           {QStringLiteral("enum"),
+                            QJsonArray{QStringLiteral("leader"), QStringLiteral("user"),
+                                       QStringLiteral("external")}},
+                           {QStringLiteral("description"),
+                            QStringLiteral("Who or what you are waiting on. Defaults to external. "
+                                           "Only leader notifies the leader; user and external "
+                                           "behave the same for developers.")}}},
               {QStringLiteral("task_id"), text(QStringLiteral("The task it holds up, if any."))}},
              {QStringLiteral("reason"), QStringLiteral("minutes")}),
         tool(QStringLiteral("team_task_create"),

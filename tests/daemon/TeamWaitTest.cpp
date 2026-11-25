@@ -99,6 +99,22 @@ class TeamWaitTest final : public QObject {
         QCOMPARE(host_.of("waiting_for_leader").size(), 2);
     }
 
+    void developerNotifiesLeaderAgainAfterTheFirstWaitWasAnswered() {
+        const QString id = inProgress();
+        QVERIFY(teams_->wait(team_, "dev1", 1, "merge the PR", id, "leader").ok());
+        QCOMPARE(host_.of("waiting_for_leader").size(), 1);
+        // The reminder fires; the developer goes back to work and its turn ends.
+        QTRY_VERIFY(!teams_->isWaiting("dev1"));
+        teams_->memberTurnEnded("dev1");
+        QVERIFY(teams_->wait(team_, "dev1", 60, "merge the PR", id, "leader").ok());
+        QCOMPARE(host_.of("waiting_for_leader").size(), 2);
+        // A repeated wait inside the reminder turn still does not notify twice.
+        QVERIFY(teams_->wait(team_, "dev1", 1, "merge the PR", id, "leader").ok());
+        QTRY_VERIFY(!teams_->isWaiting("dev1"));
+        QVERIFY(teams_->wait(team_, "dev1", 60, "merge the PR", id, "leader").ok());
+        QCOMPARE(host_.of("waiting_for_leader").size(), 2);
+    }
+
     void pausedTeamHoldsOneLeaderNotificationUntilResume() {
         const QString id = inProgress();
         const int turns = team().automaticTurns;

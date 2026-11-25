@@ -915,8 +915,11 @@ class TeamCoordinator : public QObject {
         QString reason;
         QString taskId;
         QString notifiedLeader;
+        // The task's state when the leader was notified: a task that moved on is a new wait.
+        QString taskState;
     };
     void cancelWait(const QString& sessionId);
+    void forgetEndedWait(const QString& sessionId);
     void waitEnded(const QString& sessionId);
     // By member session.
     QHash<QString, Wait> waits_;

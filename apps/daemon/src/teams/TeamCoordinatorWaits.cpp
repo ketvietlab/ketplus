@@ -75,18 +75,22 @@ TeamResult TeamCoordinator::wait(const qint64 teamId, const QString& sessionId, 
                      .taskId = taskId}}))
         return {.error = failed};
 
+    const Task* waitTask = taskId.isEmpty() ? nullptr : team->task(taskId);
+    const QString taskState = waitTask ? waitTask->state : QString{};
     const Wait previous = waits_.value(sessionId);
     const bool notifyLeader =
         waitsForLeader && (previous.notifiedLeader != leaderSession || previous.reason != why ||
-                           previous.taskId != taskId);
+                           previous.taskId != taskId || previous.taskState != taskState);
     // One wait per member: a new one replaces the old.
     cancelWait(sessionId);
     auto* timer = new QTimer(this);
     timer->setSingleShot(true);
     connect(timer, &QTimer::timeout, this, [this, sessionId] { waitEnded(sessionId); });
-    waits_.insert(
-        sessionId,
-        {.timer = timer, .reason = why, .taskId = taskId, .notifiedLeader = leaderSession});
+    waits_.insert(sessionId, {.timer = timer,
+                              .reason = why,
+                              .taskId = taskId,
+                              .notifiedLeader = leaderSession,
+                              .taskState = taskState});
     timer->start(minutes * waitMinuteMs_);
     if (notifyLeader)
         wake(*team,
@@ -109,6 +113,15 @@ void TeamCoordinator::cancelWait(const QString& sessionId) {
         return;
     delete found->timer;
     waits_.erase(found);
+}
+
+void TeamCoordinator::forgetEndedWait(const QString& sessionId) {
+    // A wait whose timer ended stays only so a reminder turn that waits again does not notify
+    // the leader twice. When that turn ends without a new wait the member went back to work:
+    // the next wait on the leader is a new one.
+    const auto found = waits_.constFind(sessionId);
+    if (found != waits_.cend() && !found->timer)
+        waits_.erase(found);
 }
 
 void TeamCoordinator::waitEnded(const QString& sessionId) {
