@@ -1521,8 +1521,8 @@ control, provider invocation, toolchain change or production fix.
 accepts a verified-empty process group, a SIGKILLed supervisor no longer yields
 `needs_attention`; the macOS rows therefore run the injected-result path below until a
 real fault that leaves a live process in the job group exists (opt in with
-`KETPLUS_ATTENTION_REAL_NATIVE`). The real-native fault, when enabled, launches a harmless marker/output/sleep process through the managed API,
-captures its supervisor/root identities, faults the supervisor with the production
+`KETPLUS_ATTENTION_REAL_NATIVE`). When enabled, the real-native fault launches a harmless
+marker/output/sleep process through the managed API, captures its supervisor/root identities, faults the supervisor with the production
 identity-bound signal, and requires `needs_attention`/`unverified` with the known
 executor stopped. On Linux, it injects an executor result without an execution
 identity: that branch checks portable persistence, Host lifecycle and CAS/audit
