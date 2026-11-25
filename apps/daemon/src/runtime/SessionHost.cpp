@@ -358,9 +358,18 @@ SessionHost::SessionHost(LocalJournal* journal, CodexAdapter* adapter,
         if (provider != nullptr && !providers_.contains(provider))
             providers_.append(provider);
     QSet<QString> liveSessions;
-    for (ProviderAdapter* provider : std::as_const(providers_))
+    for (ProviderAdapter* provider : std::as_const(providers_)) {
         connect(provider, &ProviderAdapter::stopped, this,
                 [this, name = provider->name()] { catalogCache_.invalidate(name); });
+        // An adapter may be destroyed before the host (a test fixture stops them first). A
+        // sibling that fails its pending calls while it goes down would otherwise find the
+        // dead pointer here and call through it.
+        connect(provider, &QObject::destroyed, this, [this](QObject* gone) {
+            providers_.removeAll(static_cast<ProviderAdapter*>(gone));
+            if (gone == static_cast<QObject*>(adapter_))
+                adapter_ = nullptr;
+        });
+    }
     connect(adapter_, &CodexAdapter::notificationReceived, this,
             [this](const QString& method, const QJsonObject&) {
                 if (method == "account/updated") {

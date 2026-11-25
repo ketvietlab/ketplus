@@ -463,7 +463,7 @@ void SessionHost::failTurnStart(Session& session, const QString& message) {
 void SessionHost::providerStopped(const QString& adapterName, const QString& reason) {
     const auto isolated = [this](const Session& session) {
         if (session.stored.adapter == "codex")
-            return adapter_->ownsIsolatedThread(session.stored.threadId);
+            return adapter_ != nullptr && adapter_->ownsIsolatedThread(session.stored.threadId);
         const auto* acp = qobject_cast<AcpAdapter*>(provider(session.stored.adapter));
         return acp && acp->ownsIsolatedSession(session.stored.id);
     };
@@ -474,7 +474,8 @@ void SessionHost::providerStopped(const QString& adapterName, const QString& rea
         return it == sessions_.cend() || (it->stored.adapter == adapterName && !isolated(*it));
     });
     for (auto it = pendingProviderByRequest_.begin(); it != pendingProviderByRequest_.end();) {
-        if (it.value() == adapterName && !adapter_->ownsIsolatedRequest(it.key()))
+        if (it.value() == adapterName &&
+            (adapter_ == nullptr || !adapter_->ownsIsolatedRequest(it.key())))
             it = pendingProviderByRequest_.erase(it);
         else
             ++it;
