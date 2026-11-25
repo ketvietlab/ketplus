@@ -156,7 +156,7 @@ class TeamDigestActorTest final : public QObject {
         QVERIFY(body.contains("Which region?"));
     }
 
-    void externalWaitLocksAndANewQuestionReopens() {
+    void developerMergeConflictReopensAQuiescedTeamOnce() {
         const QString id = newTask("Cart", "dev1");
         QVERIFY(teams_->moveTask(team_, id, state::inProgress, "dev1").ok());
         QVERIFY(teams_->moveTask(team_, id, state::blocked, "dev1", "When does it ship?").ok());
@@ -183,11 +183,21 @@ class TeamDigestActorTest final : public QObject {
         leaderTurnEnds();
         QCOMPARE(team().quiescedReason, "waiting_for_external_event");
 
+        const QString conflict = "Merge conflict in Cart.cpp. Which change should I keep?";
+        const int turnsBeforeConflict = team().automaticTurns;
         QVERIFY(teams_->moveTask(team_, id, state::inProgress, "dev1").ok());
-        QVERIFY(teams_->moveTask(team_, id, state::blocked, "dev1", "Which region?").ok());
+        QVERIFY(teams_->moveTask(team_, id, state::blocked, "dev1", conflict).ok());
         leaderTurnEnds();
-        QVERIFY(digestTo("lead").contains("Which region?"));
+        QCOMPARE(host_.of("digest").size(), 1);
+        QCOMPARE(team().automaticTurns, turnsBeforeConflict + 1);
+        QVERIFY(digestTo("lead").contains(conflict));
         QVERIFY(team().quiescedReason.isEmpty());
+
+        QVERIFY(teams_->moveTask(team_, id, state::inProgress, "dev1").ok());
+        QVERIFY(teams_->moveTask(team_, id, state::blocked, "dev1", conflict).ok());
+        leaderTurnEnds();
+        QCOMPARE(host_.of("digest").size(), 1);
+        QCOMPARE(team().automaticTurns, turnsBeforeConflict + 1);
     }
 
     // Criterion 1: only the leader's own updates, with or without a wait: no digest, no turn.

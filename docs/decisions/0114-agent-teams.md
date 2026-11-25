@@ -389,6 +389,12 @@ review outcome, or the leader's wait ending reopens the team. Pause, turn budget
 and role checks still apply. Team summaries expose `quiesced` and
 `quiesced_reason` (`tasks_done` or `waiting_for_external_event`).
 
+A merge conflict reaches the leader when the developer reports it as a blocked
+task with a reason. A new report reopens the team and an already digested reason
+does not request another wake. Pull request conflict detection belongs to the
+pull request task tracking work (T-12) and must reopen the team when it signals
+a new conflict.
+
 ### 8. A team that stops is moved on (decided 2026-11-11)
 
 The table above is event-driven: a turn that ends with work left and no event to follow
