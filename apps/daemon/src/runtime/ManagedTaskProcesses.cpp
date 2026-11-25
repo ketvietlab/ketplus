@@ -239,7 +239,7 @@ void ManagedTaskRuntime::observeProcess(const QString& id, const QJsonObject& ev
             if (previous != "stopping") {
                 BackgroundTaskChange settling;
                 settling.state = "stopping";
-                settling.terminalTarget = "interrupted";
+                settling.terminalTarget = realResultState(event);
                 settling.reason = "executor_lost";
                 settling.cleanupPending = true;
                 settling.exitCode = event.value("exit_code").toInt(-1);
@@ -308,20 +308,34 @@ void ManagedTaskRuntime::observeProcess(const QString& id, const QJsonObject& ev
     pump();
 }
 
+// The state the executor's receipt reports for the command itself when its cleanup is unverified:
+// completed or failed when the command ran to an exit, otherwise interrupted.
+QString ManagedTaskRuntime::realResultState(const QJsonObject& event) {
+    const auto reported = event.value("result_state").toString();
+    return reported == "completed" || reported == "failed" ? reported
+                                                           : QStringLiteral("interrupted");
+}
+
 void ManagedTaskRuntime::endUnverified(const QString& id, const QString& issue,
                                        const QJsonObject& event) {
     const auto live = live_.value(id);
     if (!live)
         return;
     const auto previous = live->record.value("state").toString();
+    // The state follows what the command really did: a result the executor reported (completed
+    // or failed) is kept, and the cleanup gap goes to the diagnostics only. Without a real
+    // result the job is interrupted (ADR 0127 4a).
     const QString target = previous == "stopping"
                                ? live->record.value("terminal_target").toString("interrupted")
-                               : QStringLiteral("interrupted");
+                               : realResultState(event);
+    const bool keptResult = target == "completed" || target == "failed";
     const bool launched = event.isEmpty() ? live->record.value("handshake_committed").toBool()
                                           : event.value("root_started").toBool(true);
     BackgroundTaskChange change;
     change.state = target;
-    change.reason = target == "interrupted" ? QStringLiteral("executor_lost") : target;
+    change.reason = target == "interrupted" ? QStringLiteral("executor_lost")
+                    : keptResult            ? event.value("error").toString()
+                                            : target;
     change.cleanupConfirmed = true;
     change.neverLaunched = !launched;
     change.cleanupStatus = launched ? "best_effort_complete" : "not_required";

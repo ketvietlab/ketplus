@@ -347,6 +347,10 @@ void NativeJobSupervisor::finish() {
                        : exitCode_ == 0         ? "completed"
                                                 : "failed";
     metadata_.insert("state", state);
+    if (cleanupError_ && stopReason_.isEmpty() && metadata_.value("root_started").toBool()) {
+        // What the command really did, for the daemon to keep when cleanup stays unverified.
+        metadata_.insert("result_state", exitCode_ == 0 ? "completed" : "failed");
+    }
     metadata_.insert("exit_code", exitCode_);
     metadata_.insert("executor_stopped",
                      process_.state() == QProcess::NotRunning && known_.isEmpty());

@@ -53,6 +53,8 @@ class ManagedTaskRuntime final : public QObject {
     [[nodiscard]] bool isLive(const QString& taskId) const { return live_.contains(taskId); }
     [[nodiscard]] bool isPumping() const { return timer_.isActive(); }
 
+    friend struct ManagedTaskRuntimeTestAccess; // Lets a test feed an executor receipt.
+
   private:
     QJsonObject accept(const BackgroundTaskIntent& intent, const QJsonObject& execution);
     struct LiveTask {
@@ -73,6 +75,7 @@ class ManagedTaskRuntime final : public QObject {
     void reconcileProcess(const QString& taskId);
     // The daemon owns cleanup: it ends the job at its target state even when it could not
     // verify that every process is gone. The gap stays in diagnostics and the daemon log.
+    static QString realResultState(const QJsonObject& event);
     void endUnverified(const QString& taskId, const QString& issue, const QJsonObject& event = {});
     void stopTask(const QString& taskId, const QString& reason);
     void publish(const QString& taskId);
