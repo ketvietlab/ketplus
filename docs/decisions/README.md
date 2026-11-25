@@ -34,3 +34,4 @@ decision, retain the old record and link both documents.
 - [0131: Paged live session catalog](0131-paged-live-session-catalog.md)
 
 - [English UI and prompt-driven team content](2026-11-18-english-ui-team-content.md)
+- [The leader keeps its context, team messages arrive in batches, the leader can interrupt](2026-11-25-team-batched-delivery-and-leader-interrupt.md)
