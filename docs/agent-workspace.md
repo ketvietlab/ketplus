@@ -1126,6 +1126,10 @@ remains for live leftover processes or cleanup that could not be verified. A clo
 control channel is noticed at once on both ends, but the supervisor stops a job only
 when the lease expires, so a restarted daemon can reconnect to a running job; the
 supervisor's stop is bounded by the lease, not by the channel.
+The ledger accepts that verified result only with `cleanup_verification=process_group_empty`
+(the record stays native best effort, never `cgroup_v2`). A stopped supervisor records the
+signal and sender (`stop_signal`, `stop_sender_pid`, `stop_sender_uid`). A recorded process
+that is gone or whose PID another user reuses no longer raises `process_identity_lost`.
 
 On native macOS, the bar labels the assurance as best effort, including
 `best_effort_complete`; this never claims absence of unobserved descendants. The

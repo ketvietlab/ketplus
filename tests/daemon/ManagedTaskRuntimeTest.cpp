@@ -6,10 +6,12 @@
 #include <QEventLoop>
 #include <QFileInfo>
 #include <QJsonArray>
+#include <QScopeGuard>
 #include <QSqlQuery>
 #include <QTemporaryDir>
 #include <QUuid>
 #include <QtTest>
+#include <csignal>
 
 using namespace ketplus::daemon;
 
@@ -535,6 +537,74 @@ class ManagedTaskRuntimeTest final : public QObject {
         }
         QSqlDatabase::removeDatabase(connection);
     }
+#ifdef Q_OS_MACOS
+    // A lost supervisor whose job group is verified empty ends interrupted with verified
+    // cleanup, through the runtime's own event path (observeProcess) and with no
+    // executor_result_commit_failed. A live, unaccounted group member keeps needs_attention.
+    void lostSupervisorOutcomeFollowsTheJobGroup_data() {
+        QTest::addColumn<bool>("survivor");
+        QTest::newRow("group-empty") << false;
+        QTest::newRow("live-unaccounted-member") << true;
+    }
+
+    void lostSupervisorOutcomeFollowsTheJobGroup() {
+        QFETCH(bool, survivor);
+        QString connection;
+        {
+            Fixture fixture;
+            connection = fixture.connection;
+            QString error;
+            QVERIFY(fixture.initialize(&error));
+            const auto script = survivor ? QStringLiteral("sleep 60 & echo $! > child; wait")
+                                         : QStringLiteral("exec sleep 60");
+            const auto started =
+                fixture.start(fixture.intent(), fixture.execution({"/bin/sh", "-c", script}));
+            const auto id = started.value("task").toObject().value("task_id").toString();
+            QTRY_COMPARE(fixture.permissionRequests, 1);
+            fixture.runtime->permissionResolved(id, true);
+            QTRY_COMPARE_WITH_TIMEOUT(fixture.get(id).value("state"), "running", 6000);
+            if (survivor)
+                QTRY_VERIFY_WITH_TIMEOUT(QFileInfo::exists(fixture.path() + "/child"), 3000);
+            const auto identity = fixture.get(id).value("execution_identity").toObject();
+            const auto root = identity.value("root_identity").toObject();
+            const auto supervisor = identity.value("supervisor_identity").toObject();
+            QVERIFY(root.value("pid").toInteger() > 1);
+            QVERIFY(supervisor.value("pid").toInteger() > 1);
+            const auto group = root.value("process_group").toInteger();
+            const auto cleanup = qScopeGuard([&] { ::kill(-pid_t(group), SIGKILL); });
+            fixture.runtime.reset();
+            QCOMPARE(::kill(pid_t(supervisor.value("pid").toInteger()), SIGKILL), 0);
+            QCOMPARE(::kill(pid_t(root.value("pid").toInteger()), SIGKILL), 0);
+            if (survivor) {
+                // The surviving member is absent from the persisted receipt, so recovery
+                // cannot signal it: only the group listing can reveal it.
+                const auto receiptPath = fixture.path() + "/jobs/" + id + "/executor.json";
+                QFile receipt(receiptPath);
+                QVERIFY(receipt.open(QIODevice::ReadOnly));
+                auto saved = QJsonDocument::fromJson(receipt.readAll()).object();
+                receipt.close();
+                saved.insert("known_processes", QJsonArray{});
+                QVERIFY(receipt.open(QIODevice::WriteOnly | QIODevice::Truncate));
+                receipt.write(QJsonDocument(saved).toJson());
+                receipt.close();
+            }
+            QVERIFY(fixture.startRuntime(&error));
+            if (survivor) {
+                QTRY_COMPARE_WITH_TIMEOUT(fixture.get(id).value("state"), "needs_attention",
+                                          executor::NativeJobLeaseMs + 8000);
+                QVERIFY(fixture.get(id).value("cleanup_status") != "verified");
+            } else {
+                QTRY_COMPARE_WITH_TIMEOUT(fixture.get(id).value("state"), "interrupted",
+                                          executor::NativeJobLeaseMs + 8000);
+                const auto task = fixture.get(id);
+                QCOMPARE(task.value("cleanup_status"), "verified");
+                QCOMPARE(task.value("cleanup_verification"), "process_group_empty");
+                QVERIFY(task.value("error").toString() != "executor_result_commit_failed");
+            }
+        }
+        QSqlDatabase::removeDatabase(connection);
+    }
+#endif
 };
 QTEST_GUILESS_MAIN(ManagedTaskRuntimeTest)
 #include "ManagedTaskRuntimeTest.moc"

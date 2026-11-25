@@ -750,6 +750,102 @@ class BackgroundTaskLedgerTest final : public QObject {
         QSqlDatabase::removeDatabase(name);
     }
 
+    // A running native task and the executor "done" result a recovery reports for it.
+    static QString runningNativeTask(BackgroundTaskLedger& ledger) {
+        const auto id = taskId(ledger.create(intent()));
+        BackgroundTaskChange change;
+        change.state = "queued";
+        change.permissionApproved = true;
+        if (!ledger.change(id, 1, change).value("ok").toBool() || taskId(ledger.claimNext()) != id)
+            return {};
+        change = {};
+        change.state = "running";
+        change.handshakeCommitted = true;
+        change.executionIdentity = {{"process_birth_identity", "birth"},
+                                    {"executor_lease_identity", "lease"}};
+        return ledger.change(id, 3, change).value("ok").toBool() ? id : QString();
+    }
+    static QJsonObject recoveryResult(const QString& status, const QString& verification) {
+        QJsonObject event{{"event", "done"},
+                          {"state", "interrupted"},
+                          {"cleanup_status", status},
+                          {"executor_stopped", true},
+                          {"root_started", true}};
+        if (!verification.isEmpty())
+            event.insert("cleanup_verification", verification);
+        return event;
+    }
+
+    void recoveryReportingAnEmptyProcessGroupIsAcceptedByTheLedger() {
+        const auto name = QUuid::createUuid().toString();
+        {
+            auto db = QSqlDatabase::addDatabase("QSQLITE", name);
+            db.setDatabaseName(":memory:");
+            QVERIFY(db.open());
+            BackgroundTaskLedger ledger(db);
+            QString error;
+            QVERIFY(ledger.initialize(&error));
+            QVERIFY(seedOwner(db));
+            const auto id = runningNativeTask(ledger);
+            QVERIFY(!id.isEmpty());
+            // verified without any evidence kind is refused.
+            BackgroundTaskChange change;
+            change.state = "interrupted";
+            change.cleanupConfirmed = true;
+            applyExecutorCleanupEvidence(change, recoveryResult("verified", {}));
+            QVERIFY(!change.groupVerified);
+            QCOMPARE(ledger.change(id, 4, change).value("error_code"), "invalid_cleanup_evidence");
+            // The evidence mapping, not a hand-set flag, accepts a verified empty group.
+            applyExecutorCleanupEvidence(change, recoveryResult("verified", "process_group_empty"));
+            QVERIFY(change.groupVerified);
+            QVERIFY(!change.fullScopeVerified);
+            const auto task = ledger.change(id, 4, change).value("task").toObject();
+            QCOMPARE(task.value("state"), "interrupted");
+            QCOMPARE(task.value("cleanup_status"), "verified");
+            QCOMPARE(task.value("cleanup_verification"), "process_group_empty");
+            QVERIFY(task.value("containment_mode").toString() != "cgroup_v2");
+            QVERIFY(task.value("error").toString() != "executor_result_commit_failed");
+        }
+        QSqlDatabase::removeDatabase(name);
+    }
+
+    void kernelEvidenceKeepsItsKindAndLiveGroupStaysNeedsAttention() {
+        QJsonObject kernel = recoveryResult("verified", "process_group_empty");
+        kernel.insert("containment_mode", "cgroup_v2");
+        BackgroundTaskChange change;
+        applyExecutorCleanupEvidence(change, kernel);
+        QVERIFY(change.fullScopeVerified);
+        QVERIFY(!change.groupVerified);
+        const auto name = QUuid::createUuid().toString();
+        {
+            auto db = QSqlDatabase::addDatabase("QSQLITE", name);
+            db.setDatabaseName(":memory:");
+            QVERIFY(db.open());
+            BackgroundTaskLedger ledger(db);
+            QString error;
+            QVERIFY(ledger.initialize(&error));
+            QVERIFY(seedOwner(db));
+            const auto id = runningNativeTask(ledger);
+            QVERIFY(!id.isEmpty());
+            // A group that still has a live process reports unverified: never a terminal state.
+            BackgroundTaskChange live;
+            applyExecutorCleanupEvidence(live, recoveryResult("unverified", {}));
+            QVERIFY(!live.groupVerified);
+            live.state = "interrupted";
+            live.cleanupConfirmed = true;
+            QCOMPARE(ledger.change(id, 4, live).value("error_code"), "invalid_cleanup_evidence");
+            BackgroundTaskChange attention;
+            attention.state = "needs_attention";
+            attention.executorStopped = true;
+            attention.errorCode = "process_group_not_verified_empty";
+            const auto task = ledger.change(id, 4, attention).value("task").toObject();
+            QCOMPARE(task.value("state"), "needs_attention");
+            QCOMPARE(task.value("cleanup_status"), "unverified");
+            QVERIFY(!task.contains("cleanup_verification"));
+        }
+        QSqlDatabase::removeDatabase(name);
+    }
+
     void paginationIncludesMoreThanSixteenAndRefetchesChangedSnapshot() {
         const auto name = QUuid::createUuid().toString();
         {

@@ -1,3 +1,8 @@
+// The real-native fault (SIGKILL of the supervisor, expecting needs_attention) encoded the
+// false alarm that the ledger now removes: a lost supervisor whose process group is verified
+// empty ends interrupted with verified cleanup. Define KETPLUS_ATTENTION_REAL_NATIVE only
+// with a fault that leaves a live, unaccounted process in the job group. By default every
+// platform runs the injected-attention path, which tests the lifecycle plumbing.
 #include "FakeCodex.h"
 #include "ManagedTaskIntentLookup.h"
 #include "providers/CodexAdapter.h"
@@ -7,7 +12,7 @@
 #include "storage/BackgroundTaskLedger.h"
 #include "storage/BackgroundTaskOutput.h"
 #include "storage/LocalJournal.h"
-#ifdef Q_OS_MACOS
+#ifdef KETPLUS_ATTENTION_REAL_NATIVE
 #include "ManagedTaskAttentionCleanup.h"
 #endif
 
@@ -163,7 +168,7 @@ bool publishedIncident(const QSignalSpy& events, const QString& id, qint64 previ
                 incident.value("state") != "needs_attention" ||
                 !incident.value("executor_stopped").toBool())
                 continue;
-#ifdef Q_OS_MACOS
+#ifdef KETPLUS_ATTENTION_REAL_NATIVE
             if (incident.value("revision").toInteger() > previousRevision)
 #else
             // No-identity portable reconciliation publishes the unchanged incident.
@@ -174,7 +179,7 @@ bool publishedIncident(const QSignalSpy& events, const QString& id, qint64 previ
     }
     return false;
 }
-#ifdef Q_OS_MACOS
+#ifdef KETPLUS_ATTENTION_REAL_NATIVE
 executor::NativeProcessIdentity identity(const QJsonObject& value) {
     return {value.value("pid").toInteger(), 0, 0, value.value("birth").toString()};
 }
@@ -264,7 +269,7 @@ class ManagedTaskAttentionRecoveryTest final : public QObject {
                 << QJsonDocument(
                        QJsonObject{
                            {"row", replaceGeneration ? "generation-change" : "owner-close"},
-#ifdef Q_OS_MACOS
+#ifdef KETPLUS_ATTENTION_REAL_NATIVE
                            {"mode", "real-native-fault"},
 #else
                            {"mode", "portable-injected-attention"},
@@ -290,7 +295,7 @@ class ManagedTaskAttentionRecoveryTest final : public QObject {
                            {"retained_fixture", fixtureRetained ? QJsonValue(cwd) : QJsonValue()}})
                        .toJson(QJsonDocument::Compact);
         });
-#ifdef Q_OS_MACOS
+#ifdef KETPLUS_ATTENTION_REAL_NATIVE
         const auto cleanupNative = [&](LocalJournal& journal, SessionHost& host) {
             const auto result = attention_fixture::cleanupNativeAttention(
                 journal, id, cwd, [&](const QString& taskId) {
@@ -313,7 +318,7 @@ class ManagedTaskAttentionRecoveryTest final : public QObject {
             LocalJournal journal(databasePath);
             QVERIFY(journal.isOpen());
             QVERIFY(seed(journal, cwd));
-#ifndef Q_OS_MACOS
+#ifndef KETPLUS_ATTENTION_REAL_NATIVE
             // Linux verifies portable journal/Host/CAS/audit plumbing only. No
             // launch or native identity claim is made by this injected executor result.
             auto ledger = journal.backgroundTasks();
@@ -362,11 +367,11 @@ class ManagedTaskAttentionRecoveryTest final : public QObject {
             SessionHost host(&journal, &adapter);
             QSignalSpy events(&host, &SessionHost::eventReady);
             const auto stopAdapter = qScopeGuard([&] { adapter.stop(); });
-#ifdef Q_OS_MACOS
+#ifdef KETPLUS_ATTENTION_REAL_NATIVE
             // Runs before adapter/Host/journal destruction and before directory removal.
             const auto closeNative = qScopeGuard([&] { cleanupNative(journal, host); });
 #endif
-#ifdef Q_OS_MACOS
+#ifdef KETPLUS_ATTENTION_REAL_NATIVE
             phase = "native-launch";
             const auto accepted =
                 command(host, "session.task.start",
@@ -461,7 +466,7 @@ class ManagedTaskAttentionRecoveryTest final : public QObject {
             SessionHost host(&journal, &adapter);
             QSignalSpy events(&host, &SessionHost::eventReady);
             const auto stopAdapter = qScopeGuard([&] { adapter.stop(); });
-#ifdef Q_OS_MACOS
+#ifdef KETPLUS_ATTENTION_REAL_NATIVE
             // Runs before adapter/Host/journal destruction and before directory removal.
             const auto closeNative = qScopeGuard([&] { cleanupNative(journal, host); });
 #endif
@@ -519,7 +524,7 @@ class ManagedTaskAttentionRecoveryTest final : public QObject {
             SessionHost host(&journal, &adapter);
             QSignalSpy events(&host, &SessionHost::eventReady);
             const auto stopAdapter = qScopeGuard([&] { adapter.stop(); });
-#ifdef Q_OS_MACOS
+#ifdef KETPLUS_ATTENTION_REAL_NATIVE
             // Runs before adapter/Host/journal destruction and before directory removal.
             const auto closeNative = qScopeGuard([&] { cleanupNative(journal, host); });
 #endif
@@ -527,7 +532,7 @@ class ManagedTaskAttentionRecoveryTest final : public QObject {
             // event-loop barrier before checking the retained incident.
             QTRY_COMPARE_WITH_TIMEOUT(stored(databasePath, id).value("owner_fence"),
                                       "owner_invalid", 6000);
-#ifdef Q_OS_MACOS
+#ifdef KETPLUS_ATTENTION_REAL_NATIVE
             QTRY_VERIFY_WITH_TIMEOUT(task(host, id, &latest).value("revision").toInteger() >
                                          beforeOwnerChangeRevision,
                                      ketplus::daemon::executor::NativeJobLeaseMs + 5000);
@@ -593,7 +598,7 @@ class ManagedTaskAttentionRecoveryTest final : public QObject {
             SessionHost host(&journal, &adapter);
             QSignalSpy events(&host, &SessionHost::eventReady);
             const auto stopAdapter = qScopeGuard([&] { adapter.stop(); });
-#ifdef Q_OS_MACOS
+#ifdef KETPLUS_ATTENTION_REAL_NATIVE
             // Runs before adapter/Host/journal destruction and before directory removal.
             const auto closeNative = qScopeGuard([&] { cleanupNative(journal, host); });
 #endif
@@ -622,7 +627,7 @@ class ManagedTaskAttentionRecoveryTest final : public QObject {
                 journal.backgroundTasks().deliveryPage(true).value("events").toArray().isEmpty());
             QVERIFY(noTurnEvents(events));
         }
-#ifdef Q_OS_MACOS
+#ifdef KETPLUS_ATTENTION_REAL_NATIVE
         QCOMPARE(bytes(cwd + "/launch-marker"), QByteArray("X"));
         QVERIFY(stopped(root));
         QVERIFY(stopped(supervisor));

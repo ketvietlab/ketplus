@@ -82,6 +82,11 @@ QJsonObject BackgroundTaskLedger::applyTransition(const QString& id, QJsonObject
                                                              : "verified");
         }
     }
+    // The evidence kind lives only as long as the verified status it supports.
+    if (change.groupVerified && record.value("cleanup_status") == "verified")
+        record.insert("cleanup_verification", "process_group_empty");
+    else if (record.value("cleanup_status") != "verified")
+        record.remove("cleanup_verification");
     if (!change.terminalTarget.isEmpty())
         record.insert("terminal_target", change.terminalTarget);
     if (!change.executionIdentity.isEmpty())

@@ -11,17 +11,43 @@
 #include <QSaveFile>
 #include <QSqlError>
 #include <QUuid>
+#include <atomic>
 #include <cerrno>
 #include <csignal>
 #include <unistd.h>
 
 namespace ketplus::daemon::executor {
 namespace {
-volatile sig_atomic_t stopRequested = 0;
-void stopSignal(int) { stopRequested = 1; }
+// The handler only stores integers; the main loop inspects and logs the sender. A signal
+// handler's sa_mask is per thread, so another thread may run a second handler concurrently.
+// The first signal wins by compare-exchange on stopState (0 idle, 1 recording, 2 published);
+// readers accept only 2, so they never see a half record. Lock-free atomics keep the unsigned
+// uid whole and are async-signal-safe.
+static_assert(std::atomic<unsigned>::is_always_lock_free);
+std::atomic<unsigned> stopRequested{0};
+std::atomic<unsigned> stopSignalNumber{0};
+std::atomic<unsigned> stopSenderPid{0};
+std::atomic<unsigned> stopSenderUid{0};
+void stopSignal(int number, siginfo_t* info, void*) {
+    unsigned expected = 0;
+    if (!stopRequested.compare_exchange_strong(expected, 1, std::memory_order_acq_rel))
+        return;
+    stopSignalNumber.store(unsigned(number), std::memory_order_relaxed);
+    stopSenderPid.store(info ? unsigned(info->si_pid) : 0, std::memory_order_relaxed);
+    stopSenderUid.store(info ? unsigned(info->si_uid) : 0, std::memory_order_relaxed);
+    stopRequested.store(2, std::memory_order_release);
+}
 } // namespace
 
-bool supervisorStopRequested() { return stopRequested != 0; }
+bool supervisorStopRequested() { return stopRequested.load(std::memory_order_acquire) == 2; }
+
+SupervisorStopSignal supervisorStopSignal() {
+    if (!supervisorStopRequested())
+        return {};
+    return {int(stopSignalNumber.load(std::memory_order_relaxed)),
+            qint64(stopSenderPid.load(std::memory_order_relaxed)),
+            qint64(stopSenderUid.load(std::memory_order_relaxed))};
+}
 
 NativeJobSupervisor::NativeJobSupervisor(QString directory, QString taskId, QString lease,
                                          QObject* parent)
@@ -144,8 +170,14 @@ bool NativeJobSupervisor::initialize(QString* error) {
     timer_.setInterval(100);
     connect(&timer_, &QTimer::timeout, this, [this] { tick(); });
     timer_.start();
-    signal(SIGTERM, stopSignal);
-    signal(SIGINT, stopSignal);
+    struct sigaction action{};
+    action.sa_sigaction = stopSignal;
+    action.sa_flags = SA_SIGINFO;
+    sigemptyset(&action.sa_mask);
+    sigaddset(&action.sa_mask, SIGTERM);
+    sigaddset(&action.sa_mask, SIGINT);
+    sigaction(SIGTERM, &action, nullptr);
+    sigaction(SIGINT, &action, nullptr);
     signal(SIGPIPE, SIG_IGN); // A pre-exec gate peer may die before the release write.
     return true;
 }
