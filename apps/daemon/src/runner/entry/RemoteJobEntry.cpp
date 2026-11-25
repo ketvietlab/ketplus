@@ -99,13 +99,6 @@ std::optional<QString> RemoteJobEntry::stop(const QString& taskId) {
     return jobs_.stop(taskId).code;
 }
 
-std::optional<QString> RemoteJobEntry::resolveCleanup(const QString& taskId,
-                                                      const QString& userClientId) {
-    if (!jobs_.record(taskId))
-        return std::nullopt;
-    return jobs_.resolveCleanup(taskId, userClientId).code;
-}
-
 bool RemoteJobEntry::hasRecord(const QString& taskId) const {
     return jobs_.record(taskId).has_value();
 }

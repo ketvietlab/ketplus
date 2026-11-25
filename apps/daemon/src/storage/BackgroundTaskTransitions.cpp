@@ -17,8 +17,7 @@ bool terminal(const QString& state) {
 } // namespace
 
 QJsonObject BackgroundTaskLedger::changeImpl(const QString& id, qint64 expectedRevision,
-                                             const BackgroundTaskChange& change,
-                                             const QString& userClientId) {
+                                             const BackgroundTaskChange& change) {
     if (!database_.transaction())
         return failure("storage_error", database_.lastError().text());
     const auto fail = [&](const QString& code, const QString& message) {
@@ -42,9 +41,6 @@ QJsonObject BackgroundTaskLedger::changeImpl(const QString& id, qint64 expectedR
         return fail("revision_exhausted", "Task revision exhausted.");
     bool allowed = false;
     const bool native = record.value("containment_mode") == "native_best_effort";
-    const bool userAcknowledgement = previous == "needs_attention" && !userClientId.isEmpty() &&
-                                     change.reason == "cleanup_acknowledged" &&
-                                     record.value("executor_stopped").toBool();
     if (change.state == "queued")
         allowed = previous == "queued" && change.permissionApproved;
     else if (change.state == "starting") {
@@ -84,10 +80,14 @@ QJsonObject BackgroundTaskLedger::changeImpl(const QString& id, qint64 expectedR
     } else if (change.state == "stopping")
         allowed = true;
     else if (change.state == "needs_attention")
-        allowed = native && (previous == "starting" || previous == "running" ||
-                             previous == "stopping" || previous == "needs_attention");
+        allowed = false; // Retired: the daemon settles cleanup itself and always ends the job.
     else if (change.state == "completed")
-        allowed = previous == "running" && change.cleanupConfirmed;
+        // From stopping only when the daemon kept a real exit-0 result whose cleanup it could
+        // not confirm (ADR 0127 4a).
+        allowed =
+            change.cleanupConfirmed &&
+            (previous == "running" ||
+             (previous == "stopping" && record.value("terminal_target").toString() == "completed"));
     else if (change.state == "failed") {
         const bool prelaunchFailure = change.reason == "permission_denied" ||
                                       change.reason == "spawn_failed" ||
@@ -101,15 +101,10 @@ QJsonObject BackgroundTaskLedger::changeImpl(const QString& id, qint64 expectedR
     } else if (change.state == "cancelled" || change.state == "timed_out")
         allowed = previous == "stopping" && change.cleanupConfirmed;
     else if (change.state == "interrupted")
-        allowed = change.cleanupConfirmed || userAcknowledgement;
-    // The daemon sends start only after a durable handshake commit. A job that never committed
-    // one never launched a workload, so its attention record can end without a user.
-    const bool neverStarted = previous == "needs_attention" && userClientId.isEmpty() &&
-                              change.state == "failed" && change.reason == "handshake_failed" &&
-                              change.neverLaunched && !record.value("handshake_committed").toBool();
-    if (previous == "needs_attention" && change.state != "needs_attention")
-        allowed = (change.state == "interrupted" && userAcknowledgement) || neverStarted;
-    if (!userClientId.isEmpty() && !userAcknowledgement)
+        allowed = change.cleanupConfirmed;
+    // A record left in needs_attention by an older daemon is ended by the startup migration,
+    // never by a transition.
+    if (previous == "needs_attention")
         allowed = false;
     if (!allowed)
         return fail("invalid_transition", "The transition lacks its required execution evidence.");
@@ -153,13 +148,12 @@ QJsonObject BackgroundTaskLedger::changeImpl(const QString& id, qint64 expectedR
         change.cleanupStatus != "unverified" && change.cleanupStatus != "best_effort_complete")
         return fail("invalid_cleanup_evidence", "Unknown cleanup assurance level.");
     if ((!native && change.cleanupStatus == "best_effort_complete") ||
-        (terminal(change.state) && !userAcknowledgement &&
+        (terminal(change.state) &&
          (change.cleanupStatus == "unverified" || change.cleanupStatus == "pending")))
         return fail("invalid_cleanup_evidence",
                     "The cleanup assurance cannot support this result.");
     const auto applied = applyTransition(id, record, revision, change,
-                                         {native, record.value("executor_stopped").toBool(),
-                                          userAcknowledgement, "user", userClientId});
+                                         {native, record.value("executor_stopped").toBool()});
     if (!applied.value("ok").toBool()) {
         database_.rollback();
         return applied;

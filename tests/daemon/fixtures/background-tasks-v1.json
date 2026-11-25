@@ -71,12 +71,12 @@
     "terminal_delivered": {"task_id": "task-example", "state": "completed", "completion": {"event_id": "opaque-terminal-event", "status": "delivered", "reason": null}},
     "permission_denied": {"task_id": "task-denied", "state": "failed", "reason": "permission_denied", "completion": {"event_id": "opaque-denied-event", "status": "suppressed", "reason": "permission_denied"}},
     "native_complete": {"task_id": "task-native", "state": "completed", "exit_code": 0, "containment_mode": "native_best_effort", "cleanup_status": "best_effort_complete", "executor_stopped": true, "completion": {"event_id": "task-native:5", "status": "pending", "reason": null}},
-    "native_attention": {"task_id": "task-native-attention", "state": "needs_attention", "revision": 6, "exit_code": 0, "reason": "cleanup_unverified", "containment_mode": "native_best_effort", "cleanup_status": "unverified", "executor_stopped": true, "completion": null},
-    "native_acknowledged": {"task_id": "task-native-attention", "state": "interrupted", "revision": 7, "exit_code": 0, "reason": "cleanup_acknowledged", "containment_mode": "native_best_effort", "cleanup_status": "unverified", "executor_stopped": true, "completion": {"event_id": "task-native-attention:7", "status": "suppressed", "reason": "cleanup_acknowledged"}}
+    "native_settled": {"task_id": "task-native-settled", "state": "interrupted", "revision": 6, "exit_code": 0, "reason": "executor_lost", "containment_mode": "native_best_effort", "cleanup_status": "best_effort_complete", "executor_stopped": true, "completion": {"event_id": "task-native-settled:6", "status": "pending", "reason": null}}
   },
   "forbidden_journal_or_ui_data": ["tokens", "full_inherited_environment"],
   "states": {
-    "nonterminal": ["queued", "starting", "running", "stopping", "needs_attention"],
+    "nonterminal": ["queued", "starting", "running", "stopping"],
+    "read_only_legacy": ["needs_attention"],
     "terminal": ["completed", "failed", "cancelled", "timed_out", "interrupted"]
   },
   "transitions": [
@@ -88,21 +88,18 @@
     {"from": ["queued", "starting"], "to": "stopping", "requires": ["launch_failure_needs_cleanup", "terminal_target_failed"]},
     {"from": ["stopping"], "to": "failed", "requires": ["terminal_target_failed", "executor_and_descendants_reclaimed", "terminal_and_outbox_transaction"]},
     {"from": ["queued", "starting", "running"], "to": "stopping", "requires": ["stop_or_deadline"]},
-    {"from": ["queued", "starting", "running", "stopping"], "to": "stopping", "requires": ["cleanup_unverified", "cleanup_pending", "continue_reconciliation_and_warning"]},
+    {"from": ["queued", "starting", "running", "stopping"], "to": "stopping", "requires": ["cleanup_not_yet_confirmed", "cleanup_pending", "daemon_retries_within_a_bounded_window"]},
     {"from": ["stopping"], "to": "cancelled", "requires": ["cleanup_evidence_for_containment_mode", "terminal_and_outbox_transaction"]},
     {"from": ["stopping"], "to": "timed_out", "requires": ["deadline", "cleanup_evidence_for_containment_mode", "terminal_and_outbox_transaction"]},
-    {"from": ["starting", "running", "stopping", "needs_attention"], "to": "needs_attention", "requires": ["native_best_effort", "cleanup_error_or_known_survivor_or_identity_lease_loss_or_unreconciled_restart", "preserve_record_root_result_and_manual_guidance", "no_wake", "release_slot_only_when_known_executor_stopped"]},
-    {"from": ["needs_attention"], "to": "interrupted", "requires": ["authenticated_local_user_action", "revision_cas", "durable_user_audit", "reason_cleanup_acknowledged", "terminal_and_outbox_transaction", "suppress_wake", "acknowledgement_is_not_kernel_evidence"]},
+    {"from": ["starting", "running", "stopping"], "to": "interrupted", "requires": ["native_best_effort", "daemon_cleanup_retries_exhausted", "internal_diagnostics_recorded", "slot_released", "best_effort_complete", "terminal_and_outbox_transaction"]},
     {"from": ["queued", "starting", "running", "stopping"], "to": "interrupted", "requires": ["unsafe_to_recover", "reconciliation_and_reclamation", "confirmed_no_live_workload_in_containment", "terminal_and_outbox_transaction"]}
   ],
   "cleanup_evidence": {
     "strict": "executor_and_descendants_reclaimed",
     "native_best_effort": "root_and_known_processes_reclaimed_without_cleanup_error",
     "normal_native_terminal": "best_effort_complete_with_standard_wake_not_verified",
-    "attention_record": "nonterminal_cap_retained_no_auto_prune_even_after_owner_invalid",
-    "user_only_operation": "session.task.resolve_cleanup",
-    "user_only_inputs": ["task_id", "revision"],
-    "acknowledgement": "interrupted_cleanup_acknowledged_suppressed_completion_user_audit"
+    "unconfirmed_cleanup": "daemon_retries_then_ends_job_with_best_effort_complete_and_internal_diagnostics",
+    "startup_migration": "needs_attention_rows_end_as_interrupted_daemon_upgrade_suppressed_wake"
   },
   "transition_invariants": ["revision_cas", "terminal_immutable", "stop_idempotent", "one_terminal_winner"],
   "completion": {
@@ -126,8 +123,6 @@
     {"condition": "paused", "action": "keep_pending_until_explicit_resume"},
     {"condition": "owner_invalid", "action": "suppress_with_reason"},
     {"condition": "permission_denied", "action": "suppress_with_permission_denied_reason_no_wake_or_retry"},
-    {"condition": "needs_attention", "action": "ui_notice_only_no_wake"},
-    {"condition": "cleanup_acknowledged", "action": "suppress_with_reason"},
     {"condition": "cancelled_by_stop_or_session_close", "action": "suppress_with_reason"}
   ],
   "limits": {
@@ -162,8 +157,8 @@
     {"id": "preaccept-refusal", "boundary": "api", "given": "Validation, authentication or quota check refuses request", "when": "Start has not been accepted", "expect": ["api_error", "no_job", "no_outbox", "no_launch"]},
     {"id": "permission-denied", "boundary": "runtime", "given": "Accepted intent; no workload launched", "when": "User denies permission", "expect": ["failed", "reason_permission_denied", "completion_suppressed_permission_denied", "no_wake", "no_permission_retry"]},
     {"id": "native-normal-exit", "boundary": "executor", "given": "macOS native job root exits and every known process is reclaimed without cleanup error", "when": "Publish terminal result", "expect": ["terminal_according_to_exit_result", "native_best_effort", "best_effort_complete_not_verified", "standard_wake", "no_absolute_no_orphan_claim"]},
-    {"id": "native-cleanup-attention", "boundary": "executor", "given": "macOS native cleanup error, known surviving process, identity/lease loss or unreconciled restart", "when": "Root result and cleanup evidence are evaluated", "expect": ["needs_attention", "cleanup_status_unverified", "preserve_root_result_output_and_guidance", "no_wake", "release_slot_only_after_known_executor_stops", "retain_nonterminal_record_after_owner_close"]},
-    {"id": "user-cleanup-ack", "boundary": "api", "given": "Needs-attention task and authenticated user administrative action", "when": "resolve_cleanup with task_id and revision; also stale revision and agent callers", "expect": ["user_only", "revision_cas", "atomic_audit_source_user", "interrupted_cleanup_acknowledged", "unverified_assurance_preserved", "suppressed_wake", "no_command_replay"]},
+    {"id": "native-cleanup-settled", "boundary": "executor", "given": "macOS native cleanup error, known surviving process, identity/lease loss or unreconciled restart", "when": "The daemon retries within its bounded window and cleanup is still unconfirmed", "expect": ["interrupted_or_stop_target", "cleanup_status_best_effort_complete", "internal_diagnostics_only", "standard_completion_wake", "slot_released", "no_user_action"]},
+    {"id": "retired-attention-migration", "boundary": "storage", "given": "A registry written by an earlier daemon with a needs_attention task", "when": "The daemon starts", "expect": ["interrupted_reason_daemon_upgrade", "slot_released", "wake_suppressed", "no_command_replay"]},
     {"id": "launch-failure", "boundary": "executor", "given": "Accepted job encounters spawn_failed or handshake_failed", "when": "Workload is proven absent or cleanup completes", "expect": ["failed", "standard_terminal_outbox", "no_command_replay"]},
     {"id": "launch-failure-cleanup", "boundary": "executor", "given": "Accepted job fails before running but cleanup takes time", "when": "Cleanup is pending then confirmed", "expect": ["stopping_with_terminal_target_failed", "no_early_terminal", "failed_only_after_reclamation"]},
     {"id": "cleanup-uncertain", "boundary": "executor", "given": "Execution identity lost or PID absent; containment not proven clean", "when": "Recovery cannot verify all descendants reclaimed", "expect": ["stopping_cleanup_pending", "continue_reconciliation_and_warning", "no_interrupted_until_containment_confirmed_clean"]},

@@ -201,7 +201,7 @@ void NativeJobSupervisor::recordStopSender() {
     const auto stop = supervisorStopSignal();
     if (stop.signal == 0)
         return;
-    const QString name = stop.signal == SIGTERM ? "SIGTERM"
+    const QString name = stop.signal == SIGTERM  ? "SIGTERM"
                          : stop.signal == SIGINT ? "SIGINT"
                                                  : QString::number(stop.signal);
     metadata_.insert("stop_signal", name);
@@ -347,6 +347,10 @@ void NativeJobSupervisor::finish() {
                        : exitCode_ == 0         ? "completed"
                                                 : "failed";
     metadata_.insert("state", state);
+    if (cleanupError_ && stopReason_.isEmpty() && metadata_.value("root_started").toBool()) {
+        // What the command really did, for the daemon to keep when cleanup stays unverified.
+        metadata_.insert("result_state", exitCode_ == 0 ? "completed" : "failed");
+    }
     metadata_.insert("exit_code", exitCode_);
     metadata_.insert("executor_stopped",
                      process_.state() == QProcess::NotRunning && known_.isEmpty());
@@ -365,11 +369,8 @@ void NativeJobSupervisor::finish() {
         qInfo("Job cleanup verified by empty process group after %s.", qUtf8Printable(stopCause_));
     }
 #endif
-    if (cleanupError_) {
-        metadata_.insert("reason", "cleanup_unverified");
-        metadata_.insert("manual_guidance", "Inspect the recorded process identities and "
-                                            "descendants, then resolve cleanup in the task UI.");
-    }
+    if (cleanupError_)
+        metadata_.insert("reason", "cleanup_unverified"); // Executor receipt only; never shown.
     if (!persist()) {
 #ifdef Q_OS_LINUX
         finalized_ = false;

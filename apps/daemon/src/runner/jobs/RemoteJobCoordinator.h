@@ -12,7 +12,7 @@
 
 // The desktop's remote job records. Inputs come from the start and Stop requests, the Relay's
 // answers and job.changed hints, the authenticated peer session of each job, timers, runner
-// removal and the user's cleanup acknowledgement; effects go through the ports.
+// removal; effects go through the ports.
 namespace ketplus::daemon::runner::jobs {
 
 inline constexpr int maximumOutstanding = 64;
@@ -44,7 +44,6 @@ class RemoteJobCoordinator final {
     JobDecision start(const QString& taskId, const QStringList& runsOn, qint64 timeoutMs,
                       const RemoteSnapshot& snapshot);
     JobDecision stop(const QString& taskId);
-    JobDecision resolveCleanup(const QString& taskId);
 
     // The Relay.
     void jobChanged(const QString& jobId);

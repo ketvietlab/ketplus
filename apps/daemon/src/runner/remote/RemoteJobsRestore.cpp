@@ -12,10 +12,9 @@ Q_LOGGING_CATEGORY(lcRemoteRestore, "ketplus.runner.remote")
 
 // Started, but the runner has not taken the spec: no runner ran any of it.
 bool unsent(const jobs::RemoteJobRecord& record) {
-    return !record.terminal() && record.state != jobs::state::needsAttention &&
-           (record.placement == jobs::placement::submitting ||
-            record.placement == jobs::placement::relayQueued ||
-            record.placement == jobs::placement::assigned);
+    return !record.terminal() && (record.placement == jobs::placement::submitting ||
+                                  record.placement == jobs::placement::relayQueued ||
+                                  record.placement == jobs::placement::assigned);
 }
 } // namespace
 
@@ -72,7 +71,7 @@ void RemoteJobs::endUnsent(const QList<jobs::RemoteJobRecord>& loaded) {
     }
 }
 
-// interrupted, record_unreadable, cleanup unverified, without an acknowledgement; once only,
+// interrupted, record_unreadable, with the confirmation gap kept as diagnostics; once only,
 // since the row is written readable and terminal.
 void RemoteJobs::endUnreadable(const QStringList& taskIds) {
     for (const QString& taskId : taskIds) {

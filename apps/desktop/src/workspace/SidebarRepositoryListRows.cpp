@@ -21,10 +21,8 @@ ket::ConversationStatus conversationStatus(const QVariantMap& conversation) {
         return Status::AwaitingReply;
     if (conversation.value(QStringLiteral("running")).toBool())
         return Status::Working;
-    // The turn ended but a job it started is live: the job needs the user, else it wakes the
-    // conversation when it ends, so the row is neither done nor the user's to answer.
-    if (conversation.value(QStringLiteral("attentionJobs")).toInt() > 0)
-        return Status::TaskNeedsAttention;
+    // The turn ended but a job it started is live: it wakes the conversation when it ends,
+    // so the row is neither done nor the user's to answer.
     const bool waitsOnJob = conversation.value(QStringLiteral("liveJobs")).toInt() > 0;
     if (status.contains("fail") || status.contains("error") || status.contains("disconnect") ||
         status.contains("missing") || status.contains("not found"))
@@ -47,8 +45,7 @@ bool waitsForUser(const QVariantMap& conversation, const bool seen) {
     using Status = ket::ConversationStatus;
     const Status status = conversationStatus(conversation);
     return status == Status::NeedsInput || status == Status::AwaitingReply ||
-           status == Status::Error || status == Status::TaskNeedsAttention ||
-           (status == Status::Completed && !seen);
+           status == Status::Error || (status == Status::Completed && !seen);
 }
 
 } // namespace sidebar_list

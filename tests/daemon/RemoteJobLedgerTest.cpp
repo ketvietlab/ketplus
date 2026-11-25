@@ -163,9 +163,6 @@ class RemoteJobLedgerTest final : public QObject {
         stop.state = "stopping";
         QCOMPARE(f.ledger->change(id, f.revision(id), stop).value("error_code").toString(),
                  QStringLiteral("invalid_state"));
-        QCOMPARE(
-            f.ledger->resolveCleanup(id, f.revision(id), "client").value("error_code").toString(),
-            QStringLiteral("invalid_state"));
         QCOMPARE(f.state(id), QStringLiteral("queued"));
     }
 

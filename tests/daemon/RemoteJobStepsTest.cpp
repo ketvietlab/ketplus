@@ -71,12 +71,12 @@ struct Steps {
         jobs->started(job, runnerA);
         return record().state == state::running;
     }
-    bool needsAttention() {
+    bool endedWithoutItsRunner() {
         if (!running())
             return false;
         jobs->peerLost(job, runnerA, clock.time);
         clock.advance(20 * minute);
-        return record().state == state::needsAttention;
+        return record().state == state::interrupted;
     }
     int outbox() {
         return f.count("SELECT count(*) FROM managed_job_outbox WHERE task_id='" + id + "'");
@@ -290,17 +290,21 @@ class RemoteJobStepsTest final : public QObject {
                  ended == "cancelled" ? QStringLiteral("suppressed") : QStringLiteral("pending"));
     }
 
-    // To needs_attention, and S9: a late result ends it.
-    void aLateResultEndsAJobThatNeedsAttention() {
+    // A job whose runner stays away ends interrupted with its gap kept in the diagnostics, and
+    // a late result cannot change it.
+    void aJobWithoutItsRunnerEndsWithoutAUserAndALateResultChangesNothing() {
         Steps s;
-        const QJsonValue stopped = s.f.task(s.id).value("executor_stopped");
-        QVERIFY(s.needsAttention());
-        QCOMPARE(s.task(), QStringLiteral("needs_attention"));
-        QCOMPARE(s.f.task(s.id).value("cleanup_status").toString(), QStringLiteral("unverified"));
-        QCOMPARE(s.f.task(s.id).value("executor_stopped"), stopped);
+        QVERIFY(s.endedWithoutItsRunner());
+        QCOMPARE(s.task(), QStringLiteral("interrupted"));
+        QCOMPARE(s.f.task(s.id).value("cleanup_status").toString(),
+                 QStringLiteral("best_effort_complete"));
         QCOMPARE(s.f.task(s.id).value("slot_held").toBool(), false);
-        QVERIFY(s.jobs->result(job, runnerA, jobResult("exited", 0)).ok());
-        QCOMPARE(s.task(), QStringLiteral("completed"));
+        QVERIFY(!s.f.task(s.id).contains("manual_guidance"));
+        QCOMPARE(
+            s.f.count("SELECT count(*) FROM managed_job_diagnostics WHERE task_id='" + s.id + "'"),
+            1);
+        s.jobs->result(job, runnerA, jobResult("exited", 0));
+        QCOMPARE(s.task(), QStringLiteral("interrupted"));
         QCOMPARE(s.outbox(), 1);
     }
 
@@ -310,29 +314,6 @@ class RemoteJobStepsTest final : public QObject {
         QTest::newRow("resolve cleanup") << "user";
         QTest::newRow("runner removed") << "runner_removed";
     }
-    void anAcknowledgementIsNeededToInterruptAJobThatNeedsAttention() {
-        QFETCH(QString, source);
-        Steps s;
-        QVERIFY(s.needsAttention());
-        const auto act = [&] {
-            return source == "user" ? s.jobs->resolveCleanup(s.id).code
-                                    : s.jobs->runnerRemoved(runnerA).code;
-        };
-        QCOMPARE(act(), QStringLiteral("storage_error"));
-        QCOMPARE(s.task(), QStringLiteral("needs_attention"));
-        QVERIFY(!s.f.store->acknowledge(s.id, source, QString()));
-        QVERIFY(!s.f.store->acknowledge(s.id, "someone", "client-1"));
-        QVERIFY(s.f.store->acknowledge(s.id, source, "client-1"));
-        QCOMPARE(act(), QString());
-        QCOMPARE(s.task(), QStringLiteral("interrupted"));
-        QCOMPARE(s.f.count("SELECT count(*) FROM managed_job_cleanup_audit WHERE task_id='" + s.id +
-                           "' AND source='" + source + "' AND user_client_id='client-1'"),
-                 1);
-        const QJsonObject row = s.outboxRow();
-        QCOMPARE(row.value("status").toString(), QStringLiteral("suppressed"));
-        QCOMPARE(row.value("reason").toString(), QStringLiteral("cleanup_acknowledged"));
-    }
-
     // X to stopping before dispatch: the Relay cancels, nothing ran.
     void aJobStoppedBeforeDispatchIsCancelled() {
         Steps s;
@@ -373,10 +354,6 @@ class RemoteJobStepsTest final : public QObject {
         RemoteJobRecord mismatched = s.record();
         mismatched.placement = placement::assigned; // running is only placed running
         QVERIFY(!s.f.store->put(mismatched, mismatched.revision));
-        RemoteJobRecord unverified = s.record();
-        unverified.state = state::completed;
-        unverified.cleanupStatus = cleanup::unverified;
-        QVERIFY(!s.f.store->put(unverified, unverified.revision));
         QCOMPARE(s.task(), QStringLiteral("running"));
     }
 
@@ -390,7 +367,6 @@ class RemoteJobStepsTest final : public QObject {
         s.f.failRemoteWrites(false);
         QCOMPARE(s.f.task(s.id), task);
         QCOMPARE(s.outbox(), 0);
-        QCOMPARE(s.f.count("SELECT count(*) FROM managed_job_cleanup_audit"), 0);
     }
 
     void theCompletionEventHasTheLocalShape() {
@@ -453,10 +429,6 @@ class RemoteJobStepsTest final : public QObject {
         s.jobs->restore();
         QCOMPARE(s.f.task(s.id), before);
         QVERIFY(!taskIds(s.f.ledger->nonterminal(), "tasks").contains(s.id));
-        QCOMPARE(s.f.ledger->resolveCleanup(s.id, s.f.revision(s.id), "client")
-                     .value("error_code")
-                     .toString(),
-                 QStringLiteral("invalid_state"));
         const QString local = taskIdOf(s.f.ledger->create(intentFor("local", std::nullopt)));
         QVERIFY(s.f.approve(local));
         QCOMPARE(s.f.ledger->claimNext().value("task").toObject().value("task_id").toString(),
@@ -469,9 +441,6 @@ class RemoteJobStepsTest final : public QObject {
         QVERIFY(!ended.value("cleanup_pending").toBool());
         QCOMPARE(ended.value("cleanup_status").toString(), QStringLiteral("verified"));
         QVERIFY(!ended.value("slot_held").toBool());
-        QCOMPARE(s.f.count("SELECT count(*) FROM managed_job_cleanup_audit WHERE task_id='" + s.id +
-                           "'"),
-                 0);
         QCOMPARE(s.outbox(), 1);
     }
 
@@ -480,7 +449,6 @@ class RemoteJobStepsTest final : public QObject {
         QTest::newRow("undispatched") << "undispatched";
         QTest::newRow("dispatched") << "dispatched";
         QTest::newRow("stopping") << "stopping";
-        QTest::newRow("needs attention") << "needs_attention";
     }
     void aRestartContinuesEachKindOfRecord() {
         QFETCH(QString, kind);
@@ -489,10 +457,8 @@ class RemoteJobStepsTest final : public QObject {
             QVERIFY(s.assigned());
         else if (kind == "dispatched")
             QVERIFY(s.running());
-        else if (kind == "stopping")
-            QVERIFY(s.running() && s.jobs->stop(s.id).ok());
         else
-            QVERIFY(s.needsAttention());
+            QVERIFY(s.running() && s.jobs->stop(s.id).ok());
         const RemoteJobRecord before = s.record();
         QVERIFY(s.f.reopen());
         s.reopenJobs();

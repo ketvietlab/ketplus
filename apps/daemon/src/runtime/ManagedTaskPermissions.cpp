@@ -93,12 +93,7 @@ bool ManagedTaskBridge::hasExecutions() const {
     const auto page = ledger_.nonterminal();
     if (!page.value("ok").toBool())
         return true;
-    for (const auto value : page.value("tasks").toArray()) {
-        const auto task = value.toObject();
-        if (task.value("state") != "needs_attention" || !task.value("executor_stopped").toBool())
-            return true;
-    }
-    return false;
+    return !page.value("tasks").toArray().isEmpty();
 }
 
 QJsonObject ManagedTaskBridge::snapshot(const BackgroundTaskOwner& owner) {
@@ -175,19 +170,5 @@ void ManagedTaskBridge::changed(const QJsonObject& task) {
                         {"summary", page.value("summary")},
                         {"revision", page.value("revision")},
                         {"active_count", page.value("active_count")}});
-    if (task.value("state") != "needs_attention") {
-        attentionNotices_.remove(id);
-        return;
-    }
-    const QJsonObject notice{{"kind", "background_task_attention"},
-                             {"task_id", id},
-                             {"reason", task.value("reason")},
-                             {"cleanup_issue", task.value("error").toString()},
-                             {"executor_stopped", task.value("executor_stopped").toBool()},
-                             {"manual_guidance", task.value("manual_guidance")}};
-    // Executor receipts can advance the task revision without changing the incident.
-    if (attentionNotices_.value(id) != notice &&
-        host_->appendEvent(*current, "agent_message.state", notice))
-        attentionNotices_.insert(id, notice);
 }
 } // namespace ketplus::daemon

@@ -1,7 +1,6 @@
 // ADR 0127 §7a: owner notices. A completion tells the owner that a job ended; a notice tells it
-// that a job it still owns needs something it cannot get by waiting: cleanup only the user can
-// acknowledge, or a queue position that will not move by itself soon. Both reach the owner
-// through the same durable acceptance, wake and fences.
+// that a job it still owns waits in a queue position that will not move by itself soon. Both
+// reach the owner through the same durable acceptance, wake and fences.
 #include "storage/BackgroundTaskLedger.h"
 #include "storage/RemoteJobRows.h"
 
@@ -13,7 +12,6 @@
 
 namespace ketplus::daemon {
 namespace {
-const QString attentionEvent = QStringLiteral("needs_attention");
 const QString queuedEvent = QStringLiteral("queued");
 
 QJsonObject failure(const QString& code, const QString& message) {
@@ -41,30 +39,6 @@ QJsonObject insertNotice(QSqlDatabase database, const QString& eventId, const QS
     return {{"ok", true}};
 }
 } // namespace
-
-QJsonObject BackgroundTaskLedger::noticeAttention(const QString& id, const QJsonObject& record,
-                                                  const QString& previousState) {
-    // One notice per entry into needs_attention, keyed by the revision that entered it. A
-    // later update of the same incident (its executor stopped, a cleanup retry) adds none.
-    if (previousState == attentionEvent)
-        return {{"ok", true}};
-    QJsonObject payload{{"event", attentionEvent},
-                        {"task_id", id},
-                        {"title", record.value("title")},
-                        {"state", attentionEvent},
-                        {"reason", "cleanup_unverified"},
-                        {"cleanup_status", "unverified"},
-                        {"manual_guidance", record.value("manual_guidance")},
-                        {"output_reference", id}};
-    if (record.contains("exit_code"))
-        payload.insert("exit_code", record.value("exit_code"));
-    // A job its owner or the user cancelled wakes no one, as its completion would not (§7).
-    const QString suppressed =
-        record.value("terminal_target") == "cancelled" ? QStringLiteral("cancelled") : QString();
-    return insertNotice(database_,
-                        id + ":attention:" + QString::number(record.value("revision").toInteger()),
-                        attentionEvent, record, payload, suppressed);
-}
 
 QJsonObject BackgroundTaskLedger::supersedeNotices(const QString& id) {
     QSqlQuery query(database_);
@@ -178,7 +152,7 @@ QJsonObject BackgroundTaskLedger::noticePage(const qint64 after) const {
 
 bool BackgroundTaskLedger::noticeCurrent(const QJsonObject& turnRecord) const {
     const QString event = turnRecord.value("event").toString();
-    if (event != attentionEvent && event != queuedEvent)
+    if (event != queuedEvent)
         return true; // A completion describes a terminal job, which cannot move on.
     const auto record = task(turnRecord.value("task_id").toString());
     return !record.contains("error_code") && record.value("state").toString() == event;

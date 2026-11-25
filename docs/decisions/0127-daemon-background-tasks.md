@@ -175,42 +175,92 @@ best_effort_complete`. A normal root exit with every known process reclaimed and
 no cleanup error ends in the normal terminal state according to the exit result,
 with `best_effort_complete` and normal completion delivery. This is not `verified`
 and does not promise absence of unobserved descendants. Lack of kernel containment
-alone must not force every native job into an attention state.
+alone must not force every native job into a waiting state.
 
 Cleanup errors, known surviving processes, lost identity/lease or an unreconciled
-restart instead produce nonterminal `needs_attention`,
-`cleanup_status=unverified`, `reason=cleanup_unverified`. Preserve the root result,
-exit code and output, plus manual-check guidance. Do not report clean success or
-cancellation. Release the execution slot only once the known executor has stopped;
-the retained attention record still counts against the 116 nonterminal cap and
-is never automatically pruned, including after owner close/generation change.
-Existing authenticated local administration may inspect it; do not invent a new
-grant. Cleanup retries signal only identities that can still be validated and
-never replay the command.
+restart are the daemon's to settle, never the user's: see "Daemon-owned cleanup"
+below (2026-11-25). The earlier design parked such a job in a nonterminal
+`needs_attention` state for a user acknowledgement; that state, the acknowledgement
+command and its UI are retired. Cleanup retries signal only identities that can still
+be validated and never replay the command.
 
 A job that never committed its handshake never launched a workload, because the daemon
 sends start only after that commit. When such a job's supervisor left neither a receipt
 nor a control socket (it exited before its first durable write), the daemon ends the job
 as `failed(reason=handshake_failed, error=executor_never_started)` with
-`cleanup_status=not_required` and releases its slot, also from `needs_attention`. The
+`cleanup_status=not_required` and releases its slot. The
 supervisor persists its receipt before anything else that can fail, and a failure before
 its control socket listens is recorded as `failed/handshake_failed`. A job that was already
 `stopping` when this is detected ends at its `terminal_target` instead (cancelled, timed out
-or interrupted), with the same evidence. A missing receipt after a committed handshake stays
-`needs_attention`, and a client that has seen a receipt keeps retrying the identities it
-holds. A supervisor slower than the daemon's 5.5-second recovery window to write its first
+or interrupted), with the same evidence. A missing receipt after a committed handshake is
+settled by the daemon like any other unconfirmed cleanup, and a client that has seen a
+receipt keeps retrying the identities it holds. A supervisor slower than the daemon's 5.5-second recovery window to write its first
 receipt (for example the first launch of a newly installed bundle while the system scans
 it) is reported the same way; it launched nothing and exits once its lease expires, so the
 `handshake_failed` result does not mean the executor or handshake is broken.
 
-Only a user may invoke `session.task.resolve_cleanup` with `task_id` and revision.
-CAS `needs_attention -> interrupted(reason=cleanup_acknowledged)` with a durable
-audit whose source is `user`. Acknowledgement is a user statement, not kernel
-cleanup evidence; keep the assurance level visible. Agents have no cleanup acknowledgement
-tool. They can read the incident and its output with their existing job access and
-report it to the user. Acknowledgement wakes no agent. Entering `needs_attention`
-shows the UI warning and queues one attention wake per incident (§7a). The job
-remains nonterminal and cleanup remains unverified.
+### 4a. Daemon-owned cleanup
+
+Amendment, 2026-11-25. The user asked that cleanup stop being a concept they meet at all:
+no warning, button, dialog or "cleanup needs attention" wording. Cleanup is the daemon's
+job and the daemon finishes it.
+
+**Decision.**
+
+1. A job always ends at the state its command really reached (`completed`, `failed`,
+   `cancelled`, `timed_out`, `interrupted`). The daemon never emits `needs_attention`,
+   `reason=cleanup_unverified` or `cleanup_acknowledged`. `session.task.resolve_cleanup`
+   and the `manual_guidance` field are removed from the public protocol and from the agent
+   transport; the daemon answers the command as unsupported. A client older than this
+   change still reads every record, because `state`, `cleanup_status` and the fields it
+   used are unchanged; it simply never sees the retired state again.
+2. When an executor result reports processes not yet confirmed gone (cleanup error, known
+   survivor, lost identity or lease, unreconciled restart), the job moves to `stopping`
+   with `terminal_target=interrupted` and the daemon keeps working for a bounded window of
+   30 seconds: the executor client probes the job's process group and signals again every
+   second, SIGTERM first and SIGKILL after 1.5 seconds, only to identities it re-verifies
+   by pid and birth time (never a bare stored PID, never a reused PID). A later result
+   that verifies the group empty ends the job normally with
+   `cleanup_verification=process_group_empty`.
+3. When the window elapses, or when the executor can no longer be reached at all (receipt
+   missing, executor identity invalid, reconnect failed, result not committable), the
+   daemon ends the job at its target state with `cleanup_status=best_effort_complete`, logs a warning and records the
+   unconfirmed issue in `managed_job_diagnostics(task_id, revision, issue, recorded_at)`.
+   The target state follows the real outcome: when the executor reported that the command
+   ran to an exit (`completed` for exit 0, `failed` otherwise), that state is kept and the
+   unconfirmed cleanup is recorded in the diagnostics only. The job is `interrupted` only
+   when no real result exists (the executor was lost before reporting one), and a stop
+   already in progress keeps the state it named (`cancelled`, `timed_out`).
+   That table and the log are the internal diagnostics (daemon log, `ketplusctl`); the
+   task record, the notices, the agent tools and the UI carry no cleanup wording.
+4. **Slot and resource policy.** The terminal transition releases the execution slot and
+   the job stops counting against the nonterminal cap, exactly like any ended job. A
+   process the daemon could not identify may outlive its job; that residual is bounded
+   per job (one diagnostics row, no retained record, no timer, no retry loop after the
+   job ended) and is never signalled: the daemon kills only identities it verified, so a
+   process of another user, a reused PID or an unrelated process is never touched. The
+   assurance is not raised: native records stay `native_best_effort` and are never
+   `cgroup_v2` or `verified` without process-group or kernel evidence.
+5. A restart re-runs the same path: recovery reconnects to each nonterminal job, repeats
+   the probe and signals for another window, and ends the job the same way. The window is
+   per daemon start, so a job cannot keep a slot across restarts.
+6. **Migration.** When the registry opens, every record an earlier daemon left in
+   `needs_attention` ends as `interrupted` (`reason=daemon_upgrade`,
+   `cleanup_status=best_effort_complete`), releases its slot, queues a suppressed
+   completion (no wake for the migration), drops `manual_guidance`, and keeps its former
+   issue as a `migrated_` diagnostics row. Its remote job record, if any, follows. Pending
+   attention notices are superseded. The step is idempotent.
+7. A remote job whose runner stays away for the 20-minute window, whose runner is removed,
+   or whose result lacks cleanup confirmation, ends the same way: the runner's own result
+   decides the state (`interrupted/runner_unreachable` or `runner_removed` without one),
+   the missing confirmation is a diagnostic. The daemon cannot signal a remote machine, so
+   there is no retry for it.
+
+**Internal vocabulary kept.** The executor's own receipt file and its client still call the
+unconfirmed result `needs_attention` with `reason=cleanup_unverified`. That is the private
+protocol between the daemon and its supervisor process, never stored in the registry and
+never sent to a client; the runtime translates it as above. The runner's result vocabulary
+is unchanged (`cleanup_unverified` is its own diagnostic code).
 
 ### 5. Supervisor, launch and restart safety
 
@@ -269,8 +319,7 @@ start dispatch is rejected before beginning admission.
 Linux records use `containment_mode=cgroup_v2`. `cleanup_status=verified` requires
 an identity-matching domain with `populated=0`, or verified service reclamation/
 host reboot during recovery. Otherwise the record stays `stopping`,
-`cleanup_pending=true`, and retains its slot. The native macOS acknowledgement
-action does not resolve this Linux state. This boundary contains the workload's
+`cleanup_pending=true`, and retains its slot. This boundary contains the workload's
 own migration authority; it is not a sandbox against an independently acting
 same-UID host process or requests deliberately made to external services.
 
@@ -296,13 +345,12 @@ gone. The answer decides the outcome:
 
 - Group empty and every recorded identity gone: cleanup is **verified**
   (`cleanup_status=verified`, `cleanup_verification=process_group_empty`). The job
-  ends `interrupted` with no `needs_attention`, no `cleanup_unverified` and no
-  blocked slot; the daemon only logs it. This is process-group evidence, not the
+  ends `interrupted` with no blocked slot; the daemon only logs it. This is process-group evidence, not the
   kernel containment of Linux (`fullScopeVerified` stays false).
 - A live process remains, the group or an identity cannot be listed or inspected
   completely (another UID, truncated listing), the recorded PID now has a different
-  birth time, or the receipt is missing: unchanged, `needs_attention` with
-  `cleanup_unverified`. A reused PID is never signalled.
+  birth time, or the receipt is missing: the daemon retries for its window and then ends
+  the job with a diagnostic (§4a). A reused PID is never signalled.
 
 The ledger accepts this result by evidence kind, not by trusting the status word. A
 native result carrying `cleanup_status=verified` is committed only with
@@ -310,7 +358,7 @@ native result carrying `cleanup_status=verified` is committed only with
 `verified` alone on a native job is still refused (`invalid_cleanup_evidence`). The task
 record keeps `cleanup_verification=process_group_empty` and a native `containment_mode`,
 so the weaker assurance is never raised to `cgroup_v2`. A result that could not be
-verified still ends in `needs_attention`.
+verified is retried, then ended with a diagnostic (§4a).
 
 The supervisor records who stopped it. Its SIGTERM/SIGINT handler (`sigaction`,
 `SA_SIGINFO`) only stores the signal number and the kernel-reported sender PID and UID
@@ -324,7 +372,7 @@ inspected, `stop_sender_birth` to the receipt and logs them next to
 control. The OS reporting the PID gone, or the PID held by another process with a
 different birth time (a reused PID), proves the original exited and raises no alarm.
 An unchanged birth, or a PID that cannot be read but still answers `kill(pid, 0)`,
-still blocks as `needs_attention`.
+is retried within the window and then ends the job with a diagnostic (§4a).
 
 On macOS the probe reads the PID through libproc. For another user's process libproc
 either refuses the read (the probe reports unknown and falls back to `kill(pid, 0)`) or
@@ -365,8 +413,9 @@ On daemon restart, reconcile every nonterminal registry record with the
 executor identity and lease. Reconnect only to a live, verifiable executor;
 otherwise reclaim it and record `interrupted` only after confirming the
 containment is clean. If that cannot be confirmed, keep `stopping/cleanup_pending`
-and continue reconciliation and warnings. macOS follows the native amendment's
-`needs_attention` path when restart cannot be reconciled. Never relaunch a command with
+and continue reconciliation and warnings. macOS follows the native amendment's bounded
+retry and then ends the job with a diagnostic (§4a) when restart cannot be reconciled.
+Never relaunch a command with
 side effects to reconstruct its result, even when its last state was queued or
 starting. Provider exit does not kill a daemon-owned process job.
 
@@ -412,9 +461,7 @@ message-only routing cannot replace it.
 | Team paused or automatic turn budget exhausted | Keep pending and record one UI notice per event ID with the reason; Resume releases eligible wakes |
 | Closed/deleted owner or replaced generation | Suppress with a recorded reason |
 | Job cancelled by Stop or session close | Suppress; cancellation must not restart the agent |
-| Job enters `needs_attention` | UI warning and one owner notice (§7a); suppressed for a cancelled job |
 | Approved job still queued at its notice threshold | One owner notice naming why (§7a) |
-| Cleanup acknowledged by the user | Completion suppressed; no auto-wake |
 | Permission denied after job acceptance | `failed` with `reason=permission_denied`; suppress completion with the same reason |
 
 Delivery is rechecked at acceptance and dispatch, including generation and Stop
@@ -432,35 +479,30 @@ cancels only that job. These controls must not be conflated.
 ### 7a. Owner notices of nonterminal jobs
 
 Amendment, 2026-11-23. Agents guessed how long to wait for jobs. Only terminal states
-woke the owner, so a job that entered `needs_attention`, or that sat queued behind its
-root's full slots, told it nothing until the job's timeout, if ever. Team members also
+woke the owner, so a job that sat queued behind its root's full slots told it nothing
+until the job's timeout, if ever. Team members also
 set `team_wait` timers for builds that a managed job would have reported by itself.
 
-**Decision.** A nonterminal job queues an owner notice in two cases, at most once each:
+**Decision.** A nonterminal job queues an owner notice when it waits in the queue, at most
+once (the `needs_attention` notice of the first design is retired, §4a):
 
 | Notice | When | Event identity |
 | --- | --- | --- |
-| `needs_attention` | The transition that enters `needs_attention`; a later update of the same incident adds none | `(task_id, revision that entered it)` |
 | `queued` | The job is still `queued`, its permission approved, `queuedNoticeAfterMs(timeout)` after its creation: half its timeout, at most two minutes | `(task_id, "queued")` |
 
 The queued notice names `queue_reason`: `root_slot_limit` with `slot_limit` and the
 `slot_holders` (task id, title, state) of its root, `waiting_for_runner` for a job that
 runs on a runner, or `awaiting_admission` otherwise. A job waiting for its permission
-request gets none: the request is the user's and the UI shows it. The attention notice
-carries the retained exit code and manual guidance; its prompt tells the owner that
-cleanup is unverified, not to start the job again or assume its processes are gone, and
-that only the user acknowledges cleanup. A job its owner or the user cancelled queues the
-attention notice already suppressed, as its completion would be.
+request gets none: the request is the user's and the UI shows it.
 
 **Mechanism.** Notices are rows of `managed_job_notices`, written in the transition's
-transaction (attention) or by the runtime's pump through one idempotent ledger call
-(queued). `INSERT OR IGNORE` on the event identity makes a repeated write harmless,
+transaction or by the runtime's pump through one idempotent ledger call (queued). `INSERT OR IGNORE` on the event identity makes a repeated write harmless,
 including after a restart. They are not added to the completion outbox: that table keeps
 one event per task, which its `completion` projection, retention and child-continuation
 checks rely on. From acceptance on, a notice follows the completion path unchanged: the
 same durable acceptance into `managed_job_wakes`, owner generation and Stop/pause/decision
 fences, idle dispatch, and the logical `turn_id=background-wake:<event_id>`. A notice is
-stale once its job has moved on (started, ended, acknowledged): dispatch suppresses it
+stale once its job has moved on (started or ended): dispatch suppresses it
 with `superseded`, and a terminal transition suppresses the job's pending notices and
 their accepted wakes in its own transaction, so retention is never held by them. The
 wake's origin kind is `background_task_notice`. Outbox delivery to wake acceptance
@@ -498,11 +540,9 @@ projection does not determine whether a job exists, is active, is eligible for
 cleanup or may be stopped. Snapshots include `revision` and `active_count`.
 `tasks.changed` snapshots and every session catalog row (`background_task_summary`)
 also carry an owner summary over the whole registry:
-`{live_jobs, queued_jobs, attention_jobs, job_title}`, just `{live_jobs: 0}` when
-nothing is live. It counts the owner's
-queued through stopping and `needs_attention` jobs, except a job stopping toward
-`cancelled`, whose completion wake is suppressed, and names one job, a job needing
-attention first. Clients show whether an ended turn still waits on a job from this
+`{live_jobs, queued_jobs, job_title}`, just `{live_jobs: 0}` when nothing is live. It
+counts the owner's queued through stopping jobs, except a job stopping toward
+`cancelled`, whose completion wake is suppressed, and names one job. Clients show whether an ended turn still waits on a job from this
 summary, never from the bounded rows.
 An event gap or reconnect requires refetch, rather than reconstructing membership
 from a partial event stream.
@@ -572,7 +612,7 @@ verified old-context drain and replacement-context acknowledgement. See the
 [provider refresh evidence and remaining gaps](0127-provider-origin-refresh-evidence.md).
 The MCP layer forwards the exact execution spec/request key and opaque cursors;
 the registry owns deduplication, authorization, output and completion delivery.
-It never exposes `session.task.resolve_cleanup` as an agent tool. A new schema
+It exposes no cleanup operation to an agent: there is none (§4a). A new schema
 does not grant execution or replace the existing daemon permission broker.
 
 Claude SDK 0.3.322 is configured through `background-policy.mjs`: both the child
@@ -720,8 +760,7 @@ managed child conversations, durable completion acceptance and wake dispatch.
 `background_tasks` remains a 16-row compatibility projection; its active records
 come first, while list/get/output/stop use the complete registry. Authenticated
 local administration can inspect a retained owner/generation after conversation
-deletion and acknowledge cleanup with revision/audit checks; agent and remote
-credentials do not gain this administration grant.
+deletion; agent and remote credentials do not gain this administration grant.
 
 An accepted wake contains a durable logical `turn_id=background-wake:<event_id>`.
 A live dispatcher may defer a claimed wake only before invoking a provider.

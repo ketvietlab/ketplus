@@ -7,17 +7,16 @@ namespace ketplus {
 QVariantMap CodexAppServer::backgroundTaskAccess() const {
     return {{"connected", daemon_ && daemon_->isReady()},
             {"canRead", daemon_ && daemon_->hasCapability("session.read")},
-            {"canControl", daemon_ && daemon_->hasCapability("session.control")},
-            {"canResolve", daemon_ && daemon_->hasCapability("session.control")}};
+            {"canControl", daemon_ && daemon_->hasCapability("session.control")}};
 }
 
 void CodexAppServer::callDaemonBackgroundTask(const QString& method, const QJsonObject& params,
                                               ResponseCallback callback) {
     const auto action = method.mid(5);
-    static const QSet<QString> operations{"list", "get", "stop", "output", "resolve_cleanup"};
+    static const QSet<QString> operations{"list", "get", "stop", "output"};
     const auto sessionId = params.value("threadId").toString();
     const auto found = daemonSessions_.constFind(sessionId);
-    const bool mutation = action == "stop" || action == "resolve_cleanup";
+    const bool mutation = action == "stop";
     if (!operations.contains(action) || found == daemonSessions_.cend()) {
         callback({}, QStringLiteral("Unknown background task operation or conversation."));
         return;

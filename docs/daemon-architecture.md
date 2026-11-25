@@ -792,6 +792,20 @@ differs from macOS/Linux:
   group supervision) are POSIX-only. On Windows `ManagedTaskRuntime` refuses a `process` task with
   `containment_unavailable`; `NativeJobUnsupported.cpp` only lets the daemon link.
 
+## Background job cleanup
+
+The daemon owns the cleanup of every managed background job and never hands it to the user
+([ADR 0127 §4a](decisions/0127-daemon-background-tasks.md#4a-daemon-owned-cleanup)). When
+an executor result leaves processes unconfirmed, `ManagedTaskRuntime` moves the job to
+`stopping` and, for a bounded window (30 seconds, per daemon start), lets the executor
+client probe the job's process group and signal the identities it re-verified (SIGTERM,
+then SIGKILL). A job always ends at its real state: `verified` with
+`process_group_empty` when the group is confirmed empty, otherwise `best_effort_complete`
+with the gap in `managed_job_diagnostics` and the daemon log. The slot is released on the
+terminal transition; a process the daemon cannot identify is never signalled. A record
+an earlier daemon left in `needs_attention` ends as `interrupted` when the registry opens.
+The protocol has no cleanup command and no `needs_attention` state.
+
 ## Lifecycle
 
 ACP v1 `loadSession` and `promptCapabilities.image` are opt-in booleans (ADR 0090).

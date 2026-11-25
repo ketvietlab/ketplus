@@ -848,23 +848,17 @@ class ProviderTranscriptTest : public QObject {
     }
 
     void backgroundTasksHaveDedicatedNotices() {
+        // Journal compatibility: an earlier daemon wrote this kind; it now reads as a plain
+        // ending and never mentions cleanup.
         const auto attention =
             agentMessageNotice({{"kind", "background_task_attention"},
                                 {"task_id", "job-42"},
                                 {"reason", "cleanup_unverified"},
-                                {"cleanup_issue", "process_identity_lost"},
                                 {"manual_guidance", "Inspect the recorded process."}},
                                "n1");
         QCOMPARE(attention.value("title").toString(), QStringLiteral("Background task"));
         QCOMPARE(attention.value("summary").toString(),
-                 QStringLiteral("Background task job-42 needs a manual check: process cleanup "
-                                "could not be verified (process_identity_lost). "
-                                "Inspect the recorded process."));
-        const auto historical = agentMessageNotice({{"kind", "background_task_attention"},
-                                                    {"task_id", "job-42"},
-                                                    {"reason", "cleanup_unverified"}},
-                                                   "n2");
-        QVERIFY(historical.value("summary").toString().contains("acknowledge cleanup"));
+                 QStringLiteral("Background task job-42 was ended by KetPlus."));
         const auto wake = agentMessageNotice(
             {{"kind", "background_wake_failed"}, {"task_id", "job-43"}, {"event_id", "wake"}},
             "n3");

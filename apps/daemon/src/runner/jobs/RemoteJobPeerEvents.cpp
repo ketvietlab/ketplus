@@ -43,7 +43,7 @@ JobDecision RemoteJobCoordinator::offer(const QString& jobId, const QString& run
         cancelOnRelay(found->taskId, alreadyDispatched);
         return {alreadyDispatched};
     }
-    if (found->state == state::stopping || found->state == state::needsAttention ||
+    if (found->state == state::stopping ||
         (found->placement != placement::relayQueued && found->placement != placement::assigned))
         return {jobMismatch};
     RemoteJobRecord next = *found;
@@ -82,7 +82,7 @@ JobDecision RemoteJobCoordinator::dispatch(const QString& jobId, const QString& 
 
 void RemoteJobCoordinator::accepted(const QString& jobId, const QString& runnerId) {
     RemoteJobRecord* found = fromRunner(jobId, runnerId);
-    if (!found || found->placement != placement::assigned || found->state == state::needsAttention)
+    if (!found || found->placement != placement::assigned)
         return;
     RemoteJobRecord next = *found;
     next.placement = placement::syncing;
@@ -92,7 +92,7 @@ void RemoteJobCoordinator::accepted(const QString& jobId, const QString& runnerI
 
 void RemoteJobCoordinator::started(const QString& jobId, const QString& runnerId) {
     RemoteJobRecord* found = fromRunner(jobId, runnerId);
-    if (!found || found->state == state::needsAttention ||
+    if (!found ||
         (found->placement != placement::assigned && found->placement != placement::syncing))
         return;
     RemoteJobRecord next = *found;
@@ -127,8 +127,7 @@ void RemoteJobCoordinator::rejected(const QString& jobId, const QString& runnerI
                                     const QString& code) {
     RemoteJobRecord* found = byJob(jobId);
     if (!found || !trust_.pinnedName(runnerId) || found->placement != placement::assigned ||
-        found->state == state::needsAttention || !found->runner ||
-        found->runner->runnerId != runnerId ||
+        !found->runner || found->runner->runnerId != runnerId ||
         (found->dispatched() && found->dispatchedTo != runnerId))
         return;
     // The runner took no spec: its mark goes, and another runner may take the job.
@@ -172,7 +171,7 @@ void RemoteJobCoordinator::peerOpened(const QString& jobId, const QString& runne
 void RemoteJobCoordinator::peerLost(const QString& jobId, const QString& runnerId,
                                     const QDateTime& lastContact) {
     RemoteJobRecord* found = fromRunner(jobId, runnerId);
-    if (!found || found->state == state::needsAttention)
+    if (!found)
         return;
     RemoteJobRecord next = *found;
     next.lastPeerContact = lastContact;
@@ -192,8 +191,8 @@ void RemoteJobCoordinator::armWindow(const QString& taskId, const QDateTime& fro
 void RemoteJobCoordinator::windowElapsed(const QString& taskId) {
     const auto current = record(taskId);
     const auto live = live_.constFind(taskId);
-    if (!current || current->terminal() || !current->dispatched() ||
-        current->state == state::needsAttention || live == live_.cend() || live->peerOpen)
+    if (!current || current->terminal() || !current->dispatched() || live == live_.cend() ||
+        live->peerOpen)
         return;
     const qint64 due = live->windowStart.toMSecsSinceEpoch() + peerAbsentMs;
     if (clock_.now().toMSecsSinceEpoch() < due) {
@@ -201,8 +200,10 @@ void RemoteJobCoordinator::windowElapsed(const QString& taskId) {
         return;
     }
     RemoteJobRecord next = *current;
-    next.state = state::needsAttention;
-    next.reason = QStringLiteral("cleanup_unverified");
+    // The runner stayed away for the whole window: the daemon ends the job. Whether its
+    // processes still run is beyond the daemon's reach and stays in the diagnostics.
+    next.state = state::interrupted;
+    next.reason = QStringLiteral("runner_unreachable");
     next.cleanupStatus = cleanup::unverified;
     if (!commit(next))
         clock_.arm(taskId, JobTimer::PeerAbsent, firstRetryMs);
@@ -226,20 +227,13 @@ JobDecision RemoteJobCoordinator::runnerRemoved(const QString& runnerId) {
     return written ? JobDecision{} : JobDecision{QStringLiteral("storage_error")};
 }
 
-// A runner that lost its pin can never report again: its records end at once, acknowledged by
-// the user's removal. A record that cannot be written stays where it got to.
+// A runner that lost its pin can never report again: its records end at once. A record that
+// cannot be written stays where it got to.
 bool RemoteJobCoordinator::releaseRunner(const QString& taskId) {
     RemoteJobRecord next = records_.value(taskId);
-    if (next.state != state::needsAttention) {
-        next.state = state::needsAttention;
-        next.reason = QStringLiteral("cleanup_unverified");
-        next.cleanupStatus = cleanup::unverified;
-        if (!commit(next))
-            return false;
-        next = records_.value(taskId);
-    }
     next.state = state::interrupted;
-    next.reason = QStringLiteral("cleanup_acknowledged");
+    next.reason = QStringLiteral("runner_removed");
+    next.cleanupStatus = cleanup::unverified;
     if (!commit(next))
         return false;
     cancelOnRelay(taskId, QStringLiteral("runner_removed"));

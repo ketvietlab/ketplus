@@ -122,7 +122,7 @@ class RemoteJobFlowTest final : public QObject {
         QCOMPARE(second.record().state, state::completed);
     }
 
-    // ---- Peer loss and needs_attention ----
+    // ---- Peer loss ----
 
     void peerLossKeepsTheStateForTwentyMinutes_data() {
         QTest::addColumn<QString>("stage");
@@ -146,8 +146,8 @@ class RemoteJobFlowTest final : public QObject {
         h.clock.advance(19 * minute - 1); // one step before 20 minutes after the last contact
         QCOMPARE(h.record().state, kept);
         h.clock.advance(1);
-        QCOMPARE(h.record().state, state::needsAttention);
-        QCOMPARE(h.record().reason, QStringLiteral("cleanup_unverified"));
+        QCOMPARE(h.record().state, state::interrupted);
+        QCOMPARE(h.record().reason, QStringLiteral("runner_unreachable"));
         QCOMPARE(h.record().cleanupStatus, cleanup::unverified);
     }
 
@@ -161,7 +161,7 @@ class RemoteJobFlowTest final : public QObject {
         QCOMPARE(h.record().state, state::running);
         h.jobs->peerLost(job, runnerA, h.clock.time);
         h.clock.advance(20 * minute);
-        QCOMPARE(h.record().state, state::needsAttention);
+        QCOMPARE(h.record().state, state::interrupted);
     }
 
     void relayEndWithoutAResultWaitsForTheWindow_data() {
@@ -179,7 +179,7 @@ class RemoteJobFlowTest final : public QObject {
         QCOMPARE(h.relay.pending("get"), 0);
         h.jobs->peerLost(job, runnerA, h.clock.time);
         h.clock.advance(20 * minute);
-        QCOMPARE(h.record().state, state::needsAttention);
+        QCOMPARE(h.record().state, state::interrupted);
     }
 
     void assignedDispatchedRecordUsesTheWindowToo() {
@@ -187,37 +187,10 @@ class RemoteJobFlowTest final : public QObject {
         QVERIFY(h.sent());
         h.jobs->peerLost(job, runnerA, h.clock.time);
         h.clock.advance(20 * minute);
-        QCOMPARE(h.record().state, state::needsAttention);
-    }
-
-    void attentionLeavesByTheUsersAcknowledgement() {
-        Harness h;
-        QVERIFY(h.running());
-        h.jobs->peerLost(job, runnerA, h.clock.time);
-        h.clock.advance(20 * minute);
-        QCOMPARE(h.jobs->resolveCleanup(task).code, QString());
         QCOMPARE(h.record().state, state::interrupted);
-        QCOMPARE(h.record().reason, QStringLiteral("cleanup_acknowledged"));
-        QCOMPARE(h.record().cleanupStatus, cleanup::unverified);
     }
 
-    void attentionLeavesByAVerifiedResultOfThePinnedRunner() {
-        Harness h;
-        QVERIFY(h.running());
-        h.jobs->peerLost(job, runnerA, h.clock.time);
-        h.clock.advance(20 * minute);
-        h.jobs->result(job, runnerB, jobResult("exited", 0)); // not the runner holding it
-        h.jobs->result(job, runnerA, jobResult("exited", 0, {}, "unverified"));
-        QCOMPARE(h.record().state, state::needsAttention);
-        h.jobs->peerOpened(job, runnerA);
-        h.jobs->result(job, runnerA,
-                       jobResult("interrupted", std::nullopt, "requester_lost", "verified"));
-        QCOMPARE(h.record().state, state::interrupted);
-        QCOMPARE(h.record().reason, QStringLiteral("requester_lost"));
-        QCOMPARE(h.record().cleanupStatus, cleanup::verified);
-    }
-
-    void attentionHasNoOtherWayOut() {
+    void aRecordEndedWithoutItsRunnerNeverChanges() {
         Harness h;
         QVERIFY(h.running());
         h.jobs->peerLost(job, runnerA, h.clock.time);
@@ -242,7 +215,6 @@ class RemoteJobFlowTest final : public QObject {
         QTest::newRow("syncing") << "syncing";
         QTest::newRow("running") << "running";
         QTest::newRow("stopping") << "stopping";
-        QTest::newRow("needs attention") << "attention";
     }
     void removingTheRunnerEndsItsRecordsAtOnce() {
         QFETCH(QString, stage);
@@ -250,19 +222,14 @@ class RemoteJobFlowTest final : public QObject {
         QVERIFY(stage == "sent" ? h.sent() : stage == "syncing" ? h.syncing() : h.running());
         if (stage == "stopping")
             QVERIFY(h.jobs->stop(task).ok());
-        if (stage == "attention") {
-            h.jobs->peerLost(job, runnerA, h.clock.time);
-            h.clock.advance(20 * minute);
-        }
         QList<QString> states;
         h.jobs->setChanged([&](const RemoteJobRecord& r) { states.append(r.state); });
         const int cancels = h.relay.sent("cancel");
         h.trust.pins.remove(runnerA);
         h.jobs->runnerRemoved(runnerA);
         QCOMPARE(h.record().state, state::interrupted);
-        QCOMPARE(h.record().reason, QStringLiteral("cleanup_acknowledged"));
+        QCOMPARE(h.record().reason, QStringLiteral("runner_removed"));
         QCOMPARE(states.last(), state::interrupted);
-        QCOMPARE(states.contains(state::needsAttention) || stage == "attention", true);
         QCOMPARE(h.relay.sent("cancel"), cancels + 1);
         QCOMPARE(h.relay.log.last().reason, QStringLiteral("runner_removed"));
     }
@@ -432,7 +399,7 @@ class RemoteJobFlowTest final : public QObject {
         h.clock.advance(20 * minute - 1);
         QCOMPARE(h.record("running").state, state::running);
         h.clock.advance(1);
-        QCOMPARE(h.record("running").state, state::needsAttention);
+        QCOMPARE(h.record("running").state, state::interrupted);
         QCOMPARE(h.record("assigned").state, state::starting); // waits for the runner's offer
     }
 
@@ -588,16 +555,13 @@ class RemoteJobFlowTest final : public QObject {
         QCOMPARE(h.jobs->start("task-extra", {"gpu"}, 0).code,
                  QStringLiteral("resource_exhausted"));
         QVERIFY(!h.jobs->record("task-extra"));
-        // An attention record still counts; a terminal one frees its place.
+        // A record ended without its runner frees its place as any terminal one.
         QVERIFY(h.relay.answer("submit", relayJob("queued")));
         QVERIFY(h.jobs->offer(job, runnerA, 1).ok());
         QVERIFY(h.dispatch(runnerA).ok());
         h.jobs->peerLost(job, runnerA, h.clock.time);
         h.clock.advance(20 * minute);
-        QCOMPARE(h.record("task-0").state, state::needsAttention);
-        QCOMPARE(h.jobs->start("task-extra", {"gpu"}, 0).code,
-                 QStringLiteral("resource_exhausted"));
-        QVERIFY(h.relay.refuse("submit", "queue_full"));
+        QCOMPARE(h.record("task-0").state, state::interrupted);
         QVERIFY(h.jobs->start("task-extra", {"gpu"}, 0).ok());
     }
 
@@ -652,8 +616,7 @@ class RemoteJobFlowTest final : public QObject {
         QTest::addColumn<QString>("reason");
         QTest::newRow("ran") << "exited" << state::completed << QString();
         QTest::newRow("ran and failed") << "exited 2" << state::failed << "exit_code";
-        QTest::newRow("unverified")
-            << "unverified" << state::needsAttention << "cleanup_unverified";
+        QTest::newRow("unverified") << "unverified" << state::failed << "snapshot_failed";
     }
     void aSnapshotStopKeepsTheUsualMapping() {
         QFETCH(QString, result);
@@ -720,7 +683,7 @@ class RemoteJobFlowTest final : public QObject {
         h.clock.advance(20 * minute - 1);
         QCOMPARE(h.record().state, state::stopping);
         h.clock.advance(1);
-        QCOMPARE(h.record().state, state::needsAttention);
+        QCOMPARE(h.record().state, state::interrupted);
         // After a restart the stop and its code are still there.
         Harness again;
         QVERIFY(again.syncing());
@@ -748,10 +711,7 @@ class RemoteJobFlowTest final : public QObject {
         QCOMPARE(h.record().state, state::running); // retried while the store refuses
         h.store.failWrites = false;
         h.clock.advance(1000);
-        QCOMPARE(h.record().state, state::needsAttention);
-        h.store.failWrites = true;
-        QCOMPARE(h.jobs->resolveCleanup(task).code, QStringLiteral("storage_error"));
-        QCOMPARE(h.record().state, state::needsAttention);
+        QCOMPARE(h.record().state, state::interrupted);
     }
 };
 

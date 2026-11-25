@@ -77,20 +77,17 @@ test("completion vectors preserve durable acceptance and user fences", () => {
   assert.equal(policy.get("permission_denied"), "suppress_with_permission_denied_reason_no_wake_or_retry");
 });
 
-test("native assurance distinguishes routine completion from cleanup incidents and user acknowledgement", () => {
+test("native assurance ends every job; unconfirmed cleanup is internal", () => {
   const examples = fixture.projection_examples;
   assert.equal(examples.native_complete.containment_mode, "native_best_effort");
   assert.equal(examples.native_complete.cleanup_status, "best_effort_complete");
   assert.equal(examples.native_complete.completion.status, "pending");
-  assert.ok(nonterminal.has(examples.native_attention.state));
-  assert.equal(examples.native_attention.cleanup_status, "unverified");
-  assert.equal(examples.native_attention.completion, null);
-  assert.equal(examples.native_acknowledged.revision, examples.native_attention.revision + 1);
-  assert.equal(examples.native_acknowledged.state, "interrupted");
-  assert.equal(examples.native_acknowledged.reason, "cleanup_acknowledged");
-  assert.equal(examples.native_acknowledged.cleanup_status, "unverified");
-  assert.equal(examples.native_acknowledged.completion.status, "suppressed");
-  assert.equal(fixture.cleanup_evidence.user_only_operation, "session.task.resolve_cleanup");
+  assert.ok(terminal.has(examples.native_settled.state));
+  assert.equal(examples.native_settled.cleanup_status, "best_effort_complete");
+  assert.equal(examples.native_settled.completion.status, "pending");
+  assert.ok(!nonterminal.has("needs_attention"));
+  assert.deepEqual(fixture.states.read_only_legacy, ["needs_attention"]);
+  assert.ok(!("user_only_operation" in fixture.cleanup_evidence));
 });
 
 test("pre-launch failure and uncertain cleanup keep ownership until reclamation", () => {
@@ -102,13 +99,11 @@ test("pre-launch failure and uncertain cleanup keep ownership until reclamation"
   assert.ok(failedAfterCleanup.requires.includes("terminal_target_failed"));
   const uncertain = fixture.transitions.find((t) => t.requires.includes("cleanup_pending"));
   assert.equal(uncertain.to, "stopping");
-  assert.ok(uncertain.requires.includes("continue_reconciliation_and_warning"));
+  assert.ok(uncertain.requires.includes("daemon_retries_within_a_bounded_window"));
   for (const t of fixture.transitions.filter((t) => t.to === "interrupted")) {
-    if (t.from.includes("needs_attention")) {
-      assert.ok(t.requires.includes("authenticated_local_user_action"));
-      assert.ok(t.requires.includes("durable_user_audit"));
-      assert.ok(t.requires.includes("suppress_wake"));
-    } else assert.ok(t.requires.includes("confirmed_no_live_workload_in_containment"));
+    assert.ok(!t.from.includes("needs_attention"));
+    assert.ok(t.requires.includes("confirmed_no_live_workload_in_containment") ||
+      t.requires.includes("daemon_cleanup_retries_exhausted"));
   }
 });
 
@@ -161,7 +156,7 @@ test("fault matrix retains every mandatory implementation verification gate", ()
   for (const id of [
     "retry-start", "retry-conflict", "start-commit-failure", "permission-fence", "preaccept-refusal",
     "permission-denied", "launch-failure", "launch-failure-cleanup", "cleanup-uncertain", "response-schema",
-    "managed-child", "child-terminal-fence", "native-normal-exit", "native-cleanup-attention", "user-cleanup-ack",
+    "managed-child", "child-terminal-fence", "native-normal-exit", "native-cleanup-settled", "retired-attention-migration",
     "crash-before-spawn", "crash-after-spawn", "pid-reuse", "descendants", "lease-loss",
     "unsupported-containment", "timeout", "stop-complete-race",
     "restart-before-terminal-commit", "restart-after-terminal-commit",

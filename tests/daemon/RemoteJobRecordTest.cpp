@@ -124,7 +124,6 @@ class RemoteJobRecordTest final : public QObject {
         h.jobs->jobChanged(job);
         h.jobs->runnerRemoved(runnerA);
         QVERIFY(h.jobs->stop(task).ok());
-        QCOMPARE(h.jobs->resolveCleanup(task).code, QStringLiteral("invalid_state"));
         QCOMPARE(h.jobs->offer(job, runnerA, 1).code, QStringLiteral("job_mismatch"));
         h.clock.advance(60 * minute);
         QCOMPARE(h.record(), ended);
@@ -214,7 +213,7 @@ class RemoteJobRecordTest final : public QObject {
             QCOMPARE(h.record().cleanupStatus, cleanup::verified);
             QCOMPARE(h.record().exitCode, value.exitCode);
 
-            // The same result without verified cleanup needs the user's attention.
+            // The same result without confirmed cleanup ends the same way; the gap is kept.
             Harness u;
             QVERIFY(u.running());
             if (stopped)
@@ -222,8 +221,8 @@ class RemoteJobRecordTest final : public QObject {
             JobResult unverified = value;
             unverified.cleanupStatus = "unverified";
             u.jobs->result(job, runnerA, unverified);
-            QCOMPARE(u.record().state, state::needsAttention);
-            QCOMPARE(u.record().reason, QStringLiteral("cleanup_unverified"));
+            QCOMPARE(u.record().state, h.record().state);
+            QCOMPARE(u.record().reason, h.record().reason);
             QCOMPARE(u.record().cleanupStatus, cleanup::unverified);
             QCOMPARE(u.record().exitCode, value.exitCode);
         }
@@ -357,10 +356,10 @@ class RemoteJobRecordTest final : public QObject {
         QVERIFY(a.running(30 * minute));
         a.jobs->peerLost(job, runnerA, a.clock.time);
         a.clock.advance(20 * minute);
-        const RemoteJobRecord attention = a.record();
-        QCOMPARE(attention.state, state::needsAttention);
+        const RemoteJobRecord ended = a.record();
+        QCOMPARE(ended.state, state::interrupted);
         a.jobs->timerFired(task, JobTimer::Deadline);
-        QCOMPARE(a.record(), attention);
+        QCOMPARE(a.record(), ended);
     }
 
     void aResultAfterTheDeadlineDecides() {

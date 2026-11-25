@@ -91,15 +91,12 @@ RemoteJobRecord applyResult(RemoteJobRecord record, const JobResult& result) {
     }
     record.exitCode = result.exitCode;
     record.signal = result.signal;
-    if (result.cleanupStatus != cleanup::verified) {
-        record.state = state::needsAttention;
-        record.reason = QStringLiteral("cleanup_unverified");
-        record.cleanupStatus = cleanup::unverified;
-        return record;
-    }
+    // The daemon cannot reach the runner's processes: it ends the job with the runner's own
+    // result and keeps the missing confirmation as diagnostics.
     record.state = terminal;
     record.reason = reason;
-    record.cleanupStatus = cleanup::verified;
+    record.cleanupStatus =
+        result.cleanupStatus == cleanup::verified ? cleanup::verified : cleanup::unverified;
     return record;
 }
 
@@ -113,7 +110,7 @@ RemoteJobRecord endUndispatched(RemoteJobRecord record, const QString& terminal,
 
 std::optional<RemoteJobRecord> applyRelayJob(const RemoteJobRecord& record, const RelayJob& job,
                                              const QString& runnerName) {
-    if (record.terminal() || record.dispatched() || record.state == state::needsAttention)
+    if (record.terminal() || record.dispatched())
         return std::nullopt;
     if (record.state == state::stopping) {
         // A user Stop waits for the Relay to end the job; nothing of it ever ran.

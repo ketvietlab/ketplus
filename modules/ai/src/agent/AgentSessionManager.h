@@ -73,8 +73,6 @@ class AgentSessionManager final : public QObject {
     void stopBackgroundTask(const QString& worktreePath, const QString& taskId);
     [[nodiscard]] QVariantMap backgroundTaskState(const QString& worktreePath) const;
     void loadBackgroundTasks(const QString& worktreePath, bool more);
-    void resolveBackgroundTaskCleanup(const QString& worktreePath, const QString& taskId,
-                                      qint64 revision);
     void readBackgroundTaskOutput(const QString& worktreePath, const QString& taskId,
                                   const QString& cursor = {}, quint64 request = 0);
 

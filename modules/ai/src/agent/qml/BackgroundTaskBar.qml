@@ -30,30 +30,23 @@ Rectangle {
         const scope = String(registry.scope || "");
         if (scope !== confirmationScope) {
             confirmingStop = "";
-            if (cleanupDialog.visible)
-                cleanupDialog.reject();
             confirmationScope = scope;
         }
     }
     readonly property bool canRead: registry.canRead !== false
     readonly property bool canControl: registry.canControl !== false
-    readonly property bool canResolve: registry.canResolve === true
-    readonly property int tickingCount: tasks.filter(task => live(task) && !attention(task)).length
-    readonly property int attentionCount: tasks.filter(task => attention(task)).length
+    readonly property int tickingCount: tasks.filter(task => live(task)).length
     function state(task) {
         return task.state || task.status || "unknown";
     }
-    function attention(task) {
-        return state(task) === "needs_attention";
-    }
     function live(task) {
-        return ["queued", "starting", "running", "stopping", "needs_attention"].indexOf(state(task)) >= 0;
+        return ["queued", "starting", "running", "stopping"].indexOf(state(task)) >= 0;
     }
     function canStop(task) {
         return !offline && canControl && ["queued", "starting", "running"].indexOf(state(task)) >= 0;
     }
     function rowStatus(task) {
-        if (attention(task) || (live(task) && !canStop(task)))
+        if (live(task) && !canStop(task))
             return KetTheme.TaskStatus.Stopping;
         return ({
                 queued: KetTheme.TaskStatus.Running,
@@ -65,18 +58,9 @@ Rectangle {
                 timed_out: KetTheme.TaskStatus.Failed
             })[state(task)] ?? KetTheme.TaskStatus.Stopped;
     }
-    // Native macOS cleanup assurance belongs to the machine, not to one task: the strip states
-    // it once under the rows instead of repeating it under every card.
-    readonly property bool bestEffort: tasks.some(task => task.containment_mode === "native_best_effort")
     // Only what a reader must act on or know about this task sits under its card.
     function details(task) {
         const lines = [];
-        if (attention(task)) {
-            lines.push("Cleanup unverified. " + (task.manual_guidance || "Check the command and its descendants, then retry cleanup or acknowledge your manual check."));
-            if (task.exit_code !== undefined && task.exit_code !== null)
-                lines.push("Root exit code: " + task.exit_code + " · cleanup remains unverified");
-        } else if (task.reason === "cleanup_acknowledged")
-            lines.push("Cleanup acknowledged by user · assurance remains unverified");
         const completion = task.completion || ({});
         if (completion.status)
             lines.push(({
@@ -86,19 +70,12 @@ Rectangle {
                 })[completion.status] + (completion.reason ? " · " + completion.reason : ""));
         return lines.join("\n");
     }
-    // The opened output names its task and the cleanup assurance of that task.
+    // The opened output names its task.
     function outputFooter(task) {
         const parts = [];
         if (task.schema_version !== undefined)
             parts.push("Task " + task.task_id);
-        if (task.containment_mode === "native_best_effort")
-            parts.push(task.cleanup_status === "best_effort_complete" ? "Best effort cleanup complete" : "Best effort cleanup");
         return parts.join(" · ");
-    }
-    function confirmCleanup(task) {
-        cleanupDialog.taskId = task.task_id;
-        cleanupDialog.taskRevision = task.revisionToken || String(task.revision);
-        cleanupDialog.open();
     }
     function plural(count, word) {
         return count + " " + word + (count === 1 ? "" : "s");
@@ -114,8 +91,6 @@ Rectangle {
     function meta(task) {
         if (state(task) === "stopping")
             return "Stopping…";
-        if (attention(task))
-            return "Cleanup unverified · action needed";
         if (state(task) === "queued")
             return "Queued · waiting to start";
         if (state(task) === "starting")
@@ -149,8 +124,7 @@ Rectangle {
                 stopped: KetTheme.t.textMuted,
                 cancelled: KetTheme.t.textMuted,
                 timed_out: KetTheme.t.danger,
-                interrupted: KetTheme.t.warning,
-                needs_attention: KetTheme.t.warning
+                interrupted: KetTheme.t.warning
             })[state(task)] || KetTheme.t.textMuted;
     }
     function openTask(task) {
@@ -161,7 +135,7 @@ Rectangle {
     }
     readonly property var openedTask: tasks.find(task => task.task_id === pane.taskId)
     // The kit's toggle (`.bg-toggle`) counts every task; the rows show which still run.
-    readonly property string headline: attentionCount > 0 ? plural(attentionCount, "task") + " · cleanup needs attention" : offline ? plural(liveCount, "background task") + " · last known" : liveCount > 0 ? (agentHost.sessionRunning ? "" : "Turn finished · ") + plural(tasks.length, "background task") : "Background tasks finished"
+    readonly property string headline: offline ? plural(liveCount, "background task") + " · last known" : liveCount > 0 ? (agentHost.sessionRunning ? "" : "Turn finished · ") + plural(tasks.length, "background task") : "Background tasks finished"
 
     objectName: "backgroundTaskBar"
     visible: tasks.length > 0 || !!registry.error || !!registry.loading
@@ -208,8 +182,6 @@ Rectangle {
     onTasksChanged: {
         if (confirmingStop && !tasks.some(task => task.task_id === confirmingStop && bar.canStop(task)))
             confirmingStop = "";
-        if (cleanupDialog.visible && !tasks.some(task => task.task_id === cleanupDialog.taskId && attention(task)))
-            cleanupDialog.reject();
     }
 
     ColumnLayout {
@@ -237,7 +209,7 @@ Rectangle {
                 spacing: toggle.recipe.spacing
                 KetIcon {
                     anchors.verticalCenter: parent.verticalCenter
-                    name: bar.attentionCount > 0 ? "warning" : bar.liveCount > 0 ? "loading" : KetTheme.iconForLucide("circle-check")
+                    name: bar.liveCount > 0 ? "loading" : KetTheme.iconForLucide("circle-check")
                     box: toggle.recipe.iconSize
                     color: toggle.recipe.text
                 }
@@ -284,18 +256,6 @@ Rectangle {
                     }
                 }
             }
-        }
-        Text {
-            objectName: "backgroundTaskAssurance"
-            Layout.fillWidth: true
-            visible: !bar.collapsed && bar.bestEffort
-            leftPadding: bar.barRecipe.paddingInline
-            rightPadding: bar.barRecipe.paddingInline
-            text: "Native macOS · cleanup is best effort. Unobserved descendant processes may remain."
-            color: KetTheme.t.textMuted
-            font.family: KetTheme.fontFamily
-            font.pixelSize: bar.barRecipe.fontPixels
-            wrapMode: Text.Wrap
         }
         Text {
             Layout.fillWidth: true
@@ -472,36 +432,5 @@ Rectangle {
             font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
             wrapMode: Text.Wrap
         }
-    }
-    KetDialog {
-        id: cleanupDialog
-        objectName: "backgroundTaskCleanupDialog"
-        property string taskId: ""
-        property string taskRevision: ""
-        title: "Acknowledge manual cleanup?"
-        Text {
-            Layout.fillWidth: true
-            text: "Confirm only after you have checked and handled the command and its descendants. This records your acknowledgement; KetPlus cannot verify that every process stopped. It will not restart the agent."
-            color: KetTheme.t.textMain
-            font.family: KetTheme.fontFamily
-            font.pixelSize: KetTheme.assistantMessageRecipe(KetTheme.dark, KetTheme.zoom).timePixels
-            wrapMode: Text.Wrap
-        }
-        actions: [
-            KetButton {
-                text: "Keep warning"
-                variant: KetTheme.ButtonVariant.Ghost
-                onClicked: cleanupDialog.reject()
-            },
-            KetButton {
-                objectName: "confirmTaskCleanup"
-                text: "I've handled cleanup"
-                enabled: !bar.offline && bar.canResolve
-                onClicked: {
-                    agentHost.resolveBackgroundTaskCleanup(cleanupDialog.taskId, cleanupDialog.taskRevision);
-                    cleanupDialog.accept();
-                }
-            }
-        ]
     }
 }

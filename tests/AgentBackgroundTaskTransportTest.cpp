@@ -122,11 +122,10 @@ class AgentBackgroundTaskTransportTest final : public QObject {
                 const auto id = request.value("payload").toObject().value("task_id").toString();
                 return QJsonObject{
                     {"ok", true},
-                    {"task",
-                     QJsonObject{{"task_id", id},
-                                 {"schema_version", 1},
-                                 {"state", id == "job-23" ? "completed" : "needs_attention"},
-                                 {"revision", 4}}}};
+                    {"task", QJsonObject{{"task_id", id},
+                                         {"schema_version", 1},
+                                         {"state", id == "job-23" ? "completed" : "interrupted"},
+                                         {"revision", 4}}}};
             }
             if (type != "session.task.list")
                 return QJsonObject{{"ok", true}, {"events", QJsonArray{}}};
@@ -150,7 +149,7 @@ class AgentBackgroundTaskTransportTest final : public QObject {
                 cursorCorrect = cursorCorrect && cursor == "opaque/+page==";
                 tasks.append(QJsonObject{{"task_id", "last-job"},
                                          {"schema_version", 1},
-                                         {"state", "needs_attention"},
+                                         {"state", "interrupted"},
                                          {"revision", 3}});
             }
             return QJsonObject{{"ok", true},
@@ -201,15 +200,11 @@ class AgentBackgroundTaskTransportTest final : public QObject {
             });
         })());
         QTRY_VERIFY(!manager.backgroundTaskState(peer.directory.path()).value("loading").toBool());
-        bool acknowledged = false;
-        server.call(
-            "task/resolve_cleanup",
-            {{"threadId", "owner"}, {"taskId", "last-job"}, {"revision", 3}},
-            [&](const QJsonObject&, const QString& error) { acknowledged = error.isEmpty(); });
-        QTRY_VERIFY(acknowledged);
-        QCOMPARE(peer.requests.last().value("message_type").toString(),
-                 "session.task.resolve_cleanup");
-        QCOMPARE(peer.requests.last().value("payload").toObject().value("revision").toInt(), 3);
+        // The operation that acknowledged cleanup no longer exists.
+        QString unknown;
+        server.call("task/resolve_cleanup", {{"threadId", "owner"}, {"taskId", "last-job"}},
+                    [&](const QJsonObject&, const QString& error) { unknown = error; });
+        QTRY_VERIFY(!unknown.isEmpty());
         peer.client->abort();
         QTRY_VERIFY(!server.isReady());
         QString offlineError;
