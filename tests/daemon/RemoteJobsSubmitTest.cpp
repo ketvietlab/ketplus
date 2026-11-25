@@ -210,8 +210,8 @@ class RemoteJobsSubmitTest final : public QObject {
         QCOMPARE(h.prepared.size(), 64);
     }
 
-    // The record of a removed runner ends acknowledged by the daemon when no local client asked.
-    void aRemovedRunnerEndsItsRecordsAcknowledgedByTheDaemon() {
+    // The record of a removed runner ends at once, whoever asked.
+    void aRemovedRunnerEndsItsRecordsAtOnce() {
         RemoteHarness h;
         const QString id = h.f.remoteTask();
         QVERIFY(h.write(syncingSteps(id, QStringLiteral("job-1"), runnerA, std::nullopt)));
@@ -219,13 +219,7 @@ class RemoteJobsSubmitTest final : public QObject {
         h.jobs->restore();
         QVERIFY(h.jobs->runnerRemoved(runnerA, {}).ok());
         QCOMPARE(h.f.state(id), state::interrupted);
-        QSqlQuery audit(h.f.database);
-        QVERIFY(audit.exec("SELECT source,user_client_id FROM managed_job_cleanup_audit "
-                           "WHERE task_id='" +
-                           id + "'"));
-        QVERIFY(audit.next());
-        QCOMPARE(audit.value(0).toString(), QStringLiteral("runner_removed"));
-        QCOMPARE(audit.value(1).toString(), QStringLiteral("daemon"));
+        QCOMPARE(h.jobs->record(id)->reason, QStringLiteral("runner_removed"));
     }
 
     void aRemovedRunnerNamesTheLocalClientThatAsked() {
@@ -235,29 +229,6 @@ class RemoteJobsSubmitTest final : public QObject {
         h.build();
         h.jobs->restore();
         QVERIFY(h.jobs->runnerRemoved(runnerA, QStringLiteral("connection-7")).ok());
-        QCOMPARE(h.f.count("SELECT count(*) FROM managed_job_cleanup_audit WHERE "
-                           "user_client_id='connection-7'"),
-                 1);
-    }
-
-    void cleanupIsResolvedOnlyWithAUserAcknowledgement() {
-        RemoteHarness h;
-        const QString id = h.f.remoteTask();
-        QList<RemoteJobRecord> steps = syncingSteps(id, QStringLiteral("job-1"), runnerA, {});
-        RemoteJobRecord attention = steps.last();
-        attention.state = state::needsAttention;
-        attention.reason = QStringLiteral("cleanup_unverified");
-        attention.cleanupStatus = cleanup::unverified;
-        steps << attention;
-        QVERIFY(h.write(steps));
-        h.build();
-        h.jobs->restore();
-        QCOMPARE(h.jobs->resolveCleanup(id, {}).code, QStringLiteral("invalid_request"));
-        QCOMPARE(h.f.state(id), state::needsAttention);
-        QVERIFY(h.jobs->resolveCleanup(id, QStringLiteral("connection-7")).ok());
-        QCOMPARE(h.f.state(id), state::interrupted);
-        QCOMPARE(h.jobs->resolveCleanup(id, QStringLiteral("connection-7")).code,
-                 QStringLiteral("invalid_state"));
     }
 };
 

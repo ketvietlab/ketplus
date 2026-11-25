@@ -424,7 +424,7 @@ class ManagedTaskOriginHostTest final : public QObject {
                 "stale_origin");
             QVERIFY(invoke(host, token, "session.task.list", {}).value("ok").toBool());
             QCOMPARE(invoke(host, token, "session.task.resolve_cleanup", {}).value("error_code"),
-                     "forbidden");
+                     "unsupported_operation"); // retired: the daemon settles cleanup itself
             Q_UNUSED(profile);
         }
     }

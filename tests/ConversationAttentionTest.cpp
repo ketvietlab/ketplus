@@ -291,12 +291,9 @@ for line in sys.stdin:
         QVERIFY(icon->stateText().contains(QStringLiteral("Large library check")));
         QCOMPARE(icon->status(), ket::ConversationStatus::WaitingOnTask);
 
+        // The retired state is no live job: the row stops waiting on it.
         job("needs_attention", 3);
-        QCOMPARE(row().value("attentionJobs").toInt(), 1);
-        QTRY_COMPARE(
-            (icon = bar.findChild<ket::SidebarRow*>("productConversationButton"))->status(),
-            ket::ConversationStatus::TaskNeedsAttention);
-        QVERIFY(sidebar_list::waitsForUser(row(), true));
+        QVERIFY(!row().contains("liveJobs"));
 
         job("completed", 4);
         QVERIFY(!row().contains("liveJobs"));
@@ -334,16 +331,13 @@ for line in sys.stdin:
         QTRY_COMPARE(
             (icon = bar.findChild<ket::SidebarRow*>("productConversationButton"))->status(),
             ket::ConversationStatus::Completed);
-        // A job needing attention beyond the projection still makes the row wait on the user.
+        // Jobs beyond the projection still make the row wait on them.
         projected("job-old", "completed", 1,
-                  {{"live_jobs", 2},
-                   {"queued_jobs", 0},
-                   {"attention_jobs", 1},
-                   {"job_title", "Check cleanup"}});
+                  {{"live_jobs", 2}, {"queued_jobs", 0}, {"job_title", "Library check"}});
         QTRY_COMPARE(
             (icon = bar.findChild<ket::SidebarRow*>("productConversationButton"))->status(),
-            ket::ConversationStatus::TaskNeedsAttention);
-        QVERIFY(icon->stateText().contains(QStringLiteral("Check cleanup and 1 more")));
+            ket::ConversationStatus::WaitingOnTask);
+        QVERIFY(icon->stateText().contains(QStringLiteral("Library check and 1 more")));
     }
 
     void nativeStatusMarks() {

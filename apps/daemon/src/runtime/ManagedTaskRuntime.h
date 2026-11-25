@@ -31,6 +31,9 @@ class ManagedTaskRuntime final : public QObject {
     void setCallbacks(Changed changed, Permission permission, ChildStart childStart,
                       ChildStop childStop);
     bool initialize(QString* error);
+    // How long the daemon keeps verifying and signalling a job's processes before it ends the
+    // job without confirmation.
+    void setCleanupWindow(qint64 milliseconds) { cleanupWindowMs_ = milliseconds; }
     void setRemoteJobs(runner::entry::RemoteJobPort* port);
     void start(const BackgroundTaskIntent& intent, const QJsonObject& execution, Done done);
     QJsonObject stop(const QString& taskId, const BackgroundTaskOwner& owner,
@@ -40,7 +43,6 @@ class ManagedTaskRuntime final : public QObject {
     [[nodiscard]] QJsonObject output(const QString& taskId, const BackgroundTaskOwner& owner,
                                      const QString& cursor = {},
                                      bool localAdministration = false) const;
-    QJsonObject resolveCleanup(const QString& taskId, qint64 revision, const QString& clientId);
     // Managed children report only after inference, approvals and descendants settle.
     void childChanged(const QString& taskId, const BackgroundTaskChange& change);
     QJsonObject reserveChild(const QString& taskId);
@@ -59,6 +61,8 @@ class ManagedTaskRuntime final : public QObject {
         QPointer<executor::NativeJobClient> executor;
         QJsonObject pendingExecutorEvent;
         QString persistenceError;
+        // When the daemon began settling an executor result whose cleanup is unverified.
+        qint64 settlingSince{0};
         // The ledger holds this job's queued notice; it is not asked again.
         bool queuedNoticed{false};
     };
@@ -67,6 +71,9 @@ class ManagedTaskRuntime final : public QObject {
     void startProcess(const QString& taskId);
     void observeProcess(const QString& taskId, const QJsonObject& event);
     void reconcileProcess(const QString& taskId);
+    // The daemon owns cleanup: it ends the job at its target state even when it could not
+    // verify that every process is gone. The gap stays in diagnostics and the daemon log.
+    void endUnverified(const QString& taskId, const QString& issue, const QJsonObject& event = {});
     void stopTask(const QString& taskId, const QString& reason);
     void publish(const QString& taskId);
     void maintain();
@@ -81,6 +88,7 @@ class ManagedTaskRuntime final : public QObject {
     ChildStart childStart_;
     ChildStop childStop_;
     bool pumping_{false};
+    qint64 cleanupWindowMs_{30000};
     runner::entry::RemoteJobPort* remoteJobs_{nullptr};
 };
 } // namespace ketplus::daemon

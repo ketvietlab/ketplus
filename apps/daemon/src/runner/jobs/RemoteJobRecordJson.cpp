@@ -15,10 +15,9 @@ namespace {
 constexpr int version = 1;
 
 const QSet<QString>& states() {
-    static const QSet<QString> all{state::queued,        state::starting,  state::running,
-                                   state::stopping,      state::completed, state::failed,
-                                   state::cancelled,     state::timedOut,  state::interrupted,
-                                   state::needsAttention};
+    static const QSet<QString> all{state::queued,    state::starting,  state::running,
+                                   state::stopping,  state::completed, state::failed,
+                                   state::cancelled, state::timedOut,  state::interrupted};
     return all;
 }
 const QSet<QString>& placements() {

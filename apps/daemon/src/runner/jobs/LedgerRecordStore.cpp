@@ -62,8 +62,6 @@ bool LedgerRecordStore::put(const RemoteJobRecord& record, const qint64 expected
         database_.rollback();
         return false;
     }
-    if (record.state == state::interrupted)
-        acknowledgements_.remove(record.taskId);
     return true;
 }
 
@@ -89,19 +87,13 @@ bool LedgerRecordStore::write(const RemoteJobRecord& record, const qint64 expect
             return false;
         from = *stored;
     }
-    const auto held = acknowledgements_.constFind(record.taskId);
-    const RemoteStep step = remoteStep(from, record, held != acknowledgements_.cend());
+    const RemoteStep step = remoteStep(from, record);
     if (step.kind == RemoteStep::Kind::Refused)
         return false;
     if (step.kind == RemoteStep::Kind::Task) {
         task.insert("placement", record.placement);
         task.insert("runner", runnerJson(record.runner));
         BackgroundTaskEffects effects;
-        effects.userAcknowledgement = step.acknowledgement;
-        if (step.acknowledgement) {
-            effects.auditSource = held->source;
-            effects.auditClientId = held->userClientId;
-        }
         const auto applied = ledger_.applyTransition(
             record.taskId, task, task.value("revision").toInteger(), step.change, effects);
         if (!applied.value("ok").toBool())
@@ -212,7 +204,8 @@ std::optional<QString> LedgerRecordStore::abandonUnreadable(const QString& taskI
         BackgroundTaskChange change;
         change.state = record.state;
         change.reason = record.reason;
-        change.cleanupStatus = record.cleanupStatus;
+        change.cleanupStatus = QStringLiteral("best_effort_complete");
+        change.cleanupDiagnostic = QStringLiteral("record_unreadable");
         const auto applied =
             ledger_.applyTransition(taskId, task, task.value("revision").toInteger(), change, {});
         if (!applied.value("ok").toBool())
@@ -226,19 +219,9 @@ std::optional<QString> LedgerRecordStore::abandonUnreadable(const QString& taskI
     update.addBindValue(revision);
     if (!update.exec() || update.numRowsAffected() != 1 || !database_.commit())
         return fail();
-    acknowledgements_.remove(taskId);
     unreadable_.removeAll(taskId);
     qCWarning(ketplusRemoteJobStore).noquote() << "remote job record abandoned task=" + taskId;
     return record.jobId;
-}
-
-bool LedgerRecordStore::acknowledge(const QString& taskId, const QString& source,
-                                    const QString& userClientId) {
-    if (taskId.isEmpty() || userClientId.isEmpty() ||
-        (source != QLatin1String("user") && source != QLatin1String("runner_removed")))
-        return false;
-    acknowledgements_.insert(taskId, {source, userClientId});
-    return true;
 }
 
 } // namespace ketplus::daemon::runner::jobs

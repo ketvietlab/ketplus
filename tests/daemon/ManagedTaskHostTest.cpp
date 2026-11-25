@@ -69,8 +69,8 @@ QJsonObject task(SessionHost& host, const QString& id, const QString& owner = "o
 class ManagedTaskHostTest final : public QObject {
     Q_OBJECT
   private slots:
-    // ADR 0127 §8: the owner summary counts every live job, prefers one needing attention
-    // for its title, and leaves out a job stopping toward cancellation (no wake follows).
+    // ADR 0127 §8: the owner summary counts every live job, names the first for its title, and
+    // leaves out a job stopping toward cancellation (no wake follows).
     void ownerSummaryCountsWhatTheTurnWaitsOn() {
         QList<QJsonObject> managed;
         for (int i = 0; i < 20; ++i)
@@ -78,14 +78,15 @@ class ManagedTaskHostTest final : public QObject {
                 {{"state", i < 15 ? "queued" : "running"}, {"title", QString("Job %1").arg(i)}});
         managed.append({{"state", "stopping"}, {"terminal_target", "cancelled"}, {"title", "x"}});
         managed.append({{"state", "stopping"}, {"terminal_target", "timed_out"}, {"title", "y"}});
-        managed.append({{"state", "needs_attention"}, {"title", "Check cleanup"}});
+        // A record an earlier daemon left in the retired state is no live job.
+        managed.append({{"state", "needs_attention"}, {"title", "Retired"}});
         const QJsonArray legacy{QJsonObject{{"status", "running"}, {"title", "Legacy"}},
                                 QJsonObject{{"status", "completed"}, {"title", "Done"}}};
         const auto summary = backgroundTaskSummary(managed, legacy);
-        QCOMPARE(summary.value("live_jobs").toInt(), 23);
+        QCOMPARE(summary.value("live_jobs").toInt(), 22);
         QCOMPARE(summary.value("queued_jobs").toInt(), 15);
-        QCOMPARE(summary.value("attention_jobs").toInt(), 1);
-        QCOMPARE(summary.value("job_title").toString(), QStringLiteral("Check cleanup"));
+        QVERIFY(!summary.contains("attention_jobs"));
+        QCOMPARE(summary.value("job_title").toString(), QStringLiteral("Job 0"));
         QCOMPARE(backgroundTaskSummary({}, {}), (QJsonObject{{"live_jobs", 0}}));
     }
 
@@ -576,7 +577,7 @@ class ManagedTaskHostTest final : public QObject {
         QCOMPARE(task(host, id).value("completion").toObject().value("status"), "delivered");
     }
 
-    void agentTokenCannotChooseAnotherOwnerOrAcknowledgeCleanup() {
+    void agentTokenCannotChooseAnotherOwnerOrUseRetiredCommands() {
         QTemporaryDir directory;
         const auto cwd = QFileInfo(directory.path()).canonicalFilePath();
         LocalJournal journal(directory.filePath("journal.sqlite"));
@@ -595,7 +596,7 @@ class ManagedTaskHostTest final : public QObject {
         host.handleAgentCommandDeferred(token, "session.task.resolve_cleanup",
                                         {{"task_id", "anything"}, {"revision", 1}},
                                         [&](const QJsonObject& value) { result = value; });
-        QCOMPARE(result.value("error_code"), "forbidden");
+        QCOMPARE(result.value("error_code"), "unsupported_operation");
         QCOMPARE(journal.backgroundTasks().nonterminal().value("tasks").toArray().size(), 0);
     }
 

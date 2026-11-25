@@ -68,9 +68,7 @@ struct FakePort final : RemoteJobPort {
     QStringList submitted;
     QSet<QString> records; // tasks with a remote record
     QString stopCode;
-    QString cleanupCode;
     QStringList stops;
-    QStringList cleanups;
 
     void setPorts(Ports next) override { ports = std::move(next); }
     QJsonObject admit(const BackgroundTaskIntent&, const QJsonObject&) const override {
@@ -83,12 +81,6 @@ struct FakePort final : RemoteJobPort {
             return std::nullopt;
         stops.append(taskId);
         return stopCode;
-    }
-    std::optional<QString> resolveCleanup(const QString& taskId, const QString&) override {
-        if (!records.contains(taskId))
-            return std::nullopt;
-        cleanups.append(taskId);
-        return cleanupCode;
     }
     bool hasRecord(const QString& taskId) const override { return records.contains(taskId); }
     QJsonObject withPlacement(QJsonObject reply) const override {
@@ -333,69 +325,6 @@ class ManagedTaskRemoteHostTest final : public QObject {
         QVERIFY(h.port.submitted.isEmpty());
     }
 
-    void attentionNoticesTrackMeaningfulChanges() {
-        Host h;
-        h.attach();
-        auto ledger = h.journal->backgroundTasks();
-        BackgroundTaskIntent intent{
-            {"owner", 1, "fixture"}, "attention", "process", "Attention", "fixture", 60000, {}};
-        intent.containmentMode = "native_best_effort";
-        const auto id = idOf(ledger.create(intent));
-        QVERIFY(!id.isEmpty());
-        BackgroundTaskChange approved;
-        approved.state = "queued";
-        approved.permissionApproved = true;
-        QVERIFY(ledger.change(id, 1, approved).value("ok").toBool());
-        QCOMPARE(idOf(ledger.claimNext()), id);
-
-        QSignalSpy events(h.host.get(), &SessionHost::eventReady);
-        BackgroundTaskChange attention;
-        attention.state = "needs_attention";
-        attention.errorCode = "process_identity_lost";
-        attention.executorStopped = false;
-        const auto update = [&] {
-            const auto revision = ledger.runtimeTask(id).value("revision").toInteger();
-            const auto result = ledger.change(id, revision, attention);
-            QVERIFY(result.value("ok").toBool());
-            h.port.ports.changed(id);
-        };
-        const auto notices = [&] {
-            QList<QJsonObject> result;
-            for (const auto& arguments : events) {
-                const auto event = arguments.first().toJsonObject();
-                const auto payload = event.value("payload").toObject();
-                if (event.value("event_type") == "agent_message.state" &&
-                    payload.value("kind") == "background_task_attention")
-                    result.append(payload);
-            }
-            return result;
-        };
-
-        update();
-        attention.outputSize = 20;
-        update();
-        update();
-        h.port.ports.changed(id);
-        const auto initial = notices();
-        QCOMPARE(initial.size(), 1);
-        QCOMPARE(initial.first().value("task_id"), id);
-        QCOMPARE(initial.first().value("reason"), "cleanup_unverified");
-        QCOMPARE(initial.first().value("cleanup_issue"), "process_identity_lost");
-        QCOMPARE(initial.first().value("executor_stopped"), false);
-        QVERIFY(!initial.first().value("manual_guidance").toString().isEmpty());
-
-        attention.errorCode = "process_signal_failed";
-        update();
-        update();
-        QCOMPARE(notices().size(), 2);
-        QCOMPARE(notices().last().value("cleanup_issue"), "process_signal_failed");
-        attention.executorStopped = true;
-        update();
-        update();
-        QCOMPARE(notices().size(), 3);
-        QCOMPARE(notices().last().value("executor_stopped"), true);
-    }
-
     // A submit that ends before a record exists fails the task with its code, once.
     void aFailedSubmitEndsTheTaskWithItsCode() {
         Host h;
@@ -440,7 +369,7 @@ class ManagedTaskRemoteHostTest final : public QObject {
         QCOMPARE(h.task(id).value("state"), "cancelled");
     }
 
-    // With a record, stop, resolve_cleanup, get and list go to the remote jobs.
+    // With a record, stop, get and list go to the remote jobs.
     void aRecordedTaskIsStoppedAndShownThroughThePort() {
         Host h;
         h.attach();
@@ -455,11 +384,9 @@ class ManagedTaskRemoteHostTest final : public QObject {
         QVERIFY(stopped.value("ok").toBool());
         QCOMPARE(h.port.stops, QStringList{id});
         QCOMPARE(h.task(id).value("state"), "queued"); // the record carries the stop
-        h.port.cleanupCode = "invalid_state";
-        const auto cleanup = h.run("session.task.resolve_cleanup",
-                                   {{"task_id", id}, {"revision", h.task(id).value("revision")}});
-        QCOMPARE(cleanup.value("error_code"), "invalid_state");
-        QCOMPARE(h.port.cleanups, QStringList{id});
+        // The command that acknowledged cleanup no longer exists.
+        QCOMPARE(h.run("session.task.resolve_cleanup", {{"task_id", id}}).value("error_code"),
+                 "unknown_operation");
     }
 
     // The same labels in another order are the same request; another timeout is not.

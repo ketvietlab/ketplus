@@ -203,10 +203,10 @@ struct AgentSessionManager::Session final {
 };
 
 // The jobs a conversation still waits on, as its sidebar row and header word them:
-// liveJobs (queued through stopping, attention included, but not a job stopping toward
-// cancellation, which wakes no one), queuedJobs, attentionJobs and jobTitle, the job the
-// row names (one needing attention first). Empty when none is live. From the cached rows,
-// or from the daemon's owner summary ({live_jobs, queued_jobs, attention_jobs, job_title}).
+// liveJobs (queued through stopping, but not a job stopping toward cancellation, which
+// wakes no one), queuedJobs and jobTitle, the job the row names. Empty when none is live.
+// From the cached rows, or from the daemon's owner summary ({live_jobs, queued_jobs,
+// job_title}).
 QVariantMap backgroundJobSummary(const QVariantList& tasks);
 QVariantMap backgroundJobSummary(const QJsonObject& daemonSummary);
 

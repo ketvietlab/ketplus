@@ -36,26 +36,16 @@ class LedgerRecordStore final : public RecordStore {
     };
     [[nodiscard]] std::optional<Reservation> reservation(const QString& taskId) const;
 
-    // A local user's cleanup acknowledgement for the next put that ends the task from
-    // needs_attention; held in memory and used once. `source` is "user" or "runner_removed".
-    [[nodiscard]] bool acknowledge(const QString& taskId, const QString& source,
-                                   const QString& userClientId);
-
     // Ends a task whose record could not be read: interrupted, reason record_unreadable, cleanup
-    // unverified, and a readable record in its place so no later load finds it again. Answers
+    // not confirmed, and a readable record in its place so no later load finds it again. Answers
     // the job id the row names (empty when none), or nullopt when nothing could be written.
     [[nodiscard]] std::optional<QString> abandonUnreadable(const QString& taskId);
 
   private:
-    struct Acknowledgement {
-        QString source;
-        QString userClientId;
-    };
     bool write(const RemoteJobRecord& record, qint64 expected);
 
     QSqlDatabase database_;
     BackgroundTaskLedger& ledger_;
-    QHash<QString, Acknowledgement> acknowledgements_;
     mutable QStringList unreadable_;
 };
 

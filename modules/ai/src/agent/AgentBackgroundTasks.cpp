@@ -15,8 +15,7 @@ QString state(const QVariantMap& task) {
     return task.value("state", task.value("status")).toString();
 }
 bool live(const QVariantMap& task) {
-    static const QSet<QString> states{"queued", "starting", "running", "stopping",
-                                      "needs_attention"};
+    static const QSet<QString> states{"queued", "starting", "running", "stopping"};
     return states.contains(state(task));
 }
 bool terminal(const QVariantMap& task) {
@@ -52,7 +51,7 @@ QVariantList merge(const QVariantList& base, const QVariantList& incoming) {
 } // namespace
 
 QVariantMap backgroundJobSummary(const QVariantList& tasks) {
-    int count = 0, queued = 0, attention = 0;
+    int count = 0, queued = 0;
     QString title;
     for (const auto& value : tasks) {
         const auto task = value.toMap();
@@ -62,17 +61,12 @@ QVariantMap backgroundJobSummary(const QVariantList& tasks) {
             continue;
         ++count;
         queued += state(task) == "queued";
-        const bool needsUser = state(task) == "needs_attention";
-        if (title.isEmpty() || (needsUser && attention == 0))
+        if (title.isEmpty())
             title = task.value("title").toString();
-        attention += needsUser;
     }
     if (count == 0)
         return {};
-    return {{"liveJobs", count},
-            {"queuedJobs", queued},
-            {"attentionJobs", attention},
-            {"jobTitle", title}};
+    return {{"liveJobs", count}, {"queuedJobs", queued}, {"jobTitle", title}};
 }
 
 QVariantMap backgroundJobSummary(const QJsonObject& daemonSummary) {
@@ -81,7 +75,6 @@ QVariantMap backgroundJobSummary(const QJsonObject& daemonSummary) {
         return {};
     return {{"liveJobs", count},
             {"queuedJobs", daemonSummary.value("queued_jobs").toInt()},
-            {"attentionJobs", daemonSummary.value("attention_jobs").toInt()},
             {"jobTitle", daemonSummary.value("job_title").toString()}};
 }
 
@@ -212,10 +205,6 @@ void AgentSessionManager::refreshBackgroundTaskMetadata(const SessionPtr& sessio
 
 void AgentSessionManager::stopBackgroundTask(const QString& path, const QString& id) {
     callBackgroundTask(path, id, "stop");
-}
-void AgentSessionManager::resolveBackgroundTaskCleanup(const QString& path, const QString& id,
-                                                       qint64 revision) {
-    callBackgroundTask(path, id, "resolve_cleanup", {{"revision", revision}});
 }
 void AgentSessionManager::readBackgroundTaskOutput(const QString& path, const QString& id,
                                                    const QString& cursor, quint64 request) {

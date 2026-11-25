@@ -22,18 +22,6 @@ void AgentWorkspaceView::stopBackgroundTask(const QString& taskId) {
     emit backgroundTaskStopRequested(taskId);
 }
 
-void AgentWorkspaceView::resolveBackgroundTaskCleanup(const QString& taskId, qint64 revision) {
-    if (!agentAvailable_ || !backgroundTaskState_.value("connected", true).toBool() ||
-        !backgroundTaskState_.value("canResolve", false).toBool() ||
-        backgroundTaskActions_.value(taskId).toMap().value("pending").toBool())
-        return;
-    // This entry point is wired only to the explicit native user confirmation.
-    // Keep the revision captured when asking; a conflict requires a fresh decision.
-    backgroundTaskActions_.insert(taskId, QVariantMap{{"pending", true}});
-    emit backgroundTaskOutputChanged();
-    emit backgroundTaskCleanupResolutionRequested(taskId, revision);
-}
-
 void AgentWorkspaceView::requestBackgroundTaskOutput(const QString& taskId) {
     if (!agentAvailable_ || !backgroundTaskState_.value("connected", true).toBool() ||
         !backgroundTaskState_.value("canRead", true).toBool())

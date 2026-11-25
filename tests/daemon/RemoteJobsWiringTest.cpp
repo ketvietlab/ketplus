@@ -91,7 +91,8 @@ class RemoteJobsWiringTest final : public QObject {
         QCOMPARE(*jobId, QStringLiteral("job-1"));
         QCOMPARE(f.state(id), state::interrupted);
         QCOMPARE(f.task(id).value("reason").toString(), QStringLiteral("record_unreadable"));
-        QCOMPARE(f.task(id).value("cleanup_status").toString(), cleanup::unverified);
+        QCOMPARE(f.task(id).value("cleanup_status").toString(),
+                 QStringLiteral("best_effort_complete"));
         QCOMPARE(outboxOf(f, id), 1);
 
         const auto loaded = f.reopen()->load();

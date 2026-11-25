@@ -118,10 +118,6 @@ Item {
                     return KetTheme.ConversationStatus.AwaitingReply
                 if (agentHost.sessionRunning)
                     return KetTheme.ConversationStatus.Working
-                // The turn ended on a live job: it needs the user, else it wakes this
-                // conversation when it ends (the task bar under the transcript names it).
-                if ((conversation.attentionJobs || 0) > 0)
-                    return KetTheme.ConversationStatus.TaskNeedsAttention
                 if (/fail|error|disconnect|missing|not found/.test(text))
                     return KetTheme.ConversationStatus.Error
                 if ((conversation.liveJobs || 0) > 0)

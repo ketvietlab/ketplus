@@ -1,6 +1,5 @@
 #pragma once
 
-#include "runner/entry/RemoteGuidance.h"
 #include "runner/entry/RemoteJobPort.h"
 
 #include <QJsonObject>
@@ -34,8 +33,6 @@ class RemoteJobEntry final : public RemoteJobPort {
     // The labels and timeout are those the reserved task was created with.
     void submit(const QString& taskId, const QJsonObject& execution) override;
     [[nodiscard]] std::optional<QString> stop(const QString& taskId) override;
-    [[nodiscard]] std::optional<QString> resolveCleanup(const QString& taskId,
-                                                        const QString& userClientId) override;
     [[nodiscard]] QJsonObject withPlacement(QJsonObject reply) const override;
     [[nodiscard]] bool hasRecord(const QString& taskId) const override;
 

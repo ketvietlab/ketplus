@@ -87,8 +87,6 @@ class RemoteJobs final : public link::LinkEvents {
     [[nodiscard]] int outstanding() const { return coordinator_.outstanding(); }
     void submit(const QString& taskId, SubmitRequest request, Callback callback);
     [[nodiscard]] jobs::JobDecision stop(const QString& taskId);
-    [[nodiscard]] jobs::JobDecision resolveCleanup(const QString& taskId,
-                                                   const QString& userClientId);
     // A runner the user removed or unpaired; `clientId` of the request, or "daemon".
     [[nodiscard]] jobs::JobDecision runnerRemoved(const QString& runnerId, const QString& clientId);
     [[nodiscard]] std::optional<jobs::RemoteJobRecord> record(const QString& taskId) const;

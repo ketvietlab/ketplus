@@ -172,8 +172,7 @@ JobDecision RemoteJobCoordinator::stop(const QString& taskId) {
     const auto current = record(taskId);
     if (!current)
         return {QStringLiteral("not_found")};
-    if (current->terminal() || current->state == state::stopping ||
-        current->state == state::needsAttention)
+    if (current->terminal() || current->state == state::stopping)
         return {};
     RemoteJobRecord next = *current;
     next.state = state::stopping;
@@ -215,20 +214,6 @@ void RemoteJobCoordinator::cancelAnswered(const QString& taskId, const JobOutcom
     }
     if (!commit(endUndispatched(*current, state::cancelled, user)))
         retryLater(taskId);
-}
-
-JobDecision RemoteJobCoordinator::resolveCleanup(const QString& taskId) {
-    const auto current = record(taskId);
-    if (!current)
-        return {QStringLiteral("not_found")};
-    if (current->state != state::needsAttention)
-        return {QStringLiteral("invalid_state")};
-    RemoteJobRecord next = *current;
-    next.state = state::interrupted;
-    next.reason = QStringLiteral("cleanup_acknowledged");
-    if (!commit(next))
-        return {QStringLiteral("storage_error")};
-    return {};
 }
 
 void RemoteJobCoordinator::timerFired(const QString& taskId, const JobTimer timer) {
@@ -289,8 +274,7 @@ void RemoteJobCoordinator::restore() {
             submit(stored.taskId);
         } else if (stored.dispatched()) {
             // The runner offers again; the spec is never sent twice.
-            if (stored.state != state::needsAttention)
-                armWindow(stored.taskId, now);
+            armWindow(stored.taskId, now);
             if (userStop)
                 cancelOnRelay(stored.taskId, user);
             armDeadline(stored);

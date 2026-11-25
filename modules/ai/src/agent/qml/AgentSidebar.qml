@@ -69,10 +69,9 @@ Rectangle {
                 text: modelData.title || "New conversation"
                 number: modelData.number || ""
                 checked: !!modelData.active
-                // A resting turn whose job is live waits on it, or on the user when the job needs
-                // attention; the desktop sidebar's rows read the same facts.
+                // A resting turn whose job is live waits on it; the desktop sidebar's rows read the same facts.
                 readonly property bool waitsOnJob: !modelData.running && (modelData.liveJobs || 0) > 0
-                status: modelData.needsInput ? Kit.KetTheme.ConversationStatus.NeedsInput : modelData.awaitingReply ? Kit.KetTheme.ConversationStatus.AwaitingReply : modelData.running ? Kit.KetTheme.ConversationStatus.Working : (modelData.attentionJobs || 0) > 0 ? Kit.KetTheme.ConversationStatus.TaskNeedsAttention : /fail|error|disconnect|missing/i.test(modelData.status || "") ? Kit.KetTheme.ConversationStatus.Error : waitsOnJob ? Kit.KetTheme.ConversationStatus.WaitingOnTask : /stop/i.test(modelData.status || "") ? Kit.KetTheme.ConversationStatus.Stopped : modelData.started ? Kit.KetTheme.ConversationStatus.Completed : Kit.KetTheme.ConversationStatus.NotStarted
+                status: modelData.needsInput ? Kit.KetTheme.ConversationStatus.NeedsInput : modelData.awaitingReply ? Kit.KetTheme.ConversationStatus.AwaitingReply : modelData.running ? Kit.KetTheme.ConversationStatus.Working : /fail|error|disconnect|missing/i.test(modelData.status || "") ? Kit.KetTheme.ConversationStatus.Error : waitsOnJob ? Kit.KetTheme.ConversationStatus.WaitingOnTask : /stop/i.test(modelData.status || "") ? Kit.KetTheme.ConversationStatus.Stopped : modelData.started ? Kit.KetTheme.ConversationStatus.Completed : Kit.KetTheme.ConversationStatus.NotStarted
                 statusLabel: waitsOnJob && status !== Kit.KetTheme.ConversationStatus.Error ? Kit.KetTheme.conversationStatusLabel(status) + " · " + (modelData.jobTitle || "Background job") : modelData.status || Kit.KetTheme.conversationStatusLabel(status)
                 // The Working indicator's policy (docs/design-system.md): spin unless reduced motion,
                 // restoring, hidden, minimized or scrolled away. Behind another app the kit clock

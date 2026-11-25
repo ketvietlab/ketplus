@@ -48,6 +48,9 @@ struct BackgroundTaskChange final {
     std::optional<bool> executorStopped;
     std::optional<int> exitCode;
     QString errorCode;
+    // The daemon gave up verifying cleanup and ended the job anyway. Kept only in the
+    // internal diagnostics table and the daemon log; never in the record clients read.
+    QString cleanupDiagnostic;
     bool fullScopeVerified{false};
     // Native: the job process group was verified empty by the OS. Weaker than kernel
     // verification (fullScopeVerified) and recorded as such.
@@ -63,8 +66,8 @@ inline void applyExecutorCleanupEvidence(BackgroundTaskChange& change, const QJs
     const bool verified = change.cleanupStatus == "verified";
     const bool kernel = event.value("containment_mode") == "cgroup_v2";
     change.fullScopeVerified = kernel && verified;
-    change.groupVerified = !kernel && verified &&
-                           event.value("cleanup_verification") == "process_group_empty";
+    change.groupVerified =
+        !kernel && verified && event.value("cleanup_verification") == "process_group_empty";
 }
 
 // What a transition's effects need besides the change: given by the caller, never read from the
@@ -72,9 +75,6 @@ inline void applyExecutorCleanupEvidence(BackgroundTaskChange& change, const QJs
 struct BackgroundTaskEffects final {
     bool native{false};                  // the task's containment is native best effort
     std::optional<bool> executorStopped; // the executor's state before; nullopt: not tracked
-    bool userAcknowledgement{false};     // a cleanup acknowledgement, audited with:
-    QString auditSource{"user"};
-    QString auditClientId;
 };
 
 // Transactional persistence and slot admission. Permission and executor evidence
@@ -113,9 +113,6 @@ class BackgroundTaskLedger final {
     [[nodiscard]] bool ownsLiveJobs(const BackgroundTaskOwner& owner) const;
     // Runtime-only recovery scan; callers must apply authorization to every API projection.
     [[nodiscard]] QJsonObject nonterminal() const;
-    // The IPC layer permits this only for an authenticated local user action.
-    QJsonObject resolveCleanup(const QString& taskId, qint64 expectedRevision,
-                               const QString& userClientId);
     // Commits completion dedup and its queued owner-turn record in one transaction.
     QJsonObject acceptCompletion(const QString& eventId, const BackgroundTaskOwner& owner);
     // Runtime sets durable Stop/pause/decision fences; only explicit eligibility clears them.
@@ -155,13 +152,11 @@ class BackgroundTaskLedger final {
   private:
     QJsonObject accept(const QString& table, const QString& eventId,
                        const BackgroundTaskOwner& owner);
-    // Inside applyTransition's transaction: the needs_attention notice, and suppressing the
-    // pending notices of a job that ends.
-    QJsonObject noticeAttention(const QString& taskId, const QJsonObject& record,
-                                const QString& previousState);
+    // Inside applyTransition's transaction: suppressing the pending notices of a job that ends.
     QJsonObject supersedeNotices(const QString& taskId);
     QJsonObject changeImpl(const QString& taskId, qint64 expectedRevision,
-                           const BackgroundTaskChange& change, const QString& userClientId);
+                           const BackgroundTaskChange& change);
+    bool migrateRetiredAttention(QString* error);
     QJsonObject task(const QString& taskId) const;
     QSqlDatabase database_;
 };

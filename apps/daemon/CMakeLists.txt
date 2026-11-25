@@ -110,7 +110,6 @@ target_sources(ketplus_daemon_core PRIVATE
     src/runner/remote/SnapshotPorts.cpp src/runner/remote/SnapshotPorts.h
     src/runner/remote/SnapshotStores.cpp src/runner/remote/SnapshotStores.h
     src/runner/remote/TaskSnapshots.cpp src/runner/remote/TaskSnapshots.h
-    src/runner/entry/RemoteCleanup.h src/runner/entry/RemoteGuidance.h
     src/runner/entry/RemoteJobPort.h src/runner/entry/RemoteLiveTasks.h
     src/runner/entry/RemoteOutput.h
     src/runner/entry/RemoteJobEntry.cpp src/runner/entry/RemoteJobEntry.h
