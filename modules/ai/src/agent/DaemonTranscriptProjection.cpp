@@ -260,11 +260,11 @@ QString agentMessageStateText(const QJsonObject& data) {
     }
     if (kind == "background_wake_held") {
         if (data.value("reason") == "team_budget")
-            return QStringLiteral("Background task %1's follow-up is waiting for Resume because "
-                                  "the team used its automatic turns.")
+            return QStringLiteral("Background task %1's follow-up is on hold because the team "
+                                  "used its automatic turns. Resume clears the team hold.")
                 .arg(taskId);
-        return QStringLiteral("Background task %1's follow-up is waiting because the team is "
-                              "paused. Resume the team to release it.")
+        return QStringLiteral("Background task %1's follow-up is on hold because the team is "
+                              "paused. Resume clears the team hold.")
             .arg(taskId);
     }
     if (kind == "background_wake_failed")

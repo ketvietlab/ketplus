@@ -412,12 +412,16 @@ class ManagedTaskHostTest final : public QObject {
 
     void teamFencesReportOneHeldWakeAndResumeIt_data() {
         QTest::addColumn<bool>("budget");
-        QTest::newRow("paused") << false;
-        QTest::newRow("budget_exhausted") << true;
+        QTest::addColumn<bool>("restart");
+        QTest::newRow("paused_in_process") << false << false;
+        QTest::newRow("paused_after_restart") << false << true;
+        QTest::newRow("budget_in_process") << true << false;
+        QTest::newRow("budget_after_restart") << true << true;
     }
 
     void teamFencesReportOneHeldWakeAndResumeIt() {
         QFETCH(bool, budget);
+        QFETCH(bool, restart);
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
         const auto cwd = QFileInfo(directory.path()).canonicalFilePath();
@@ -438,6 +442,13 @@ class ManagedTaskHostTest final : public QObject {
                     result.append(payload);
             }
             return result;
+        };
+        const auto resumeAndVerify = [&](SessionHost& host, LocalJournal& journal) {
+            QVERIFY(command(host, "team.update", {{"team_id", teamId}, {"paused", false}})
+                        .value("ok")
+                        .toBool());
+            QTRY_COMPARE_WITH_TIMEOUT(turns(log), 1, 6000);
+            QCOMPARE(notices(journal).size(), 1);
         };
         {
             LocalJournal journal(path);
@@ -466,6 +477,10 @@ class ManagedTaskHostTest final : public QObject {
             QCOMPARE(notice.value("reason"), budget ? "team_budget" : "team_paused");
             QVERIFY(!notice.value("event_id").toString().isEmpty());
             QCOMPARE(turns(log), 0);
+            if (!restart) {
+                resumeAndVerify(host, journal);
+                return;
+            }
         }
         {
             LocalJournal journal(path);
@@ -475,11 +490,7 @@ class ManagedTaskHostTest final : public QObject {
             QTest::qWait(1100); // Let the reopened dispatcher revisit the held wake.
             QCOMPARE(notices(journal).size(), 1);
             QCOMPARE(turns(log), 0);
-            QVERIFY(command(host, "team.update", {{"team_id", teamId}, {"paused", false}})
-                        .value("ok")
-                        .toBool());
-            QTRY_COMPARE_WITH_TIMEOUT(turns(log), 1, 6000);
-            QCOMPARE(notices(journal).size(), 1);
+            resumeAndVerify(host, journal);
         }
     }
 

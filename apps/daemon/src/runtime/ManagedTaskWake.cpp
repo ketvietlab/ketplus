@@ -136,6 +136,8 @@ void ManagedTaskBridge::dispatchWakes() {
                 (void)ledger_.suppressCompletion(eventId, "superseded");
                 continue;
             }
+            if (!eligible(owner, wakes))
+                continue;
             QString teamMember = owner.sessionId;
             auto* team = host_->teams_ ? host_->teams_->teamOf(teamMember) : nullptr;
             if (!team && host_->teams_ && !parent.isEmpty()) {
@@ -159,8 +161,6 @@ void ManagedTaskBridge::dispatchWakes() {
                                               {"reason", reason}});
                 continue;
             }
-            if (!eligible(owner, wakes))
-                continue;
             if (!wakes) {
                 const auto accepted = pass == Completions ? ledger_.acceptCompletion(eventId, owner)
                                                           : ledger_.acceptNotice(eventId, owner);
