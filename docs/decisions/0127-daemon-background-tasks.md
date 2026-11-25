@@ -322,7 +322,11 @@ receipt and logs them next to `stop_cause=supervisor_termination_requested`.
 control. The OS reporting the PID gone, or the PID held by another user's process with a
 different birth time (a reused PID), proves the original exited and raises no alarm. An
 unchanged birth under another user, or a PID that cannot be read but still answers
-`kill(pid, 0)`, still blocks as `needs_attention`.
+`kill(pid, 0)`, still blocks as `needs_attention`. On macOS, libproc refuses another
+user's process, so the birth time and user are read from the process table
+(`sysctl KERN_PROC_PID`, no privilege needed); where neither source can describe the PID,
+the alarm stays. The record keeps `cleanup_verification` only while its
+`cleanup_status` is `verified`; any other status removes it.
 
 A process that called `setsid` leaves the group, so the group alone cannot see it.
 The supervisor therefore keeps tracking descendants by parentage, signals every

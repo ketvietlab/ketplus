@@ -12,33 +12,40 @@
 #include <QSqlError>
 #include <QUuid>
 #include <cerrno>
+#include <atomic>
 #include <csignal>
 #include <unistd.h>
 
 namespace ketplus::daemon::executor {
 namespace {
 // The handler only stores integers; the main loop inspects and logs the sender. The first
-// signal wins, and stopRequested is written last so a reader never sees a half record.
-volatile sig_atomic_t stopRequested = 0;
-volatile sig_atomic_t stopSignalNumber = 0;
-volatile sig_atomic_t stopSenderPid = 0;
-volatile sig_atomic_t stopSenderUid = 0;
+// signal wins, and stopRequested is written last so a reader never sees a half record. The
+// supervisor is single-threaded and both stop signals are blocked while the handler runs
+// (sa_mask), so no second handler can interleave with these stores. Lock-free atomics keep
+// the unsigned uid whole and are async-signal-safe.
+static_assert(std::atomic<unsigned>::is_always_lock_free);
+std::atomic<unsigned> stopRequested{0};
+std::atomic<unsigned> stopSignalNumber{0};
+std::atomic<unsigned> stopSenderPid{0};
+std::atomic<unsigned> stopSenderUid{0};
 void stopSignal(int number, siginfo_t* info, void*) {
-    if (stopRequested)
+    if (stopRequested.load(std::memory_order_relaxed))
         return;
-    stopSignalNumber = number;
-    stopSenderPid = info ? sig_atomic_t(info->si_pid) : 0;
-    stopSenderUid = info ? sig_atomic_t(info->si_uid) : 0;
-    stopRequested = 1;
+    stopSignalNumber.store(unsigned(number), std::memory_order_relaxed);
+    stopSenderPid.store(info ? unsigned(info->si_pid) : 0, std::memory_order_relaxed);
+    stopSenderUid.store(info ? unsigned(info->si_uid) : 0, std::memory_order_relaxed);
+    stopRequested.store(1, std::memory_order_release);
 }
 } // namespace
 
-bool supervisorStopRequested() { return stopRequested != 0; }
+bool supervisorStopRequested() { return stopRequested.load(std::memory_order_acquire) != 0; }
 
 SupervisorStopSignal supervisorStopSignal() {
-    if (!stopRequested)
+    if (!supervisorStopRequested())
         return {};
-    return {int(stopSignalNumber), qint64(stopSenderPid), qint64(stopSenderUid)};
+    return {int(stopSignalNumber.load(std::memory_order_relaxed)),
+            qint64(stopSenderPid.load(std::memory_order_relaxed)),
+            qint64(stopSenderUid.load(std::memory_order_relaxed))};
 }
 
 NativeJobSupervisor::NativeJobSupervisor(QString directory, QString taskId, QString lease,

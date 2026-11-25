@@ -1517,8 +1517,11 @@ control, provider invocation, toolchain change or production fix.
 
 `ketplus_managed_attention_recovery_tests` adds the `owner-close` and
 `generation-change` rows of `attentionSurvivesOwnerLifecycle`. It uses a file-backed
-`LocalJournal`, real `SessionHost`/runtime and scripted FakeCodex. On macOS only,
-the row launches a harmless marker/output/sleep process through the managed API,
+`LocalJournal`, real `SessionHost`/runtime and scripted FakeCodex. Since the ledger
+accepts a verified-empty process group, a SIGKILLed supervisor no longer yields
+`needs_attention`; the macOS rows therefore run the injected-result path below until a
+real fault that leaves a live process in the job group exists (opt in with
+`KETPLUS_ATTENTION_REAL_NATIVE`). The real-native fault, when enabled, launches a harmless marker/output/sleep process through the managed API,
 captures its supervisor/root identities, faults the supervisor with the production
 identity-bound signal, and requires `needs_attention`/`unverified` with the known
 executor stopped. On Linux, it injects an executor result without an execution

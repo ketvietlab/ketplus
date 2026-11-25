@@ -255,12 +255,7 @@ void ManagedTaskRuntime::observeProcess(const QString& id, const QJsonObject& ev
     complete.reason = event.value("error").toString();
     complete.cleanupConfirmed = true;
     complete.neverLaunched = !event.value("root_started").toBool();
-    complete.cleanupStatus = event.value("cleanup_status").toString();
-    complete.fullScopeVerified =
-        event.value("containment_mode") == "cgroup_v2" && complete.cleanupStatus == "verified";
-    complete.groupVerified = event.value("containment_mode") != "cgroup_v2" &&
-                             complete.cleanupStatus == "verified" &&
-                             event.value("cleanup_verification") == "process_group_empty";
+    applyExecutorCleanupEvidence(complete, event);
 #ifdef Q_OS_LINUX
     if (!event.value("linux_boundary").toObject().isEmpty()) {
         complete.executionIdentity = live->record.value("execution_identity").toObject();

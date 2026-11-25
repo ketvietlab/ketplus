@@ -56,6 +56,17 @@ struct BackgroundTaskChange final {
     std::optional<bool> outputTruncated;
 };
 
+// The cleanup evidence an executor result carries. Native process-group evidence is a weaker
+// kind than kernel (cgroup_v2) verification and never sets fullScopeVerified.
+inline void applyExecutorCleanupEvidence(BackgroundTaskChange& change, const QJsonObject& event) {
+    change.cleanupStatus = event.value("cleanup_status").toString();
+    const bool verified = change.cleanupStatus == "verified";
+    const bool kernel = event.value("containment_mode") == "cgroup_v2";
+    change.fullScopeVerified = kernel && verified;
+    change.groupVerified = !kernel && verified &&
+                           event.value("cleanup_verification") == "process_group_empty";
+}
+
 // What a transition's effects need besides the change: given by the caller, never read from the
 // task's record.
 struct BackgroundTaskEffects final {

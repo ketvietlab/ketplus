@@ -53,8 +53,6 @@ QJsonObject BackgroundTaskLedger::applyTransition(const QString& id, QJsonObject
         record.insert("cleanup_status", "pending");
     if (!change.cleanupStatus.isEmpty())
         record.insert("cleanup_status", change.cleanupStatus);
-    if (change.groupVerified && change.cleanupStatus == "verified")
-        record.insert("cleanup_verification", "process_group_empty");
     if (change.state == "needs_attention") {
         record.insert("cleanup_status", "unverified");
         record.insert("reason", "cleanup_unverified");
@@ -84,6 +82,11 @@ QJsonObject BackgroundTaskLedger::applyTransition(const QString& id, QJsonObject
                                                              : "verified");
         }
     }
+    // The evidence kind lives only as long as the verified status it supports.
+    if (change.groupVerified && record.value("cleanup_status") == "verified")
+        record.insert("cleanup_verification", "process_group_empty");
+    else if (record.value("cleanup_status") != "verified")
+        record.remove("cleanup_verification");
     if (!change.terminalTarget.isEmpty())
         record.insert("terminal_target", change.terminalTarget);
     if (!change.executionIdentity.isEmpty())

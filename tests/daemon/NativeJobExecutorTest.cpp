@@ -625,13 +625,17 @@ class NativeJobExecutorTest final : public QObject {
         QVERIFY(child.waitForFinished());
         QCOMPARE(probe(gone).presence, ProcessPresence::Gone);
         if (geteuid() != 0) {
-            // The OS may refuse to describe another user's process (Unknown) or describe it
-            // (Foreign); it is never Owned or Gone, and Unknown stays an alarm.
+            // Another user's process is described, with its birth, even where libproc refuses.
             const auto init = probe(1);
+#ifdef Q_OS_MACOS
+            QCOMPARE(init.presence, ProcessPresence::Foreign);
+            QVERIFY(init.identity && !init.identity->birth.isEmpty());
+            QVERIFY(!originalMayBeAlive(NativeProcessIdentity{1, 0, 1, "1:1", false}, init, true));
+            QVERIFY(originalMayBeAlive(*init.identity, init, true));
+#else
             QVERIFY(init.presence == ProcessPresence::Foreign ||
                     init.presence == ProcessPresence::Unknown);
-            if (init.presence == ProcessPresence::Foreign)
-                QVERIFY(init.identity && !init.identity->birth.isEmpty());
+#endif
         }
     }
 
