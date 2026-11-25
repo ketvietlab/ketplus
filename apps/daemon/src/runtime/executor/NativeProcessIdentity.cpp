@@ -17,7 +17,6 @@
 #include <mach/mach.h>
 #include <sys/proc.h>
 #include <sys/proc_info.h>
-#include <sys/sysctl.h>
 #elif defined(Q_OS_LINUX)
 #include <sys/syscall.h>
 #endif
@@ -33,27 +32,8 @@ ProcessProbe probe(qint64 pid) {
 #ifdef Q_OS_MACOS
     proc_bsdinfo info{};
     errno = 0;
-    if (proc_pidinfo(int(pid), PROC_PIDTBSDINFO, 0, &info, sizeof(info)) != int(sizeof(info))) {
-        if (errno == ESRCH)
-            return {ProcessPresence::Gone, {}};
-        // libproc refuses another user's process, but the process table does not: read the
-        // same birth time and user from sysctl, which needs no privilege.
-        int mib[4] = {CTL_KERN, KERN_PROC, KERN_PROC_PID, int(pid)};
-        kinfo_proc entry{};
-        size_t length = sizeof(entry);
-        if (sysctl(mib, 4, &entry, &length, nullptr, 0) != 0)
-            return {};
-        if (length < sizeof(entry) || entry.kp_proc.p_pid != pid_t(pid))
-            return {ProcessPresence::Gone, {}}; // An empty answer: no such process.
-        NativeProcessIdentity other{
-            pid, entry.kp_eproc.e_ppid, entry.kp_eproc.e_pgid,
-            QString::number(qint64(entry.kp_proc.p_starttime.tv_sec)) + ":" +
-                QString::number(qint64(entry.kp_proc.p_starttime.tv_usec)),
-            entry.kp_proc.p_stat == SZOMB};
-        return {entry.kp_eproc.e_ucred.cr_uid == geteuid() ? ProcessPresence::Unknown
-                                                          : ProcessPresence::Foreign,
-                other};
-    }
+    if (proc_pidinfo(int(pid), PROC_PIDTBSDINFO, 0, &info, sizeof(info)) != int(sizeof(info)))
+        return {errno == ESRCH ? ProcessPresence::Gone : ProcessPresence::Unknown, {}};
     NativeProcessIdentity identity{pid, info.pbi_ppid, info.pbi_pgid,
                                    QString::number(info.pbi_start_tvsec) + ":" +
                                        QString::number(info.pbi_start_tvusec),

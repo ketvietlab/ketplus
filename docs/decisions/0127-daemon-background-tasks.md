@@ -323,9 +323,8 @@ control. The OS reporting the PID gone, or the PID held by another user's proces
 different birth time (a reused PID), proves the original exited and raises no alarm. An
 unchanged birth under another user, or a PID that cannot be read but still answers
 `kill(pid, 0)`, still blocks as `needs_attention`. On macOS, libproc refuses another
-user's process, so the birth time and user are read from the process table
-(`sysctl KERN_PROC_PID`, no privilege needed); where neither source can describe the PID,
-the alarm stays. The record keeps `cleanup_verification` only while its
+user's process, so such a PID still blocks as before; this change does not narrow that
+case, and the daemon's own retry of it is a separate follow-up. The record keeps `cleanup_verification` only while its
 `cleanup_status` is `verified`; any other status removes it.
 
 A process that called `setsid` leaves the group, so the group alone cannot see it.
