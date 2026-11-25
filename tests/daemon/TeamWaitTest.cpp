@@ -352,6 +352,23 @@ class TeamWaitTest final : public QObject {
         QVERIFY(!teams_->isWaiting("lead"));
     }
 
+    // T-12: a turn that is only held while the team is paused did not reach the leader, so the
+    // leader's wait still ends with its own turn (held as well).
+    void aHeldWakeDoesNotDropALeadersWait() {
+        const QString id = inProgress();
+        QVERIFY(teams_->wait(team_, "lead", 5, "the build").ok());
+        QVERIFY(teams_->update(team_, {{"paused", true}}, "user").ok());
+        QVERIFY(teams_->wait(team_, "dev1", 30, "an answer", id, "leader").ok());
+        QTRY_VERIFY_WITH_TIMEOUT(!teams_->isWaiting("lead"), 2000);
+        QStringList held;
+        for (const QJsonValue& value : team().held)
+            held.append(value.toObject().value("kind").toString() + ">" +
+                        value.toObject().value("to").toString());
+        QVERIFY2(held.contains("waiting_for_leader>lead"), qPrintable(held.join(",")));
+        QVERIFY2(held.contains("wait>lead"), qPrintable(held.join(",")));
+        QVERIFY(host_.messages.isEmpty());
+    }
+
     // T-12: nothing changed in the team, so the wait moves once and ends with the turn.
     void aLeadersWaitOnAnUnchangedTeamIsMovedOnce() {
         (void)inProgress();

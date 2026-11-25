@@ -173,11 +173,6 @@ void TeamCoordinator::wake(const Team& snapshot, const TeamMessage& sent) {
     Team* team = mutableTeam(teamId);
     if (!team)
         return;
-    // T-12: a leader's wait that ends after another turn reached the leader has nothing to add.
-    if (message.kind != QStringLiteral("wait") && !team->paused)
-        if (const Member* leader = team->memberWithRole(role::leader);
-            leader && leader->sessionId == message.toSession)
-            ++leaderWakes_[teamId];
     const Team before = *team;
     QList<Update> updates;
     pauseIfBudgetUsed(*team, updates);
@@ -260,6 +255,18 @@ void TeamCoordinator::send(const qint64 teamId, const TeamMessage& message) {
     if (const QString error = host_->postTeamMessage(message); !error.isEmpty())
         qWarning("Unable to send the team's %s to %s: %s", qUtf8Printable(message.kind),
                  qUtf8Printable(message.toSession), qUtf8Printable(error));
+    else
+        noteDelivered(teamId, message);
+}
+
+// T-12: a turn the leader was actually sent, not one only queued, held or dropped.
+void TeamCoordinator::noteDelivered(const qint64 teamId, const TeamMessage& message) {
+    if (message.kind == QStringLiteral("wait"))
+        return;
+    const Team* current = team(teamId);
+    const Member* leader = current ? current->memberWithRole(role::leader) : nullptr;
+    if (leader && leader->sessionId == message.toSession)
+        ++leaderWakes_[teamId];
 }
 
 void TeamCoordinator::forgetRelocations(const qint64 teamId, const QString& sessionId) {
@@ -311,8 +318,8 @@ void TeamCoordinator::sendFromOutbox() {
             std::any_of(teams_.cbegin(), teams_.cend(), [&](const Team& candidate) {
                 return std::any_of(candidate.outbox.cbegin(), candidate.outbox.cend(),
                                    [&](const QJsonValue& value) {
-                                       return heldMessage(candidate, value.toObject())
-                                                  .toSession == session;
+                                       return heldMessage(candidate, value.toObject()).toSession ==
+                                              session;
                                    });
             });
         if (!waiting && outboxQuiet_.remove(session))
@@ -434,6 +441,8 @@ void TeamCoordinator::finishOutboxEntry(const qint64 teamId, const QJsonObject& 
         if (const QString error = host_->postTeamMessage(message); !error.isEmpty())
             qWarning("Unable to send the team's %s to %s: %s", qUtf8Printable(message.kind),
                      qUtf8Printable(message.toSession), qUtf8Printable(error));
+        else
+            noteDelivered(teamId, message);
     }
     Team* current = mutableTeam(teamId);
     if (current) {

@@ -418,7 +418,12 @@ is actionable only while a task exists that the leader can hand out: a `todo` ta
 nobody owns, or a blocked task of another member. Otherwise it rides along with the
 next actionable digest like the other routine updates. A leader's own `team_wait`
 ends without a turn when any other turn (a digest, a developer's wait notice, a
-failed-message notice) reached the leader after the wait was set. When the team did
+failed-message notice) was delivered to the leader after the wait was set. Only a
+turn actually sent counts: one that is held while the team is paused, or still
+queued, does not. A wait dropped this way is not re-armed; a leader that still waits
+for something external calls `team_wait` again, and the stall watchdog is the only
+backstop. The existing digest test for an idle developer gains an unowned todo task
+because an idle developer with nothing to hand out no longer needs the leader. When the team did
 not change since the wait was set and is not quiesced, the first expiry only moves
 the wait by its own length; the next expiry wakes the leader as before. Waits of
 developers and the stall watchdog are unchanged.

@@ -966,6 +966,7 @@ class TeamCoordinator : public QObject {
     };
     // Turns started for each team's leader other than its own waits (T-12).
     QHash<qint64, quint64> leaderWakes_;
+    void noteDelivered(qint64 teamId, const TeamMessage& message);
     void cancelWait(const QString& sessionId);
     void forgetEndedWait(const QString& sessionId);
     void waitEnded(const QString& sessionId);
