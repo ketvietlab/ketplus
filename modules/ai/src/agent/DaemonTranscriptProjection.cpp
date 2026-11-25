@@ -258,6 +258,15 @@ QString agentMessageStateText(const QJsonObject& data) {
                     "in the task UI."));
         return text + QStringLiteral(" ") + guidance;
     }
+    if (kind == "background_wake_held") {
+        if (data.value("reason") == "team_budget")
+            return QStringLiteral("Background task %1's follow-up is waiting for Resume because "
+                                  "the team used its automatic turns.")
+                .arg(taskId);
+        return QStringLiteral("Background task %1's follow-up is waiting because the team is "
+                              "paused. Resume the team to release it.")
+            .arg(taskId);
+    }
     if (kind == "background_wake_failed")
         return QStringLiteral("Background task %1 ended, but its follow-up turn could not start.")
             .arg(taskId);
@@ -386,7 +395,8 @@ QVariantMap agentMessageNotice(const QJsonObject& data, const QString& itemId) {
         return entry;
     }
     const auto kind = data.value("kind");
-    if (kind == "background_task_attention" || kind == "background_wake_failed")
+    if (kind == "background_task_attention" || kind == "background_wake_failed" ||
+        kind == "background_wake_held")
         return providerNoticeMessage(agentMessageStateText(data), itemId,
                                      QStringLiteral("Background task"));
     auto entry = providerNoticeMessage(agentMessageStateText(data), itemId,

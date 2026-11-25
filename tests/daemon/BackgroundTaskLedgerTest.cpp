@@ -139,7 +139,14 @@ class BackgroundTaskLedgerTest final : public QObject {
         QSqlDatabase::removeDatabase(name);
     }
 
+    void acceptedWakeSurvivesRestartButUncertainDispatchNeverReplays_data() {
+        QTest::addColumn<bool>("attention");
+        QTest::newRow("completion") << false;
+        QTest::newRow("attention") << true;
+    }
+
     void acceptedWakeSurvivesRestartButUncertainDispatchNeverReplays() {
+        QFETCH(bool, attention);
         const auto name = QUuid::createUuid().toString();
         {
             auto db = QSqlDatabase::addDatabase("QSQLITE", name);
@@ -149,13 +156,28 @@ class BackgroundTaskLedgerTest final : public QObject {
             QString error;
             QVERIFY(ledger.initialize(&error));
             QVERIFY(seedOwner(db));
-            const auto id = taskId(ledger.create(intent()));
-            const auto ended = failed(ledger, id);
-            const auto event =
-                ended.value("task").toObject().value("completion_event_id").toString();
+            QString id;
+            QString event;
+            if (attention) {
+                id = runningJob(ledger);
+                QVERIFY(!id.isEmpty());
+                BackgroundTaskChange incident;
+                incident.state = "needs_attention";
+                QVERIFY(ledger.change(id, 4, incident).value("ok").toBool());
+                const auto notices = ledger.noticePage().value("events").toArray();
+                QCOMPARE(notices.size(), 1);
+                event = notices.first().toObject().value("event_id").toString();
+            } else {
+                id = taskId(ledger.create(intent()));
+                const auto ended = failed(ledger, id).value("task").toObject();
+                event = ended.value("completion_event_id").toString();
+            }
             QVERIFY(!event.isEmpty());
-            QCOMPARE(ledger.deliveryPage(false).value("events").toArray().size(), 1);
-            QVERIFY(ledger.acceptCompletion(event, {"owner", 1, {}}).value("ok").toBool());
+            const auto accept = [&] {
+                return attention ? ledger.acceptNotice(event, intent().owner)
+                                 : ledger.acceptCompletion(event, intent().owner);
+            };
+            QVERIFY(accept().value("ok").toBool());
             QVERIFY(ledger.recoverDispatchingWakes().value("ok").toBool());
             QCOMPARE(ledger.deliveryPage(true).value("events").toArray().size(), 1);
             QVERIFY(ledger.claimWake(event, {"owner", 1, {}}).value("ok").toBool());
@@ -166,7 +188,7 @@ class BackgroundTaskLedgerTest final : public QObject {
             QVERIFY(ledger.recoverDispatchingWakes().value("ok").toBool());
             QVERIFY(!ledger.wakeDispatchAllowed(event, {"owner", 1, {}}));
             QVERIFY(ledger.deliveryPage(true).value("events").toArray().isEmpty());
-            QVERIFY(ledger.acceptCompletion(event, {"owner", 1, {}}).value("duplicate").toBool());
+            QVERIFY(accept().value("duplicate").toBool());
             QVERIFY(ledger.deliveryPage(true).value("events").toArray().isEmpty());
             QSqlQuery query(db);
             QVERIFY(query.exec("UPDATE sessions SET generation=2 WHERE id='owner'"));

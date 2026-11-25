@@ -206,11 +206,11 @@ it) is reported the same way; it launched nothing and exits once its lease expir
 Only a user may invoke `session.task.resolve_cleanup` with `task_id` and revision.
 CAS `needs_attention -> interrupted(reason=cleanup_acknowledged)` with a durable
 audit whose source is `user`. Acknowledgement is a user statement, not kernel
-cleanup evidence; keep the assurance level visible. Agents cannot invoke this
-action on the user's behalf. Acknowledgement wakes no agent. Entering
-`needs_attention` shows the UI warning and also queues one owner notice (§7a) that says
-cleanup is unverified and that only the user acknowledges it. Permission, outbox, dedup
-and owner fences remain unchanged.
+cleanup evidence; keep the assurance level visible. Agents have no cleanup acknowledgement
+tool. They can read the incident and its output with their existing job access and
+report it to the user. Acknowledgement wakes no agent. Entering `needs_attention`
+shows the UI warning and queues one attention wake per incident (§7a). The job
+remains nonterminal and cleanup remains unverified.
 
 ### 5. Supervisor, launch and restart safety
 
@@ -330,6 +330,7 @@ message-only routing cannot replace it.
 | Busy in a turn | Enqueue after that turn; never urgent-steer into it |
 | Waiting on permission or user decision | Keep pending; do not answer for the user |
 | User Stop or pause | Keep pending; only explicit Resume releases it |
+| Team paused or automatic turn budget exhausted | Keep pending and record one UI notice per event ID with the reason; Resume releases eligible wakes |
 | Closed/deleted owner or replaced generation | Suppress with a recorded reason |
 | Job cancelled by Stop or session close | Suppress; cancellation must not restart the agent |
 | Job enters `needs_attention` | UI warning and one owner notice (§7a); suppressed for a cancelled job |
@@ -383,7 +384,10 @@ fences, idle dispatch, and the logical `turn_id=background-wake:<event_id>`. A n
 stale once its job has moved on (started, ended, acknowledged): dispatch suppresses it
 with `superseded`, and a terminal transition suppresses the job's pending notices and
 their accepted wakes in its own transaction, so retention is never held by them. The
-wake's origin kind is `background_task_notice`.
+wake's origin kind is `background_task_notice`. Outbox delivery to wake acceptance
+can retry at least once under the same event ID. The unique durable wake ID deduplicates
+acceptance across restart. Once dispatch has been claimed, recovery interrupts an
+uncertain dispatch rather than risking a second provider turn.
 
 A job's wake leaves a `team_wait` the member set: the wait names something KetPlus does
 not track, such as a deployment, and nothing ties it to the job. The team watchdog counts
