@@ -239,7 +239,8 @@ void NativeJobSupervisor::renewLease() {
     lastPulse_ = now;
 }
 
-bool NativeJobSupervisor::leaseExpired() {
+// Returns true once the lease has lapsed; records the gap in maxPingGap_ as a side effect.
+bool NativeJobSupervisor::checkLease() {
     const auto gap = clock_.elapsed() - lastPulse_;
     if (gap < NativeJobLeaseMs)
         return false;

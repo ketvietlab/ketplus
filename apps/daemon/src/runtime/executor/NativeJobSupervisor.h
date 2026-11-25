@@ -29,7 +29,7 @@ class NativeJobSupervisor final : public QObject {
     void command(const QJsonObject& message);
     void send(const QString& event, const QJsonObject& data = {});
     bool persist();
-    bool leaseExpired();
+    bool checkLease();
     void renewLease();
     void launch(const QJsonObject& message);
     bool prepareLaunchGate(QString* error);

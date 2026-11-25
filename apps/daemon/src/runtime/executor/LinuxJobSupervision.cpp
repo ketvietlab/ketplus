@@ -17,7 +17,7 @@ void NativeJobSupervisor::linuxTick() {
             QCoreApplication::quit();
         return;
     }
-    if (leaseExpired() || supervisorStopRequested())
+    if (checkLease() || supervisorStopRequested())
         requestStop("interrupted");
     if (deadline_ > 0 && clock_.elapsed() >= deadline_)
         requestStop("timed_out");

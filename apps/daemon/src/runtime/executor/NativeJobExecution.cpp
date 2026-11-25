@@ -248,7 +248,7 @@ void NativeJobSupervisor::tick() {
         }
         requestStop("interrupted");
     }
-    if (leaseExpired()) {
+    if (checkLease()) {
         if (launchAttempted_) {
             cleanupError_ = true;
             metadata_.insert("cleanup_issue", "lease_expired");
