@@ -682,6 +682,114 @@ class TeamAgentToolsTest final : public QObject {
                                           "team_tasks", "team_wait", "work_report"}));
     }
 
+    // ADR 0114 §11: only the leader interrupts, and only a member of a running team.
+    void leaderInterruptIsRefusedForEveryoneElse() {
+        Fixture fixture;
+        QVERIFY(fixture.open());
+        const Team team = create(fixture);
+        QVERIFY(!team.id.isEmpty());
+        const auto interrupt = [&](const QString& caller, const QString& member) {
+            return fixture.agents(caller, "agents.team_member_interrupt",
+                                  {{"member", member}, {"text", "Stop"}, {"reason", "wrong_way"}});
+        };
+        for (const QString& caller : {team.developer, team.reviewer})
+            QCOMPARE(interrupt(caller, fixture.number(team.second)).value("error_code").toString(),
+                     QStringLiteral("role_forbidden"));
+        QCOMPARE(interrupt(team.leader, fixture.number(team.leader)).value("error_code").toString(),
+                 QStringLiteral("not_allowed"));
+        const QString outsider = fixture.start("claude", "hello");
+        QVERIFY(!outsider.isEmpty());
+        QCOMPARE(interrupt(team.leader, fixture.number(outsider)).value("error_code").toString(),
+                 QStringLiteral("not_member"));
+        QCOMPARE(interrupt(team.leader, "nobody").value("error_code").toString(),
+                 QStringLiteral("not_member"));
+        QVERIFY(command(fixture, "team.update", {{"team_id", team.id}, {"paused", true}})
+                    .value("ok")
+                    .toBool());
+        QCOMPARE(interrupt(team.leader, fixture.number(team.second)).value("error_code").toString(),
+                 QStringLiteral("team_paused"));
+        QVERIFY(
+            fixture.journal->agentMessagesTo(team.second, 1, {QStringLiteral("queued")}).isEmpty());
+    }
+
+    void leaderInterruptStopsARunningTurnAndGoesFirst() {
+        Fixture fixture;
+        QVERIFY(fixture.open());
+        const Team team = create(fixture, {}, "Shop", "claude", "claude");
+        QVERIFY(!team.id.isEmpty());
+        QCOMPARE(
+            fixture.start("claude", "hang", team.developer, fixture.directory.filePath("shop")),
+            team.developer);
+        QTRY_VERIFY_WITH_TIMEOUT(fixture.count(team.developer, "turn.started") >= 1, 5000);
+        const int completed = fixture.count(team.developer, "turn.completed");
+        // A normal message waits for the end of the running turn.
+        QVERIFY(fixture
+                    .agents(team.leader, "agents.send",
+                            {{"to", fixture.number(team.developer)}, {"text", "queued earlier"}})
+                    .value("ok")
+                    .toBool());
+        const QJsonObject receipt = fixture.agents(team.leader, "agents.team_member_interrupt",
+                                                   {{"member", fixture.number(team.developer)},
+                                                    {"text", "Use the new API instead"},
+                                                    {"reason", "wrong_way"}});
+        QVERIFY2(receipt.value("ok").toBool(), qPrintable(text(receipt)));
+        QVERIFY(receipt.value("interrupted").toBool());
+        QVERIFY(!receipt.value("message_id").toString().isEmpty());
+        QCOMPARE(receipt.value("delivery").toString(), QStringLiteral("starting"));
+        QTRY_VERIFY_WITH_TIMEOUT(fixture.count(team.developer, "turn.completed") > completed, 5000);
+        // The leader's stop is not the user's Stop.
+        const QJsonObject ended = fixture.payloads(team.developer, "turn.completed").at(completed);
+        QCOMPARE(ended.value("status").toString(), QStringLiteral("interrupted"));
+        QCOMPARE(ended.value("stopped_by").toString(), QStringLiteral("leader"));
+        QVERIFY(ended.value("reason").toString() != QStringLiteral("user"));
+        // The next turn carries both messages, the priority one first.
+        QTRY_VERIFY_WITH_TIMEOUT(fixture.count(team.developer, "user.message") >= 2, 5000);
+        QFile log(fixture.claudeLog);
+        QVERIFY(log.open(QIODevice::ReadOnly));
+        const QString logged = QString::fromUtf8(log.readAll());
+        const qsizetype urgent = logged.indexOf("Use the new API instead");
+        const qsizetype queued = logged.indexOf("queued earlier");
+        QVERIFY(urgent >= 0 && queued >= 0);
+        QVERIFY(urgent < queued);
+        QVERIFY(logged.contains("stopped your previous turn"));
+        QVERIFY(!logged.contains("task-stop:"));
+    }
+
+    void leaderInterruptOfAnIdleMemberStillDeliversAndIsLimited() {
+        Fixture fixture;
+        QVERIFY(fixture.open());
+        const Team team = create(fixture);
+        QVERIFY(!team.id.isEmpty());
+        const QJsonObject args{{"member", fixture.number(team.second)},
+                               {"text", "Look at the cart"},
+                               {"reason", "priority"}};
+        for (int index = 0; index < 3; ++index) {
+            const QJsonObject receipt =
+                fixture.agents(team.leader, "agents.team_member_interrupt", args);
+            QVERIFY2(receipt.value("ok").toBool(), qPrintable(text(receipt)));
+            QVERIFY(!receipt.value("interrupted").toBool());
+            QTRY_COMPARE_WITH_TIMEOUT(fixture.count(team.second, "turn.completed"), index + 1,
+                                      5000);
+        }
+        // The fourth is refused; a normal message is still possible.
+        const QJsonObject fourth =
+            fixture.agents(team.leader, "agents.team_member_interrupt", args);
+        QCOMPARE(fourth.value("error_code").toString(), QStringLiteral("interrupt_limit"));
+        QVERIFY(fixture
+                    .agents(team.leader, "agents.send",
+                            {{"to", fixture.number(team.second)}, {"text", "Normal message"}})
+                    .value("ok")
+                    .toBool());
+        // Another member has its own count.
+        QVERIFY(fixture
+                    .agents(team.leader, "agents.team_member_interrupt",
+                            {{"member", fixture.number(team.developer)},
+                             {"text", "Hello"},
+                             {"reason", "priority"}})
+                    .value("ok")
+                    .toBool());
+    }
+
     void toolsAreListedOnlyForAMember() {
         const auto listWith = [](const QJsonObject& whoami) {
             const QJsonObject answer = agent_mcp::handleMessage(

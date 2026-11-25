@@ -695,6 +695,18 @@ conversation never reaches that point.
   backlog is summarised as "N older updates on tasks …, read them with `team_tasks`". Settings
   and wire (`context_reset*`) are unchanged and still govern the other roles. See
   [the batched delivery decision](2026-11-25-team-batched-delivery-and-leader-interrupt.md).
+- The leader interrupts a member with `team_member_interrupt {member, text, reason}` (T-11,
+  decision 3 of that document). The daemon refuses every other role, the leader itself, a
+  non-member and a paused team. A running turn of the member is stopped as the user's Stop
+  does, but recorded as `turn.completed` with `reason: "leader"` and `stopped_by: "leader"`:
+  the stall watcher and `cancelWait` treat it as a normal end, so the member's `team_wait`
+  stays, and its managed background jobs and their wakes are untouched. The message is
+  stored urgent, first in the member's next batch, and starts that turn at once (one
+  automatic turn). Task history of the member's open tasks and Updates get `leader
+  interrupted <member>: <reason>` (`member_interrupted`); worktree and task state do not
+  change. Receipt: `interrupted`, `message_id`, `delivery: "starting"`. At most 3 interrupts
+  per member per hour (kept in memory, so a daemon restart resets the count); the fourth
+  fails with `interrupt_limit`.
 - The team keeps each member's context mark (`contexts`: its task, its native thread, and
   the conversation's turn count when it began) in the team document. Clients and `team_get`
   do not need it; `team_get` leaves it out. A thread the team has not seen, such as one a
@@ -989,7 +1001,7 @@ Agent tools in the ketplus_agents server, served only to members: `team_get`,
 developers), `team_task_create`,
 `team_task_assign`, `team_task_handover`, `team_task_criteria`, `team_task_close`
 (ADR 0118), `team_lane_set`, `team_repository_set` (ADR 0123),
-`team_decision_raise` and `team_decision_withdraw` (leader). `team_task_create` takes an
+`team_decision_raise`, `team_decision_withdraw` and `team_member_interrupt` (leader). `team_task_create` takes an
 optional `repository` and `integration_branch` for a task that works in another repository
 than the team's (ADR 0123). A call by the wrong role names
 the role that may.

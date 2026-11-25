@@ -535,9 +535,16 @@ void SessionHost::providerReloaded(const QString& reason) {
 QJsonObject SessionHost::turnCompletion(Session& session, const QString& status) {
     QJsonObject completed{{QStringLiteral("status"), status}};
     // Only an interrupted end is the Stop's; a turn that finished first keeps its own status.
+    const QString stoppedBy = std::exchange(session.stoppedBy, QString{});
     if (std::exchange(session.stopRequested, false) &&
-        (status == QStringLiteral("interrupted") || status == QStringLiteral("stopped")))
-        completed.insert(QStringLiteral("reason"), QStringLiteral("user"));
+        (status == QStringLiteral("interrupted") || status == QStringLiteral("stopped"))) {
+        // The leader's stop is a normal end for the team: not the user's Stop (ADR 0114 §11).
+        const bool byLeader = stoppedBy == QStringLiteral("leader");
+        completed.insert(QStringLiteral("reason"),
+                         byLeader ? QStringLiteral("leader") : QStringLiteral("user"));
+        if (byLeader)
+            completed.insert(QStringLiteral("stopped_by"), QStringLiteral("leader"));
+    }
     // Only the actual end row publishes pending data. A page containing this row is
     // self-contained, and an older turn's ledger can never become this turn's report.
     const QJsonObject report = journal_->workReport(session.stored.id, session.stored.generation);

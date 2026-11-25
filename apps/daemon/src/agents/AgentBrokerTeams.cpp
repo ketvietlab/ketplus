@@ -10,7 +10,7 @@ namespace ketplus::daemon {
 QString AgentBroker::postTeamMessage(const QString& fromSession, const QString& fromTitle,
                                      const QString& toSession, const QString& kind,
                                      const QString& body, const bool expectReply,
-                                     QString* messageId, const QString& id) {
+                                     QString* messageId, const QString& id, const bool urgent) {
     const auto target = host_->agentConversation(toSession);
     if (!target)
         return QStringLiteral("The member's conversation no longer exists.");
@@ -37,6 +37,8 @@ QString AgentBroker::postTeamMessage(const QString& fromSession, const QString& 
     message.toGeneration = target->generation;
     message.toNumber = target->number;
     message.kind = kind;
+    // ADR 0114 §11 (leader interrupt): first in the receiver's next batch.
+    message.urgent = urgent;
     message.expectReply = expectReply;
     message.body = body.toUtf8().size() > maximumBodyBytes
                        ? QString::fromUtf8(body.toUtf8().left(maximumBodyBytes - 64)) +

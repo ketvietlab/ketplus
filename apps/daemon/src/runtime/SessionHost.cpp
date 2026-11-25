@@ -1553,6 +1553,7 @@ QJsonObject SessionHost::startTurn(const QJsonObject& request, bool localClient,
         resumeManagedTaskWake(sessionId, it->stored.generation);
     it->startingTurn = true;
     it->stopRequested = false;
+    it->stoppedBy.clear();
     QJsonObject turnOptions = options;
     turnOptions.insert(QStringLiteral("provider"), it->stored.adapter);
     turnOptions.insert(QStringLiteral("model"), it->stored.model);
@@ -2014,7 +2015,12 @@ QJsonObject SessionHost::interrupt(const QJsonObject& request) {
     const qint64 generation = session->stored.generation;
     session->stopRequested = session->startingTurn || !session->stored.turnId.isEmpty() ||
                              session->stored.state == QStringLiteral("running");
-    holdManagedTaskWake(sessionId, generation, "user_stopped");
+    // ADR 0114 §11: the leader's stop leaves the member's background jobs and their wakes alone.
+    const bool byLeader =
+        request.value(QStringLiteral("stopped_by")).toString() == QStringLiteral("leader");
+    session->stoppedBy = byLeader ? QStringLiteral("leader") : QString{};
+    if (!byLeader)
+        holdManagedTaskWake(sessionId, generation, "user_stopped");
     QTimer::singleShot(0, approvals_, [this, sessionId, generation] {
         approvals_->cancelPending(sessionId, generation, false);
     });
