@@ -215,6 +215,7 @@ struct Task final {
     QString state{state::todo};
     // The state a blocked task returns to when its question is answered.
     QString resumeState;
+    QString externalWaitQuestion;
     QString question;
     // Protocol reason, never inferred from the localized question.
     QString reviewBlock;
@@ -327,6 +328,7 @@ struct Team final {
     bool leaderWritesRequirements{true};
     bool paused{false};
     QString pausedReason;
+    QString quiescedReason;
     int maxRounds{defaultReviewRounds};
     QString reviewPlace{place::board};
     int turnBudget{defaultTurnBudget};

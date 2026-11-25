@@ -230,7 +230,9 @@ void TeamCoordinator::finishTask(Team& team, Task& task, const QString& actor,
         }
     dropReview(team, task.id);
     task.question.clear();
+    const qsizetype stateUpdate = updates.size();
     applyMove(team, task, state::done, actor, reason, updates);
+    updates[stateUpdate].data.insert(QStringLiteral("completion"), kind);
     addHistory(task, actor, kind, reason, data);
     // T-90: the owner does not stay in the worktree of work that is in. It moves to its task
     // in progress, another open task, or the team's repository (relocationHome), once the

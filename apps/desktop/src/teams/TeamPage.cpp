@@ -581,6 +581,18 @@ void TeamPage::buildBanners(const QJsonObject& team) {
         });
         layout_->addWidget(banner);
     }
+    if (!team.value(QStringLiteral("paused")).toBool() &&
+        team.value(QStringLiteral("quiesced")).toBool()) {
+        const bool completed = team.value(QStringLiteral("quiesced_reason")).toString() ==
+                               QStringLiteral("tasks_done");
+        auto* banner = new ket::Banner(
+            ket::BannerTone::Info, tr("Team is idle"),
+            completed ? tr("All tasks are done.")
+                      : tr("The remaining tasks are waiting for an external event."),
+            column_);
+        banner->setObjectName(QStringLiteral("teamQuiescedBanner"));
+        layout_->addWidget(banner);
+    }
     const int developers = TeamDirectory::count(team, QStringLiteral("developer"));
     // T-23: a second reviewer takes the queue away, so the banner offers one until it is there.
     if (developers >= kQueueBannerDevelopers &&

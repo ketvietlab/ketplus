@@ -57,6 +57,7 @@ Task taskFromJson(const QJsonObject& json) {
                               .met = value.toObject().value(QStringLiteral("met")).toBool()});
     task.owner = json.value(QStringLiteral("owner")).toString();
     task.state = json.value(QStringLiteral("state")).toString(state::todo);
+    task.externalWaitQuestion = json.value(QStringLiteral("external_wait_question")).toString();
     task.resumeState = json.value(QStringLiteral("resume_state")).toString();
     task.question = json.value(QStringLiteral("question")).toString();
     task.reviewBlock = json.value(QStringLiteral("review_block")).toString();
@@ -340,6 +341,7 @@ QJsonObject toJson(const Task& task, const bool withHistory) {
                      {QStringLiteral("owner"), task.owner},
                      {QStringLiteral("state"), task.state},
                      {QStringLiteral("resume_state"), task.resumeState},
+                     {QStringLiteral("external_wait_question"), task.externalWaitQuestion},
                      {QStringLiteral("question"), task.question},
                      {QStringLiteral("review_block"), task.reviewBlock},
                      {QStringLiteral("branch"), task.branch},
@@ -450,6 +452,8 @@ QJsonObject toJson(const Team& team) {
         {QStringLiteral("leader_writes_requirements"), team.leaderWritesRequirements},
         {QStringLiteral("paused"), team.paused},
         {QStringLiteral("paused_reason"), team.pausedReason},
+        {QStringLiteral("quiesced"), !team.quiescedReason.isEmpty()},
+        {QStringLiteral("quiesced_reason"), team.quiescedReason},
         {QStringLiteral("max_rounds"), team.maxRounds},
         {QStringLiteral("review_place"), team.reviewPlace},
         {QStringLiteral("turn_budget"), team.turnBudget},
@@ -511,6 +515,7 @@ Team teamFromJson(const QJsonObject& json) {
     team.leaderWritesRequirements =
         json.value(QStringLiteral("leader_writes_requirements")).toBool(true);
     team.paused = json.value(QStringLiteral("paused")).toBool();
+    team.quiescedReason = json.value(QStringLiteral("quiesced_reason")).toString();
     team.pausedReason = json.value(QStringLiteral("paused_reason")).toString();
     // T-10: "shared_paths" and each member's "paths" of an older document are dropped.
     // A saved value outside one to five is not a team's choice; it reads as the default.

@@ -1579,6 +1579,8 @@ QJsonObject SessionHost::startTurn(const QJsonObject& request, bool localClient,
                                     "work, KetPlus moves the conversation to it after the turn.")
                          .arg(it->stored.worktreePath, executionDirectory(*it))}});
     if (agentOrigin.isEmpty()) {
+        if (teams_)
+            teams_->userMessageReceived(sessionId);
         addAgentContext(*it, displayText, input, true);
     } else {
         input.append(

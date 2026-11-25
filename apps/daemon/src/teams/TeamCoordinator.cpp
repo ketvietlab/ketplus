@@ -244,12 +244,45 @@ std::optional<Candidate> TeamCoordinator::candidate(const QString& sessionId) co
                      .teamId = current ? current->id : 0};
 }
 
+QString TeamCoordinator::quiescenceReason(const Team& team) {
+    if (team.tasks.isEmpty() || team.openDecisions() != 0)
+        return {};
+    bool waiting = false;
+    for (const Task& task : team.tasks) {
+        if (task.state == state::done)
+            continue;
+        if (task.state != state::blocked || task.externalWaitQuestion.isEmpty() ||
+            task.externalWaitQuestion != task.question)
+            return {};
+        waiting = true;
+    }
+    return waiting ? QStringLiteral("waiting_for_external_event") : QStringLiteral("tasks_done");
+}
+
 std::optional<TeamError> TeamCoordinator::commit(Team& team, const Team& before,
                                                  const QString& actor,
                                                  const QList<Update>& updates) {
     // Preserve the last persisted placement of legacy teams before execution scope changes.
     // A caller cannot relocate an already known sidebar placement through settings updates.
     team.sidebarRepository = before.sidebarRepository.value_or(before.repository);
+    const auto routine = [](const Update& update) {
+        return update.kind == QStringLiteral("idle_developer") ||
+               update.kind == QStringLiteral("goal_reached") ||
+               (update.kind == QStringLiteral("state") &&
+                update.data.value(QStringLiteral("to")).toString() == state::done &&
+                update.data.value(QStringLiteral("completion")).toString() !=
+                    QStringLiteral("merged"));
+    };
+    if (!updates.isEmpty()) {
+        const Member* leader = team.memberWithRole(role::leader);
+        const bool needsLeader =
+            std::any_of(updates.cbegin(), updates.cend(), [&](const Update& update) {
+                const QString& source = update.actor.isEmpty() ? actor : update.actor;
+                return update.actionable && !routine(update) &&
+                       (!leader || source != leader->sessionId);
+            });
+        team.quiescedReason = needsLeader ? QString{} : quiescenceReason(team);
+    }
     team.revision = before.revision + 1;
     team.changedAt = nowIso();
     stampChanges(team, before);
@@ -266,7 +299,9 @@ std::optional<TeamError> TeamCoordinator::commit(Team& team, const Team& before,
         teamBySession_.insert(session, team.id);
     bool actionable = false;
     for (const Update& update : updates) {
-        actionable = actionable || update.actionable;
+        const bool wakesLeader =
+            update.actionable && (team.quiescedReason.isEmpty() || !routine(update));
+        actionable = actionable || wakesLeader;
         (void)journal_->appendTeamUpdate({.teamId = team.id,
                                           .at = team.changedAt,
                                           .actor = update.actor.isEmpty() ? actor : update.actor,
@@ -274,7 +309,7 @@ std::optional<TeamError> TeamCoordinator::commit(Team& team, const Team& before,
                                           .taskId = update.taskId,
                                           .text = boundedText(update.text),
                                           .data = boundedData(update.data),
-                                          .actionable = update.actionable});
+                                          .actionable = wakesLeader});
     }
     emit teamChanged(directoryJson(team));
     if (actionable)

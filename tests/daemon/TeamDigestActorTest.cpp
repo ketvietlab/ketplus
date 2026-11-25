@@ -134,6 +134,62 @@ class TeamDigestActorTest final : public QObject {
         QCOMPARE(team().automaticTurns, initialTurns + 3);
     }
 
+    void completingTheTeamKeepsUpdatesForTheNextDigest() {
+        const QString id = newTask("Cart", "dev1");
+        QVERIFY(teams_->moveTask(team_, id, state::inProgress, "dev1").ok());
+        const int turns = team().automaticTurns;
+        QVERIFY(teams_->closeTask(team_, id, "abcdef1234567", "Finished.", "lead").ok());
+        leaderTurnEnds();
+        QVERIFY(host_.of("digest").isEmpty());
+        QCOMPARE(team().automaticTurns, turns);
+        QCOMPARE(teams_->teamJson(team()).value("quiesced_reason").toString(), "tasks_done");
+
+        const QString other = newTask("Billing", "dev2");
+        QVERIFY(!other.isEmpty());
+        QVERIFY(team().quiescedReason.isEmpty());
+        QVERIFY(teams_->moveTask(team_, other, state::inProgress, "dev2").ok());
+        QVERIFY(teams_->moveTask(team_, other, state::blocked, "dev2", "Which region?").ok());
+        leaderTurnEnds();
+        const QString body = digestTo("lead");
+        QVERIFY(body.contains("Every task is done"));
+        QVERIFY(body.contains("[needs you]"));
+        QVERIFY(body.contains("Which region?"));
+    }
+
+    void externalWaitLocksAndANewQuestionReopens() {
+        const QString id = newTask("Cart", "dev1");
+        QVERIFY(teams_->moveTask(team_, id, state::inProgress, "dev1").ok());
+        QVERIFY(teams_->moveTask(team_, id, state::blocked, "dev1", "When does it ship?").ok());
+        QCOMPARE(team().quiescedReason, QString{});
+        settle();
+        QVERIFY(teams_->wait(team_, "dev1", 30, "deployment", id).ok());
+        QVERIFY(team().quiescedReason.isEmpty());
+        QVERIFY(teams_->wait(team_, "lead", 30, "deployment", id).ok());
+        QCOMPARE(team().quiescedReason, "waiting_for_external_event");
+        const int turns = team().automaticTurns;
+        leaderTurnEnds();
+        QVERIFY(host_.of("digest").isEmpty());
+        QCOMPARE(team().automaticTurns, turns);
+
+        teams_->userMessageReceived("lead");
+        QVERIFY(team().quiescedReason.isEmpty());
+        leaderTurnEnds();
+        QCOMPARE(team().quiescedReason, "waiting_for_external_event");
+        teams_->setWaitMinuteForTesting(1);
+        QVERIFY(teams_->wait(team_, "lead", 1, "deployment").ok());
+        QTRY_COMPARE(host_.of("wait").size(), 1);
+        QVERIFY(team().quiescedReason.isEmpty());
+        QCOMPARE(team().automaticTurns, turns + 1);
+        leaderTurnEnds();
+        QCOMPARE(team().quiescedReason, "waiting_for_external_event");
+
+        QVERIFY(teams_->moveTask(team_, id, state::inProgress, "dev1").ok());
+        QVERIFY(teams_->moveTask(team_, id, state::blocked, "dev1", "Which region?").ok());
+        leaderTurnEnds();
+        QVERIFY(digestTo("lead").contains("Which region?"));
+        QVERIFY(team().quiescedReason.isEmpty());
+    }
+
     // Criterion 1: only the leader's own updates, with or without a wait: no digest, no turn.
     void theLeadersOwnUpdatesAloneSendNoDigest() {
         const QString id = newTask("Cart", "dev1");
@@ -222,14 +278,13 @@ class TeamDigestActorTest final : public QObject {
     }
 
     // What the daemon works out inside the leader's own command is the daemon's update, not the
-    // leader's: closing a developer's last task leaves it idle, closing the last task of the team
-    // reaches the goal, and closing a dependency makes a reviewed task ready to merge. The
+    // leader's: closing a developer's last task leaves it idle, and closing a dependency makes
+    // a reviewed task ready to merge. The
     // digest still goes out and still marks them.
     void whatTheDaemonDerivesFromTheLeadersCommandStillNeedsTheLeader_data() {
         QTest::addColumn<QString>("what");
         QTest::addColumn<QString>("needle");
         QTest::newRow("idle developer") << "idle" << "has no task left";
-        QTest::newRow("goal reached") << "goal" << "Every task is done";
         QTest::newRow("merge offer") << "merge" << "can be merged";
     }
     void whatTheDaemonDerivesFromTheLeadersCommandStillNeedsTheLeader() {

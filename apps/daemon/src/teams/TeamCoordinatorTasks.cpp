@@ -373,6 +373,14 @@ bool TeamCoordinator::blockAtLoweredLimit(Team& team, Task& task, QList<Update>&
     return true;
 }
 
+QString TeamCoordinator::questionKey(const QString& question) {
+    return QString::fromLatin1(
+        QCryptographicHash::hash(
+            question.simplified().normalized(QString::NormalizationForm_C).toUtf8(),
+            QCryptographicHash::Sha256)
+            .toHex());
+}
+
 void TeamCoordinator::applyMove(Team& team, Task& task, const QString& to, const QString& actor,
                                 const QString& reason, QList<Update>& updates) {
     const QString from = task.state;
@@ -389,13 +397,11 @@ void TeamCoordinator::applyMove(Team& team, Task& task, const QString& to, const
     const Member* leader = team.memberWithRole(role::leader);
     if (to == state::blocked && leader && actor != leader->sessionId && actor == task.owner &&
         !reason.isEmpty()) {
-        const QString key = QString::fromLatin1(
-            QCryptographicHash::hash(
-                reason.simplified().normalized(QString::NormalizationForm_C).toUtf8(),
-                QCryptographicHash::Sha256)
-                .toHex());
+        const QString key = questionKey(reason);
         data.insert(QStringLiteral("question_key"), key);
         actionable = !journal_->teamQuestionWasDigested(team.id, task.id, leader->sessionId, key);
+        if (actionable)
+            task.externalWaitQuestion.clear();
     }
     updates.append(
         {.kind = QStringLiteral("state"),

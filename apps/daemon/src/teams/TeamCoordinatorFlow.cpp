@@ -382,7 +382,7 @@ void TeamCoordinator::scheduleDigest(const qint64 teamId) {
 void TeamCoordinator::sendDigest(const qint64 teamId) {
     const Team* team = this->team(teamId);
     const Member* leader = team ? team->memberWithRole(role::leader) : nullptr;
-    if (!leader || team->paused)
+    if (!leader || team->paused || !team->quiescedReason.isEmpty())
         return;
     const QList<TeamUpdateRecord> updates = updateRecords(teamId, true, 500);
     // A wait is shown, but it is never the reason for a digest (T-39): a digest that would only
@@ -404,6 +404,16 @@ void TeamCoordinator::sendDigest(const qint64 teamId) {
                  .toSession = leader->sessionId,
                  .kind = QStringLiteral("digest"),
                  .body = digestText(*team, updates, leader->sessionId)});
+}
+
+void TeamCoordinator::userMessageReceived(const QString& sessionId) {
+    const Team* current = teamOf(sessionId);
+    Team* team = current ? mutableTeam(current->id) : nullptr;
+    if (!team || team->quiescedReason.isEmpty())
+        return;
+    const Team before = *team;
+    team->quiescedReason.clear();
+    (void)commit(*team, before, QStringLiteral("daemon"), {});
 }
 
 void TeamCoordinator::memberTurnEnded(const QString& sessionId,
@@ -443,6 +453,14 @@ void TeamCoordinator::memberTurnEnded(const QString& sessionId,
     if (memberRole == role::leader) {
         askFirstPlanAgain(teamId);
         sendDigest(teamId);
+        if (Team* current = mutableTeam(teamId); current && current->quiescedReason.isEmpty()) {
+            const QString reason = quiescenceReason(*current);
+            if (!reason.isEmpty()) {
+                const Team before = *current;
+                current->quiescedReason = reason;
+                (void)commit(*current, before, QStringLiteral("daemon"), {});
+            }
+        }
     }
 }
 

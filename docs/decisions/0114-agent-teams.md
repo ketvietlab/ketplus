@@ -373,6 +373,22 @@ reason is also noted on the task. A command that names a member standing in a ta
 worktree finds that worktree's repository from the team, without git, so a handover is
 answered before any git runs.
 
+**Repeated blocks and quiescence.** A task owner's block question is keyed by its
+task, destination state, and the SHA-256 digest of its whitespace-normalized NFC
+text. Once included in a digest, an identical question stays in history without
+requesting a new digest until the leader or user changes the task's assignment,
+criteria, decision, or state. A different question can request a digest.
+
+A team is quiesced when it has tasks and every task is done or explicitly parked
+on an external event. To park a blocked task, the leader records a task-specific
+`team_wait` after the current question has appeared in a digest. An open decision
+keeps the team active. Routine completion updates remain in the log and ride
+along with the next actionable digest. Quiescence suppresses digest and stall
+wakes. A user message, new work, an actionable change such as a new block or
+review outcome, or the leader's wait ending reopens the team. Pause, turn budget,
+and role checks still apply. Team summaries expose `quiesced` and
+`quiesced_reason` (`tasks_done` or `waiting_for_external_event`).
+
 ### 8. A team that stops is moved on (decided 2026-11-11)
 
 The table above is event-driven: a turn that ends with work left and no event to follow
