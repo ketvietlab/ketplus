@@ -26,7 +26,7 @@ NativeJobClient::NativeJobClient(QString executable, QString directory, QString 
         send({{"op", "auth"}, {"lease_id", lease_}});
     });
     connect(&socket_, &QLocalSocket::readyRead, this, [this] { receive(); });
-    connect(&socket_, &QLocalSocket::disconnected, this, [this] { authenticated_ = false; });
+    connect(&socket_, &QLocalSocket::disconnected, this, [this] { channelClosed(); });
     timer_.setInterval(250);
     connect(&timer_, &QTimer::timeout, this, [this] { tick(); });
 }
@@ -172,6 +172,23 @@ void NativeJobClient::connectVerified(const QJsonObject& record) {
         return;
     lastReceipt_ = record;
     socket_.connectToServer(controlAddress(directory_, lease_));
+}
+
+// EOF/HUP on the control channel is noticed at once. If the supervisor process is
+// gone, recovery starts now rather than after the lease-length silence window; a live but
+// silent peer still falls back to that window (ping/lease).
+void NativeJobClient::channelClosed() {
+    authenticated_ = false;
+    if (acknowledged_ || !timer_.isActive())
+        return;
+    const auto record = receipt();
+    const auto self = record.value("supervisor_identity").toObject();
+    const auto identity = inspect(self.value("pid").toInteger());
+    const bool alive = identity && identity->birth == self.value("birth").toString() &&
+                       !identity->zombie;
+    if (!alive && !self.isEmpty() && clock_.elapsed() - lastMessage_ < NativeJobLeaseMs + 500)
+        lastMessage_ = clock_.elapsed() - NativeJobLeaseMs - 500;
+    QTimer::singleShot(0, this, [this] { tick(); });
 }
 
 void NativeJobClient::send(const QJsonObject& message) {

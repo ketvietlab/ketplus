@@ -103,6 +103,25 @@ QList<qint64> groupMembers(qint64 group, bool* complete) {
 #endif
 }
 
+GroupState inspectGroup(qint64 group) {
+    if (group <= 1 || group > std::numeric_limits<pid_t>::max())
+        return GroupState::Unknown;
+    bool complete = false;
+    const auto members = groupMembers(group, &complete);
+    bool unknown = !complete;
+    for (const auto pid : members) {
+        const auto current = inspect(pid);
+        if (current && !current->zombie) {
+            if (current->group == group)
+                return GroupState::Occupied;
+            continue; // Left the group between the listing and the inspection.
+        }
+        if (!current && (kill(pid_t(pid), 0) == 0 || errno != ESRCH))
+            unknown = true; // Another UID or an uninspectable process is not evidence.
+    }
+    return unknown ? GroupState::Unknown : GroupState::Empty;
+}
+
 std::unique_ptr<NativeProcessSignal>
 NativeProcessSignal::capture(const NativeProcessIdentity& identity, QString* error) {
     if (identity.pid <= 0 || identity.pid > std::numeric_limits<pid_t>::max() ||

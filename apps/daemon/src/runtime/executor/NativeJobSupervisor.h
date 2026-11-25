@@ -42,6 +42,7 @@ class NativeJobSupervisor final : public QObject {
     void tick();
     void linuxTick();
     void finish();
+    bool verifyGroupEmpty();
 
     QString directory_;
     QString taskId_;
@@ -65,6 +66,7 @@ class NativeJobSupervisor final : public QObject {
     qint64 lastPulse_{0};
     bool pulsed_{false};
     qint64 maxPingGap_{0};
+    qint64 channelLostAt_{-1};
     qint64 deadline_{0};
     qint64 killAt_{0};
     qint64 finishCleanupAt_{0};
@@ -76,5 +78,7 @@ class NativeJobSupervisor final : public QObject {
     bool finalized_{false};
     int exitCode_{-1};
     QString stopReason_;
+    QString stopCause_;
+    bool leaseOrChannelExpired();
 };
 } // namespace ketplus::daemon::executor

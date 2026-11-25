@@ -254,7 +254,7 @@ class NativeJobExecutorTest final : public QObject {
         }
     }
 
-    void supervisorCrashReclaimsRecordedRootAndPreservesUnverifiedAttention() {
+    void supervisorCrashVerifiesAnEmptyProcessGroupWithoutAttention() {
         Executor fixture;
         QVERIFY(fixture.start());
         fixture.execute({"/bin/sleep", "60"});
@@ -270,17 +270,18 @@ class NativeJobExecutorTest final : public QObject {
         QString error;
         QVERIFY(recovered.reconnect(
             [&](const QJsonObject& value) {
-                if (value.value("state") == "needs_attention")
+                if (value.value("event") == "done")
                     done = value;
             },
             &error));
-        QTRY_VERIFY_WITH_TIMEOUT(!done.isEmpty() && done.value("executor_stopped").toBool(),
-                                 NativeJobLeaseMs + 5000);
-        QCOMPARE(done.value("state"), "needs_attention");
-        QCOMPARE(done.value("cleanup_status"), "unverified");
+        QTRY_VERIFY_WITH_TIMEOUT(!done.isEmpty() && done.value("executor_stopped").toBool(), NativeJobLeaseMs + 5000);
+        // The OS reports the job's process group empty: verified, never needs_attention.
+        QCOMPARE(done.value("state"), "interrupted");
+        QCOMPARE(done.value("cleanup_status"), "verified");
+        QCOMPARE(done.value("cleanup_verification"), "process_group_empty");
+        QVERIFY(done.value("reason").toString().isEmpty());
         const auto current = inspect(root.value("pid").toInteger());
         QVERIFY(!current || current->birth != root.value("birth").toString() || current->zombie);
-        // Result publication does not turn best-effort recovery into kernel evidence.
         recovered.acknowledge();
     }
 
@@ -523,24 +524,177 @@ class NativeJobExecutorTest final : public QObject {
         QVERIFY(executor.receipt().value("max_ping_gap_ms").toInteger() >= 5500);
     }
 
-    void leaseLossLeavesAttentionReceiptAndStopsKnownRoot() {
-        static_assert(NativeJobLeaseMs == 15000);
+    void closedChannelStopsTheJobAtOnceAndVerifiesTheGroup() {
         Executor executor;
         QVERIFY(executor.start());
         executor.execute({"/bin/sleep", "60"});
         const auto running = executor.receive("running");
         const auto root = running.value("root_identity").toObject();
         QVERIFY(!root.isEmpty());
-        executor.socket.abort();
-        QVERIFY(executor.helper.waitForFinished(18500));
+        QElapsedTimer elapsed;
+        elapsed.start();
+        executor.socket.abort(); // Abrupt EOF: the daemon vanished.
+        QVERIFY(executor.helper.waitForFinished(8500));
+        // Detected from the closed channel, far ahead of the lease.
+        QVERIFY2(elapsed.elapsed() < 3500, qPrintable(QString::number(elapsed.elapsed())));
         const auto receipt = executor.receipt();
-        QCOMPARE(receipt.value("state"), "needs_attention");
-        QCOMPARE(receipt.value("cleanup_status"), "unverified");
-        QCOMPARE(receipt.value("cleanup_issue"), "lease_expired");
-        QVERIFY(receipt.value("max_ping_gap_ms").toInteger() >= 15000);
+        QCOMPARE(receipt.value("state"), "interrupted");
+        QCOMPARE(receipt.value("cleanup_status"), "verified");
+        QCOMPARE(receipt.value("cleanup_verification"), "process_group_empty");
+        QCOMPARE(receipt.value("stop_cause"), "channel_closed");
         QVERIFY(receipt.value("executor_stopped").toBool());
+        QVERIFY(receipt.value("reason").toString().isEmpty());
         const auto current = inspect(root.value("pid").toInteger());
         QVERIFY(!current || current->birth != root.value("birth").toString() || current->zombie);
+    }
+
+    void hungChannelFallsBackToTheLease() {
+        Executor executor;
+        QVERIFY(executor.start());
+        executor.execute({"/bin/sleep", "60"});
+        const auto running = executor.receive("running");
+        QVERIFY(!running.isEmpty());
+        QElapsedTimer elapsed;
+        elapsed.start();
+        // Stay connected but silent: no EOF, no ping. Only the lease can end this.
+        QVERIFY(executor.helper.waitForFinished(NativeJobLeaseMs + 4000));
+        QVERIFY2(elapsed.elapsed() >= NativeJobLeaseMs - 1000,
+                 qPrintable(QString::number(elapsed.elapsed())));
+        QCOMPARE(executor.socket.state(), QLocalSocket::ConnectedState);
+        const auto receipt = executor.receipt();
+        QCOMPARE(receipt.value("state"), "interrupted");
+        QCOMPARE(receipt.value("stop_cause"), "lease_expired");
+        QCOMPARE(receipt.value("cleanup_status"), "verified");
+    }
+
+    void selfDetachedDescendantIsReclaimedBeforeVerifying() {
+        Executor executor;
+        QVERIFY(executor.start());
+        // The child leaves the job's process group with setsid; it must still be found
+        // through its parent and stopped, or the empty group alone would not be enough.
+        executor.execute({"/bin/sh", "-c",
+                          "perl -e 'use POSIX; POSIX::setsid(); exec q(sleep), q(60)' & wait"});
+        QVERIFY(!executor.receive("running").isEmpty());
+        QTRY_VERIFY_WITH_TIMEOUT(executor.receipt().value("known_processes").toArray().size() >= 3,
+                                 5000);
+        const auto known = executor.receipt().value("known_processes").toArray();
+        executor.socket.abort();
+        QVERIFY(executor.helper.waitForFinished(9000));
+        const auto receipt = executor.receipt();
+        QCOMPARE(receipt.value("state"), "interrupted");
+        QCOMPARE(receipt.value("cleanup_status"), "verified");
+        for (const auto value : known) {
+            const auto old = value.toObject();
+            const auto current = inspect(old.value("pid").toInteger());
+            QVERIFY(!current || current->birth != old.value("birth").toString() ||
+                    current->zombie);
+        }
+    }
+
+    void groupInspectionSeesLiveMembersAndIgnoresSetsidEscapees() {
+#ifdef Q_OS_MACOS
+        QProcess leader;
+        leader.setProgram("/bin/sh");
+        leader.setArguments(
+            {"-c", "perl -e 'use POSIX; POSIX::setsid(); exec q(sleep), q(30)' & wait"});
+        leader.setChildProcessModifier([] { setsid(); });
+        leader.start();
+        QVERIFY(leader.waitForStarted());
+        const qint64 group = leader.processId();
+        QTRY_COMPARE_WITH_TIMEOUT(inspectGroup(group), GroupState::Occupied, 3000);
+        QCOMPARE(inspectGroup(0), GroupState::Unknown);
+        bool complete = false;
+        QList<qint64> escapees;
+        QTRY_VERIFY_WITH_TIMEOUT(
+            [&] {
+                escapees = children(group, &complete);
+                return complete && !escapees.isEmpty();
+            }(),
+            3000);
+        // Let the child leave the group, then remove the leader.
+        QTest::qWait(500);
+        leader.kill();
+        QVERIFY(leader.waitForFinished());
+        // The detached child is not a member of the group, so the group is empty. That
+        // is why the supervisor also tracks descendants by parentage before verifying.
+        QTRY_COMPARE_WITH_TIMEOUT(inspectGroup(group), GroupState::Empty, 3000);
+        for (const auto pid : escapees)
+            kill(pid_t(pid), SIGKILL);
+#else
+        QSKIP("Process group inspection is macOS only.");
+#endif
+    }
+
+    void supervisorLossWithAReusedBirthNeverSignalsAndStaysUnverified() {
+        Executor fixture;
+        QVERIFY(fixture.start());
+        fixture.execute({"/bin/sleep", "60"});
+        const auto running = fixture.receive("running");
+        const auto root = running.value("root_identity").toObject();
+        QVERIFY(!root.isEmpty());
+        fixture.socket.abort();
+        fixture.helper.kill();
+        QVERIFY(fixture.helper.waitForFinished());
+        // Pretend the recorded PID now belongs to a different incarnation.
+        auto receipt = fixture.receipt();
+        auto forged = root;
+        forged.insert("birth", root.value("birth").toString() + "-other");
+        receipt.insert("root_identity", forged);
+        receipt.insert("known_processes", QJsonArray{forged});
+        QFile file(fixture.path() + "/executor.json");
+        QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        file.write(QJsonDocument(receipt).toJson(QJsonDocument::Compact));
+        file.close();
+        NativeJobClient recovered(QStringLiteral(KETPLUS_JOB_EXECUTOR_PATH), fixture.path(),
+                                  fixture.taskId, fixture.lease);
+        QJsonObject result;
+        QString error;
+        QVERIFY(recovered.reconnect([&](const QJsonObject& value) { result = value; }, &error));
+        // The group still holds the real, live process: unverified, as before.
+        QTRY_VERIFY_WITH_TIMEOUT(result.value("state") == "needs_attention", 10000);
+        QCOMPARE(result.value("cleanup_status"), "unverified");
+        QCOMPARE(result.value("reason"), "cleanup_unverified");
+        const auto live = inspect(root.value("pid").toInteger());
+        QVERIFY(live && !live->zombie && live->birth == root.value("birth").toString());
+        signalIdentity(*live, SIGKILL, &error);
+        recovered.acknowledge();
+    }
+
+    void closedChannelLetsTheDaemonRecoverWithoutWaitingForSilence() {
+        Executor fixture;
+        const auto execution = QJsonObject{{"argv", QJsonArray{"/bin/sleep", "60"}},
+                                           {"cwd", fixture.path()},
+                                           {"env_delta", QJsonObject{}}};
+        QJsonObject done;
+        QString error;
+        NativeJobClient client(QStringLiteral(KETPLUS_JOB_EXECUTOR_PATH), fixture.path(),
+                               fixture.taskId, fixture.lease);
+        QVERIFY2(client.start(
+                     execution, 30000, [](const QJsonObject&) { return true; },
+                     [&](const QJsonObject& value) {
+                         if (value.value("event") == "done")
+                             done = value;
+                     },
+                     &error),
+                 qPrintable(error));
+        QTRY_VERIFY_WITH_TIMEOUT(fixture.receipt().value("root_started").toBool(), 5000);
+        const auto receipt = fixture.receipt();
+        const auto supervisor = receipt.value("supervisor_identity").toObject();
+        const auto root = receipt.value("root_identity").toObject();
+        QElapsedTimer elapsed;
+        elapsed.start();
+        QString signalError;
+        QVERIFY(signalIdentity({supervisor.value("pid").toInteger(), 0, 0,
+                                supervisor.value("birth").toString()},
+                               SIGKILL, &signalError));
+        QTRY_VERIFY_WITH_TIMEOUT(!done.isEmpty(), 10000);
+        // EOF started recovery at once; the lease-length silence window was not needed.
+        QVERIFY2(elapsed.elapsed() < 4500, qPrintable(QString::number(elapsed.elapsed())));
+        QCOMPARE(done.value("state"), "interrupted");
+        QCOMPARE(done.value("cleanup_status"), "verified");
+        const auto current = inspect(root.value("pid").toInteger());
+        QVERIFY(!current || current->birth != root.value("birth").toString() || current->zombie);
+        client.acknowledge();
     }
 
     void changedBirthNeverSignalsTheNewProcess() {
