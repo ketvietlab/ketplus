@@ -1519,14 +1519,25 @@ control, provider invocation, toolchain change or production fix.
 `generation-change` rows of `attentionSurvivesOwnerLifecycle`. It uses a file-backed
 `LocalJournal`, real `SessionHost`/runtime and scripted FakeCodex. Since the ledger
 accepts a verified-empty process group, a SIGKILLed supervisor no longer yields
-`needs_attention`; the macOS rows therefore run the injected-result path below until a
-real fault that leaves a live process in the job group exists (opt in with
-`KETPLUS_ATTENTION_REAL_NATIVE`). When enabled, the real-native fault launches a harmless
-marker/output/sleep process through the managed API, captures its supervisor/root identities, faults the supervisor with the production
+`needs_attention`; the macOS rows therefore run the injected-result path below. The
+opt-in `KETPLUS_ATTENTION_REAL_NATIVE` fault is kept only for a fault that leaves a live
+process in the job group; it is not enabled by default. When enabled, the real-native
+fault launches a harmless marker/output/sleep process through the managed API,
+captures its supervisor/root identities, faults the supervisor with the production
 identity-bound signal, and requires `needs_attention`/`unverified` with the known
 executor stopped. On Linux, it injects an executor result without an execution
 identity: that branch checks portable persistence, Host lifecycle and CAS/audit
 plumbing and makes no claim about native faults, birth identity or containment.
+
+`ManagedTaskRuntimeTest::lostSupervisorOutcomeFollowsTheJobGroup` (macOS) covers the real
+fault at the runtime level instead of through the Host. It SIGKILLs the supervisor and
+root of a running job, restarts the runtime, and lets recovery produce the `done` event
+that `ManagedTaskRuntime::observeProcess` commits. An empty group ends `interrupted`,
+`verified`, `process_group_empty`, without `executor_result_commit_failed`. A group
+member left out of the persisted receipt (so recovery cannot signal it) ends
+`needs_attention`. A `setsid` survivor is deliberately not used: it leaves the job group,
+so an empty group is the correct result. Not covered: a member that appears after
+recovery's last listing; that race cannot be built deterministically.
 
 Each row closes and reopens both journal and Host/runtime, retains the incident,
 output and root result, checks slot release without terminalizing the incident,

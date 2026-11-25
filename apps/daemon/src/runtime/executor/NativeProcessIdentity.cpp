@@ -70,10 +70,12 @@ bool originalMayBeAlive(const NativeProcessIdentity& known, const ProcessProbe& 
     case ProcessPresence::Gone:
         return false;
     case ProcessPresence::Foreign:
+    case ProcessPresence::Owned:
+        // Owned here means inspect() came back empty but the probe now reads the PID (a race);
+        // compare birth and zombie state exactly as for another user's process.
         if (seen.identity)
             return seen.identity->birth == known.birth && !seen.identity->zombie;
         return existsByKill;
-    case ProcessPresence::Owned:
     case ProcessPresence::Unknown:
         break;
     }

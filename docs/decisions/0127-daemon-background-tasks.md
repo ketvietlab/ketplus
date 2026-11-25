@@ -314,18 +314,26 @@ verified still ends in `needs_attention`.
 
 The supervisor records who stopped it. Its SIGTERM/SIGINT handler (`sigaction`,
 `SA_SIGINFO`) only stores the signal number and the kernel-reported sender PID and UID
-in async-signal-safe variables; the main loop adds `stop_signal`, `stop_sender_pid`,
-`stop_sender_uid` and, when the sender can be inspected, `stop_sender_birth` to the
-receipt and logs them next to `stop_cause=supervisor_termination_requested`.
+in async-signal-safe atomics. The first signal wins by compare-exchange; `sa_mask` is
+per thread, so it is not relied on to serialise handlers. The main loop adds
+`stop_signal`, `stop_sender_pid`, `stop_sender_uid` and, when the sender can be
+inspected, `stop_sender_birth` to the receipt and logs them next to
+`stop_cause=supervisor_termination_requested`.
 
 `process_identity_lost` means the recorded process may still be alive beyond our
-control. The OS reporting the PID gone, or the PID held by another user's process with a
-different birth time (a reused PID), proves the original exited and raises no alarm. An
-unchanged birth under another user, or a PID that cannot be read but still answers
-`kill(pid, 0)`, still blocks as `needs_attention`. On macOS, libproc refuses another
-user's process, so such a PID still blocks as before; this change does not narrow that
-case, and the daemon's own retry of it is a separate follow-up. The record keeps `cleanup_verification` only while its
-`cleanup_status` is `verified`; any other status removes it.
+control. The OS reporting the PID gone, or the PID held by another process with a
+different birth time (a reused PID), proves the original exited and raises no alarm.
+An unchanged birth, or a PID that cannot be read but still answers `kill(pid, 0)`,
+still blocks as `needs_attention`.
+
+On macOS the probe reads the PID through libproc. For another user's process libproc
+either refuses the read (the probe reports unknown and falls back to `kill(pid, 0)`) or
+returns it with a different owner (the probe reports foreign, with its birth). The
+probe test accepts either result. This change does not narrow that case; the daemon's
+own retry of it is a separate follow-up.
+
+The record keeps `cleanup_verification` only while its `cleanup_status` is `verified`;
+any other status removes it.
 
 A process that called `setsid` leaves the group, so the group alone cannot see it.
 The supervisor therefore keeps tracking descendants by parentage, signals every
