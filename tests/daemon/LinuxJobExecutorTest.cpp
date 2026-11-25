@@ -1,5 +1,6 @@
 #include "runtime/ManagedTaskRuntime.h"
 #include "runtime/executor/LinuxJobContainment.h"
+#include "runtime/executor/NativeJobLease.h"
 #include "runtime/executor/NativeProcessIdentity.h"
 #include "storage/BackgroundTaskLedger.h"
 
@@ -391,6 +392,7 @@ while True: time.sleep(.1)
         QCOMPARE(fixture.task(id).value("cleanup_status"), "verified");
     }
     void daemonSigkillLeaseRecoveryAndReopenDoNotReplay() {
+        static_assert(ketplus::daemon::executor::NativeJobLeaseMs == 5000);
         QTemporaryDir directory;
         QProcess daemon;
         daemon.setProgram(QCoreApplication::applicationFilePath());

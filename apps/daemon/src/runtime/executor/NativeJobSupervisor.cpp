@@ -1,6 +1,7 @@
 #include "runtime/executor/NativeJobSupervisor.h"
 #include "runtime/executor/LinuxJobContainment.h"
 #include "runtime/executor/NativeJobControlAddress.h"
+#include "runtime/executor/NativeJobLease.h"
 
 #include <QCoreApplication>
 #include <QDir>
@@ -195,10 +196,10 @@ void NativeJobSupervisor::command(const QJsonObject& message) {
             return;
         }
         authenticated_ = true;
-        lastPulse_ = clock_.elapsed();
+        renewLease();
         send("ready", metadata_);
     } else if (operation == "ping") {
-        lastPulse_ = clock_.elapsed();
+        renewLease();
         send("pong");
     } else if (operation == "start" && !finalized_ && !stopping_) {
         launch(message);
@@ -229,7 +230,23 @@ void NativeJobSupervisor::send(const QString& event, const QJsonObject& data) {
     }
 }
 
+void NativeJobSupervisor::renewLease() {
+    const auto now = clock_.elapsed();
+    maxPingGap_ = qMax(maxPingGap_, now - lastPulse_);
+    lastPulse_ = now;
+}
+
+bool NativeJobSupervisor::leaseExpired() {
+    const auto gap = clock_.elapsed() - lastPulse_;
+    if (gap < NativeJobLeaseMs)
+        return false;
+    maxPingGap_ = qMax(maxPingGap_, gap);
+    return true;
+}
+
 bool NativeJobSupervisor::persist() {
+    if (maxPingGap_ > 2000)
+        metadata_.insert("max_ping_gap_ms", maxPingGap_);
     QJsonArray identities;
     for (const auto& identity : known_)
         identities.append(identity.json());

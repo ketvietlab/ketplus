@@ -4,6 +4,7 @@
 #include "runtime/executor/LinuxJobContainment.h"
 #include "runtime/executor/NativeJobClient.h"
 #include "runtime/executor/NativeJobControlAddress.h"
+#include "runtime/executor/NativeJobLease.h"
 #include "runtime/executor/NativeProcessIdentity.h"
 
 #include <QFile>
@@ -290,7 +291,7 @@ void NativeJobClient::tick() {
         socket_.abort();
     // A live supervisor gets its full lease/grace window to finish cleanup and
     // write a result. Recovery never calls start() to reconstruct a missing result.
-    if (clock_.elapsed() - lastMessage_ >= 5500 &&
+    if (clock_.elapsed() - lastMessage_ >= NativeJobLeaseMs + 500 &&
         clock_.elapsed() - lastRecoveryAttempt_ >= 1000) {
         lastRecoveryAttempt_ = clock_.elapsed();
         recoverLostSupervisor();

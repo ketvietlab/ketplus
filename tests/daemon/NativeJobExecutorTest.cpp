@@ -1,5 +1,6 @@
 #include "runtime/executor/NativeJobClient.h"
 #include "runtime/executor/NativeJobControlAddress.h"
+#include "runtime/executor/NativeJobLease.h"
 #include "runtime/executor/NativeProcessIdentity.h"
 
 #include <QDir>
@@ -273,7 +274,8 @@ class NativeJobExecutorTest final : public QObject {
                     done = value;
             },
             &error));
-        QTRY_VERIFY_WITH_TIMEOUT(!done.isEmpty() && done.value("executor_stopped").toBool(), 10000);
+        QTRY_VERIFY_WITH_TIMEOUT(!done.isEmpty() && done.value("executor_stopped").toBool(),
+                                 NativeJobLeaseMs + 5000);
         QCOMPARE(done.value("state"), "needs_attention");
         QCOMPARE(done.value("cleanup_status"), "unverified");
         const auto current = inspect(root.value("pid").toInteger());
@@ -500,7 +502,27 @@ class NativeJobExecutorTest final : public QObject {
         }
     }
 
+    void authenticatedHeartbeatCanResumeAfterFiveSeconds() {
+        Executor executor;
+        QVERIFY(executor.start());
+        executor.execute({"/bin/sleep", "60"});
+        const auto root = executor.receive("running").value("root_identity").toObject();
+        QVERIFY(!root.isEmpty());
+
+        QTest::qWait(5500);
+        const auto live = inspect(root.value("pid").toInteger());
+        QVERIFY(live && live->birth == root.value("birth").toString() && !live->zombie);
+        executor.send({{"op", "ping"}});
+        QVERIFY(!executor.receive("pong").isEmpty());
+
+        executor.send({{"op", "stop"}, {"reason", "cancelled"}});
+        QVERIFY(!executor.receive("done").isEmpty());
+        QCOMPARE(executor.receipt().value("state"), "cancelled");
+        QVERIFY(executor.receipt().value("max_ping_gap_ms").toInteger() >= 5500);
+    }
+
     void leaseLossLeavesAttentionReceiptAndStopsKnownRoot() {
+        static_assert(NativeJobLeaseMs == 15000);
         Executor executor;
         QVERIFY(executor.start());
         executor.execute({"/bin/sleep", "60"});
@@ -508,10 +530,12 @@ class NativeJobExecutorTest final : public QObject {
         const auto root = running.value("root_identity").toObject();
         QVERIFY(!root.isEmpty());
         executor.socket.abort();
-        QVERIFY(executor.helper.waitForFinished(8500));
+        QVERIFY(executor.helper.waitForFinished(18500));
         const auto receipt = executor.receipt();
         QCOMPARE(receipt.value("state"), "needs_attention");
         QCOMPARE(receipt.value("cleanup_status"), "unverified");
+        QCOMPARE(receipt.value("cleanup_issue"), "lease_expired");
+        QVERIFY(receipt.value("max_ping_gap_ms").toInteger() >= 15000);
         QVERIFY(receipt.value("executor_stopped").toBool());
         const auto current = inspect(root.value("pid").toInteger());
         QVERIFY(!current || current->birth != root.value("birth").toString() || current->zombie);
