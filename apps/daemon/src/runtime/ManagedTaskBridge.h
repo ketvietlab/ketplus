@@ -62,6 +62,7 @@ class ManagedTaskBridge final : public QObject {
     };
     QHash<QString, Wake> activeWakes_;
     QHash<QString, QList<QByteArray>> streamedItems_;
+    QHash<QString, QJsonObject> attentionNotices_;
     bool deliveryPending_{false};
 };
 } // namespace ketplus::daemon

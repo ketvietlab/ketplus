@@ -242,6 +242,26 @@ void markAgentOrigin(QVariantMap& entry, const QJsonArray& agentMessages) {
 QString agentMessageNoticeTitle() { return QStringLiteral("Agent message"); }
 
 QString agentMessageStateText(const QJsonObject& data) {
+    const auto kind = data.value("kind");
+    const auto taskId = data.value("task_id").toString();
+    if (kind == "background_task_attention") {
+        auto text = QStringLiteral("Background task %1 needs a manual check: process cleanup "
+                                   "could not be verified")
+                        .arg(taskId);
+        if (const auto issue = data.value("cleanup_issue").toString(); !issue.isEmpty())
+            text += QStringLiteral(" (%1)").arg(issue);
+        text += QStringLiteral(".");
+        const auto guidance =
+            data.value("manual_guidance")
+                .toString(QStringLiteral(
+                    "Check the recorded executor and descendants, then acknowledge cleanup "
+                    "in the task UI."));
+        return text + QStringLiteral(" ") + guidance;
+    }
+    if (kind == "background_wake_failed")
+        return QStringLiteral("Background task %1 ended, but its follow-up turn could not start.")
+            .arg(taskId);
+
     const QString peer = QStringLiteral("@agent/") + data.value("peer_number").toString();
     const QString state = data.value("state").toString();
     const QString reason = data.value("reason").toString();
@@ -365,10 +385,13 @@ QVariantMap agentMessageNotice(const QJsonObject& data, const QString& itemId) {
         entry.insert(QStringLiteral("title"), label);
         return entry;
     }
-    const bool review = data.value("kind").toString() == QStringLiteral("review");
-    auto entry =
-        providerNoticeMessage(agentMessageStateText(data), itemId,
-                              review ? QStringLiteral("Review") : agentMessageNoticeTitle());
+    const auto kind = data.value("kind");
+    if (kind == "background_task_attention" || kind == "background_wake_failed")
+        return providerNoticeMessage(agentMessageStateText(data), itemId,
+                                     QStringLiteral("Background task"));
+    auto entry = providerNoticeMessage(agentMessageStateText(data), itemId,
+                                       kind == "review" ? QStringLiteral("Review")
+                                                        : agentMessageNoticeTitle());
     if (data.value("direction").toString() == "incoming" &&
         !data.value("message_id").toString().isEmpty()) {
         entry.insert("subtype", "heldAgentMessage");

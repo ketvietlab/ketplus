@@ -376,11 +376,15 @@ void CodexAppServer::dispatchDaemonEvent(const QJsonObject& envelope) {
         auto presentation = agent_message::agentNote(data, agent_message::agentNoteItemId(data));
         if (presentation.isEmpty())
             presentation = agent_message::agentMessageNotice(data, itemId);
+        const auto kind = data.value("kind");
+        const auto title = kind == "background_task_attention" || kind == "background_wake_failed"
+                               ? presentation.value("title").toString()
+                               : agent_message::agentMessageNoticeTitle();
         emit notificationReceived(
             QStringLiteral("daemon/providerNotice"),
             {{QStringLiteral("threadId"), sessionId},
              {QStringLiteral("itemId"), itemId},
-             {QStringLiteral("title"), agent_message::agentMessageNoticeTitle()},
+             {QStringLiteral("title"), title},
              {QStringLiteral("text"), agent_message::agentMessageStateText(data)},
              {QStringLiteral("presentation"), QJsonObject::fromVariantMap(presentation)}});
         return;
