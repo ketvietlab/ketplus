@@ -188,7 +188,7 @@ class TeamDecisionTest final : public QObject {
         QCOMPARE(decision(skipped).state, "open");
         QCOMPARE(decision(first).answer, "EUR");
         QCOMPARE(decision(second).answer, "USD");
-        QCOMPARE(team().revision, revision + 2); // One answer commit, one wake.
+        QCOMPARE(team().revision, revision + 3); // One answer commit, one wake, one counted turn.
         QCOMPARE(team().automaticTurns, 1);
         QCOMPARE(recipients("decision"), QStringList{"lead"});
         const auto body = host_.of("decision").first().body;

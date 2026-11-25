@@ -338,6 +338,10 @@ void SessionHost::releaseTeamHeldMessages(const QStringList& sessionIds) {
     agents_->releaseTeamHeldMessages(sessionIds);
 }
 
+void SessionHost::holdTeamDelivery(const QString& sessionId, const bool hold) {
+    agents_->holdDelivery(sessionId, hold);
+}
+
 bool SessionHost::teamMessagePosted(const QString& id) const {
     return !id.isEmpty() && journal_->agentMessage(id).has_value();
 }

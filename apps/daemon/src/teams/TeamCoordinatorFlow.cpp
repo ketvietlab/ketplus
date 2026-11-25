@@ -182,7 +182,8 @@ void TeamCoordinator::wake(const Team& snapshot, const TeamMessage& sent) {
             qWarning("Unable to hold the team's %s.", qUtf8Printable(message.kind));
         return;
     }
-    ++team->automaticTurns;
+    // The budget counts the turns that start, when the broker delivers the batch (takeMemberTurn),
+    // not the messages queued here.
     if (!deferSending_) {
         if (commit(*team, before, QStringLiteral("daemon"), {}))
             return;
@@ -298,11 +299,42 @@ void TeamCoordinator::sendFromOutbox() {
         return;
     QList<qint64> ids = teams_.keys();
     std::sort(ids.begin(), ids.end());
+    // A quiet mark whose member has nothing left in any outbox (the member or its team was
+    // removed) is void: its hold is released so the member is not left held.
+    for (const QString& session : outboxQuiet_.keys()) {
+        const bool waiting =
+            std::any_of(teams_.cbegin(), teams_.cend(), [&](const Team& candidate) {
+                return std::any_of(candidate.outbox.cbegin(), candidate.outbox.cend(),
+                                   [&](const QJsonValue& value) {
+                                       return heldMessage(candidate, value.toObject())
+                                                  .toSession == session;
+                                   });
+            });
+        if (!waiting && outboxQuiet_.remove(session))
+            host_->holdTeamDelivery(session, false);
+    }
     for (const qint64 id : std::as_const(ids)) {
         const Team* team = this->team(id);
         if (!team || team->outbox.isEmpty())
             continue;
-        const QJsonObject entry = team->outbox.first().toObject();
+        QJsonObject entry;
+        QSet<QString> waiting;
+        bool found = false;
+        for (const QJsonValue& value : team->outbox) {
+            entry = value.toObject();
+            const QString session = heldMessage(*team, entry).toSession;
+            // The order of one member's messages is kept: nothing passes a held one.
+            if (waiting.contains(session))
+                continue;
+            if (holdForQuiet(*team, entry)) {
+                waiting.insert(session);
+                continue;
+            }
+            found = true;
+            break;
+        }
+        if (!found)
+            continue;
         const TeamMessage message = heldMessage(*team, entry);
         // A member that left meanwhile receives nothing of the team's.
         if (!stillDelivers(id, message)) {
@@ -358,6 +390,36 @@ bool TeamCoordinator::stillDelivers(const qint64 teamId, const TeamMessage& mess
     return current && current->member(message.toSession) && !host_->teamMessagePosted(message.id);
 }
 
+// ADR 0114 §2: a member that is not the leader, idle, with more than one message waiting in the
+// outbox, receives them as one turn: the first waits one quiet period for the rest to arrive,
+// then the whole burst is posted with the member's delivery held, so a single turn serves it.
+// A member's only message, or a busy member's, is never delayed.
+bool TeamCoordinator::holdForQuiet(const Team& team, const QJsonObject& entry) {
+    const TeamMessage message = heldMessage(team, entry);
+    const QString& session = message.toSession;
+    const auto member = team.member(session);
+    if (!member || member->role == role::leader)
+        return false;
+    if (const auto it = outboxQuiet_.constFind(session); it != outboxQuiet_.cend()) {
+        // Released: the burst is posted without waiting again.
+        if (QDateTime::currentDateTimeUtc() >= *it)
+            return false;
+        return true;
+    }
+    qsizetype count = 0;
+    for (const QJsonValue& value : team.outbox)
+        if (heldMessage(team, value.toObject()).toSession == session)
+            ++count;
+    const auto conversation = host_->teamConversation(session);
+    if (count < 2 || !conversation || !conversation->idle)
+        return false;
+    const QDateTime until = QDateTime::currentDateTimeUtc().addMSecs(quietPeriod_);
+    outboxQuiet_.insert(session, until);
+    host_->holdTeamDelivery(session, true);
+    QTimer::singleShot(quietPeriod_, this, [this] { scheduleOutbox(); });
+    return true;
+}
+
 // Sent first, then forgotten: a stop between the two finds the message queued and only
 // forgets it.
 void TeamCoordinator::finishOutboxEntry(const qint64 teamId, const QJsonObject& entry,
@@ -371,12 +433,21 @@ void TeamCoordinator::finishOutboxEntry(const qint64 teamId, const QJsonObject& 
     Team* current = mutableTeam(teamId);
     if (current) {
         const Team before = *current;
+        const QString session = heldMessage(before, entry).toSession;
         for (qsizetype index = 0; index < current->outbox.size(); ++index)
             if (current->outbox.at(index).toObject().value(QStringLiteral("id")) ==
                 entry.value(QStringLiteral("id"))) {
                 current->outbox.removeAt(index);
                 break;
             }
+        // The member's burst is over with its last entry: its delivery is released (see
+        // holdForQuiet), so one turn serves what was posted.
+        const bool more = std::any_of(
+            current->outbox.cbegin(), current->outbox.cend(), [&](const QJsonValue& value) {
+                return heldMessage(*current, value.toObject()).toSession == session;
+            });
+        if (!more && outboxQuiet_.remove(session))
+            host_->holdTeamDelivery(session, false);
         // A journal that refuses keeps the entry; the next start sends what is left.
         if (commit(*current, before, QStringLiteral("daemon"), {})) {
             qWarning("Unable to forget a sent team message.");

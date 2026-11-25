@@ -484,6 +484,7 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     [[nodiscard]] agent_messaging::TeamRoleContext teamContextFor(const QString& sessionId) const;
     void noteInConversation(const QString& sessionId, const QJsonObject& note) override;
     void releaseTeamHeldMessages(const QStringList& sessionIds) override;
+    void holdTeamDelivery(const QString& sessionId, bool hold) override;
     [[nodiscard]] QString repositoryOf(const QString& worktreePath) const;
     [[nodiscard]] bool repositoryKnown(const QString& worktreePath) const;
     void noteRepository(const QString& worktreePath, const QString& repository) const;
@@ -671,8 +672,6 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     [[nodiscard]] QList<AgentConversation> agentConversations() const override;
     QString startAgentTurn(const QString& sessionId, qint64 generation, const QString& providerText,
                            const QJsonObject& origin) override;
-    QString steerAgentTurn(const QString& sessionId, qint64 generation, const QString& providerText,
-                           const QJsonObject& origin) override;
     [[nodiscard]] qint64 agentTurnSequence(const QString& sessionId) const override;
     void appendAgentNotice(const QString& sessionId, qint64 generation,
                            const QJsonObject& payload) override;
@@ -744,9 +743,8 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     };
     QHash<QString, TeamWakeTask> teamWakeTasks_;
     // The task of the last message the turn delivers that names one; forgets the session's
-    // hints for messages already delivered (a user's turn, a steer).
+    // hints for messages already delivered (a user's turn).
     QString takeTeamWakeTask(const QString& sessionId, const QJsonObject& agentOrigin);
-    void forgetTeamWakeTasks(const QJsonObject& agentOrigin);
     // ADR 0114 §2: the one directory a team's reviewer may write in during a review round.
     [[nodiscard]] QString reviewScratchDirectory(const QString& sessionId) const;
     QTemporaryDir attachmentDirectory_;

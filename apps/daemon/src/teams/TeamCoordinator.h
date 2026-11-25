@@ -6,6 +6,7 @@
 #include "teams/TeamRules.h"
 #include "teams/TeamStorage.h"
 
+#include <QDateTime>
 #include <QHash>
 #include <QObject>
 #include <QPointer>
@@ -139,6 +140,8 @@ struct ReviewComment final {
 using ReviewCommentDone = std::function<void(const ReviewComment&)>;
 // The error of pointing a conversation at a worktree; empty when it worked.
 using PointDone = std::function<void(const QString&)>;
+
+class TeamCoordinator;
 
 class TeamHostPort {
   public:
@@ -312,6 +315,15 @@ class TeamHostPort {
     [[nodiscard]] virtual bool teamMessagePosted(const QString& id) const {
         (void)id;
         return false;
+    }
+    // The coordinator that reads this host, once it exists. A host that runs no broker of its
+    // own may count the turns its posted messages start (takeMemberTurn).
+    virtual void coordinatorCreated(TeamCoordinator* coordinator) { (void)coordinator; }
+    // Holds (or releases) the delivery of posted messages to a member, so that a burst the
+    // coordinator posts in one go starts a single turn.
+    virtual void holdTeamDelivery(const QString& sessionId, bool hold) {
+        (void)sessionId;
+        (void)hold;
     }
     // ADR 0114 §2: the team continued; the messages its members' agents sent each other and
     // that waited for it are delivered.
@@ -755,6 +767,8 @@ class TeamCoordinator : public QObject {
     // The rest of one outbox entry once its conversation stands where it should: posts it
     // when `deliver`, then forgets it.
     void finishOutboxEntry(qint64 teamId, const QJsonObject& entry, bool deliver);
+    // ADR 0114 §2: holds the entry of an idle member that has more waiting for one quiet period.
+    [[nodiscard]] bool holdForQuiet(const Team& team, const QJsonObject& entry);
     // Whether an outbox entry is still for a member that has not received it.
     [[nodiscard]] bool stillDelivers(qint64 teamId, const TeamMessage& message) const;
     void forgetRelocations(qint64 teamId, const QString& sessionId);
@@ -910,6 +924,8 @@ class TeamCoordinator : public QObject {
     QHash<QString, QList<std::function<void()>>> conversationJobs_;
     QHash<qint64, QTimer*> digestTimers_;
     int quietPeriod_{defaultQuietPeriodMs};
+    // Members whose burst of messages waits in the outbox until the time: session → release.
+    QHash<QString, QDateTime> outboxQuiet_;
 
     // What the watchdog did since the team's work last changed. Not stored: a restart
     // starts the count again, which only costs one more wake.

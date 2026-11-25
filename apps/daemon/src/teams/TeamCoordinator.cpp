@@ -71,7 +71,10 @@ void stampChanges(Team& team, const Team& before) {
 } // namespace
 
 TeamCoordinator::TeamCoordinator(LocalJournal* journal, TeamHostPort* host, QObject* parent)
-    : QObject(parent), journal_(journal), host_(host) {}
+    : QObject(parent), journal_(journal), host_(host) {
+    if (host_)
+        host_->coordinatorCreated(this);
+}
 
 TeamCoordinator::~TeamCoordinator() = default;
 

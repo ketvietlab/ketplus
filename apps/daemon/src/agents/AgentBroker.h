@@ -3,6 +3,7 @@
 #include "agents/ReviewIntegrity.h"
 #include "storage/AgentMessageRecord.h"
 
+#include <QDateTime>
 #include <QHash>
 #include <QJsonObject>
 #include <QObject>
@@ -32,11 +33,6 @@ struct AgentConversation final {
     QString lastActivity;
     // No open turn, background task or pending provider request: a message may start a turn.
     bool idle{false};
-    // A running turn that accepts steering.
-    bool steerable{false};
-    // T-39: for a busy conversation that cannot be steered now, what it waits on, in words
-    // ("a background task", "an approval from the user"); empty otherwise.
-    QString waitingOn;
 };
 
 class AgentHostPort {
@@ -48,9 +44,6 @@ class AgentHostPort {
     // Starts a turn whose provider input is `providerText`; the journal records `origin` with
     // the user.message so clients show the agent message instead of user text. Returns an error.
     virtual QString startAgentTurn(const QString& sessionId, qint64 generation,
-                                   const QString& providerText, const QJsonObject& origin) = 0;
-    // Steers the running turn. Returns an error when the text was not handed to the provider.
-    virtual QString steerAgentTurn(const QString& sessionId, qint64 generation,
                                    const QString& providerText, const QJsonObject& origin) = 0;
     [[nodiscard]] virtual qint64 agentTurnSequence(const QString& sessionId) const = 0;
     virtual void appendAgentNotice(const QString& sessionId, qint64 generation,
@@ -194,6 +187,8 @@ class AgentBroker final : public QObject {
     // ADR 0114 §2: the team continued. Messages to these members that its pause, its budget
     // or an earlier build's loop guard held are delivered again, in order.
     void releaseTeamHeldMessages(const QStringList& sessionIds);
+    // Holds the delivery to a receiver until released; what is posted meanwhile starts one turn.
+    void holdDelivery(const QString& sessionId, bool hold);
     QString postTeamMessage(const QString& fromSession, const QString& fromTitle,
                             const QString& toSession, const QString& kind, const QString& body,
                             bool expectReply, QString* messageId = nullptr, const QString& id = {});
@@ -245,8 +240,6 @@ class AgentBroker final : public QObject {
     void scheduleDelivery(const QString& sessionId);
     void processDeliveries();
     void deliverTo(const QString& sessionId);
-    // Tracks the tool calls of a running turn from its item events.
-    void noteToolCall(const QString& sessionId, const QString& type, const QJsonObject& payload);
     void finishTurn(const QString& sessionId, qint64 generation, const QString& status);
     // Answers the turn's expect_reply requests, except the `voided` ones.
     void answerRequests(const QString& sessionId, qint64 generation, const QString& status,
@@ -291,12 +284,11 @@ class AgentBroker final : public QObject {
     QHash<QString, QString> tokenBySession_;
     QHash<QString, TurnOrigin> turns_;
     QSet<QString> pendingDeliveries_;
-    // T-39: receivers with an urgent message that could not steer yet; each of their events
-    // tries again, so it steers at the first point the provider allows.
-    QSet<QString> urgentWaiting_;
-    // T-39: the tool calls each conversation's running turn is in (item id → what it is), so
-    // a receipt can say that a steer is read only when the call ends.
-    QHash<QString, QHash<QString, QString>> toolCalls_;
+    // Receivers whose delivery the team coordinator holds while it posts a burst of messages,
+    // so that one turn serves them all (ADR 0114 §2).
+    // A hold that is never released (a team removed meanwhile) lapses after a few minutes.
+    QHash<QString, QDateTime> heldDeliveries_;
+    [[nodiscard]] bool deliveryHeld(const QString& sessionId) const;
     // The tree each conversation's next finished turn is compared with, and the latest
     // snapshot started for it, so an older one finishing later cannot replace it.
     QHash<QString, QString> reviewSnapshots_;

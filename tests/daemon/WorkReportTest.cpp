@@ -130,8 +130,7 @@ class WorkReportTest final : public QObject {
         const auto sent = fixture.agents(
             sender, "agents.send",
             {{"to", fixture.number(id)}, {"text", "agent continuation"}, {"urgent", true}});
-        QCOMPARE(sent.value("delivery").toString(), "steering");
-        QTRY_COMPARE(fixture.count(id, "turn.steered"), 2);
+        QCOMPARE(sent.value("delivery").toString(), "queued");
         QVERIFY(reports().isEmpty());
     }
 

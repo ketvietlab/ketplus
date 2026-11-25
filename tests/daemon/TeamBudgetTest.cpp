@@ -126,6 +126,50 @@ class TeamBudgetTest final : public QObject {
         QVERIFY(team().decisions.last().choices.contains("Continue (5 more turns)"));
     }
 
+    // ADR 0114 §2: the budget counts the turns that start, not the messages queued. Messages the
+    // team queues for one member count nothing until the broker starts the turn they share.
+    void queuedMessagesAreNotTurns() {
+        host_.countPostedTurns = false;
+        start(5);
+        QStringList ids;
+        for (int index = 0; index < 3; ++index)
+            ids << task(QStringLiteral("Task %1").arg(index));
+        for (const QString& id : ids)
+            QVERIFY(teams_->assignTask(team_, id, "dev1", "lead").ok());
+        QCOMPARE(host_.of("assignment").size(), 3);
+        QCOMPARE(team().automaticTurns, 0);
+        // One batch of them is one turn.
+        QCOMPARE(teams_->takeMemberTurn("dev1"), QString{});
+        QCOMPARE(team().automaticTurns, 1);
+    }
+
+    // ADR 0114 §2: an idle developer with several messages waiting in the outbox receives them
+    // after one quiet period, posted with its delivery held so that one turn serves them; a
+    // single message, or the leader's, is not delayed.
+    void anIdleMemberWithManyMessagesWaitsOneQuietPeriod() {
+        teams_->setQuietPeriod(300);
+        teams_->setDeferSending(true);
+        start(10);
+        QStringList ids;
+        for (int index = 0; index < 3; ++index)
+            ids << task(QStringLiteral("Task %1").arg(index));
+        QVERIFY(teams_->assignTask(team_, ids.at(0), "dev1", "lead").ok());
+        QVERIFY(teams_->assignTask(team_, ids.at(1), "dev1", "lead").ok());
+        QVERIFY(teams_->assignTask(team_, ids.at(2), "dev2", "lead").ok());
+        // The member with one message is served at once; the one with two waits.
+        QTRY_COMPARE_WITH_TIMEOUT(host_.of("assignment").size(), 1, 2000);
+        QCOMPARE(host_.of("assignment").first().toSession, QStringLiteral("dev2"));
+        QTest::qWait(100);
+        QCOMPARE(host_.of("assignment").size(), 1);
+        QVERIFY(host_.holds.contains({"dev1", true}));
+        QVERIFY(!host_.holds.contains({"dev1", false}));
+        QTRY_COMPARE_WITH_TIMEOUT(host_.of("assignment").size(), 3, 3000);
+        QTRY_VERIFY_WITH_TIMEOUT(host_.holds.contains({"dev1", false}), 2000);
+        // Both of dev1's went out in order, before its delivery was released.
+        QCOMPARE(host_.of("assignment").at(1).toSession, QStringLiteral("dev1"));
+        QCOMPARE(host_.of("assignment").at(2).toSession, QStringLiteral("dev1"));
+    }
+
     // ADR 0114 §2: a turn a teammate's message starts counts against the budget like a turn
     // the team starts. Once the budget is used up the team pauses and asks once; continuing
     // it releases the messages that waited for every member.

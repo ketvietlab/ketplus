@@ -3,6 +3,8 @@
 Status: accepted
 Date: 2026-11-01
 
+Amended 2026-11-25: `urgent` no longer steers (docs/decisions/2026-11-25-team-batched-delivery-and-leader-interrupt.md).
+
 See also: ADR 0114 (agent teams) adds roles, tasks, digests and role addressing on
 top of these messages; nothing here changes.
 
@@ -76,30 +78,21 @@ Delivery depends on the receiver:
 - **Busy**: the message is queued. Queued messages are delivered together, in
   order, when the receiver becomes idle, or prepended as one host block to the
   next turn the user starts, whichever comes first.
-- **`urgent`**: delivered through `session.steer` when the receiver's provider
-  supports steering into its active turn; otherwise queued. The journaled
-  `turn.steered` carries the same `origin` fields. A busy receiver that cannot be
-  steered now (its turn has ended but a background task it started still runs, its
-  turn is starting or stopping, or its provider cannot steer) gets the message at
-  the first point the provider allows: every later event of the receiver tries the
-  steer again, and once the receiver is idle the message starts its turn as usual
-  (decided 2026-11-12).
+- **`urgent`**: accepted for compatibility, but it never steers a running turn. It only
+  moves the message to the front of the receiver's queue, so it is first in the batch
+  delivered when the receiver becomes idle. The receipt says `queued`. Earlier versions
+  steered through `session.steer` and could report `steering` or `urgent_waiting`;
+  journal rows with `delivery: "steer"` and `turn.steered` events stay readable
+  (amended 2026-11-25, see the batched-delivery decision). The user's own
+  `session.steer` from a client is unchanged.
 - **Provider failure**: the message becomes `failed` and the sender's next turn
   receives the error.
 
 `agents_send` returns the message ID and the receiver's number, title, provider
 and delivery state so the sender can verify the address. The states are
-`starting` (the message starts a turn), `queued` (it arrives when the receiver's
-turn ends), `steering` (urgent, handed to the running turn), `urgent_waiting`
-(urgent, but the receiver cannot be steered now) and `recorded` (a review's
-answer). With `urgent_waiting` the receipt adds `waiting_on`, what the receiver
-waits on in words, and a `note` saying that it could not steer yet and that the
-message should not be sent again. A running turn that is inside a tool call (a
-command, another tool such as a wait loop or an MCP tool, or a web search, tracked
-from its `item.started` and `item.completed` events) can be steered, but its provider reads the steer only
-when that call ends: the receipt then says `steering` with `waiting_on` (for
-example "a command (Bash)") and a note saying so. The tool description and the
-agents' instructions name these states.
+`starting` (the message starts a turn), `queued` (it arrives with everything else queued
+for the receiver, in order, in one turn, when its turn ends) and `recorded` (a review's
+answer). The tool description and the agents' instructions name these states.
 
 A request with `expect_reply` is answered by an explicit
 `agents_send(reply_to=…)`. If the woken turn ends without one, the daemon sends
@@ -161,8 +154,7 @@ already-delivered messages and marks only those IDs queued with
 `delivery=user_authorized:<command-id>`. The existing command result cache makes
 transport retries idempotent. The broker delivers one authorized batch separately
 from unrelated queued messages, bypassing hop/chain/hourly guards for that batch
-only. A busy receiver waits until its normal turn finishes, even for an urgent
-message. New automatic messages retain their existing limits and reply semantics.
+only. A busy receiver waits until its normal turn finishes; an urgent message does not change that. New automatic messages retain their existing limits and reply semantics.
 A new ordinary user turn can still consume pending held/authorized messages.
 
 Before invoking the provider, the broker persists a `releasing` claim and the
@@ -304,7 +296,7 @@ Verification uses fake providers and consumes no quota. It covers:
 
 - delivery to idle and busy receivers, batched queues and the automatic reply
   from the final message;
-- `urgent` steering of a running turn;
+- an `urgent` message to a busy receiver staying queued, first in the next batch, never steering;
 - the hop, chain and hourly limits holding messages, release with the
   receiver's next user turn (including `#NNNN` references) and the 24-hour
   request expiry;

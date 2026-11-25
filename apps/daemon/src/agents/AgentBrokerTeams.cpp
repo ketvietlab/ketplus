@@ -52,6 +52,20 @@ QString AgentBroker::postTeamMessage(const QString& fromSession, const QString& 
     return post(message);
 }
 
+void AgentBroker::holdDelivery(const QString& sessionId, const bool hold) {
+    if (hold) {
+        heldDeliveries_.insert(sessionId, QDateTime::currentDateTimeUtc().addSecs(300));
+        return;
+    }
+    if (heldDeliveries_.remove(sessionId))
+        scheduleDelivery(sessionId);
+}
+
+bool AgentBroker::deliveryHeld(const QString& sessionId) const {
+    const auto it = heldDeliveries_.constFind(sessionId);
+    return it != heldDeliveries_.cend() && *it > QDateTime::currentDateTimeUtc();
+}
+
 void AgentBroker::releaseTeamHeldMessages(const QStringList& sessionIds) {
     // What waited for the team, and what an earlier build's loop guard held inside it.
     static const QStringList waitedForTeam{

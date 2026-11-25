@@ -481,14 +481,15 @@ fires. The record ends when the developer's turn ends without a new wait, when
 the wait is cancelled (the user's Stop), and when the member leaves the team, so a
 later wait for the same thing notifies the leader again.
 
-**An urgent message to a member that cannot be steered (decided 2026-11-12).** A
-member's turn may be over while a command it started in the background still runs. A
-message sent to it with `urgent` cannot steer that turn. The sender's receipt then says
-`urgent_waiting` instead of `queued`, with `waiting_on` (for example "a background task")
-and a note that it could not steer yet. The message steers the receiver's turn at the
-first point its provider allows, or starts a turn once the receiver is idle. ADR 0027
-lists every receipt state: `starting`, `queued`, `steering`, `urgent_waiting` and
-`recorded`.
+**Team messages never steer (decided 2026-11-25, replaces the 2026-11-12 rule on urgent
+messages).** A message to a busy member waits for the end of its turn, also with `urgent`,
+which only moves it to the front of the member's queue. The receipt says `queued`; `steering`
+and `urgent_waiting` no longer exist. Everything queued for a member is delivered in one turn
+when it goes idle, and the team's turn budget counts the turns that start, not the messages
+queued: a batch is one automatic turn. For a member other than the leader, the coordinator's
+messages wait one quiet period when the member is idle and another message for it is already
+in the outbox, then are posted together with the member's delivery held, so one turn serves
+the burst.
 
 **A message outside the team that failed.** When a member's message to a conversation
 that is not on its team fails, expires or gets no answer, the broker's note in the

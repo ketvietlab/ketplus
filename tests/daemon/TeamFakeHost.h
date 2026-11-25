@@ -17,7 +17,10 @@ namespace team_test {
 using namespace ketplus::daemon::teams;
 
 class FakeHost final : public TeamHostPort {
+    TeamCoordinator* coordinator_{nullptr};
+
   public:
+    bool countPostedTurns{true};
     std::optional<TeamConversation> teamConversation(const QString& sessionId) const override {
         const auto it = conversations.constFind(sessionId);
         return it == conversations.cend() ? std::nullopt : std::optional(it.value());
@@ -102,13 +105,22 @@ class FakeHost final : public TeamHostPort {
         (void)team;
         return merged.contains(task.id);
     }
+    void coordinatorCreated(TeamCoordinator* coordinator) override { coordinator_ = coordinator; }
+    // Without a broker, each posted message starts one turn, which the budget counts when it
+    // starts (ADR 0114 §2).
     QString postTeamMessage(const TeamMessage& message) override {
         messages.append(message);
+        if (coordinator_ && countPostedTurns)
+            (void)coordinator_->takeMemberTurn(message.toSession);
         return {};
     }
     void noteInConversation(const QString& sessionId, const QJsonObject& note) override {
         notes.append({sessionId, note});
     }
+    void holdTeamDelivery(const QString& sessionId, const bool hold) override {
+        holds.append({sessionId, hold});
+    }
+    QList<std::pair<QString, bool>> holds;
     void releaseTeamHeldMessages(const QStringList& sessionIds) override {
         released.append(sessionIds);
     }
