@@ -474,6 +474,18 @@ class TeamDigestActorTest final : public QObject {
         QCOMPARE(!body.isEmpty(), workLeft);
         if (workLeft)
             QVERIFY(linesWith(body, "has no task left").first().contains("[needs you]"));
+        if (!workLeft) {
+            // The quiet line rides along with the next digest that has something to act on.
+            const QString other = newTask("Billing", "dev2");
+            QVERIFY(teams_->moveTask(team_, other, state::inProgress, "dev2").ok());
+            QVERIFY(teams_->moveTask(team_, other, state::blocked, "dev2", "Which endpoint?").ok());
+            leaderTurnEnds();
+            const QString next = digestTo("lead");
+            QVERIFY2(next.contains("Which endpoint?"), qPrintable(next));
+            const QStringList idle = linesWith(next, "has no task left");
+            QVERIFY2(!idle.isEmpty(), qPrintable(next));
+            QVERIFY2(!idle.first().contains("[needs you]"), qPrintable(next));
+        }
     }
 
     // Criterion 3, a merge seen outside the app is the daemon's.
