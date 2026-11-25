@@ -261,8 +261,8 @@ capabilities; neither the daemon nor installer lowers host namespace policy.
 
 Daemon-side admission and user-manager RPCs are asynchronous, including supervisor
 start, receipt certification and recovery queries. A stalled manager must not
-suspend the event loop that sends leases to other healthy executors. The existing
-five-second lease is unchanged. Admission commits only after the capability result
+suspend the event loop that sends leases to other healthy executors. The Linux
+lease remains five seconds. Admission commits only after the capability result
 and rechecks generation/quota/idempotency at that point; internal synchronous Host
 start dispatch is rejected before beginning admission.
 
@@ -273,6 +273,14 @@ host reboot during recovery. Otherwise the record stays `stopping`,
 action does not resolve this Linux state. This boundary contains the workload's
 own migration authority; it is not a sandbox against an independently acting
 same-UID host process or requests deliberately made to external services.
+
+The macOS native lease is 15 seconds. Lease expiry accounted for 39 of 67
+unverified-cleanup receipts (58%) in one local sample. The longer lease tolerates
+short heartbeat gaps above five seconds and can delay detection of a genuinely
+lost heartbeat by up to ten additional seconds. This is a temporary measure
+while the cause of delayed heartbeats is investigated; the target remains five
+seconds on every platform. Executor receipts record
+the largest observed heartbeat gap in milliseconds when it exceeds two seconds.
 
 Lease loss terminates contained work, then escalates to kill after a finite
 grace period. Containment includes descendants, not just the direct QProcess.

@@ -29,6 +29,8 @@ class NativeJobSupervisor final : public QObject {
     void command(const QJsonObject& message);
     void send(const QString& event, const QJsonObject& data = {});
     bool persist();
+    bool checkLease();
+    void renewLease();
     void launch(const QJsonObject& message);
     bool prepareLaunchGate(QString* error);
     void commitLaunchIdentity();
@@ -61,6 +63,8 @@ class NativeJobSupervisor final : public QObject {
     QHash<qint64, NativeProcessIdentity> known_;
     std::optional<NativeProcessIdentity> root_;
     qint64 lastPulse_{0};
+    bool pulsed_{false};
+    qint64 maxPingGap_{0};
     qint64 deadline_{0};
     qint64 killAt_{0};
     qint64 finishCleanupAt_{0};

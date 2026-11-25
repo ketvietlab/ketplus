@@ -1,4 +1,5 @@
 #include "runtime/executor/LinuxJobContainment.h"
+#include "runtime/executor/NativeJobLease.h"
 #include "runtime/executor/NativeJobSupervisor.h"
 
 #include <QCoreApplication>
@@ -12,11 +13,11 @@ void NativeJobSupervisor::linuxTick() {
     const auto boundary = metadata_.value("linux_boundary").toObject();
     const bool stopped = process_.state() == QProcess::NotRunning && linuxBoundaryEmpty(boundary);
     if (finalized_) {
-        if (stopped && clock_.elapsed() - lastPulse_ >= 5000)
+        if (stopped && clock_.elapsed() - lastPulse_ >= NativeJobLeaseMs)
             QCoreApplication::quit();
         return;
     }
-    if (supervisorStopRequested() || clock_.elapsed() - lastPulse_ >= 5000)
+    if (checkLease() || supervisorStopRequested())
         requestStop("interrupted");
     if (deadline_ > 0 && clock_.elapsed() >= deadline_)
         requestStop("timed_out");

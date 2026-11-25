@@ -2,6 +2,7 @@
 #include "ManagedTaskIntentLookup.h"
 #include "providers/CodexAdapter.h"
 #include "runtime/SessionHost.h"
+#include "runtime/executor/NativeJobLease.h"
 #include "runtime/executor/NativeProcessIdentity.h"
 #include "storage/BackgroundTaskLedger.h"
 #include "storage/BackgroundTaskOutput.h"
@@ -420,7 +421,7 @@ class ManagedTaskAttentionRecoveryTest final : public QObject {
                      qPrintable(error));
             QTRY_VERIFY_WITH_TIMEOUT(task(host, id, &latest).value("state") == "needs_attention" &&
                                          task(host, id, &latest).value("executor_stopped").toBool(),
-                                     10000);
+                                     ketplus::daemon::executor::NativeJobLeaseMs + 5000);
             QVERIFY(stopped(root));
             QVERIFY(stopped(supervisor));
 #endif
@@ -467,9 +468,10 @@ class ManagedTaskAttentionRecoveryTest final : public QObject {
             // Match this incident and generation; native publication must carry
             // a revision from reconciliation, not a persisted executor-stopped flag.
             QTRY_VERIFY_WITH_TIMEOUT(
-                publishedIncident(events, id, original.value("revision").toInteger()), 6000);
+                publishedIncident(events, id, original.value("revision").toInteger()),
+                ketplus::daemon::executor::NativeJobLeaseMs + 5000);
             QTRY_VERIFY_WITH_TIMEOUT(task(host, id, &latest).value("executor_stopped").toBool(),
-                                     6000);
+                                     ketplus::daemon::executor::NativeJobLeaseMs + 5000);
             latest = task(host, id, &latest);
             QCOMPARE(latest.value("state"), "needs_attention");
             QCOMPARE(latest.value("task_id"), id);
@@ -528,7 +530,7 @@ class ManagedTaskAttentionRecoveryTest final : public QObject {
 #ifdef Q_OS_MACOS
             QTRY_VERIFY_WITH_TIMEOUT(task(host, id, &latest).value("revision").toInteger() >
                                          beforeOwnerChangeRevision,
-                                     6000);
+                                     ketplus::daemon::executor::NativeJobLeaseMs + 5000);
 #endif
             QTRY_VERIFY_WITH_TIMEOUT(task(host, id, &latest).value("executor_stopped").toBool(),
                                      6000);

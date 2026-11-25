@@ -1,4 +1,5 @@
 #include "runtime/executor/LinuxJobContainment.h"
+#include "runtime/executor/NativeJobLease.h"
 #include "runtime/executor/NativeJobSupervisor.h"
 
 #include <QCoreApplication>
@@ -236,7 +237,7 @@ void NativeJobSupervisor::tick() {
             persist();
             send("update", metadata_);
         }
-        if (stopped && known_.isEmpty() && clock_.elapsed() - lastPulse_ >= 5000)
+        if (stopped && known_.isEmpty() && clock_.elapsed() - lastPulse_ >= NativeJobLeaseMs)
             QCoreApplication::quit();
         return;
     }
@@ -247,7 +248,7 @@ void NativeJobSupervisor::tick() {
         }
         requestStop("interrupted");
     }
-    if (clock_.elapsed() - lastPulse_ >= 5000) {
+    if (checkLease()) {
         if (launchAttempted_) {
             cleanupError_ = true;
             metadata_.insert("cleanup_issue", "lease_expired");
