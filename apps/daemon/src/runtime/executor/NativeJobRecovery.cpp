@@ -6,8 +6,8 @@
 #include "runtime/executor/NativeJobControlAddress.h"
 #include "runtime/executor/NativeProcessIdentity.h"
 
-#include <QFileInfo>
 #include <QDebug>
+#include <QFileInfo>
 #include <QJsonArray>
 #include <cerrno>
 #include <csignal>
@@ -144,7 +144,8 @@ void NativeJobClient::recoverLostSupervisor() {
     // never recorded a root (and never attempted one) has no group to inspect.
     const bool neverLaunched = root.isEmpty() && !lastReceipt_.value("launch_attempted").toBool();
     const auto group = root.value("process_group").toInteger();
-    if (knownStopped && (neverLaunched || (!root.isEmpty() && inspectGroup(group) == GroupState::Empty))) {
+    if (knownStopped &&
+        (neverLaunched || (!root.isEmpty() && inspectGroup(group) == GroupState::Empty))) {
         qInfo("Job %s cleanup verified by empty process group after the supervisor was lost.",
               qUtf8Printable(taskId_));
         auto result = lastReceipt_;

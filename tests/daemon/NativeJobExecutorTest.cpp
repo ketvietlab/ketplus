@@ -274,7 +274,8 @@ class NativeJobExecutorTest final : public QObject {
                     done = value;
             },
             &error));
-        QTRY_VERIFY_WITH_TIMEOUT(!done.isEmpty() && done.value("executor_stopped").toBool(), NativeJobLeaseMs + 5000);
+        QTRY_VERIFY_WITH_TIMEOUT(!done.isEmpty() && done.value("executor_stopped").toBool(),
+                                 NativeJobLeaseMs + 5000);
         // The OS reports the job's process group empty: verified, never needs_attention.
         QCOMPARE(done.value("state"), "interrupted");
         QCOMPARE(done.value("cleanup_status"), "verified");
@@ -572,8 +573,8 @@ class NativeJobExecutorTest final : public QObject {
         QVERIFY(executor.start());
         // The child leaves the job's process group with setsid; it must still be found
         // through its parent and stopped, or the empty group alone would not be enough.
-        executor.execute({"/bin/sh", "-c",
-                          "perl -e 'use POSIX; POSIX::setsid(); exec q(sleep), q(60)' & wait"});
+        executor.execute(
+            {"/bin/sh", "-c", "perl -e 'use POSIX; POSIX::setsid(); exec q(sleep), q(60)' & wait"});
         QVERIFY(!executor.receive("running").isEmpty());
         QTRY_VERIFY_WITH_TIMEOUT(executor.receipt().value("known_processes").toArray().size() >= 3,
                                  5000);
@@ -586,8 +587,7 @@ class NativeJobExecutorTest final : public QObject {
         for (const auto value : known) {
             const auto old = value.toObject();
             const auto current = inspect(old.value("pid").toInteger());
-            QVERIFY(!current || current->birth != old.value("birth").toString() ||
-                    current->zombie);
+            QVERIFY(!current || current->birth != old.value("birth").toString() || current->zombie);
         }
     }
 
@@ -684,9 +684,9 @@ class NativeJobExecutorTest final : public QObject {
         QElapsedTimer elapsed;
         elapsed.start();
         QString signalError;
-        QVERIFY(signalIdentity({supervisor.value("pid").toInteger(), 0, 0,
-                                supervisor.value("birth").toString()},
-                               SIGKILL, &signalError));
+        QVERIFY(signalIdentity(
+            {supervisor.value("pid").toInteger(), 0, 0, supervisor.value("birth").toString()},
+            SIGKILL, &signalError));
         QTRY_VERIFY_WITH_TIMEOUT(!done.isEmpty(), 10000);
         // EOF started recovery at once; the lease-length silence window was not needed.
         QVERIFY2(elapsed.elapsed() < 4500, qPrintable(QString::number(elapsed.elapsed())));

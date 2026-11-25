@@ -184,8 +184,8 @@ void NativeJobClient::channelClosed() {
     const auto record = receipt();
     const auto self = record.value("supervisor_identity").toObject();
     const auto identity = inspect(self.value("pid").toInteger());
-    const bool alive = identity && identity->birth == self.value("birth").toString() &&
-                       !identity->zombie;
+    const bool alive =
+        identity && identity->birth == self.value("birth").toString() && !identity->zombie;
     if (!alive && !self.isEmpty() && clock_.elapsed() - lastMessage_ < NativeJobLeaseMs + 500)
         lastMessage_ = clock_.elapsed() - NativeJobLeaseMs - 500;
     QTimer::singleShot(0, this, [this] { tick(); });
