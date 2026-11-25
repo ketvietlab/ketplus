@@ -141,7 +141,7 @@ std::optional<qint64> LocalJournal::insertTeam(const QString& repository, QJsonO
 
 bool LocalJournal::saveTeam(const qint64 teamId, const qint64 expectedRevision,
                             const QJsonObject& document, const QStringList& sessions,
-                            QString* error) {
+                            QString* error, const QList<TeamUpdateRecord>& updates) {
     QString failure;
     if (!database_.transaction()) {
         if (error)
@@ -164,10 +164,19 @@ bool LocalJournal::saveTeam(const qint64 teamId, const qint64 expectedRevision,
             failure = QStringLiteral("The team changed meanwhile.");
     } else if (!writeTeamMembers(teamId, sessions, &failure)) {
         // failure is set.
-    } else if (database_.commit()) {
-        return true;
     } else {
-        failure = database_.lastError().text();
+        bool written = true;
+        for (const auto& record : updates) {
+            if (!appendTeamUpdate(record, &failure)) {
+                written = false;
+                break;
+            }
+        }
+        if (written) {
+            if (database_.commit())
+                return true;
+            failure = database_.lastError().text();
+        }
     }
     database_.rollback();
     if (error)

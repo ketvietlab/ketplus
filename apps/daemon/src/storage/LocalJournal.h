@@ -524,7 +524,8 @@ class LocalJournal final {
                                                    QString* error = nullptr);
     // Replaces the document when the stored revision is `expectedRevision`.
     bool saveTeam(qint64 teamId, qint64 expectedRevision, const QJsonObject& document,
-                  const QStringList& sessions, QString* error = nullptr);
+                  const QStringList& sessions, QString* error = nullptr,
+                  const QList<TeamUpdateRecord>& updates = {});
     bool deleteTeam(qint64 teamId, QString* error = nullptr);
     // T-36: the whole text of a task history entry cut in the team's document, by entry index.
     bool saveTeamHistoryText(qint64 teamId, const QString& taskId, qsizetype entry,

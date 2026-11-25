@@ -45,6 +45,14 @@ class TeamDecisionTest final : public QObject {
                                                   "lead", &id);
         return result.ok() ? id : QString{};
     }
+    TeamResult submit(const QString& id, const QString& answer, const bool batch) {
+        if (!batch)
+            return teams_->answerDecision(team_, id, answer, "user");
+        return teams_->answerDecisions(team_,
+                                       {QJsonObject{{"decision_id", id}, {"answer", answer}}},
+                                       "user", nullptr, nullptr);
+    }
+
     QStringList recipients(const QString& kind) {
         QStringList result;
         for (const TeamMessage& message : host_.of(kind))
@@ -99,7 +107,14 @@ class TeamDecisionTest final : public QObject {
         QVERIFY(host_.messages.isEmpty());
     }
 
+    void theAnswerReachesTheLeaderAndTheBlockedOwnerOnce_data() {
+        QTest::addColumn<bool>("batch");
+        QTest::newRow("legacy") << false;
+        QTest::newRow("batch") << true;
+    }
+
     void theAnswerReachesTheLeaderAndTheBlockedOwnerOnce() {
+        QFETCH(bool, batch);
         start();
         const QString id = task("Cart");
         QVERIFY(teams_->assignTask(team_, id, "dev1", "lead").ok());
@@ -111,7 +126,7 @@ class TeamDecisionTest final : public QObject {
         QCOMPARE(
             teams_->answerDecision(team_, raised, "EUR", "lead").error.value_or(TeamError{}).code,
             QStringLiteral("role_forbidden"));
-        QVERIFY(teams_->answerDecision(team_, raised, "EUR", "user").ok());
+        QVERIFY(submit(raised, "EUR", batch).ok());
         QCOMPARE(decision(raised).state, QStringLiteral("answered"));
         QCOMPARE(decision(raised).answer, QStringLiteral("EUR"));
         QCOMPARE(team().task(id)->state, state::inProgress);
@@ -131,6 +146,41 @@ class TeamDecisionTest final : public QObject {
         QCOMPARE(recipients("decision"), QStringList{"lead"});
         QCOMPARE(teams_->answerDecision(team_, "D-9", "x", "user").error.value_or(TeamError{}).code,
                  QStringLiteral("invalid_payload"));
+    }
+
+    void batchAppliesValidAnswersAndWakesTheLeaderOnce() {
+        start();
+        const auto first = raise();
+        const auto second = raise();
+        const auto skipped = raise();
+        QVERIFY(!first.isEmpty() && !second.isEmpty() && !skipped.isEmpty());
+        const QJsonArray batch{QJsonObject{{"decision_id", first}, {"answer", "EUR"}},
+                               QJsonObject{{"decision_id", "missing"}, {"answer", "USD"}},
+                               QJsonObject{{"decision_id", second}, {"answer", "USD"}},
+                               QJsonObject{{"decision_id", skipped}, {"answer", " "}}};
+        QJsonArray rejected;
+        QJsonArray accepted;
+        QVERIFY(!teams_->answerDecisions(team_, batch, "lead", &rejected, &accepted).ok());
+        QVERIFY(host_.of("decision").isEmpty());
+        const auto revision = team().revision;
+        QVERIFY(teams_->answerDecisions(team_, batch, "user", &rejected, &accepted).ok());
+        QCOMPARE(accepted, QJsonArray({first, second}));
+        QCOMPARE(rejected.size(), 2);
+        QCOMPARE(decision(skipped).state, "open");
+        QCOMPARE(decision(first).answer, "EUR");
+        QCOMPARE(decision(second).answer, "USD");
+        QCOMPARE(team().revision, revision + 2); // One answer commit, one wake.
+        QCOMPARE(team().automaticTurns, 1);
+        QCOMPARE(recipients("decision"), QStringList{"lead"});
+        const auto body = host_.of("decision").first().body;
+        QVERIFY(body.contains("Answer: EUR"));
+        QVERIFY(body.contains("Answer: USD"));
+        QVERIFY(body.contains(skipped));
+        int count = 0;
+        for (const auto& update : journal_->teamUpdates(team_, false, 50))
+            if (update.kind == "decision_answered")
+                ++count;
+        QCOMPARE(count, 2);
     }
 
     void theLeaderWithdrawsOnlyItsOwnQuestionsWithAReason() {
@@ -159,7 +209,14 @@ class TeamDecisionTest final : public QObject {
                  QStringLiteral("role_forbidden"));
     }
 
+    void theFirstPlanWaitsForTheUserAndStartReleasesIt_data() {
+        QTest::addColumn<bool>("batch");
+        QTest::newRow("legacy") << false;
+        QTest::newRow("batch") << true;
+    }
+
     void theFirstPlanWaitsForTheUserAndStartReleasesIt() {
+        QFETCH(bool, batch);
         start(false);
         const QString first = task("Cart");
         const QString second = task("Api");
@@ -176,7 +233,7 @@ class TeamDecisionTest final : public QObject {
         // The user's own assignment is not held.
         QVERIFY(teams_->assignTask(team_, third, "dev1", "user").ok());
         QCOMPARE(recipients("assignment"), QStringList{"dev1"});
-        QVERIFY(teams_->answerDecision(team_, plan.id, "Start", "user").ok());
+        QVERIFY(submit(plan.id, "Start", batch).ok());
         QVERIFY(team().planApproved);
         QCOMPARE(recipients("assignment"), (QStringList{"dev1", "dev1", "dev2"}));
         QVERIFY(!team().task(first)->assignmentHeld);
@@ -212,7 +269,14 @@ class TeamDecisionTest final : public QObject {
         QCOMPARE(team().openDecisions(), 1);
     }
 
+    void theBudgetDecisionContinuesOrStops_data() {
+        QTest::addColumn<bool>("batch");
+        QTest::newRow("legacy") << false;
+        QTest::newRow("batch") << true;
+    }
+
     void theBudgetDecisionContinuesOrStops() {
+        QFETCH(bool, batch);
         start(true, 2);
         QStringList ids;
         for (int index = 0; index < 4; ++index)
@@ -222,14 +286,14 @@ class TeamDecisionTest final : public QObject {
         QVERIFY(teams_->assignTask(team_, ids.at(2), "dev1", "lead").ok());
         QVERIFY(team().paused);
         const QString budget = team().decisions.last().id;
-        QVERIFY(teams_->answerDecision(team_, budget, "Continue (2 more turns)", "user").ok());
+        QVERIFY(submit(budget, "Continue (2 more turns)", batch).ok());
         QVERIFY(!team().paused);
         QCOMPARE(recipients("assignment"), (QStringList{"dev1", "dev2", "dev1"}));
         QCOMPARE(recipients("decision"), QStringList{"lead"});
         // Both turns of the new budget are used; Stop keeps the team paused by the user.
         QVERIFY(teams_->assignTask(team_, ids.at(3), "dev2", "lead").ok());
         QVERIFY(team().paused);
-        QVERIFY(teams_->answerDecision(team_, team().decisions.last().id, "Stop", "user").ok());
+        QVERIFY(submit(team().decisions.last().id, "Stop", batch).ok());
         QVERIFY(team().paused);
         QCOMPARE(team().pausedReason, QStringLiteral("user"));
         QVERIFY(!team().held.isEmpty());

@@ -184,8 +184,8 @@ Linux store policy, signed upgrade prompts and platform release acceptance remai
   them still loads, and paths an older client sends are ignored.
   Decisions (#462): the leader raises a question with two to four choices
   (`team_decision_raise`, `team_decision_withdraw`); only the user answers through
-  `team.decision.answer`, which reaches the leader and the blocked owner once and
-  unblocks the task. The leader's first plan waits as "Start these N tasks?", and the
+  `team.decisions.answer_batch` or the legacy `team.decision.answer`. A submit
+  reaches the leader once and unblocks the affected tasks. The leader's first plan waits as "Start these N tasks?", and the
   budget's decision continues or stops the team.
   Merging (#463): a Ready task whose dependencies are done is offered once — to the
   leader's digest under `mergePolicy` `leader`, as a "Merge T-n?" decision under

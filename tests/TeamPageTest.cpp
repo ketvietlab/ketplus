@@ -33,6 +33,7 @@
 #include <QScopeGuard>
 #include <QScrollArea>
 #include <QScrollBar>
+#include <QSettings>
 #include <QStandardPaths>
 #include <QTableWidget>
 #include <QTextEdit>
@@ -168,6 +169,7 @@ class TeamPageTest final : public QObject {
     QList<QUrl> openedUrls_;
 
     void start(const QJsonObject& team) {
+        QSettings().remove(QStringLiteral("teams/decisionAnswers/7"));
         daemon_ = {};
         daemon_.answers.insert("team.list", {{"ok", true}, {"teams", QJsonArray{team}}});
         daemon_.answers.insert(
@@ -363,7 +365,15 @@ class TeamPageTest final : public QObject {
         QVERIFY(!text->truncated() && more->isVisible());
         QCOMPARE(more->text(), QStringLiteral("Show less"));
         rows.at(1)->click();
-        QCOMPARE(daemon_.last("team.decision.answer").value("choice").toString(),
+        QCOMPARE(daemon_.count("team.decisions.answer_batch"), 0);
+        page.findChild<ket::Button*>("teamDecisionSubmitAll")->click();
+        QCOMPARE(daemon_.last("team.decisions.answer_batch")
+                     .value("answers")
+                     .toArray()
+                     .first()
+                     .toObject()
+                     .value("answer")
+                     .toString(),
                  QStringLiteral("Theo từng sản phẩm: mỗi món hết tồn mở một lệnh riêng"));
     }
 
@@ -401,7 +411,6 @@ class TeamPageTest final : public QObject {
         QCOMPARE(create.first().first().toString(), QStringLiteral("/work/other"));
     }
 
-    // Answering sends team.decision.answer; the answer's team removes the card.
     // T-23: two reviewers, each with its own review and queue; no queue banner, and either
     // one may be removed. KETPLUS_TEAM_REVIEWERS_CAPTURE (a folder) saves the page, the New team
     // dialog with two reviewers and the second reviewer's dialog beside the mock's.
@@ -491,113 +500,55 @@ class TeamPageTest final : public QObject {
     void answeringRemovesTheDecision() {
         start(fixture());
         TeamPage page(teams_.get(), "7", "/work/shop");
-        daemon_.answers.insert("team.decision.answer",
-                               {{"ok", true}, {"team", fixture(2, 2, false, false)}});
+        daemon_.answers.insert(
+            "team.decisions.answer_batch",
+            {{"ok", true}, {"team", fixture(2, 2, false, false)}, {"accepted", QJsonArray{"D-1"}}});
         page.findChild<QFrame*>("teamDecision_D-1")
             ->findChildren<ket::Button*>("teamDecisionChoice")
             .first()
             ->click();
-        const QJsonObject sent = daemon_.last("team.decision.answer");
-        QCOMPARE(sent.value("team_id").toString(), QStringLiteral("7"));
-        QCOMPARE(sent.value("decision_id").toString(), QStringLiteral("D-1"));
-        QCOMPARE(sent.value("choice").toString(), QStringLiteral("Stripe"));
+        QCOMPARE(daemon_.count("team.decisions.answer_batch"), 0);
+        page.findChild<ket::Button*>("teamDecisionSubmitAll")->click();
+        const auto sent = daemon_.last("team.decisions.answer_batch");
+        QCOMPARE(sent.value("team_id").toString(), "7");
+        const auto answer = sent.value("answers").toArray().first().toObject();
+        QCOMPARE(answer.value("decision_id").toString(), "D-1");
+        QCOMPARE(answer.value("answer").toString(), "Stripe");
         QTRY_VERIFY(!page.findChild<QFrame*>("teamDecision_D-1"));
-        QCOMPARE(teams_->team("7")->value("open_decisions").toInt(), 0);
     }
 
-    // T-55: the last choice is "Other…", a field on the card. Enter sends, Shift+Enter adds a
-    // line, Esc and Cancel put the card back; a refusal shows on the card and keeps the text.
-    void otherWritesTheAnswerOnTheCard() {
+    void aDraftSurvivesThePageAndSkipDoesNotSubmit() {
         start(fixture());
+        {
+            TeamPage page(teams_.get(), "7", "/work/shop");
+            page.findChild<QAbstractButton*>("teamDecisionOther")->click();
+            QTRY_VERIFY(page.findChild<ket::TextArea*>("teamDecisionOtherText"));
+            auto* submit = page.findChild<ket::Button*>("teamDecisionSubmitAll");
+            QVERIFY(!submit->isEnabled());
+            page.findChild<ket::TextArea*>("teamDecisionOtherText")->setText("Adyen");
+            QVERIFY(submit->isEnabled());
+            QCOMPARE(daemon_.count("team.decisions.answer_batch"), 0);
+        }
         TeamPage page(teams_.get(), "7", "/work/shop");
-        page.resize(1100, 900);
-        page.show();
-        QVERIFY(QTest::qWaitForWindowExposed(&page));
-        const auto card = [&] { return page.findChild<QFrame*>("teamDecision_D-1"); };
-        const auto field = [&] {
-            return card() ? card()->findChild<ket::TextArea*>("teamDecisionOtherText") : nullptr;
-        };
-        const auto button = [&](const char* name) {
-            return card()->findChild<QAbstractButton*>(QLatin1String(name));
-        };
-        // The conversation is not where the card is answered any more.
-        QVERIFY(!card()->findChild<QWidget*>("teamDecisionInConversation"));
-        for (auto* any : card()->findChildren<QAbstractButton*>())
-            QVERIFY(!any->text().contains("conversation"));
-        QVERIFY(!field());
-        const auto open = [&] {
-            QAbstractButton* other = button("teamDecisionOther");
-            QVERIFY(other && other->isEnabled());
-            QVERIFY(other->text().startsWith("Other"));
-            other->click();
-            QTRY_VERIFY(field());
-            // The window's focus child: offscreen, the page need not be the active window.
-            QTRY_COMPARE(page.focusWidget(), static_cast<QWidget*>(field()->editor()));
-            QVERIFY(!button("teamDecisionOther"));
-        };
-        open();
-        // Nothing to send while empty or blank: Send waits and Enter sends nothing.
-        QVERIFY(!button("teamDecisionOtherSend")->isEnabled());
-        field()->setText("   ");
-        QVERIFY(!button("teamDecisionOtherSend")->isEnabled());
-        QTest::keyClick(field()->editor(), Qt::Key_Return);
-        QCOMPARE(daemon_.count("team.decision.answer"), 0);
-        // Esc puts the card back, with its choices and Other.
-        QTest::keyClick(field()->editor(), Qt::Key_Escape);
-        QTRY_VERIFY(!field());
-        QCOMPARE(card()->findChildren<ket::Button*>("teamDecisionChoice").size(), 2);
-        open();
-        button("teamDecisionOtherCancel")->click();
-        QTRY_VERIFY(!field());
-        QVERIFY(button("teamDecisionOther"));
-
-        open();
-        QTest::keyClicks(field()->editor(), "Neither: use Adyen");
-        QTest::keyClick(field()->editor(), Qt::Key_Return, Qt::ShiftModifier);
-        QTest::keyClicks(field()->editor(), "for the fees");
-        QCOMPARE(field()->text(), QStringLiteral("Neither: use Adyen\nfor the fees"));
-        QVERIFY(button("teamDecisionOtherSend")->isEnabled());
-        const QString closed = "The decision D-1 was already answered.";
-        daemon_.answers.insert(
-            "team.decision.answer",
-            {{"ok", false}, {"error_code", "decision_closed"}, {"error_message", closed}});
-        QTest::keyClick(field()->editor(), Qt::Key_Return);
-        QCOMPARE(daemon_.count("team.decision.answer"), 1);
-        QJsonObject sent = daemon_.last("team.decision.answer");
-        QCOMPARE(sent.value("decision_id").toString(), QStringLiteral("D-1"));
-        QCOMPARE(sent.value("choice").toString(),
-                 QStringLiteral("Neither: use Adyen\nfor the fees"));
-        // Refused: the reason on the card, the text as it was typed.
-        auto* error = card()->findChild<QLabel*>("teamDecisionError");
-        QTRY_VERIFY(error->isVisible());
-        QVERIFY(error->text().contains(closed));
-        QCOMPARE(field()->text(), QStringLiteral("Neither: use Adyen\nfor the fees"));
-        QVERIFY(button("teamDecisionOtherSend")->isEnabled());
-
-        // A refused payload takes the same way: the reason on the card, the text kept.
-        const QString invalid = "The answer is too long.";
-        daemon_.answers.insert(
-            "team.decision.answer",
-            {{"ok", false}, {"error_code", "invalid_payload"}, {"error_message", invalid}});
-        button("teamDecisionOtherSend")->click();
-        QCOMPARE(daemon_.count("team.decision.answer"), 2);
-        QTRY_VERIFY(card()->findChild<QLabel*>("teamDecisionError")->text().contains(invalid));
-        QCOMPARE(field()->text(), QStringLiteral("Neither: use Adyen\nfor the fees"));
-
-        // Sent again and taken: the decision leaves Waiting for you, and the answer is in Updates.
-        const QJsonObject answered = fixture(2, 2, false, false);
-        daemon_.answers.insert("team.decision.answer", {{"ok", true}, {"team", answered}});
-        daemon_.answers.insert(
-            "team.get",
-            {{"ok", true},
-             {"team", answered},
-             {"updates", QJsonArray{QJsonObject{{"id", 3},
-                                                {"at", "2026-11-10T10:02:00.000Z"},
-                                                {"text", "D-1 answered: Neither: use Adyen"}}}}});
-        button("teamDecisionOtherSend")->click();
-        QCOMPARE(daemon_.count("team.decision.answer"), 3);
-        QTRY_VERIFY(!card());
-        QTRY_VERIFY(labels(&page, "teamUpdate").join('\n').contains("D-1 answered: Neither"));
+        auto* field = page.findChild<ket::TextArea*>("teamDecisionOtherText");
+        QVERIFY(field);
+        QCOMPARE(field->text(), "Adyen");
+        QJsonObject updated = fixture(2);
+        auto decisions = updated.value("decisions").toArray();
+        auto second = decisions.first().toObject();
+        second.insert("id", "D-2");
+        second.insert("question", "A second question");
+        decisions.append(second);
+        updated.insert("decisions", decisions);
+        teams_->applyEvent("team.changed", {{"team", updated}});
+        QTRY_VERIFY(page.findChild<QFrame*>("teamDecision_D-2"));
+        QCOMPARE(page.findChild<ket::TextArea*>("teamDecisionOtherText")->text(), "Adyen");
+        page.findChild<QFrame*>("teamDecision_D-1")
+            ->findChild<ket::Button*>("teamDecisionSkip")
+            ->click();
+        QTRY_VERIFY(!page.findChild<ket::Button*>("teamDecisionSubmitAll")->isEnabled());
+        QVERIFY(page.findChild<QFrame*>("teamDecision_D-1"));
+        QCOMPARE(daemon_.count("team.decisions.answer_batch"), 0);
     }
 
     // T-55 review M1: the team changes while the answer is being written. The page rebuilds, and

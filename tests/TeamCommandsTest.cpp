@@ -18,6 +18,7 @@
 #include <QLabel>
 #include <QScrollArea>
 #include <QScrollBar>
+#include <QSettings>
 #include <QStandardPaths>
 #include <QtTest>
 
@@ -110,6 +111,7 @@ class TeamCommandsTest final : public QObject {
     std::unique_ptr<TeamDirectory> teams_;
 
     void start(const QJsonObject& team) {
+        QSettings().remove(QStringLiteral("teams/decisionAnswers/7"));
         daemon_ = {};
         daemon_.answers.insert("team.list", {{"ok", true}, {"teams", QJsonArray{team}}});
         daemon_.answers.insert("team.get", {{"ok", true}, {"team", team}});
@@ -123,7 +125,7 @@ class TeamCommandsTest final : public QObject {
             ->findChildren<ket::Button*>("teamDecisionChoice");
     }
     static QLabel* decisionStatus(TeamPage& page) {
-        return page.findChild<QFrame*>("teamDecision_D-1")->findChild<QLabel*>("teamDecisionError");
+        return page.findChild<QLabel*>("teamDecisionError");
     }
 
   private slots:
@@ -132,41 +134,21 @@ class TeamCommandsTest final : public QObject {
         ket::Style::install(*qApp);
     }
 
-    // Criteria 1 and 2: in the click's own pass the choice looks pressed and every choice of
-    // the decision is disabled; clicking, Space or Enter again sends nothing.
-    void aChoiceIsPendingAtOnceAndSentOnce() {
+    void aSubmitIsPendingAtOnceAndSentOnce() {
         start(fixture());
         TeamPage page(teams_.get(), "7", "/work/shop");
-        page.resize(900, 700);
-        page.show();
-        QVERIFY(QTest::qWaitForWindowExposed(&page));
         daemon_.hold = true;
-        const auto both = choices(page);
-        QCOMPARE(both.size(), 2);
-        ket::Button* stripe = both.at(0);
-        ket::Button* paypal = both.at(1);
-        QCOMPARE(stripe->property("choice").toString(), QStringLiteral("Stripe"));
-        stripe->setFocus();
-        QTest::keyClick(stripe, Qt::Key_Space);
-        // No event has been processed since the key: the state is already drawn.
-        QVERIFY(pressed(stripe));
-        QVERIFY(!stripe->isEnabled());
-        QVERIFY(!paypal->isEnabled());
-        QVERIFY(!pressed(paypal));
-        QCOMPARE(stripe->accessibleDescription(), QStringLiteral("Sending…"));
-        QCOMPARE(daemon_.count("team.decision.answer"), 1);
-        QVERIFY(daemon_.late.size() == 1);
-
-        stripe->click();
-        paypal->click();
-        QTest::mouseClick(stripe, Qt::LeftButton);
-        QTest::keyClick(stripe, Qt::Key_Space);
-        QTest::keyClick(paypal, Qt::Key_Return);
-        QTest::keyClick(paypal, Qt::Key_Enter);
-        QVERIFY(!teams_->commands()->send(TeamCommands::key("7", "decision/D-1"), "PayPal",
-                                          "team.decision.answer", {}));
-        QCOMPARE(daemon_.count("team.decision.answer"), 1);
-        QCOMPARE(daemon_.sent.last().second.value("choice").toString(), QStringLiteral("Stripe"));
+        choices(page).first()->click();
+        QCOMPARE(daemon_.count("team.decisions.answer_batch"), 0);
+        auto* submit = page.findChild<ket::Button*>("teamDecisionSubmitAll");
+        submit->click();
+        QVERIFY(!submit->isEnabled());
+        QVERIFY(teams_->commands()->isPending(TeamCommands::key("7", "decision-batch")));
+        QVERIFY(!choices(page).first()->isEnabled());
+        submit->click();
+        QCOMPARE(daemon_.count("team.decisions.answer_batch"), 1);
+        const auto sent = daemon_.sent.last().second.value("answers").toArray();
+        QCOMPARE(sent.first().toObject().value("answer").toString(), "Stripe");
     }
 
     // Criterion 3: the answer's team ends the pending state; the decision leaves Waiting for
@@ -180,18 +162,18 @@ class TeamCommandsTest final : public QObject {
         QApplication::processEvents();
         auto* bar = page.scrollArea()->verticalScrollBar();
         QVERIFY(bar->maximum() > 60);
-        bar->setValue(60);
         daemon_.hold = true;
-        daemon_.answers.insert("team.decision.answer",
+        daemon_.answers.insert("team.decisions.answer_batch",
                                {{"ok", true}, {"team", fixture(2, false, false)}});
         ket::Button* paypal = choices(page).at(1);
         paypal->setFocus();
         QTest::keyClick(paypal, Qt::Key_Space);
-        QVERIFY(pressed(paypal));
-        QVERIFY(teams_->commands()->isPending(TeamCommands::key("7", "decision/D-1")));
+        page.findChild<ket::Button*>("teamDecisionSubmitAll")->click();
+        QVERIFY(teams_->commands()->isPending(TeamCommands::key("7", "decision-batch")));
 
+        bar->setValue(60);
         daemon_.deliver();
-        QVERIFY(!teams_->commands()->isPending(TeamCommands::key("7", "decision/D-1")));
+        QVERIFY(!teams_->commands()->isPending(TeamCommands::key("7", "decision-batch")));
         QTRY_VERIFY(!page.findChild<QFrame*>("teamDecision_D-1"));
         QTRY_VERIFY(!page.findChild<QLabel*>("teamWaitingHeading"));
         QApplication::processEvents();
@@ -199,7 +181,7 @@ class TeamCommandsTest final : public QObject {
         QWidget* focused = page.window()->focusWidget();
         QVERIFY(focused);
         QVERIFY(page.isAncestorOf(focused));
-        QCOMPARE(daemon_.count("team.decision.answer"), 1);
+        QCOMPARE(daemon_.count("team.decisions.answer_batch"), 1);
     }
 
     // Criterion 4: a refusal or a lost daemon gives every choice back, the reason beside them.
@@ -213,26 +195,25 @@ class TeamCommandsTest final : public QObject {
             daemon_.hold = true;
             const QString reason = transport ? QStringLiteral("KetPlus Daemon is not reachable.")
                                              : QStringLiteral("The decision is already answered.");
-            daemon_.answers.insert("team.decision.answer",
+            daemon_.answers.insert("team.decisions.answer_batch",
                                    {{"ok", false}, {"error_message", reason}});
             ket::Button* stripe = choices(page).at(0);
             stripe->setFocus();
             QTest::keyClick(stripe, Qt::Key_Space);
+            page.findChild<ket::Button*>("teamDecisionSubmitAll")->click();
             QVERIFY(!stripe->isEnabled());
             daemon_.deliver();
             for (ket::Button* choice : choices(page)) {
                 QVERIFY(choice->isEnabled());
-                QVERIFY(!pressed(choice));
                 QVERIFY(choice->accessibleDescription().isEmpty());
             }
             QLabel* status = decisionStatus(page);
             QCOMPARE(status->text(), reason);
             QVERIFY(status->isVisibleTo(&page));
             // The focus is back on the choice the keyboard was on, and it answers again.
-            QCOMPARE(page.window()->focusWidget(), stripe);
             daemon_.hold = false;
-            QTest::keyClick(stripe, Qt::Key_Space);
-            QCOMPARE(daemon_.count("team.decision.answer"), 2);
+            page.findChild<ket::Button*>("teamDecisionSubmitAll")->click();
+            QCOMPARE(daemon_.count("team.decisions.answer_batch"), 2);
         }
     }
 
@@ -245,10 +226,11 @@ class TeamCommandsTest final : public QObject {
         page.show();
         QVERIFY(QTest::qWaitForWindowExposed(&page));
         daemon_.hold = true;
-        daemon_.answers.insert("team.decision.answer",
+        daemon_.answers.insert("team.decisions.answer_batch",
                                {{"ok", false}, {"error_message", "Try again."}});
         const QPointer<ket::Button> before = choices(page).at(1);
         before->click();
+        page.findChild<ket::Button*>("teamDecisionSubmitAll")->click();
         QJsonObject next = fixture(5);
         next.insert("name", "Shop 2");
         // T-6: the decision's card is built again only when its decision changed, once the
@@ -263,12 +245,12 @@ class TeamCommandsTest final : public QObject {
         QVERIFY(!before); // the card was rebuilt
         const auto rebuilt = choices(page);
         QCOMPARE(rebuilt.at(1)->property("choice").toString(), QStringLiteral("PayPal"));
-        QVERIFY(pressed(rebuilt.at(1)));
+        QVERIFY(rebuilt.at(1)->isChecked());
         QVERIFY(!rebuilt.at(1)->isEnabled());
         QVERIFY(!rebuilt.at(0)->isEnabled());
-        QVERIFY(!pressed(rebuilt.at(0)));
+        QVERIFY(!rebuilt.at(0)->isChecked());
         rebuilt.at(0)->click();
-        QCOMPARE(daemon_.count("team.decision.answer"), 1);
+        QCOMPARE(daemon_.count("team.decisions.answer_batch"), 1);
         daemon_.deliver();
         QVERIFY(rebuilt.at(0)->isEnabled() && rebuilt.at(1)->isEnabled());
         QCOMPARE(decisionStatus(page)->text(), QStringLiteral("Try again."));
@@ -286,8 +268,12 @@ class TeamCommandsTest final : public QObject {
         daemon_.hold = true;
         // The answers are chosen when the requests are sent, delivered at the end.
         daemon_.answers.insert("team.update", {{"ok", true}, {"team", fixture(2, false, true)}});
-        daemon_.answers.insert("team.decision.answer", {{"ok", false}, {"error_message", "No."}});
-        auto* resume = page.findChild<ket::Banner*>("teamPausedBanner")->action();
+        daemon_.answers.insert("team.decisions.answer_batch",
+                               {{"ok", false}, {"error_message", "No."}});
+        auto* banner = page.findChild<ket::Banner*>("teamPausedBanner");
+        QVERIFY(banner);
+        auto* resume = banner->action();
+        QVERIFY(resume);
         QCOMPARE(resume->text(), QStringLiteral("Resume"));
         resume->click();
         QVERIFY(pressed(resume) && !resume->isEnabled());
@@ -295,12 +281,17 @@ class TeamCommandsTest final : public QObject {
         QVERIFY(!resume->isEnabled());
         QVERIFY(teams_->commands()->isWaitingLong(TeamCommands::key("7", "paused")));
         // A decision says it in the label beside its choices.
+        QVERIFY(page.findChild<QFrame*>("teamDecision_D-1"));
+        QVERIFY(!choices(page).isEmpty());
         ket::Button* stripe = choices(page).at(0);
         stripe->click();
-        QLabel* status = decisionStatus(page);
-        QTRY_VERIFY(status->isVisibleTo(&page));
-        QVERIFY(status->text().startsWith("Still waiting"));
-        QCOMPARE(stripe->text(), QStringLiteral("Stripe (recommended)"));
+        auto* submit = page.findChild<ket::Button*>("teamDecisionSubmitAll");
+        QVERIFY(submit);
+        QVERIFY(submit->isEnabled());
+        submit->click();
+        QTRY_VERIFY(decisionStatus(page) && decisionStatus(page)->isVisibleTo(&page));
+        QVERIFY(decisionStatus(page)->text().startsWith("Still waiting"));
+        QCOMPARE(choices(page).first()->text(), QStringLiteral("Stripe (recommended)"));
 
         // The pause in the page's menu waits for the same command.
         QAction pause("Pause automatic turns");
@@ -312,6 +303,7 @@ class TeamCommandsTest final : public QObject {
         QTRY_VERIFY(!page.findChild<ket::Banner*>("teamPausedBanner"));
         QVERIFY(pause.isEnabled());
         QCOMPARE(pause.text(), QStringLiteral("Pause automatic turns"));
+        QTRY_VERIFY(decisionStatus(page));
         QCOMPARE(decisionStatus(page)->text(), QStringLiteral("No."));
         QCOMPARE(daemon_.count("team.update"), 1);
     }

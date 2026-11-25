@@ -111,6 +111,10 @@ class TeamPage final : public QWidget {
     void buildHeading(const QJsonObject& team);
     void buildBanners(const QJsonObject& team);
     void buildDecisions(const QJsonObject& team);
+    void stageDecisionAnswer(const QString& id, const QString& answer);
+    void refreshDecisionSubmit();
+    [[nodiscard]] QString decisionSettingsKey() const;
+    [[nodiscard]] QJsonArray stagedDecisionAnswers() const;
     // T-55 (TeamDecisionOther.cpp): a decision's last choice, "Other…", and the field it opens.
     [[nodiscard]] QWidget* decisionOther(QWidget* card, const QString& id, const QString& what,
                                          bool sentences);
@@ -188,6 +192,8 @@ class TeamPage final : public QWidget {
         int position{-1};
     };
     QHash<QString, DecisionDraft> decisionDrafts_;
+    QStringList openDecisionIds_;
+    QPointer<ket::Button> decisionSubmit_;
     // A rebuild waits while a written answer is mid-composition in an input method.
     bool rebuildDeferred_{false};
     [[nodiscard]] bool composingDraft() const;

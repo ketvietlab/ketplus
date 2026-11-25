@@ -463,6 +463,21 @@ QJsonObject SessionHost::teamTaskCommand(const QString& type, const QJsonObject&
                 {QStringLiteral("decisions"), decisions},
                 {QStringLiteral("has_more"), more}};
     }
+    if (type == QStringLiteral("team.decisions.answer_batch")) {
+        const auto answers = payload.value("answers").toArray();
+        if (answers.isEmpty())
+            return refused("invalid_payload", "Submit at least one decision answer.");
+        QJsonArray rejected;
+        QJsonArray accepted;
+        const auto result = teams_->answerDecisions(teamId, answers, user, &rejected, &accepted);
+        if (!result.ok())
+            return refused(result.error->code, result.error->message);
+        const auto* current = teams_->team(teamId);
+        return {{"ok", true},
+                {"team", current ? teams_->teamJson(*current) : QJsonObject{}},
+                {"accepted", accepted},
+                {"rejected", rejected}};
+    }
     if (type == QStringLiteral("team.decision.answer")) {
         const QString choice = payload.value(QStringLiteral("choice")).toString();
         const auto result = teams_->answerDecision(
