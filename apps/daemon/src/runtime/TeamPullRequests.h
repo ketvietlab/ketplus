@@ -30,7 +30,8 @@ struct Lookup final {
     QString branch;
 };
 // The pull request URL in the answer of `gh pr list --head <branch> --state all --json
-// url,state,createdAt`: the newest one still open, else the newest; nothing for none.
+// url,state,createdAt`: the newest one that is open; nothing for none (a closed or merged one may
+// belong to an earlier use of the branch name).
 [[nodiscard]] QString parseLink(const QByteArray& json);
 // Asks for the pull request of each task's branch, bounded as `ask` is; a task whose answer
 // is none or an error is left out. Never touches a checkout.

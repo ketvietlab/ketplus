@@ -457,8 +457,54 @@ class TeamDoneTest final : public QObject {
             R"({"url":"https://h/p/3","state":"MERGED","createdAt":"2026-01-03"})";
         QCOMPARE(team_pull_requests::parseLink("[" + closed + "," + open + "," + merged + "]"),
                  QStringLiteral("https://h/p/2"));
-        QCOMPARE(team_pull_requests::parseLink("[" + closed + "," + merged + "]"),
-                 QStringLiteral("https://h/p/3"));
+        // Closed or merged ones alone link nothing.
+        QCOMPARE(team_pull_requests::parseLink("[" + closed + "," + merged + "]"), QString{});
+    }
+
+    // T-3: a branch whose only pull request is closed (an earlier use of the name) links nothing.
+    void aClosedPullRequestOfTheBranchIsNotLinked() {
+        const QString id = task("Cart");
+        bringTo(id, state::inProgress);
+        host_.branchPullRequests.insert(get(id).branch, QString{});
+        teams_->checkPullRequests(team_);
+        QVERIFY(get(id).pullRequest.isEmpty());
+        QCOMPARE(updates("pull_request_linked"), 0);
+    }
+
+    void findLinksAsksTheToolPerBranchAndSkipsWhatItCannotLink() {
+        KETPLUS_SKIP_ON_WINDOWS("the fixture is a POSIX shell script (fake gh)");
+        QTemporaryDir bin;
+        const QString tool = bin.filePath("gh");
+        QFile script(tool);
+        QVERIFY(script.open(QIODevice::WriteOnly));
+        script.write("#!/bin/sh\n"
+                     "echo \"$4\" >> \"$(dirname \"$0\")/calls\"\n"
+                     "case \"$4\" in\n"
+                     "  feat/a) echo '[{\"url\":\"https://h/p/1\",\"state\":\"OPEN\","
+                     "\"createdAt\":\"2026-01-01\"}]' ;;\n"
+                     "  feat/old) echo '[{\"url\":\"https://h/p/2\",\"state\":\"CLOSED\","
+                     "\"createdAt\":\"2026-01-01\"}]' ;;\n"
+                     "  feat/none) echo '[]' ;;\n"
+                     "  *) echo 'boom' >&2; exit 1 ;;\n"
+                     "esac\n");
+        script.close();
+        QVERIFY(script.setPermissions(QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner));
+        const auto links = team_pull_requests::findLinks({{"T-1", bin.path(), "feat/a"},
+                                                          {"T-2", bin.path(), "feat/old"},
+                                                          {"T-3", bin.path(), {}},
+                                                          {"T-4", bin.path(), "feat/none"},
+                                                          {"T-5", bin.path(), "feat/err"},
+                                                          {"T-6", bin.path(), "feat/a"}},
+                                                         tool);
+        QCOMPARE(links.size(), 2);
+        QCOMPARE(links.value("T-1"), QStringLiteral("https://h/p/1"));
+        QCOMPARE(links.value("T-6"), QStringLiteral("https://h/p/1"));
+        QFile calls(bin.filePath("calls"));
+        QVERIFY(calls.open(QIODevice::ReadOnly));
+        // The empty branch is skipped and the ones after it are still asked.
+        QCOMPARE(calls.readAll().count('\n'), 5);
+        QVERIFY(team_pull_requests::findLinks({{"T-1", bin.path(), "feat/a"}}, bin.filePath("none"))
+                    .isEmpty());
     }
 
     void theProbeRunsTheToolOncePerPullRequestAndReportsItsFailure() {

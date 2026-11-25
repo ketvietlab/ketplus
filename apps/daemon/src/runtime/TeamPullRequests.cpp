@@ -121,21 +121,20 @@ QString parseLink(const QByteArray& json) {
     const QJsonDocument document = QJsonDocument::fromJson(json);
     if (!document.isArray())
         return {};
+    // Only a pull request that is open now: a closed or merged one may come from an earlier
+    // use of the same branch name, and must not be recorded as the task's.
     QString best;
     QString bestAt;
-    bool bestOpen = false;
     for (const QJsonValue& value : document.array()) {
         const QJsonObject object = value.toObject();
         const QString url = object.value(QStringLiteral("url")).toString();
-        if (!url.startsWith(QStringLiteral("http")))
+        if (!url.startsWith(QStringLiteral("http")) ||
+            object.value(QStringLiteral("state")).toString().toLower() != QStringLiteral("open"))
             continue;
-        const bool open =
-            object.value(QStringLiteral("state")).toString().toLower() == QStringLiteral("open");
         const QString at = object.value(QStringLiteral("createdAt")).toString();
-        if (best.isEmpty() || (open && !bestOpen) || (open == bestOpen && at > bestAt)) {
+        if (best.isEmpty() || at > bestAt) {
             best = url;
             bestAt = at;
-            bestOpen = open;
         }
     }
     return best;
@@ -151,8 +150,10 @@ QHash<QString, QString> findLinks(const QList<Lookup>& lookups, const QString& p
     clock.start();
     for (const Lookup& lookup : lookups) {
         const qint64 left = limits.batchMs - clock.elapsed();
-        if (left <= 0 || (cancelled && cancelled->load()) || lookup.branch.isEmpty())
+        if (left <= 0 || (cancelled && cancelled->load()))
             break;
+        if (lookup.branch.isEmpty())
+            continue;
         QProcess process;
         if (!lookup.directory.isEmpty())
             process.setWorkingDirectory(lookup.directory);

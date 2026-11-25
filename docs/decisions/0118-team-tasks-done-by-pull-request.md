@@ -81,9 +81,8 @@ The leader had no way to close a task either.
 
 8. **Linking.** A task that has work (In progress, In review, Ready or Blocked), a branch and
    no recorded pull request is looked up at each pull request check:
-   `gh pr list --head <branch> --state all --json url,state,createdAt`, run in the task's
-   repository on the same worker and bounds as the probe. The newest open pull request, else
-   the newest, is recorded on that task only (branches are unique per task), with a
+   `gh pr list --head <branch> --state all --json url,state,createdAt` (only an open one counts: a closed or merged one may come from an earlier use of the branch name), run in the task's
+   repository on the same worker and bounds as the probe. The newest pull request that is open now is recorded on that task only (branches are unique per task), with a
    `pull_request` history entry and an actionable `pull_request_linked` update that wakes the
    leader. A pull request someone recorded is never replaced, and a lookup that errors or
    times out links nothing. From then on the task is checked like any recorded pull request.
