@@ -402,26 +402,49 @@ class AgentMessagingTest final : public QObject {
         QVERIFY(!fixture.host->agentTurnSenders().contains(sender));
     }
 
-    void urgentMessageSteersTheRunningTurn() {
+    // ADR 0027: an urgent message never steers; it queues behind the running turn, comes first
+    // in the batch, and the batch starts one turn.
+    void urgentMessageQueuesFirstAndNeverSteers() {
         Fixture fixture;
         QVERIFY(fixture.open());
         const QString sender = fixture.start("claude", "sender");
         QTRY_COMPARE_WITH_TIMEOUT(fixture.count(sender, "turn.completed"), 1, 5000);
         const QString receiver = fixture.start("claude", "hang");
         QTRY_COMPARE_WITH_TIMEOUT(fixture.count(receiver, "turn.started"), 1, 5000);
-        const QJsonObject sent = fixture.agents(
+        const QJsonObject first = fixture.agents(
+            sender, "agents.send", {{"to", fixture.number(receiver)}, {"text", "plain one"}});
+        const QJsonObject second = fixture.agents(
             sender, "agents.send",
-            {{"to", fixture.number(receiver)}, {"text", "stop and check"}, {"urgent", true}});
-        QCOMPARE(sent.value("delivery").toString(), "steering");
-        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(receiver, "turn.steered"), 1, 5000);
-        const QJsonObject steered = fixture.payloads(receiver, "turn.steered").first();
-        QCOMPARE(steered.value("origin").toString(), "agent");
-        QCOMPARE(steered.value("text").toString(), "stop and check");
-        QVERIFY(logText(fixture.claudeLog).contains("steer:" + receiver.toUtf8()));
-        QCOMPARE(fixture.journal->agentMessage(sent.value("message_id").toString())->delivery,
-                 "steer");
-        // The running turn was steered, not replaced by an automatic one.
-        QCOMPARE(fixture.count(receiver, "user.message"), 1);
+            {{"to", fixture.number(receiver)}, {"text", "urgent two"}, {"urgent", true}});
+        const QJsonObject third = fixture.agents(
+            sender, "agents.send", {{"to", fixture.number(receiver)}, {"text", "plain three"}});
+        for (const QJsonObject& sent : {first, second, third}) {
+            QCOMPARE(sent.value("delivery").toString(), "queued");
+            QVERIFY(!sent.contains("waiting_on"));
+        }
+        QTest::qWait(100);
+        QVERIFY(!logText(fixture.claudeLog).contains("steer:" + receiver.toUtf8()));
+        QCOMPARE(fixture.count(receiver, "turn.steered"), 0);
+        QCOMPARE(fixture.journal->agentMessage(second.value("message_id").toString())->state,
+                 "queued");
+        // The running turn ends: everything arrives together, in one turn, urgent first.
+        QVERIFY(fixture.host
+                    ->handleCommand(request("session.interrupt", {}, receiver, 1), "desktop-test")
+                    .value("ok")
+                    .toBool());
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(receiver, "user.message"), 2, 5000);
+        const QString text =
+            fixture.payloads(receiver, "user.message").last().value("text").toString();
+        const qsizetype urgentAt = text.indexOf("urgent two");
+        QVERIFY2(urgentAt >= 0, qPrintable(text));
+        QVERIFY(urgentAt < text.indexOf("plain one"));
+        QVERIFY(text.indexOf("plain one") < text.indexOf("plain three"));
+        QCOMPARE(fixture.count(receiver, "turn.steered"), 0);
+        QVERIFY(!logText(fixture.claudeLog).contains("steer:" + receiver.toUtf8()));
+        for (const QJsonObject& sent : {first, second, third})
+            QTRY_COMPARE_WITH_TIMEOUT(
+                fixture.journal->agentMessage(sent.value("message_id").toString())->state,
+                "delivered", 5000);
     }
 
     void heldReleaseWaitsForBusyReceiverAndValidatesTheWholeBatch() {

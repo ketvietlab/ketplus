@@ -75,11 +75,6 @@ QString SessionHost::takeTeamWakeTask(const QString& sessionId, const QJsonObjec
     return task;
 }
 
-void SessionHost::forgetTeamWakeTasks(const QJsonObject& agentOrigin) {
-    for (const QJsonValue& entry : agentOrigin.value(QStringLiteral("agent_messages")).toArray())
-        teamWakeTasks_.remove(entry.toObject().value(QStringLiteral("message_id")).toString());
-}
-
 void SessionHost::resetTeamContext(Session& session, const QString& hint) {
     const QString sessionId = session.stored.id;
     if (!teams_)

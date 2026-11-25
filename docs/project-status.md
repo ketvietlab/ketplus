@@ -131,7 +131,9 @@ Linux store policy, signed upgrade prompts and platform release acceptance remai
   Settings → Teams, which a team created without its own takes (an older phone included);
   New team and the team's Automatic turns dialog set a team's own, a whole number from 5
   to 200, and a larger budget withdraws the budget decision and resumes the team, its used
-  turns still counted. The team page shows the turns used of it.
+  turns still counted. The team page shows the turns used of it. The budget counts the turns
+  that start: a batch of messages for one member is one turn, and an idle developer with several
+  messages in the outbox receives them after one quiet period as a single turn.
   Context reset (ADR 0114 §11, T-1): a turn the team starts begins a fresh native thread of
   the same provider at a task boundary (developers and reviewers) or past the team's
   threshold (developers and reviewers; `context_reset_turns`, 12 by default), never for a
@@ -626,7 +628,7 @@ Linux store policy, signed upgrade prompts and platform release acceptance remai
   Claude, Codex and Cursor turns receive their own `ketplus_agents` MCP server
   (the daemon executable's `--mcp-agents` mode, a per-conversation token and an
   agents-only IPC scope). Messages to idle conversations start a turn; busy ones
-  receive them when the turn ends, or by steering when `urgent`; a final answer
+  receive them, together and in order, when the turn ends (`urgent` only puts a message first and never steers); a final answer
   returns as the reply. Hop, chain and hourly limits hold runaway exchanges for
   the user's next turn, and requests expire after 24 hours. Delivered messages
   show as labelled agent bubbles, the sender and receiver get "Sent to @agent/N" and
