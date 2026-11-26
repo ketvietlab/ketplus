@@ -13,6 +13,7 @@
 #include <QVBoxLayout>
 namespace ketplus {
 void ExplorerPanel::createEntry(bool directory) {
+    applyPendingRoot();
     entryParent_ = targetDirectory();
     if (entryParent_.isEmpty())
         return;
