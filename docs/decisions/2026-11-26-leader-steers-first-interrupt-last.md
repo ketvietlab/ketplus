@@ -12,6 +12,14 @@ two tools only: a normal message that waits for the end of the turn, and
 `team_member_interrupt`, which ends the turn and can cut a build or test off halfway.
 Something important that cannot wait a whole turn should not need the heavy tool.
 
+## Why this partly reverses the 2026-11-25 change
+
+That change (commit e5e78abc) removed the steer path for every sender. The user then directed
+that a leader with something important must steer by default, and that only the leader may,
+with interrupt as the last resort. This decision therefore restores the removed steer path
+for the leader's `urgent` only; it keeps the removal for every other sender, which was the
+real cause of the problem (members steering each other at every tool boundary).
+
 ## Decisions
 
 1. **Only the leader steers.** `agents_send` with `urgent` from a team leader to a member
