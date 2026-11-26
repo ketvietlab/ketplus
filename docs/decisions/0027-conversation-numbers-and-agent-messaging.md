@@ -4,6 +4,7 @@ Status: accepted
 Date: 2026-11-01
 
 Amended 2026-11-25: `urgent` no longer steers (docs/decisions/2026-11-25-team-batched-delivery-and-leader-interrupt.md).
+Amended 2026-11-26: a team leader's `urgent` to a member of its team steers again; on a team nobody else may send it (docs/decisions/2026-11-26-leader-steers-first-interrupt-last.md).
 
 See also: ADR 0114 (agent teams) adds roles, tasks, digests and role addressing on
 top of these messages; nothing here changes.
@@ -296,7 +297,7 @@ Verification uses fake providers and consumes no quota. It covers:
 
 - delivery to idle and busy receivers, batched queues and the automatic reply
   from the final message;
-- an `urgent` message to a busy receiver staying queued, first in the next batch, never steering;
+- an `urgent` message outside a team to a busy receiver staying queued, first in the next batch, never steering; a team leader's `urgent` steering a member, and a developer's or reviewer's refused;
 - the hop, chain and hourly limits holding messages, release with the
   receiver's next user turn (including `#NNNN` references) and the 24-hour
   request expiry;

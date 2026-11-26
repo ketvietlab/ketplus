@@ -132,6 +132,21 @@ AgentConversation SessionHost::agentConversationOf(const Session& session) const
                           state == QStringLiteral("waiting_for_input") ||
                           state == QStringLiteral("stopping");
     conversation.idle = !turnOpen && !hasLiveBackgroundTasks(session);
+    const bool claude = stored.adapter == QStringLiteral("claude");
+    conversation.steerable = state == QStringLiteral("running") && !stored.turnId.isEmpty() &&
+                             (claude || !stored.threadId.isEmpty()) &&
+                             providerSupports(stored.adapter, compat::capability::turnSteer);
+    if (!conversation.idle && !conversation.steerable)
+        conversation.waitingOn =
+            state == QStringLiteral("waiting_for_input")
+                ? QStringLiteral("an approval or an answer from the user")
+            : state == QStringLiteral("stopping") ? QStringLiteral("its turn to stop")
+            : session.startingTurn || state == QStringLiteral("starting") ||
+                    (state == QStringLiteral("running") && stored.turnId.isEmpty())
+                ? QStringLiteral("its turn to start")
+            : state == QStringLiteral("running")
+                ? QStringLiteral("a running turn that its provider cannot steer")
+                : QStringLiteral("a background task (a command or wait it started)");
     return conversation;
 }
 
@@ -195,6 +210,27 @@ QString SessionHost::startReviewerConversation(const Session& working, const QSt
         return {};
     }
     return result.value(QStringLiteral("session_id")).toString();
+}
+
+QString SessionHost::steerAgentTurn(const QString& sessionId, const qint64 generation,
+                                    const QString& providerText, const QJsonObject& origin) {
+    const auto it = sessions_.constFind(sessionId);
+    if (it == sessions_.cend() || it->stored.generation != generation)
+        return QStringLiteral("The conversation no longer exists.");
+    const QJsonObject result =
+        steer(internalRequest(
+                  QStringLiteral("session.steer"), sessionId, generation,
+                  {{QStringLiteral("prompt"), providerText},
+                   {QStringLiteral("display_text"), displayText(origin)},
+                   {QStringLiteral("expected_context_revision"), it->stored.contextRevision}}),
+              {}, true, origin);
+    // T-1: a team message steered into a running turn was delivered there; its task is not
+    // the next wake's.
+    if (result.value(QStringLiteral("ok")).toBool())
+        forgetTeamWakeTasks(origin);
+    return result.value(QStringLiteral("ok")).toBool()
+               ? QString{}
+               : result.value(QStringLiteral("error_message")).toString();
 }
 
 qint64 SessionHost::agentTurnSequence(const QString& sessionId) const {
