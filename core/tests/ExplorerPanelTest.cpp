@@ -26,6 +26,7 @@ class ExplorerPanelTest final : public QObject {
     void opensFilesFromTheTree();
     void togglesFoldersFromTheTree();
     void revealsAnOpenFile();
+    void hiddenPanelLoadsItsRootWhenShown();
     void reportsInlineRenames();
     void createsInlineWithoutOverwritingExistingFiles();
     void filesAndFoldersShareTheIconAndNameColumns();
@@ -207,6 +208,43 @@ void ExplorerPanelTest::revealsAnOpenFile() {
     QVERIFY(elsewhere.isValid());
     explorer.revealPath(QDir(elsewhere.path()).filePath(QStringLiteral("other.cpp")));
     QCOMPARE(model->filePath(tree->currentIndex()), path);
+}
+
+void ExplorerPanelTest::hiddenPanelLoadsItsRootWhenShown() {
+    QTemporaryDir first;
+    QTemporaryDir second;
+    QVERIFY(first.isValid());
+    QVERIFY(second.isValid());
+    const QDir secondRoot(second.path());
+    QVERIFY(secondRoot.mkpath(QStringLiteral("src")));
+    const QString path = secondRoot.filePath(QStringLiteral("src/main.cpp"));
+    QFile file(path);
+    QVERIFY(file.open(QIODevice::WriteOnly));
+    file.close();
+
+    ketplus::ExplorerPanel explorer;
+    explorer.resize(280, 500);
+    explorer.show();
+    explorer.setRootPath(first.path());
+    auto* tree = explorer.findChild<QTreeView*>(QStringLiteral("explorerTree"));
+    QVERIFY(tree != nullptr);
+    auto* model = qobject_cast<QFileSystemModel*>(tree->model());
+    QVERIFY(model != nullptr);
+    QCOMPARE(model->rootPath(), first.path());
+
+    // Switching conversations while the panel is hidden names the new folder but does not
+    // load or watch it yet.
+    explorer.hide();
+    explorer.setRootPath(second.path());
+    explorer.revealPath(path);
+    QCOMPARE(explorer.rootPath(), second.path());
+    QCOMPARE(model->rootPath(), first.path());
+    QCOMPARE(model->filePath(tree->rootIndex()), first.path());
+
+    explorer.show();
+    QCOMPARE(model->rootPath(), second.path());
+    QCOMPARE(model->filePath(tree->rootIndex()), second.path());
+    QTRY_VERIFY_WITH_TIMEOUT(model->filePath(tree->currentIndex()) == path, 3000);
 }
 
 void ExplorerPanelTest::loadsOnlyAfterReceivingARoot() {

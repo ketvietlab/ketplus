@@ -25,6 +25,9 @@ class ExplorerPanel final : public QWidget {
     explicit ExplorerPanel(QWidget* parent = nullptr);
 
     [[nodiscard]] QString rootPath() const;
+    // A panel that was hidden with hide() keeps the new root and loads it when it is shown
+    // again: loading a folder starts watching it, which on macOS blocks until FSEvents
+    // flushes, and nobody sees the tree meanwhile.
     void setRootPath(const QString& path);
     // Expands the folders down to `path` and selects it. Folders load in the background, so
     // a path whose folders are not there yet is revealed once they arrive.
@@ -48,8 +51,10 @@ class ExplorerPanel final : public QWidget {
 
   protected:
     bool eventFilter(QObject* watched, QEvent* event) override;
+    void showEvent(QShowEvent* event) override;
 
   private:
+    void applyPendingRoot();
     void installRowDelegate();
     QHash<QString, QString> fileStatuses_;
     void activateIndex(const QModelIndex& index);
@@ -78,6 +83,7 @@ class ExplorerPanel final : public QWidget {
     ket::FileRow* rootRow_{nullptr};
     QString rootPath_;
     QString pendingReveal_;
+    bool rootPending_{false};
     bool showHiddenFiles_{false};
     std::function<int(const QString& path)> unsavedTabs_;
 };
