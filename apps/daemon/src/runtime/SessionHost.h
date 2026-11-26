@@ -677,6 +677,8 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     [[nodiscard]] QList<AgentConversation> agentConversations() const override;
     QString startAgentTurn(const QString& sessionId, qint64 generation, const QString& providerText,
                            const QJsonObject& origin) override;
+    QString steerAgentTurn(const QString& sessionId, qint64 generation, const QString& providerText,
+                           const QJsonObject& origin) override;
     [[nodiscard]] qint64 agentTurnSequence(const QString& sessionId) const override;
     void appendAgentNotice(const QString& sessionId, qint64 generation,
                            const QJsonObject& payload) override;
@@ -748,8 +750,9 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     };
     QHash<QString, TeamWakeTask> teamWakeTasks_;
     // The task of the last message the turn delivers that names one; forgets the session's
-    // hints for messages already delivered (a user's turn).
+    // hints for messages already delivered (a user's turn, a steer).
     QString takeTeamWakeTask(const QString& sessionId, const QJsonObject& agentOrigin);
+    void forgetTeamWakeTasks(const QJsonObject& agentOrigin);
     // ADR 0114 §2: the one directory a team's reviewer may write in during a review round.
     [[nodiscard]] QString reviewScratchDirectory(const QString& sessionId) const;
     QTemporaryDir attachmentDirectory_;

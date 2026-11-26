@@ -790,6 +790,64 @@ class TeamAgentToolsTest final : public QObject {
                     .toBool());
     }
 
+    void onlyTheLeaderMaySteerOnATeam() {
+        Fixture fixture;
+        QVERIFY(fixture.open());
+        const Team team = create(fixture, {}, "Shop", "claude", "claude");
+        QVERIFY(!team.id.isEmpty());
+        QCOMPARE(
+            fixture.start("claude", "hang", team.developer, fixture.directory.filePath("shop")),
+            team.developer);
+        QTRY_VERIFY_WITH_TIMEOUT(fixture.count(team.developer, "turn.started") >= 1, 5000);
+        const auto send = [&](const QString& caller, const QString& to, const QString& body,
+                              const bool urgent) {
+            QJsonObject payload{{"to", fixture.number(to)}, {"text", body}};
+            if (urgent)
+                payload.insert("urgent", true);
+            return fixture.agents(caller, "agents.send", payload);
+        };
+        // The role decides, not the prompt: a developer and a reviewer are refused.
+        for (const QString& caller : {team.second, team.reviewer}) {
+            const QJsonObject refused = send(caller, team.developer, "now", true);
+            QCOMPARE(refused.value("error_code").toString(), QStringLiteral("urgent_leader_only"));
+            QVERIFY(refused.value("error_message").toString().contains("leader"));
+        }
+        QVERIFY(fixture.journal->agentMessagesTo(team.developer, 1, {QStringLiteral("queued")})
+                    .isEmpty());
+        // A normal message between members is unchanged: queued for the end of the turn.
+        const QJsonObject plain = send(team.second, team.developer, "when you can", false);
+        QVERIFY2(plain.value("ok").toBool(), qPrintable(text(plain)));
+        QCOMPARE(plain.value("delivery").toString(), QStringLiteral("queued"));
+        QCOMPARE(fixture.count(team.developer, "turn.steered"), 0);
+        // The leader steers the running turn.
+        const QJsonObject steered = send(team.leader, team.developer, "look now", true);
+        QVERIFY2(steered.value("ok").toBool(), qPrintable(text(steered)));
+        QCOMPARE(steered.value("delivery").toString(), QStringLiteral("steering"));
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(team.developer, "turn.steered"), 1, 5000);
+        QCOMPARE(fixture.journal->agentMessage(steered.value("message_id").toString())->delivery,
+                 QStringLiteral("steer"));
+        // The plain message was not steered with it.
+        QCOMPARE(fixture.journal->agentMessage(plain.value("message_id").toString())->state,
+                 QStringLiteral("queued"));
+    }
+
+    void aLeadersUrgentMessageToATurnInAToolCallSaysWhenItIsRead() {
+        Fixture fixture;
+        QVERIFY(fixture.open());
+        const Team team = create(fixture, {}, "Shop", "claude", "claude");
+        QVERIFY(!team.id.isEmpty());
+        QCOMPARE(fixture.start("claude", "tool-hang", team.developer,
+                               fixture.directory.filePath("shop")),
+                 team.developer);
+        QTRY_VERIFY_WITH_TIMEOUT(fixture.count(team.developer, "item.started") >= 1, 5000);
+        const QJsonObject sent = fixture.agents(
+            team.leader, "agents.send",
+            {{"to", fixture.number(team.developer)}, {"text", "look now"}, {"urgent", true}});
+        QCOMPARE(sent.value("delivery").toString(), QStringLiteral("steering"));
+        QCOMPARE(sent.value("waiting_on").toString(), QStringLiteral("a command (Bash)"));
+        QVERIFY(sent.value("note").toString().contains("reads the message when that call ends"));
+    }
+
     void toolsAreListedOnlyForAMember() {
         const auto listWith = [](const QJsonObject& whoami) {
             const QJsonObject answer = agent_mcp::handleMessage(

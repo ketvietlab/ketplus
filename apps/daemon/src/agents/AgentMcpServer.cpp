@@ -146,8 +146,12 @@ QJsonArray tools() {
                  "Send a message to another KetPlus conversation by its number. An idle "
                  "conversation starts a turn for it; a busy one receives it when its turn ends. "
                  "The receipt's delivery is starting, queued (delivered with the other queued "
-                 "messages, in one turn, when its turn ends) or recorded (a review's answer). "
-                 "With expect_reply, "
+                 "messages, in one turn, when its turn ends), steering (urgent, from a team "
+                 "leader: added to the running turn), urgent_waiting (urgent, but the "
+                 "receiver cannot be steered now; waiting_on and note say what it waits on, "
+                 "and the message arrives at the first point it can) or recorded (a review's "
+                 "answer). Steering with waiting_on means the turn reads it when its tool call "
+                 "ends. Steer first: team_member_interrupt is the last resort. With expect_reply, "
                  "the answer arrives later as a "
                  "message in this conversation; do not wait or poll for it.")},
             {QStringLiteral("inputSchema"),
@@ -166,8 +170,12 @@ QJsonArray tools() {
                                QStringLiteral("Message ID this message answers."))},
                      {QStringLiteral("urgent"),
                       property(QStringLiteral("boolean"),
-                               QStringLiteral("Put the message first in the receiver's queue. It "
-                                              "never interrupts a running turn."))}},
+                               QStringLiteral("Put the message first in the receiver's queue. "
+                                              "From a team leader to a member of its team "
+                                              "it also steers the receiver's running turn; "
+                                              "when that cannot happen yet, the receipt says "
+                                              "urgent_waiting. On a team only the leader may "
+                                              "set it: a developer or reviewer is refused."))}},
                     {QStringLiteral("to"), QStringLiteral("text")})}},
         QJsonObject{
             {QStringLiteral("name"), QStringLiteral("agents_inbox")},

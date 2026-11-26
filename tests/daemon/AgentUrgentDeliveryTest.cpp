@@ -1,5 +1,5 @@
-// ADR 0027: an urgent message never steers a running turn. The receipt says queued, and the
-// agent instructions and the tool description name no steering state.
+// ADR 0114 §11: only a team leader's urgent message steers; outside a team an urgent message
+// is queued first and never steers. The instructions and the tool description name every state.
 #include "agents/AgentBroker.h"
 #include "agents/AgentInstructions.h"
 #include "agents/AgentMcpServer.h"
@@ -53,10 +53,11 @@ class AgentUrgentDeliveryTest final : public QObject {
 
     void receiptStatesAreDescribedToAgents() {
         const QString instructions = agent_messaging::toolInstructions();
-        for (const QString& state : {"starting", "queued", "recorded"})
+        for (const QString& state :
+             {"starting", "queued", "steering", "urgent_waiting", "recorded", "waiting_on"})
             QVERIFY2(instructions.contains(state), qPrintable(state));
-        for (const QString& gone : {"steering", "urgent_waiting", "waiting_on"})
-            QVERIFY2(!instructions.contains(gone), qPrintable(gone));
+        QVERIFY(!instructions.contains("never interrupted"));
+        QVERIFY(instructions.contains("only the leader may send urgent"));
         const agent_mcp::DaemonCall call = [](const QString&, const QJsonObject&) {
             return QJsonObject{{"ok", true}};
         };
@@ -72,10 +73,10 @@ class AgentUrgentDeliveryTest final : public QObject {
             if (tool.toObject().value("name").toString() == "agents_send")
                 send = tool.toObject();
         const QString description = send.value("description").toString();
-        for (const QString& state : {"starting", "queued", "recorded"})
+        for (const QString& state :
+             {"starting", "queued", "steering", "urgent_waiting", "recorded", "waiting_on"})
             QVERIFY2(description.contains(state), qPrintable(state));
-        for (const QString& gone : {"steering", "urgent_waiting", "waiting_on"})
-            QVERIFY2(!description.contains(gone), qPrintable(gone));
+        QVERIFY(description.contains("team_member_interrupt is the last resort"));
         const QJsonObject urgent = send.value("inputSchema")
                                        .toObject()
                                        .value("properties")
@@ -83,7 +84,7 @@ class AgentUrgentDeliveryTest final : public QObject {
                                        .value("urgent")
                                        .toObject();
         QCOMPARE(urgent.value("type").toString(), "boolean");
-        QVERIFY(!urgent.value("description").toString().contains("urgent_waiting"));
+        QVERIFY(urgent.value("description").toString().contains("urgent_waiting"));
     }
 };
 

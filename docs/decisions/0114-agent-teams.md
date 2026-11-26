@@ -496,8 +496,12 @@ fires. The record ends when the developer's turn ends without a new wait, when
 the wait is cancelled (the user's Stop), and when the member leaves the team, so a
 later wait for the same thing notifies the leader again.
 
-**Team messages never steer (decided 2026-11-25, replaces the 2026-11-12 rule on urgent
-messages).** A message to a busy member waits for the end of its turn, also with `urgent`,
+**Team messages never steer, except the leader's `urgent` (decided 2026-11-25, replaces the
+2026-11-12 rule on urgent messages; amended 2026-11-26: a leader's `urgent` to a member of
+its team steers the running turn, `steering` or `urgent_waiting`, and a developer or reviewer
+sending `urgent` is refused with `urgent_leader_only`; the leader steers first and uses
+`team_member_interrupt` only as the last resort, see
+`docs/decisions/2026-11-26-leader-steers-first-interrupt-last.md`).** A message to a busy member waits for the end of its turn, also with `urgent`,
 which only moves it to the front of the member's queue. The receipt says `queued`; `steering`
 and `urgent_waiting` no longer exist. Everything queued for a member is delivered in one turn
 when it goes idle, and the team's turn budget counts the turns that start, not the messages

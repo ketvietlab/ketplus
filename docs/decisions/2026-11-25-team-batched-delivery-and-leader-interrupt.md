@@ -1,6 +1,9 @@
 # The leader keeps its context, team messages arrive in batches, the leader can interrupt
 
 Status: accepted direction; implementation tracked as team tasks T-9 to T-11.
+Amended 2026-11-26: the leader's `urgent` steers again and interrupt is the last resort
+([decision](2026-11-26-leader-steers-first-interrupt-last.md)); decision 2 below still holds
+for every other sender.
 Amends [ADR 0114](0114-agent-teams.md) §11 (context reset) and
 [ADR 0027](0027-conversation-numbers-and-agent-messaging.md) (`urgent` delivery).
 
