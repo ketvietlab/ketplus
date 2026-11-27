@@ -17,9 +17,14 @@ namespace ketplus::agent_message {
 //   groupLeaderKey  (internal field, not a role) messageKey of the current leader row
 //   groupRole     "leader" for the first row, "member" for the rest, empty when ungrouped
 //   groupSummary  summary text, set on the leader
+//   groupLatest   the title of the group's last row, set on the leader: a running group's
+//                 heading names the step it is on (T-91)
 //   groupSize     number of rows in the group, set on the leader
 //   groupRunning  whether any row in the group is still running, set on every row of the group
 //   groupFailed   number of failed rows, set on the leader
+//   groupTail     whether no row follows the group, set on the leader (and on a daemon group
+//                 row): while the turn runs, such a group has not ended even when none of its
+//                 rows is running, between two steps (T-91)
 [[nodiscard]] bool isGroupableActivity(const QVariantMap& row);
 // What a group's steps did, in first-seen order, so a local run and a daemon summary read
 // the same. Family ids: command, read, list, edit, search (the web), codeSearch, fileSearch,
@@ -31,8 +36,8 @@ struct ActivityTally final {
         int count{0};
     };
     QList<Family> families;
-    QStringList servers;
-    int serverSteps{0};
+    // Tool servers in first-seen order, with the steps each took.
+    QList<Family> servers;
     int subagents{0};
     int added{0};
     int removed{0};
@@ -41,10 +46,13 @@ struct ActivityTally final {
     void add(const QString& id, int amount);
     void addServer(const QString& server, int steps);
 };
-// "Ran 3 commands, read 2 files, edited a file +1 -1 (1 failed)".
+// "Ran 3 commands, used ketplus_browser 4 times, edited a file +1 -1 (1 failed)". Thoughts
+// are not counted unless the group has nothing else.
 [[nodiscard]] QString activityTallySummary(const ActivityTally& tally);
 [[nodiscard]] QString activityGroupSummary(const QList<QVariantMap>& rows, qsizetype first,
                                            qsizetype count);
+// The heading of a running group: the title its last row shows, on one line.
+[[nodiscard]] QString activityGroupLatest(const QVariantMap& row);
 // Recomputes group roles for every row and returns the indexes whose group roles changed.
 QList<int> assignActivityGroups(QList<QVariantMap>& rows);
 // Incremental form: recomputes only the runs touching rows [first, last] (widened to the

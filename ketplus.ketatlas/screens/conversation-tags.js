@@ -41,7 +41,7 @@ K.conversationNumber = (scope, record) => {
 };
 K.tagSeeds = {
     "ketplus-desktop:develop": { navigation: ["ui"], startup: ["perf", "review"], atlas: ["atlas"] },
-    "ketviet:develop": { navigation: ["account", "ui"], startup: ["account", "bug", "review"] },
+    "sample-project:develop": { navigation: ["account", "ui"], startup: ["account", "bug", "review"] },
 };
 K.seedConversationTags = scope => {
     if (scope.tagsSeeded) return scope;

@@ -185,7 +185,7 @@ K.ensureScope = (tree = K.tree, repo = K.repo) => {
                   }
                 : repo === "api-service"
                 ? {}
-                : !["ketplus-desktop", "ketviet"].includes(repo)
+                : !["ketplus-desktop", "sample-project"].includes(repo)
                 ? {}
                 : main
                 ? {
@@ -211,7 +211,7 @@ K.ensureScope = (tree = K.tree, repo = K.repo) => {
         if (main) {
             const activity = repo === "ketplus-desktop"
                 ? { navigation: 3000, startup: 2000, atlas: 1000 }
-                : repo === "ketviet"
+                : repo === "sample-project"
                   ? { navigation: 1800, startup: 1600, atlas: 1400 }
                   : repo === "api-service"
                     ? { "linux-build": 2400 }
@@ -371,9 +371,9 @@ K.statusLabel = (state, cls = "") => {
 };
 K.repositoryCatalog = [
     { id: "benchmark-mongodb", label: "benchmark-mongodb", location: "local" },
-    { id: "ketviet", label: "ketviet", location: "local" },
+    { id: "sample-project", label: "sample-project", location: "local" },
     { id: "ketplus-desktop", label: "ketplus-desktop", location: "local" },
-    { id: "ketplus-app", label: "ketplus-app", location: "local" },
+    { id: "sample-mobile", label: "sample-mobile", location: "local" },
     { id: "ketatlas", label: "ketatlas", location: "local" },
     { id: "flow", label: "flow", location: "local" },
     { id: "api-service", label: "api-service", location: "remote", hostId: "linux-build-01" },
@@ -389,7 +389,7 @@ K.selectedMachine = () => {
         ? machine : "local";
 };
 K.repositoryRecords = (repo = K.repo) => {
-    if (!Object.values(K.demo.scopes).some((scope) => scope.repo === repo) && ["ketviet", "ketplus-desktop", "api-service"].includes(repo))
+    if (!Object.values(K.demo.scopes).some((scope) => scope.repo === repo) && ["sample-project", "ketplus-desktop", "api-service"].includes(repo))
         K.ensureScope("develop", repo);
     return Object.values(K.demo.scopes)
         .filter((scope) => scope.repo === repo && !scope.archived && !scope.deleted)

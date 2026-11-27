@@ -59,20 +59,35 @@ struct Fixture final {
     std::unique_ptr<CursorAdapter> cursor;
     std::unique_ptr<SessionHost> host;
 
+    // The daemon's order (DaemonService): stopping an adapter fails its pending calls into the
+    // host, and a stop may report itself to the host, so every adapter stops while the host and
+    // the other adapters still exist. The host then goes before the adapters it points to.
+    ~Fixture() {
+        for (ProviderAdapter* adapter : {static_cast<ProviderAdapter*>(codex.get()),
+                                         static_cast<ProviderAdapter*>(claude.get()),
+                                         static_cast<ProviderAdapter*>(cursor.get())})
+            if (adapter != nullptr)
+                adapter->stop();
+        host.reset();
+        cursor.reset();
+        claude.reset();
+        codex.reset();
+    }
+
     bool open(const bool endpoint = false) {
         if (!directory.isValid())
             return false;
         codexLog = directory.filePath("codex.log");
         claudeLog = directory.filePath("claude.log");
         cursorLog = directory.filePath("cursor.log");
-        if (!writeFakeCodex(directory.filePath("fake-codex"), codexLog) ||
-            !writeFakeClaude(directory.filePath("fake-claude"), claudeLog) ||
-            !writeFakeCursor(directory.filePath("fake-cursor"), cursorLog))
+        if (!writeFakeCodex(directory.filePath(fixtureName("fake-codex")), codexLog) ||
+            !writeFakeClaude(directory.filePath(fixtureName("fake-claude")), claudeLog) ||
+            !writeFakeCursor(directory.filePath(fixtureName("fake-cursor")), cursorLog))
             return false;
         journal = std::make_unique<LocalJournal>(directory.filePath("journal.sqlite3"));
-        codex = std::make_unique<CodexAdapter>(directory.filePath("fake-codex"));
-        claude = std::make_unique<ClaudeAdapter>(directory.filePath("fake-claude"));
-        cursor = std::make_unique<CursorAdapter>(directory.filePath("fake-cursor"));
+        codex = std::make_unique<CodexAdapter>(directory.filePath(fixtureName("fake-codex")));
+        claude = std::make_unique<ClaudeAdapter>(directory.filePath(fixtureName("fake-claude")));
+        cursor = std::make_unique<CursorAdapter>(directory.filePath(fixtureName("fake-cursor")));
         restart(endpoint);
         return journal->isOpen();
     }
@@ -86,13 +101,13 @@ struct Fixture final {
     }
 
     QString start(const QString& provider, const QString& prompt, const QString& sessionId = {},
-                  const QString& worktree = {}) {
+                  const QString& worktree = {},
+                  const QString& permission = QStringLiteral("workspace-write")) {
         const QJsonObject result = host->handleCommand(
             request("session.start_turn",
                     {{"worktree_path", worktree.isEmpty() ? directory.path() : worktree},
                      {"prompt", prompt},
-                     {"options",
-                      QJsonObject{{"provider", provider}, {"permission", "workspace-write"}}}},
+                     {"options", QJsonObject{{"provider", provider}, {"permission", permission}}}},
                     sessionId, sessionId.isEmpty() ? -1 : 1),
             "desktop-test");
         return result.value("ok").toBool() ? result.value("session_id").toString() : QString{};

@@ -24,11 +24,13 @@ int main(int argc, char* argv[]) {
     startupTimer.start();
 
     QApplication app(argc, argv);
-    // The name keeps the settings location of KetPlus CM installs; users see KétPlus.
+    // The name keeps the settings location of KetPlus CM installs; users see ketPlus.
     QCoreApplication::setApplicationName(QStringLiteral("KetPlus CM"));
-    QGuiApplication::setApplicationDisplayName(QStringLiteral("KétPlus"));
+    QGuiApplication::setApplicationDisplayName(QStringLiteral("ketPlus"));
     QCoreApplication::setApplicationVersion(QStringLiteral(KETPLUS_CM_VERSION));
     QCoreApplication::setOrganizationName(QStringLiteral("Ketsuite"));
+    // Matches core/assets/linux/ketplus.desktop, so Wayland compositors use its name and icon.
+    QGuiApplication::setDesktopFileName(QStringLiteral("ketplus"));
     QApplication::setWindowIcon(QIcon(QStringLiteral(":/brand/ketplus-app-icon.png")));
 
     // Capture/benchmark runs use a clean temporary preference store and cannot

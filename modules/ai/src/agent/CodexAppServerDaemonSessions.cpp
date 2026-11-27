@@ -65,11 +65,6 @@ void CodexAppServer::setupDaemonTransport() {
     });
     connect(daemon_, &remote::DaemonClient::eventReceived, this,
             &CodexAppServer::consumeDaemonEvent);
-    connect(daemon_, &remote::DaemonClient::noticeReceived, this,
-            [this](const QString& type, const QJsonObject& payload) {
-                if (type == QStringLiteral("tags.changed"))
-                    emit tagsChanged(payload);
-            });
     connect(daemon_, &remote::DaemonClient::disconnected, this, [](const QString&) {});
 }
 
@@ -454,17 +449,8 @@ void CodexAppServer::daemonCall(const QString& method, const QJsonObject& params
         daemon_->call(operation, {}, sessionId, found->generation, std::move(callback));
         return;
     }
-    if (method == QStringLiteral("task/stop") || method == QStringLiteral("task/output")) {
-        const QString sessionId = params.value(QStringLiteral("threadId")).toString();
-        auto found = daemonSessions_.find(sessionId);
-        if (found == daemonSessions_.end()) {
-            callback({}, QStringLiteral("Unknown daemon session."));
-            return;
-        }
-        daemon_->call(method == QStringLiteral("task/stop") ? QStringLiteral("session.task.stop")
-                                                            : QStringLiteral("session.task.output"),
-                      {{QStringLiteral("task_id"), params.value(QStringLiteral("taskId"))}},
-                      sessionId, found->generation, std::move(callback));
+    if (method.startsWith(QStringLiteral("task/"))) {
+        callDaemonBackgroundTask(method, params, std::move(callback));
         return;
     }
     callback({}, QStringLiteral("KetPlus Daemon does not support %1 yet.").arg(method));
@@ -506,45 +492,6 @@ void CodexAppServer::setDaemonSessionArchived(const QString& sessionId, const bo
     }
     daemon_->call(QStringLiteral("session.set_archived"), {{QStringLiteral("archived"), archived}},
                   sessionId, found->generation, std::move(callback));
-}
-
-void CodexAppServer::setDaemonSessionTags(const QString& sessionId, const QStringList& tags,
-                                          ResponseCallback callback) {
-    if (!hasTagSupport() || sessionId.isEmpty()) {
-        callback({}, QStringLiteral("This daemon does not store conversation tags."));
-        return;
-    }
-    const auto found = daemonSessions_.constFind(sessionId);
-    if (found == daemonSessions_.cend()) {
-        callback({}, QStringLiteral("Unknown daemon session."));
-        return;
-    }
-    daemon_->call(QStringLiteral("session.tags.set"),
-                  {{QStringLiteral("tags"), QJsonArray::fromStringList(tags)}}, sessionId,
-                  found->generation, std::move(callback));
-}
-
-bool CodexAppServer::hasTagCatalogSupport() const noexcept {
-    return daemon_ && daemon_->hasFeature(QStringLiteral("tags.catalog/1"));
-}
-
-void CodexAppServer::readTagCatalog(ResponseCallback callback) {
-    if (!hasTagCatalogSupport()) {
-        callback({}, QStringLiteral("This daemon does not keep a tag catalog."));
-        return;
-    }
-    daemon_->call(QStringLiteral("tags.catalog"), {}, {}, -1, std::move(callback));
-}
-
-void CodexAppServer::setTagCatalog(const QJsonArray& tags, const QJsonObject& renames,
-                                   ResponseCallback callback) {
-    if (!hasTagCatalogSupport()) {
-        callback({}, QStringLiteral("This daemon does not keep a tag catalog."));
-        return;
-    }
-    daemon_->call(QStringLiteral("tags.catalog.set"),
-                  {{QStringLiteral("tags"), tags}, {QStringLiteral("renames"), renames}}, {}, -1,
-                  std::move(callback));
 }
 
 void CodexAppServer::markDaemonSessionDone(const QString& sessionId, ResponseCallback callback) {
@@ -638,7 +585,9 @@ void CodexAppServer::refreshDaemonSessions() {
             emit notificationReceived(
                 QStringLiteral("thread/backgroundTasks/updated"),
                 {{QStringLiteral("threadId"), sessionId},
-                 {QStringLiteral("tasks"), stored.value(QStringLiteral("background_tasks"))}});
+                 {QStringLiteral("tasks"), stored.value(QStringLiteral("background_tasks"))},
+                 {QStringLiteral("summary"),
+                  stored.value(QStringLiteral("background_task_summary"))}});
             if (!daemonHasTranscriptWindow_)
                 emit daemonSessionRestoreStarted(sessionId);
         }

@@ -1,11 +1,14 @@
 #include "runtime/SessionHost.h"
 
+#include "agents/ReviewerPolicy.h"
+#include "agents/WorkReport.h"
 #include "providers/ClaudeAdapter.h"
 #include "providers/CodexAdapter.h"
 #include "providers/CursorAdapter.h"
 #include "runtime/ApprovalBroker.h"
 #include "runtime/CompactWindowPolicy.h"
 
+#include <QDir>
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonObject>
@@ -18,8 +21,17 @@ bool reviewGuard(const QJsonObject& options) {
     return options.value(QStringLiteral("review_guard")).toBool();
 }
 
+// ketplus#295: a Codex reviewer reviews with its own Full access, never with less; the broker
+// checks the reviewed branch after the turn instead of guarding each tool call.
+bool fullAccessReview(const QJsonObject& options) {
+    return reviewGuard(options) &&
+           reviewer::supported(options.value(QStringLiteral("provider")).toString(),
+                               options.value(QStringLiteral("execution_policy")).toString()) &&
+           reviewer::checksBranch(options.value(QStringLiteral("provider")).toString());
+}
+
 QString sandboxName(const QJsonObject& options) {
-    if (reviewGuard(options))
+    if (reviewGuard(options) && !fullAccessReview(options))
         return QStringLiteral("read-only");
     if (options.value(QStringLiteral("execution_policy")).toString() == QStringLiteral("full"))
         return QStringLiteral("danger-full-access");
@@ -33,7 +45,7 @@ QString sandboxName(const QJsonObject& options) {
 }
 
 QString approvalPolicy(const QJsonObject& options) {
-    // Defence in depth: reviews only reach Claude (AgentBroker::enforcesReviewGuard).
+    // Defence in depth: reviews reach only Claude or Codex with Full access (ReviewerPolicy.h).
     if (reviewGuard(options))
         return QStringLiteral("never");
     return options.value(QStringLiteral("execution_policy")).toString() == QStringLiteral("full")
@@ -77,7 +89,15 @@ QJsonArray SessionHost::imagePaths(const QJsonArray& input) {
 // ADR 0027: Codex receives the agent tools as per-thread config beside the compact window, with
 // its routing in developerInstructions (the browser policy is appended after it).
 void SessionHost::addCodexAgentTools(Session& session, QJsonObject& params, QJsonObject config) {
+    const QString teamRole =
+        teamMembership(session.stored.id).value(QStringLiteral("role")).toString();
+    if (!teamRole.isEmpty())
+        params.insert(QStringLiteral("teamRole"), teamRole);
     if (const auto launch = agentLaunch(session.stored.id, session.stored.generation)) {
+        if (!launch->transportEpoch.isEmpty()) {
+            params.insert("managedSessionId", session.stored.id);
+            params.insert("managedTransportEpoch", launch->transportEpoch);
+        }
         const QJsonObject agentConfig = agent_tools::codexConfig(*launch);
         for (auto entry = agentConfig.constBegin(); entry != agentConfig.constEnd(); ++entry)
             config.insert(entry.key(), entry.value());
@@ -89,19 +109,29 @@ void SessionHost::addCodexAgentTools(Session& session, QJsonObject& params, QJso
 }
 
 void SessionHost::prepareTurn(const QString& sessionId, const qint64 generation,
-                              const QJsonArray& input, const QJsonObject& options) {
+                              const QJsonArray& originalInput, const QJsonObject& options) {
     auto it = sessions_.find(sessionId);
     if (it == sessions_.end() || it->stored.generation != generation) {
         return;
     }
     noteProviderRuntime(sessionId, generation);
+    prepareManagedTaskOrigin(*it, options);
     const qint64 compactWindow = options.value(QStringLiteral("compactWindow")).toInteger();
+    QJsonArray input = originalInput;
+    if (it->stored.threadId.isEmpty() && !agentSocket_.isEmpty() && !agentExecutable_.isEmpty()) {
+        const QString number = journal_->conversationNumber(sessionId, generation);
+        if (!number.isEmpty())
+            input.append(QJsonObject{
+                {"type", "text"},
+                {"text", agent_messaging::conversationContext(number, teamContextFor(sessionId))}});
+    }
     if (it->stored.adapter == QStringLiteral("claude")) {
         beginClaudeTurn(sessionId, generation, input, options);
         return;
     }
-    if (it->stored.adapter == QStringLiteral("cursor")) {
-        beginCursorTurn(sessionId, generation, input, options);
+    if (it->stored.adapter == QStringLiteral("cursor") ||
+        it->stored.adapter == QStringLiteral("copilot")) {
+        beginAcpTurn(sessionId, generation, input, options);
         return;
     }
     if (it->stored.threadId.isEmpty()) {
@@ -117,16 +147,21 @@ void SessionHost::prepareTurn(const QString& sessionId, const qint64 generation,
         addCodexAgentTools(*it, params, context_harness::codexCompactConfig(compactWindow));
         adapter_->call(
             QStringLiteral("thread/start"), params,
-            [this, sessionId, generation, input, options,
-             compactWindow](const QJsonObject& result, const QString& providerError) {
+            [this, sessionId, generation, input, options, compactWindow,
+             epoch = params.value("managedTransportEpoch").toString()](
+                const QJsonObject& result, const QString& providerError) {
                 auto current = sessions_.find(sessionId);
                 if (current == sessions_.end() || current->stored.generation != generation) {
                     return;
                 }
+                if (!isManagedTaskEpoch(*current, epoch))
+                    return;
                 if (!providerError.isEmpty()) {
                     failTurnStart(*current, providerError);
                     return;
                 }
+                if (!acknowledgeManagedTaskOrigin(*current, epoch, result))
+                    return;
                 current->stored.threadId = result.value(QStringLiteral("thread"))
                                                .toObject()
                                                .value(QStringLiteral("id"))
@@ -144,7 +179,8 @@ void SessionHost::prepareTurn(const QString& sessionId, const qint64 generation,
             });
         return;
     }
-    if (it->attachedToProvider && it->providerCompactWindow == compactWindow) {
+    if (it->attachedToProvider && it->providerCompactWindow == compactWindow &&
+        it->mutationOrigin.bootstrap().transportEpoch.isEmpty()) {
         beginTurn(sessionId, generation, input, options);
         return;
     }
@@ -156,16 +192,21 @@ void SessionHost::prepareTurn(const QString& sessionId, const qint64 generation,
                        {QStringLiteral("excludeTurns"), true}};
     addCodexAgentTools(*it, params, context_harness::codexCompactConfig(compactWindow));
     adapter_->call(QStringLiteral("thread/resume"), params,
-                   [this, sessionId, generation, input, options,
-                    compactWindow](const QJsonObject&, const QString& providerError) {
+                   [this, sessionId, generation, input, options, compactWindow,
+                    epoch = params.value("managedTransportEpoch").toString()](
+                       const QJsonObject& result, const QString& providerError) {
                        auto current = sessions_.find(sessionId);
                        if (current == sessions_.end() || current->stored.generation != generation) {
                            return;
                        }
+                       if (!isManagedTaskEpoch(*current, epoch))
+                           return;
                        if (!providerError.isEmpty()) {
                            failTurnStart(*current, providerError);
                            return;
                        }
+                       if (!acknowledgeManagedTaskOrigin(*current, epoch, result))
+                           return;
                        current->attachedToProvider = true;
                        current->providerCompactWindow = compactWindow;
                        syncProviderTitle(*current);
@@ -192,8 +233,20 @@ void SessionHost::beginClaudeTurn(const QString& sessionId, const qint64 generat
                        // reaches the agent as its prompt-free mode, not only Codex's sandbox.
                        {QStringLiteral("permission"), sandboxName(options)},
                        {QStringLiteral("images"), imagePaths(input)}};
-    if (reviewGuard(options))
+    if (reviewGuard(options)) {
         params.insert(QStringLiteral("reviewGuard"), true);
+        // ADR 0114 §2: a team's review round verifies; anything else stays read-only.
+        const QString scratch = reviewScratchDirectory(sessionId);
+        if (options.value(QStringLiteral("review_profile")).toString() ==
+                QStringLiteral("verify") &&
+            QDir().mkpath(scratch)) {
+            params.insert(QStringLiteral("reviewProfile"), QStringLiteral("verify"));
+            params.insert(QStringLiteral("scratchDirectory"),
+                          QFileInfo(scratch).canonicalFilePath());
+        } else {
+            params.insert(QStringLiteral("reviewProfile"), QStringLiteral("read"));
+        }
+    }
     params.insert(QStringLiteral("freshContext"), it->stored.threadId.isEmpty());
     // The handoff transcript lives outside the worktree; Claude may read it without asking.
     const QString handoff = handoffDirectory(sessionId);
@@ -208,24 +261,35 @@ void SessionHost::beginClaudeTurn(const QString& sessionId, const qint64 generat
         params.insert(QStringLiteral("compactWindow"), window);
     if (!it->stored.threadId.isEmpty())
         params.insert(QStringLiteral("resume"), it->stored.threadId);
+    const QString teamRole = teamMembership(sessionId).value(QStringLiteral("role")).toString();
     if (const auto launch = agentLaunch(sessionId, generation)) {
-        params.insert(QStringLiteral("agentMcpServer"), agent_tools::claudeServer(*launch));
+        params.insert(QStringLiteral("agentMcpServer"),
+                      agent_tools::claudeServer(*launch, teamRole == QStringLiteral("developer")));
+        params.insert(QStringLiteral("managedTransportEpoch"), launch->transportEpoch);
         params.insert(QStringLiteral("agentInstructions"), agentInstructions(*it));
     }
+    if (!teamRole.isEmpty())
+        params.insert(QStringLiteral("teamRole"), teamRole);
     claude->call(
         QStringLiteral("turn/start"), params,
-        [this, sessionId, generation](const QJsonObject& result, const QString& providerError) {
+        [this, sessionId, generation, epoch = params.value("managedTransportEpoch").toString()](
+            const QJsonObject& result, const QString& providerError) {
             auto current = sessions_.find(sessionId);
             if (current == sessions_.end() || current->stored.generation != generation) {
                 return;
             }
+            if (!isManagedTaskEpoch(*current, epoch))
+                return;
             current->startingTurn = false;
             if (!providerError.isEmpty()) {
                 failTurnStart(*current, providerError);
                 return;
             }
+            if (!acknowledgeManagedTaskOrigin(*current, epoch, result))
+                return;
             // The provider has the turn, and with it the handoff note.
             current->handoffFrom.clear();
+            current->contextResetNote.clear();
             const QString threadId = result.value(QStringLiteral("thread"))
                                          .toObject()
                                          .value(QStringLiteral("id"))
@@ -248,15 +312,18 @@ void SessionHost::beginClaudeTurn(const QString& sessionId, const qint64 generat
         });
 }
 
-void SessionHost::beginCursorTurn(const QString& sessionId, const qint64 generation,
-                                  const QJsonArray& input, const QJsonObject& options) {
+void SessionHost::beginAcpTurn(const QString& sessionId, const qint64 generation,
+                               const QJsonArray& input, const QJsonObject& options) {
     auto it = sessions_.find(sessionId);
-    ProviderAdapter* const cursor = provider(QStringLiteral("cursor"));
-    if (it == sessions_.end() || it->stored.generation != generation || cursor == nullptr)
+    ProviderAdapter* const target = it == sessions_.end() ? nullptr : provider(it->stored.adapter);
+    if (it == sessions_.end() || it->stored.generation != generation || target == nullptr)
         return;
     const QString prompt = promptText(input);
     if (prompt.isEmpty()) {
-        failTurnStart(*it, QStringLiteral("Cursor turn has no prompt."));
+        failTurnStart(*it, QStringLiteral("%1 turn has no prompt.")
+                               .arg(it->stored.adapter == QStringLiteral("copilot")
+                                        ? QStringLiteral("GitHub Copilot")
+                                        : QStringLiteral("Cursor")));
         return;
     }
     QJsonObject params{{QStringLiteral("sessionId"), sessionId},
@@ -275,21 +342,31 @@ void SessionHost::beginCursorTurn(const QString& sessionId, const qint64 generat
         params.insert(QStringLiteral("resume"), it->stored.threadId);
     if (const auto launch = agentLaunch(sessionId, generation)) {
         params.insert(QStringLiteral("agentMcpServer"), agent_tools::acpServer(*launch));
+        params.insert(QStringLiteral("managedTransportEpoch"), launch->transportEpoch);
         params.insert(QStringLiteral("agentInstructions"), agentInstructions(*it));
     }
-    cursor->call(
+    const QString teamRole = teamMembership(sessionId).value(QStringLiteral("role")).toString();
+    if (!teamRole.isEmpty())
+        params.insert(QStringLiteral("teamRole"), teamRole);
+    target->call(
         QStringLiteral("turn/start"), params,
-        [this, sessionId, generation](const QJsonObject& result, const QString& providerError) {
+        [this, sessionId, generation, epoch = params.value("managedTransportEpoch").toString()](
+            const QJsonObject& result, const QString& providerError) {
             auto current = sessions_.find(sessionId);
             if (current == sessions_.end() || current->stored.generation != generation)
                 return;
+            if (!isManagedTaskEpoch(*current, epoch))
+                return; // A late callback cannot acknowledge or fail a replacement turn.
             current->startingTurn = false;
             if (!providerError.isEmpty()) {
                 failTurnStart(*current, providerError);
                 return;
             }
+            if (!acknowledgeManagedTaskOrigin(*current, epoch, result))
+                return;
             // The provider has the turn, and with it the handoff note.
             current->handoffFrom.clear();
+            current->contextResetNote.clear();
             const QString threadId = result.value(QStringLiteral("thread"))
                                          .toObject()
                                          .value(QStringLiteral("id"))
@@ -344,6 +421,7 @@ void SessionHost::beginTurn(const QString& sessionId, const qint64 generation,
             }
             // The provider has the turn, and with it the handoff note.
             current->handoffFrom.clear();
+            current->contextResetNote.clear();
             // turn/completed or a provider exit can arrive before this reply. Only a turn that is
             // still starting may become running; otherwise the session would stay busy forever.
             if (current->stored.state != QStringLiteral("starting"))
@@ -366,6 +444,7 @@ void SessionHost::abandonTurnApprovals(const QString& sessionId) {
 }
 
 void SessionHost::failTurnStart(Session& session, const QString& message) {
+    session.mutationOrigin.revoke();
     session.startingTurn = false;
     // A Stop pressed while this turn was starting belongs to it; kept, it would interrupt the
     // next turn as soon as it starts and keep the worktree switch unavailable until then.
@@ -373,24 +452,36 @@ void SessionHost::failTurnStart(Session& session, const QString& message) {
     releaseTurnAttachments(session);
     session.stored.state = QStringLiteral("failed");
     journal_->upsertSession(session.stored);
-    appendEvent(session, QStringLiteral("runtime.error"), {{QStringLiteral("message"), message}});
+    // The turn never ran and no turn.completed follows: said on the event, with the turn,
+    // so the broker ends the requests that turn carried (ADR 0114 §8).
+    appendEvent(session, QStringLiteral("runtime.error"),
+                {{QStringLiteral("message"), message},
+                 {QStringLiteral("turn_start_failed"), true},
+                 {QStringLiteral("turn_sequence"), session.stored.currentTurnSequence}});
 }
 
 void SessionHost::providerStopped(const QString& adapterName, const QString& reason) {
+    const auto isolated = [this](const Session& session) {
+        if (session.stored.adapter == "codex")
+            return adapter_ != nullptr && adapter_->ownsIsolatedThread(session.stored.threadId);
+        const auto* acp = qobject_cast<AcpAdapter*>(provider(session.stored.adapter));
+        return acp && acp->ownsIsolatedSession(session.stored.id);
+    };
     // Pending approvals carry the exited process's request ids, which the next process reuses.
     // Only that provider's approvals go: another provider's process is still waiting on its own.
-    approvals_->abandonPending([this, &adapterName](const QString& sessionId) {
+    approvals_->abandonPending([this, &adapterName, &isolated](const QString& sessionId) {
         const auto it = sessions_.constFind(sessionId);
-        return it == sessions_.cend() || it->stored.adapter == adapterName;
+        return it == sessions_.cend() || (it->stored.adapter == adapterName && !isolated(*it));
     });
     for (auto it = pendingProviderByRequest_.begin(); it != pendingProviderByRequest_.end();) {
-        if (it.value() == adapterName)
+        if (it.value() == adapterName &&
+            (adapter_ == nullptr || !adapter_->ownsIsolatedRequest(it.key())))
             it = pendingProviderByRequest_.erase(it);
         else
             ++it;
     }
     for (Session& session : sessions_) {
-        if (session.stored.adapter != adapterName)
+        if (session.stored.adapter != adapterName || isolated(session))
             continue;
         // Turn ids are per provider process; the next process may reuse them.
         session.completedTurnId.clear();
@@ -444,15 +535,22 @@ void SessionHost::providerReloaded(const QString& reason) {
 QJsonObject SessionHost::turnCompletion(Session& session, const QString& status) {
     QJsonObject completed{{QStringLiteral("status"), status}};
     // Only an interrupted end is the Stop's; a turn that finished first keeps its own status.
+    const QString stoppedBy = std::exchange(session.stoppedBy, QString{});
     if (std::exchange(session.stopRequested, false) &&
-        (status == QStringLiteral("interrupted") || status == QStringLiteral("stopped")))
-        completed.insert(QStringLiteral("reason"), QStringLiteral("user"));
-    // The end row shows the turn's report even when a history page splits it from the turn's
-    // work_report.updated event.
+        (status == QStringLiteral("interrupted") || status == QStringLiteral("stopped"))) {
+        // The leader's stop is a normal end for the team: not the user's Stop (ADR 0114 §11).
+        const bool byLeader = stoppedBy == QStringLiteral("leader");
+        completed.insert(QStringLiteral("reason"),
+                         byLeader ? QStringLiteral("leader") : QStringLiteral("user"));
+        if (byLeader)
+            completed.insert(QStringLiteral("stopped_by"), QStringLiteral("leader"));
+    }
+    // Only the actual end row publishes pending data. A page containing this row is
+    // self-contained, and an older turn's ledger can never become this turn's report.
     const QJsonObject report = journal_->workReport(session.stored.id, session.stored.generation);
     if (!report.isEmpty() &&
         report.value(QStringLiteral("turn")).toInteger() == session.stored.currentTurnSequence)
-        completed.insert(QStringLiteral("work_report"), report);
+        completed.insert(QStringLiteral("work_report"), work_report::currentRequest(report));
     // #125: a finished turn whose answer asks the user to decide ends as Waiting for you.
     const bool finished = status.isEmpty() || status == QStringLiteral("completed") ||
                           status == QStringLiteral("ready");
@@ -463,6 +561,12 @@ QJsonObject SessionHost::turnCompletion(Session& session, const QString& status)
     session.lastAnswerText.clear();
     session.decisionRequested = false;
     return completed;
+}
+
+QString SessionHost::reviewScratchDirectory(const QString& sessionId) const {
+    return QFileInfo(journal_->databasePath())
+        .dir()
+        .filePath(QStringLiteral("review-scratch/%1").arg(sessionId));
 }
 
 } // namespace ketplus::daemon

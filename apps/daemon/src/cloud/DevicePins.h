@@ -28,10 +28,10 @@ class DevicePins final {
     // pairing QR code carries, so the phone can pin this Mac (#89). Empty for invalid keys.
     [[nodiscard]] static QString hostFingerprint(const QJsonObject& keys);
 
-    // Whether pins have been initialized; before that the first device list is adopted.
+    // Whether a versioned pin set (including an empty one) is stored.
     [[nodiscard]] bool initialized(QString* error = nullptr) const;
-    // Pins every active row of the relay's device list, once.
-    bool adopt(const QJsonArray& devices, QString* error = nullptr) const;
+    // Pins every active row once, only with explicit legacy-enrollment migration permission.
+    bool adopt(const QJsonArray& devices, bool legacyEnrollment, QString* error = nullptr) const;
     // Initializes an empty pin set, replacing any earlier one: a new enrollment trusts no device.
     bool reset(QString* error = nullptr) const;
     bool pin(const QJsonObject& device, QString* error = nullptr) const;
@@ -43,7 +43,7 @@ class DevicePins final {
     [[nodiscard]] bool trustsKeys(const QString& deviceId, int keyVersion,
                                   const QJsonObject& keys) const;
     // The active rows of a device list whose keys match their pins.
-    [[nodiscard]] QJsonArray trusted(const QJsonArray& devices) const;
+    [[nodiscard]] QJsonArray trusted(const QJsonArray& devices, QString* error = nullptr) const;
 
   private:
     [[nodiscard]] QJsonObject read(QString* error) const;

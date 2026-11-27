@@ -352,7 +352,7 @@ void AgentSessionManager::readDaemonHistoryBatchPage(
 void AgentSessionManager::refenceDaemonHistory(const SessionPtr& session, const bool newer) {
     session->historyLoading = true;
     const auto epoch = session->historyEpoch;
-    server_->readDaemonTranscriptWindow(
+    serverReadDaemonTranscriptWindow(
         session->threadId,
         transcript_paging::windowParams(transcript_paging::Direction::Older, {}, 0, 0, 1),
         [this, session, newer, epoch](const QJsonObject& head, const QString& failure) {
@@ -383,7 +383,7 @@ void AgentSessionManager::readDaemonHistoryBatchPageUncached(
     const SessionPtr& session, const std::shared_ptr<DaemonHistoryBatch>& batch,
     const QString& cursor, const qint64 snapshotCursor, const qint64 projectionRevision,
     const HistoryPageReceiver& received) {
-    server_->readDaemonTranscriptWindow(
+    serverReadDaemonTranscriptWindow(
         session->threadId,
         transcript_paging::windowParams(batch->newer ? transcript_paging::Direction::Newer
                                                      : transcript_paging::Direction::Older,
@@ -480,7 +480,7 @@ void AgentSessionManager::prefetchDaemonHistoryPage(const SessionPtr& session, c
     const int turnLimit = transcript_paging::adaptiveTurnLimit(
         session->historyViewportHeight, session->historyAverageRowHeight,
         rowsPerTurn(session->messages), server_->daemonTranscriptWindowMaxTurns());
-    server_->readDaemonTranscriptWindow(
+    serverReadDaemonTranscriptWindow(
         session->threadId,
         transcript_paging::windowParams(newer ? transcript_paging::Direction::Newer
                                               : transcript_paging::Direction::Older,
@@ -1278,7 +1278,7 @@ void AgentSessionManager::copyDaemonHistoryPage(const SessionPtr& session, int g
                   raw ? session->copyProjectionRevision : session->historyProjectionRevision);
     if (raw)
         params.insert("raw_activity_details", true);
-    server_->readDaemonTranscriptWindow(
+    serverReadDaemonTranscriptWindow(
         session->threadId, params,
         [this, session, generation, cursor](const QJsonObject& page, const QString& failure) {
             if (!session->copying || session->copyGeneration != generation)

@@ -170,7 +170,7 @@ void RelayWakeups::received(const QString& text) {
     awaitingPong_ = false;
     const auto object = QJsonDocument::fromJson(text.toUtf8()).object();
     const QString type = object.value(QStringLiteral("type")).toString();
-    if (type.startsWith("signal.") || type == "device.revoked")
+    if (type.startsWith("signal.") || type == "device.revoked" || type == "job.changed")
         emit message(object);
     // ready: whatever arrived before this socket was never announced.
     // resync: the relay lost its own feed for a moment and may have missed some.

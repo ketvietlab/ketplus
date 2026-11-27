@@ -1,0 +1,10 @@
+FROM ubuntu:24.04
+ARG DEBIAN_FRONTEND=noninteractive
+COPY packaging/linux/runtime-packages.txt /runtime-packages.txt
+RUN apt-get update && \
+    sed '/^#/d; /^$/d' /runtime-packages.txt | xargs apt-get install -y --no-install-recommends && \
+    apt-get install -y --no-install-recommends python3 xvfb xauth binutils file \
+      libgl1-mesa-dri systemd && rm -rf /var/lib/apt/lists/*
+COPY packaging/linux/smoke-desktop.sh /smoke-desktop.sh
+ENV LANG=C.UTF-8
+ENTRYPOINT ["bash", "/smoke-desktop.sh"]

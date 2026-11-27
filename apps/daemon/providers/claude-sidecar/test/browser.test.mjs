@@ -11,8 +11,38 @@ test("sidecar supplies host MCP servers on resume and scopes auto-approval to in
   // Run the real sidecar against a fake SDK; never import or call an authenticated provider.
   const root = await fs.mkdtemp(path.join(os.tmpdir(), "ketplus-claude-browser-"));
   t.after(() => fs.rm(root, { recursive: true, force: true }));
-  for (const file of ["authentication.mjs", "index.mjs", "transcript.mjs", "input.mjs", "tasks.mjs", "resume.mjs", "session-delete.mjs", "session-usage.mjs"])
+  for (const file of ["authentication.mjs", "index.mjs", "transcript.mjs", "input.mjs", "tasks.mjs", "resume.mjs", "session-delete.mjs", "session-usage.mjs", "review-guard.mjs", "background-policy.mjs", "process-barrier.mjs"])
     await fs.copyFile(new URL(`../${file}`, import.meta.url), path.join(root, file));
+  for (const [directory, name] of [
+    ["", "project-build"],
+    ["apps/browser", "ketplus-browser"],
+    ["apps/browser", "browser-project"],
+    ["apps/browser", "enterprise-grade"],
+    ["", "ket-design-system"],
+    ["node_modules/fixture", "ignored-dependency"],
+    ["apps/build", "ignored-build"],
+    ["apps/build-local", "ignored-build-variant"],
+    ["apps/vendor", "ignored-vendor"],
+    [Array(9).fill("nested").join("/"), "ignored-depth"],
+    [".git", "ignored-git"],
+  ]) {
+    const projectSkill = path.join(root, directory, ".claude", "skills", name);
+    await fs.mkdir(projectSkill, { recursive: true });
+    await fs.writeFile(path.join(projectSkill, "SKILL.md"), `---\nname: ${name}\n---\n`);
+  }
+  // Preserve T-4 discovery for a workspace that links its Claude settings.
+  await fs.rename(path.join(root, ".claude"), path.join(root, ".linked-claude"));
+  await fs.symlink(path.join(root, ".linked-claude"), path.join(root, ".claude"), "junction");
+  // Fill the directory budget with shallow entries before a nested candidate.
+  const budgetRoot = path.join(root, "budget");
+  await fs.mkdir(budgetRoot);
+  for (let offset = 0; offset < 4095; offset += 128) {
+    await Promise.all(Array.from({ length: Math.min(128, 4095 - offset) }, (_, index) =>
+      fs.mkdir(path.join(budgetRoot, String(offset + index).padStart(4, "0")))));
+  }
+  const beyondBudget = path.join(budgetRoot, "zz-over-budget", ".claude", "skills", "ignored-budget");
+  await fs.mkdir(beyondBudget, { recursive: true });
+  await fs.writeFile(path.join(beyondBudget, "SKILL.md"), "---\nname: ignored-budget\n---\n");
   const sdk = path.join(root, "node_modules/@anthropic-ai/claude-agent-sdk");
   await fs.mkdir(sdk, { recursive: true });
   await fs.writeFile(path.join(sdk, "package.json"), JSON.stringify({ type: "module", exports: "./index.mjs" }));
@@ -27,6 +57,8 @@ test("sidecar supplies host MCP servers on resume and scopes auto-approval to in
           const computer = await options.canUseTool("mcp__ketplus_computer__screenshot", {});
           yield { type: "result", session_id: "thread-1", result: JSON.stringify({
             mcpServers: options.mcpServers, allowedTools: options.allowedTools,
+            skills: options.skills, settingSources: options.settingSources,
+            plugins: options.plugins, persistSession: options.persistSession,
             prompt, systemPrompt: options.systemPrompt,
             resume: options.resume, permissionMode: options.permissionMode, browser, other, similar, computer
           }) };
@@ -46,19 +78,22 @@ test("sidecar supplies host MCP servers on resume and scopes auto-approval to in
   const server = { type: "stdio", command: "/test/node", args: ["/test/mcp.mjs"], env: { KETPLUS_BROWSER_ALLOWED_ORIGINS: "loopback" } };
   const computerServer = { type: "stdio", command: "/test/ketplus-computer-mcp", args: [],
     env: { KETPLUS_COMPUTER_CONVERSATION: "session-1", KETPLUS_COMPUTER_TOKEN: "t" } };
+  const teamSkills = ["ketplusdev", "ketvietdev", "ketplus-browser"];
   const cases = [
     { id: 1, browser: true, computer: true },
-    { id: 2, browser: false, computer: false },
-    { id: 3, browser: false, computer: true },
+    { id: 2, browser: false, computer: false, teamRole: "leader" },
+    { id: 3, browser: false, computer: true, teamRole: "reviewer" },
+    { id: 4, browser: false, computer: false, teamRole: "developer" },
+    { id: 5, browser: false, computer: false, teamRole: "leader", cwd: budgetRoot },
   ];
-  for (const { id, browser: enabled, computer } of cases) {
+  for (const { id, browser: enabled, computer, teamRole, cwd = root } of cases) {
     const mcpServers = {
       ...(enabled ? { ketplus_browser: server } : {}),
       ...(computer ? { ketplus_computer: computerServer } : {}),
     };
     send({ id, method: "turn/start", params: {
       sessionId: "session-1", prompt: "Inspect", resume: "thread-1", permission: "workspace-write",
-      mcpServers,
+      mcpServers, teamRole, cwd,
       browserInstructions: enabled ? "Use ketplus_browser." : "KetPlus browser is unavailable; do not fall back.",
     } });
     const approvals = [];
@@ -82,6 +117,14 @@ test("sidecar supplies host MCP servers on resume and scopes auto-approval to in
     assert.equal(answer.prompt, "Inspect");
     assert.deepEqual(answer.systemPrompt, { type: "preset", preset: "claude_code",
       append: enabled ? "Use ketplus_browser." : "KetPlus browser is unavailable; do not fall back." });
+    assert.deepEqual(answer.skills, teamRole ? [
+      ...teamSkills,
+      ...(teamRole === "leader" ? ["enterprise-grade", "ket-design-system"] : []),
+      ...(cwd === root ? ["project-build", "browser-project"] : []),
+    ] : undefined);
+    assert.equal(answer.settingSources, undefined);
+    assert.equal(answer.plugins, undefined);
+    assert.equal(answer.persistSession, true);
     assert.equal(answer.resume, "thread-1");
     assert.equal(answer.permissionMode, "acceptEdits");
     assert.equal(answer.browser.behavior, enabled ? "allow" : "deny");
@@ -89,6 +132,11 @@ test("sidecar supplies host MCP servers on resume and scopes auto-approval to in
     assert.equal(answer.similar.behavior, "deny");
     assert.equal(answer.computer.behavior, computer ? "allow" : "deny");
     assert.equal(approvals.length, 2 + (enabled ? 0 : 1) + (computer ? 0 : 1));
+    if (id === 2) {
+      const uncached = path.join(root, ".linked-claude", "skills", "added-after-scan");
+      await fs.mkdir(uncached);
+      await fs.writeFile(path.join(uncached, "SKILL.md"), "---\nname: added-after-scan\n---\n");
+    }
   }
   assert.equal(stderr, "");
 });

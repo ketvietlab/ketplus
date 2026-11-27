@@ -1,4 +1,5 @@
 #include "FakeCodex.h"
+#include "TestPaths.h"
 #include "protocol/DaemonProtocol.h"
 #include "providers/CodexAdapter.h"
 #include "runtime/ResponseGuidance.h"
@@ -50,7 +51,7 @@ struct Fixture {
             return false;
         a = QFileInfo(a).canonicalFilePath();
         b = QFileInfo(b).canonicalFilePath();
-        const auto executable = directory.filePath("fake-codex");
+        const auto executable = directory.filePath(fixtureName("fake-codex"));
         if (!writeFakeCodex(executable, log))
             return false;
         journal = std::make_unique<LocalJournal>(directory.filePath("journal.sqlite"));
@@ -82,6 +83,147 @@ struct Fixture {
 class DaemonWorktreeContextTest final : public QObject {
     Q_OBJECT
   private slots:
+    void newConversationSnapshotsRepositoryIdentity_data() {
+        QTest::addColumn<QString>("kind");
+        for (const auto* kind : {"linked-worktree", "no-repository", "repository"})
+            QTest::newRow(kind) << QString::fromLatin1(kind);
+    }
+    void newConversationSnapshotsRepositoryIdentity() {
+        QFETCH(QString, kind);
+        Fixture f;
+        QVERIFY(f.initialize());
+        auto path = f.b;
+        auto expected = f.a;
+        if (kind != QStringLiteral("linked-worktree")) {
+            path = f.directory.filePath(kind);
+            QVERIFY(QDir().mkpath(path));
+            if (kind == QStringLiteral("repository")) {
+                QVERIFY(git(path, {"init", "-b", "main"}));
+                expected = QFileInfo(path).canonicalFilePath();
+            } else {
+                expected.clear();
+            }
+        }
+        auto start = request("session.start_turn", "new-placement",
+                             {{"prompt", "hello"}, {"worktree_path", path}});
+        start.insert("session_id", "new-conversation");
+        const auto reply = f.host->handleCommand(start, "isolated-context-test");
+        QVERIFY2(reply.value("ok").toBool(),
+                 qPrintable(QString::fromUtf8(QJsonDocument(reply).toJson())));
+        const auto listed = f.call("session.list", "placement-list");
+        bool found = false;
+        for (const auto& value : listed.value("sessions").toArray()) {
+            const auto row = value.toObject();
+            if (row.value("session_id") != QStringLiteral("new-conversation"))
+                continue;
+            found = true;
+            QVERIFY(row.value("sidebar_repository_path").isString());
+            QCOMPARE(row.value("sidebar_repository_path").toString(), expected);
+            QCOMPARE(row.value("worktree_path").toString(), QFileInfo(path).canonicalFilePath());
+        }
+        QVERIFY(found);
+        const auto records = f.journal->readSessions();
+        QVERIFY(records);
+        for (const auto& session : *records)
+            if (session.id == QStringLiteral("new-conversation")) {
+                QVERIFY(session.sidebarRepository);
+                QCOMPARE(*session.sidebarRepository, expected);
+            }
+        const auto workspaces =
+            f.call("workspace.list", "placement-workspaces").value("workspaces").toArray();
+        bool workspaceFound = false;
+        for (const auto& value : workspaces) {
+            const auto row = value.toObject();
+            if (row.value("path").toString() != QFileInfo(path).canonicalFilePath())
+                continue;
+            workspaceFound = true;
+            QVERIFY(row.value("sidebar_repository_visible").isBool());
+            QCOMPARE(row.value("sidebar_repository_visible").toBool(), !expected.isEmpty());
+        }
+        QVERIFY(workspaceFound);
+    }
+    void sidebarPlacementSurvivesExecutionUpdatesAndReopen() {
+        QTemporaryDir directory;
+        const auto database = directory.filePath("placement.sqlite");
+        StoredSession original{"placement", directory.filePath("origin"), "codex", {}, {}, "ready"};
+        original.sidebarRepository = directory.filePath("repository");
+        {
+            LocalJournal journal(database);
+            QVERIFY(journal.isOpen());
+            QVERIFY(journal.upsertSession(original));
+            auto moved = original;
+            moved.worktreePath = directory.filePath("another-repository/worktree");
+            moved.contextRevision = 2;
+            moved.sidebarRepository = directory.filePath("another-repository");
+            QVERIFY(journal.upsertSession(moved));
+            QVERIFY(journal.recordSessionContext(moved));
+            QCOMPARE(journal.conversationPath(moved), original.worktreePath);
+            QCOMPARE(journal.conversationSidebarRepository(moved), original.sidebarRepository);
+        }
+        LocalJournal reopened(database);
+        QVERIFY(reopened.isOpen());
+        const auto sessions = reopened.readSessions();
+        QVERIFY(sessions && sessions->size() == 1);
+        QCOMPARE(sessions->first().conversationPath, original.worktreePath);
+        QCOMPARE(sessions->first().sidebarRepository, original.sidebarRepository);
+        QVERIFY(sessions->first().worktreePath != original.worktreePath);
+    }
+    void sidebarNoRepositoryIsDistinctFromLegacyUnknown_data() {
+        QTest::addColumn<bool>("known");
+        QTest::newRow("explicit-no-repository") << true;
+        QTest::newRow("legacy-unknown") << false;
+    }
+    void sidebarNoRepositoryIsDistinctFromLegacyUnknown() {
+        QFETCH(bool, known);
+        QTemporaryDir directory;
+        const auto database = directory.filePath("placement.sqlite");
+        {
+            LocalJournal journal(database);
+            QVERIFY(journal.isOpen());
+            StoredSession session{"no-repo", directory.path(), "codex", {}, {}, "ready"};
+            if (known)
+                session.sidebarRepository = QString{};
+            QVERIFY(journal.upsertSession(session));
+        }
+        LocalJournal reopened(database);
+        QVERIFY(reopened.isOpen());
+        const auto sessions = reopened.readSessions();
+        QVERIFY(sessions && sessions->size() == 1);
+        const auto& placement = sessions->first().sidebarRepository;
+        QCOMPARE(placement.has_value(), known);
+        if (known)
+            QVERIFY(placement->isEmpty());
+        QCOMPARE(reopened.conversationSidebarRepository(sessions->first()), placement);
+    }
+    void legacyNavigationSchemaDoesNotInventAnOrigin() {
+        QTemporaryDir directory;
+        const auto path = directory.filePath("legacy.sqlite");
+        const auto connection = QStringLiteral("legacy-sidebar-fixture");
+        {
+            auto database = QSqlDatabase::addDatabase("QSQLITE", connection);
+            database.setDatabaseName(path);
+            QVERIFY(database.open());
+            QSqlQuery query(database);
+            QVERIFY(query.exec("CREATE TABLE conversation_navigation (session_id TEXT NOT NULL, "
+                               "generation INTEGER NOT NULL, path TEXT NOT NULL, "
+                               "PRIMARY KEY(session_id,generation))"));
+            query.prepare("INSERT INTO conversation_navigation VALUES ('legacy',1,?)");
+            query.addBindValue(directory.filePath("original"));
+            QVERIFY(query.exec());
+        }
+        QSqlDatabase::removeDatabase(connection);
+        LocalJournal journal(path);
+        QVERIFY(journal.isOpen());
+        StoredSession session{"legacy", directory.filePath("execution"), "codex", {}, {}, "ready"};
+        session.sidebarRepository = directory.filePath("execution-repository");
+        QVERIFY(journal.upsertSession(session));
+        QCOMPARE(journal.conversationPath(session), directory.filePath("original"));
+        QVERIFY(!journal.conversationSidebarRepository(session));
+        const auto sessions = journal.readSessions();
+        QVERIFY(sessions && sessions->size() == 1);
+        QCOMPARE(sessions->first().conversationPath, directory.filePath("original"));
+        QVERIFY(!sessions->first().sidebarRepository);
+    }
     void followsExplicitWorkingCheckoutAfterTurn_data() {
         QTest::addColumn<QString>("kind");
         QTest::addColumn<bool>("follows");
@@ -143,7 +285,7 @@ class DaemonWorktreeContextTest final : public QObject {
     void responseGuidanceIsProviderOnly() {
         Fixture f;
         QVERIFY(f.initialize());
-        QFile executable(f.directory.filePath("fake-codex"));
+        QFile executable(scriptSourcePath(f.directory.filePath(fixtureName("fake-codex"))));
         QVERIFY(executable.open(QIODevice::ReadOnly));
         auto source = executable.readAll();
         executable.close();
@@ -217,7 +359,7 @@ class DaemonWorktreeContextTest final : public QObject {
         Fixture f;
         QVERIFY(f.initialize());
         QVERIFY(f.move(f.b, 1, "move-before-question")["ok"].toBool());
-        QFile executable(f.directory.filePath("fake-codex"));
+        QFile executable(scriptSourcePath(f.directory.filePath(fixtureName("fake-codex"))));
         QVERIFY(executable.open(QIODevice::ReadOnly));
         QByteArray source = executable.readAll();
         executable.close();
@@ -286,7 +428,7 @@ class DaemonWorktreeContextTest final : public QObject {
         Fixture f;
         QVERIFY(f.initialize());
         // Keep a fake turn open and capture the exact provider request, without quota.
-        QFile executable(f.directory.filePath("fake-codex"));
+        QFile executable(scriptSourcePath(f.directory.filePath(fixtureName("fake-codex"))));
         QVERIFY(executable.open(QIODevice::ReadOnly));
         QByteArray source = executable.readAll();
         executable.close();
@@ -528,6 +670,34 @@ class DaemonWorktreeContextTest final : public QObject {
         QVERIFY(f.move(f.b, 3, "switch").value("ok").toBool());
         QCOMPARE(f.move(f.a, 1, "stale").value("error_code").toString(), "stale_context");
         QCOMPARE(f.journal->sessions().first().worktreePath, f.b);
+    }
+
+    // A deferred listing runs git off the event loop and answers like the direct one; when the
+    // conversation moves meanwhile it answers for where the conversation is now.
+    void listsWorktreesOffTheEventLoop() {
+        Fixture f;
+        QVERIFY(f.initialize());
+        const auto direct = f.call("session.worktrees", "direct");
+        QVERIFY(direct.value("ok").toBool());
+        QJsonObject deferred;
+        f.host->handleCommandDeferred(request("session.worktrees", "deferred"),
+                                      "isolated-context-test",
+                                      [&](const QJsonObject& result) { deferred = result; });
+        QVERIFY(deferred.isEmpty());
+        QTRY_VERIFY_WITH_TIMEOUT(!deferred.isEmpty(), 5000);
+        QCOMPARE(deferred.value("worktrees"), direct.value("worktrees"));
+        QCOMPARE(deferred.value("repository_path"), direct.value("repository_path"));
+        QCOMPARE(deferred.value("current_branch").toString(), QStringLiteral("main"));
+
+        QJsonObject moved;
+        f.host->handleCommandDeferred(request("session.worktrees", "moved"),
+                                      "isolated-context-test",
+                                      [&](const QJsonObject& result) { moved = result; });
+        QVERIFY(f.move(f.b, 1, "switch").value("ok").toBool());
+        QTRY_VERIFY_WITH_TIMEOUT(!moved.isEmpty(), 5000);
+        QVERIFY(moved.value("ok").toBool());
+        QCOMPARE(moved.value("worktree_path").toString(), f.b);
+        QCOMPARE(moved.value("current_branch").toString(), QStringLiteral("feature"));
     }
 
     // ADR 0105: the desktop picker lists another repository's worktrees before choosing one.
@@ -920,7 +1090,7 @@ class DaemonWorktreeContextTest final : public QObject {
     void providerCatalogIsSharedAndAccountChangesInvalidateIt() {
         Fixture f;
         QVERIFY(f.initialize());
-        QFile executable(f.directory.filePath("fake-codex"));
+        QFile executable(scriptSourcePath(f.directory.filePath(fixtureName("fake-codex"))));
         QVERIFY(executable.open(QIODevice::ReadOnly));
         auto script = executable.readAll();
         executable.close();

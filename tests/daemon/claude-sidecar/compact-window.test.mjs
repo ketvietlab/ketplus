@@ -9,7 +9,7 @@ import { fileURLToPath } from 'node:url';
 
 async function fixture(t) {
   const dir = await mkdtemp(path.join(tmpdir(), 'kp-compact-window-'));
-  for (const name of ['session-usage.mjs', 'authentication.mjs', 'index.mjs', 'transcript.mjs', 'input.mjs', 'tasks.mjs', 'resume.mjs', 'session-delete.mjs'])
+  for (const name of ['session-usage.mjs', 'authentication.mjs', 'index.mjs', 'transcript.mjs', 'input.mjs', 'tasks.mjs', 'resume.mjs', 'session-delete.mjs', 'review-guard.mjs', 'background-policy.mjs', 'process-barrier.mjs'])
     await copyFile(fileURLToPath(new URL(`../../../apps/daemon/providers/claude-sidecar/${name}`, import.meta.url)), path.join(dir, name));
   const sdk = path.join(dir, 'node_modules/@anthropic-ai/claude-agent-sdk');
   await mkdir(sdk, { recursive: true });
@@ -18,7 +18,8 @@ async function fixture(t) {
     export function query({prompt, options}) {
       console.log(JSON.stringify({method:'test.options', params:{
         extraArgs:options.extraArgs, hasEnv:Object.hasOwn(options,'env'),
-        hasSettings:Object.hasOwn(options,'settings'), marker:process.env.KETPLUS_TEST_KEEP_ENV,
+        hasSettings:Object.hasOwn(options,'settings'), marker:options.env?.KETPLUS_TEST_KEEP_ENV,
+        backgroundDisabled:options.env?.CLAUDE_CODE_DISABLE_BACKGROUND_TASKS,
       }}));
       return (async function* () {
         await prompt[Symbol.asyncIterator]().next();
@@ -58,8 +59,9 @@ for (const window of [100000, 272000, 1000000, null, undefined]) {
       await f.wait(() => f.events.filter(e => e.params?.type === 'turn.completed').length === id);
       const options = f.events.filter(e => e.method === 'test.options').at(before).params;
       assert.deepEqual(options.extraArgs, window == null ? undefined : { autocompact: String(window) });
-      assert.equal(options.hasEnv, false);
-      assert.equal(options.hasSettings, false);
+      assert.equal(options.hasEnv, true);
+      assert.equal(options.backgroundDisabled, '1');
+      assert.equal(options.hasSettings, true);
       assert.equal(options.marker, 'preserved');
     }
   });

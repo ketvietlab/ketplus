@@ -3,7 +3,10 @@
 Status: accepted
 Date: 2026-11-01
 
-See also: ADR 0112 (agent teams) adds roles, tasks, digests and role addressing on
+Amended 2026-11-25: `urgent` no longer steers (docs/decisions/2026-11-25-team-batched-delivery-and-leader-interrupt.md).
+Amended 2026-11-26: a team leader's `urgent` to a member of its team steers again; on a team nobody else may send it (docs/decisions/2026-11-26-leader-steers-first-interrupt-last.md).
+
+See also: ADR 0114 (agent teams) adds roles, tasks, digests and role addressing on
 top of these messages; nothing here changes.
 
 ## Context
@@ -19,7 +22,7 @@ between conversations without a new process or a cloud dependency.
 Product scope decided for this feature:
 
 - Numbers and messaging are local to one daemon. There is no cross-host
-  addressing and no relay routing.
+  addressing and no hosted service routing.
 - A message to an idle conversation starts a turn automatically.
 - Automatic turns are not restricted by the receiver's execution policy,
   including bypass.
@@ -76,15 +79,21 @@ Delivery depends on the receiver:
 - **Busy**: the message is queued. Queued messages are delivered together, in
   order, when the receiver becomes idle, or prepended as one host block to the
   next turn the user starts, whichever comes first.
-- **`urgent`**: delivered through `session.steer` when the receiver's provider
-  supports steering into its active turn; otherwise queued. The journaled
-  `turn.steered` carries the same `origin` fields.
+- **`urgent`**: accepted for compatibility, but it never steers a running turn. It only
+  moves the message to the front of the receiver's queue, so it is first in the batch
+  delivered when the receiver becomes idle. The receipt says `queued`. Earlier versions
+  steered through `session.steer` and could report `steering` or `urgent_waiting`;
+  journal rows with `delivery: "steer"` and `turn.steered` events stay readable
+  (amended 2026-11-25, see the batched-delivery decision). The user's own
+  `session.steer` from a client is unchanged.
 - **Provider failure**: the message becomes `failed` and the sender's next turn
   receives the error.
 
 `agents_send` returns the message ID and the receiver's number, title, provider
-and delivery state (`starting`, `queued` or `steered`) so the sender can verify
-the address.
+and delivery state so the sender can verify the address. The states are
+`starting` (the message starts a turn), `queued` (it arrives with everything else queued
+for the receiver, in order, in one turn, when its turn ends) and `recorded` (a review's
+answer). The tool description and the agents' instructions name these states.
 
 A request with `expect_reply` is answered by an explicit
 `agents_send(reply_to=…)`. If the woken turn ends without one, the daemon sends
@@ -146,8 +155,7 @@ already-delivered messages and marks only those IDs queued with
 `delivery=user_authorized:<command-id>`. The existing command result cache makes
 transport retries idempotent. The broker delivers one authorized batch separately
 from unrelated queued messages, bypassing hop/chain/hourly guards for that batch
-only. A busy receiver waits until its normal turn finishes, even for an urgent
-message. New automatic messages retain their existing limits and reply semantics.
+only. A busy receiver waits until its normal turn finishes; an urgent message does not change that. New automatic messages retain their existing limits and reply semantics.
 A new ordinary user turn can still consume pending held/authorized messages.
 
 Before invoking the provider, the broker persists a `releasing` claim and the
@@ -232,14 +240,16 @@ as `ketplus_browser`:
 
 ### User references
 
-- `@` remains file mentions. Typing `#` in the composer offers conversations by
-  number and title; choosing one inserts `#4821`.
-- On submit and steering, `#NNNN` tokens that name a live conversation on this
+- `@` remains file mentions, except `@agent/`. Typing `#` or `@agent/` in the
+  composer offers conversations by number and title; choosing one inserts
+  `#4821` or `@agent/4821`, as the user started it.
+- On submit and steering, `#NNNN` and `@agent/NNNN` tokens that name a live conversation on this
   host are listed for the agent in a preamble with number, title, provider and
   state, in the same way as referenced paths. Unresolved tokens stay plain text.
 - A reference never sends a message by itself; the agent calls `agents_send`
   when the user asks it to. `#1234` can also be an issue or pull-request number,
   so the preamble says references are for contacting conversations on request.
+  `agents_send` and the team tools accept a number in any of these forms.
 - Delivered agent messages appear as an outlined bubble labelled
   "From @agent/1093 · title · provider", as the Qt mock draws it (earlier
   builds wrote "Message from …" or "Reply from …").
@@ -258,10 +268,10 @@ as `ketplus_browser`:
 - While a message-started turn runs, the broker keeps its sender in memory.
   `session.list` adds it as `agent_turn`, and Desktop ends that conversation's
   sidebar row with "from #4821" until the turn ends.
-- The relay and mobile receive these events through the existing encrypted
+- The hosted service and mobile receive these events through the existing encrypted
   projection as additive types, and older clients ignore them. The phone gets
   each conversation's number, and the sender of a running message-started turn
-  (`agentTurn`), in its sealed session metadata beside the branch, so the relay
+  (`agentTurn`), in its sealed session metadata beside the branch, so the hosted service
   never reads either. Mobile shows numbers, agent-message bubbles and notes, the
   woken row's sender, and its own `#` picker, as the desktop does.
 - Minor capability `agents.messaging/1` advertises the feature;
@@ -287,7 +297,7 @@ Verification uses fake providers and consumes no quota. It covers:
 
 - delivery to idle and busy receivers, batched queues and the automatic reply
   from the final message;
-- `urgent` steering of a running turn;
+- an `urgent` message outside a team to a busy receiver staying queued, first in the next batch, never steering; a team leader's `urgent` steering a member, and a developer's or reviewer's refused;
 - the hop, chain and hourly limits holding messages, release with the
   receiver's next user turn (including `#NNNN` references) and the 24-hour
   request expiry;
@@ -303,7 +313,7 @@ Verification uses fake providers and consumes no quota. It covers:
 
 Codex per-thread configuration is checked by a metadata-only probe, as in
 ADR 0021. An authorized provider run on 2026-11-01 used an isolated 0.1.49
-daemon (its own data directory and socket, not signed in to the relay) with
+daemon (its own data directory and socket, not signed in to the hosted service) with
 Claude Sonnet through the sidecar and Codex `gpt-5.6-luna` on Codex 0.162.1,
 and confirmed the following with no approval prompts:
 
@@ -337,3 +347,9 @@ Cursor was not part of the run.
   `4821`.
 - **Sequential numbers:** an adjacent typo would usually reach a real
   conversation.
+
+## Sealed pending-reply hint
+
+Session heartbeat metadata includes the optional boolean `awaitingAgentReply`. It is true when the current conversation generation has at least one outbound `expect_reply` message in `queued`, `held`, `releasing` or `delivered` state that has not expired. Answered, failed and expired messages, notices without `expect_reply`, and requests from a previous generation do not set it. Multiple pending requests keep it true until the final one resolves.
+
+The publisher reads the durable journal at each heartbeat and emits explicit false to clear an earlier true. This is separate from `awaitingReply`, which means the user has been asked to approve or decide. The new hint is sealed with the other session metadata: message bodies, recipients and reply contents are not added to plaintext snapshots. Older clients ignore the optional field; clients receiving no field treat it as false. A client must not infer this state from transcript text or an incoming `agentTurn`.

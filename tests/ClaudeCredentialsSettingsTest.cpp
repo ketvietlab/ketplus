@@ -92,8 +92,11 @@ class ClaudeCredentialsSettingsTest : public QObject {
             page.show();
             auto* key = page.findChild<QLineEdit*>("claudeApiKey");
             QTRY_VERIFY(key && key->isVisible());
-            QTRY_VERIFY(page.findChild<QAbstractButton*>("claudeCredentialsSave")->isEnabled());
+            auto* save = page.findChild<QAbstractButton*>("claudeCredentialsSave");
+            QVERIFY(save);
+            QTRY_VERIFY(save->isEnabled());
             const auto* form = page.findChild<SettingsClaudeCredentials*>();
+            QVERIFY(form);
             for (auto* widget : form->findChildren<QWidget*>()) {
                 if (!widget->isVisible())
                     continue;
@@ -286,7 +289,7 @@ class ClaudeCredentialsSettingsTest : public QObject {
         pending({{"configured", true},
                  {"account", QJsonObject{{"display_name", "Minh Tran"}, {"username", "minh"}}}});
         QCOMPARE(role("name")->text(), QStringLiteral("Minh Tran"));
-        QCOMPARE(role("meta")->text(), QStringLiteral("minh · KétPlus Pro"));
+        QCOMPARE(role("meta")->text(), QStringLiteral("minh · ketPlus Pro"));
         QCOMPARE(account->findChild<ket::Avatar*>()->initials(), QStringLiteral("MT"));
         QVERIFY(signOut->isVisible());
         QCOMPARE(manage->text(), QStringLiteral("Manage connections"));

@@ -2,6 +2,7 @@
 #pragma once
 
 #include <QObject>
+#include <QTranslator>
 #include <QUrl>
 
 // The mock's link to the kit's appearance: QML reads KetTheme, and changes the theme or the
@@ -30,12 +31,15 @@ class MockController final : public QObject {
     Q_INVOKABLE void setZoom(qreal zoom);
     // A bundled text resource, such as the repository document the editor previews.
     Q_INVOKABLE QString resourceText(const QString& path) const;
+    // Team-only copy; the rest of the mock keeps the application's English chrome.
+    Q_INVOKABLE QString teamText(const QString& language, const QString& source) const;
     // The image viewer's Print: the system print dialog, as the app opens it.
     Q_INVOKABLE bool printImage(const QUrl& source, int rotation, const QString& title) const;
 
     QString initialScreen = QStringLiteral("workspace");
     QString initialState;
-    QString initialPanel; // a panel to open: model, mode, limits, reviewer, composer, images or mermaid
+    QString
+        initialPanel; // a panel to open: model, mode, limits, reviewer, composer, images or mermaid
     qreal initialScroll = -1; // where the transcript starts, 0 (top) to 1 (end); -1 keeps the top
     QString edition = QStringLiteral("pro"); // "pro" (Main.qml) or "lite" (LiteMain.qml)
     // Window chrome of the Lite window: "macos" (the system menu bar), "windows" or "linux"
@@ -44,4 +48,8 @@ class MockController final : public QObject {
 
   signals:
     void appearanceChanged();
+
+  private:
+    QTranslator teamCatalog_;
+    QTranslator mockTeamCatalog_;
 };

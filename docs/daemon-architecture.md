@@ -23,7 +23,7 @@ The target daemon owns:
 - local capability enforcement for filesystem, terminal, and process actions;
 - device identity and secure credential storage integration;
 - authenticated local IPC with KetPlus Desktop;
-- an outbound authenticated connection to the cloud relay;
+- an outbound authenticated connection to the hosted service;
 - bounded buffering, reconnect, heartbeats, and session cleanup.
 
 It does not own editor UI, AI presentation, organization membership, billing,
@@ -163,7 +163,7 @@ Streamed text reaches the journal coalesced: consecutive `assistant.delta` or
 (or 16 KiB) and journaled as one event. Any other event, a delta of another
 item, and SessionHost teardown journal the held text first, so provider order
 is kept. One event per provider chunk (a word or less) had every reader, above
-all a phone paging the relay, read tens of thousands of events per conversation.
+all a phone paging the hosted service, read tens of thousands of events per conversation.
 A delta for an item whose `item.completed` is already journaled is dropped, so a
 retried notification or a previous turn's tail cannot extend final text; an
 `item.started` with the same id reopens the item. The daemon remembers SHA-256
@@ -288,9 +288,9 @@ returned; live delivery owns them. `turn_limit` accepts 1-20 (was 1-3); the even
 are unchanged. `session.list` advertises `transcript_window_max_turns: 20` and
 `transcript_window_after_cursor: true`; clients that do not see these keep `turn_limit <= 3`
 and fall back to an explicit newest-window reload instead of forward paging.
-Forward paging is **local only**: `after_cursor` is not available over the cloud relay. Relayed
+Forward paging is **local only**: `after_cursor` is not available over the hosted service. Service-carried
 (mobile) transcript windows are served as restore requests with `turn_limit` capped at 3, and a
-relayed `after_cursor` is rejected with `invalid_page` ("Restore requests cannot page forward with
+service-carried `after_cursor` is rejected with `invalid_page` ("Restore requests cannot page forward with
 after_cursor."), so a mobile client that needs newer rows reloads the newest window instead.
 Existing cloud/mobile `session.transcript_page` behavior is unchanged. See
 [ADR 0005](decisions/0005-bounded-local-transcript-windows.md) for the exact local
@@ -315,28 +315,65 @@ uploads stable AES-256-GCM event envelopes from a durable retry cache (key epoch
 tag, because AES-GCM itself accepts others), and polls
 serialized encrypted commands. The machine signs a challenge only when it is
 exactly 32 canonical base64url bytes: the same Ed25519 key signs event
-envelopes, wrapped session keys and WebRTC answers, all longer, so a relay
+envelopes, wrapped session keys and peer transport answers, all longer, so a hosted service
 cannot obtain a host signature over one of them by calling it a challenge. A
-domain-separated challenge signature needs a matching relay change and is
+domain-separated challenge signature needs a matching hosted service change and is
 tracked in #85. A failed command poll or credential request waits before the
 next poll like a failed upload (one second doubling, up to five minutes after
-a refusal and one minute otherwise, with jitter); a relay wake-up or a
+a refusal and one minute otherwise, with jitter); a hosted service wake-up or a
 successful poll ends the wait. Pairing is explicitly confirmed on the Mac, and
 the daemon recomputes the claim digest from the claimed keys before approving.
-Only devices pinned on this Mac (ADR 0034) receive session keys, have their
+Only devices pinned on this Mac receive session keys, have their
 commands accepted or open peer links; the devices active when pins were
 introduced were adopted once; a
 closed pairing dialog revokes its outstanding ticket and paired devices can be
-revoked from Connections.
+revoked from Connections. Device distribution, sender-key fallback, pairing and peer-admission
+callbacks are fenced by account epoch, enrollment revision and machine/workspace identity.
+Enrollment advances the trust revision before its storage transaction, so operations started
+before the commit cannot survive a same-identity enrollment. The same fence protects credential
+challenge/redemption replies, heartbeat batches, event receipts and asynchronous command
+completions. Enrollment stops existing Atlas runtimes/tunnels and invalidates scans; old
+credential waiters finish with an error before a fresh request can serve the new enrollment.
+The sign-in epoch remains unchanged so the initiating sign-in callback can finish. Replies received after
+sign-out or another enrollment cannot adopt pins, wrap or upload session keys, or refresh the
+new enrollment's peers. Legacy adoption is an explicit, one-time permission established while
+restoring an existing enrollment without a pin record; an initialized empty set or a pin record
+removed later is not migration authority. See "Trust boundaries" and the native trust-lifecycle tests.
 
-Cloud identity keys, session keys, wrapped device keys and account identifiers
-are stored in one owner-only (0600) JSON file,
-`Ketsuite/KetPlus/daemon/credentials-<service>.json` under the user's data
-directory, not in the macOS keychain. Keychain items are bound to the code
-signature, so each rebuilt or re-signed helper prompted once per key. A file
-with unsafe permissions or unreadable contents is an error and is never
-replaced with newly generated keys. Keychain items from earlier builds are not
-migrated, so an existing machine signs in and pairs again once after upgrading.
+The sender-key cache is an optimization, not pairing authority: every hit checks the
+current local pin and the account epoch, enrollment revision and machine/workspace scope.
+Sign-in start/cancellation, sign-out and enrollment commit clear the cache. Successful
+pairing approval, device revocation and machine authorization revocation also clear it and
+advance a lookup revision, so an outstanding reply cannot refill the cache across those
+transitions (even if the same device is paired again). A same-workspace enrollment retains
+content keys but requires fresh pairing before an old sender can execute a command. Cache
+invalidation on hosted service revocation does not itself change the persisted pin policy.
+
+Heartbeat metadata and device-key preparation use one operation-scoped credential
+view, with staged writes committed before publishing envelopes or refreshing
+trusted devices. Each operation obtains a fresh record under the existing process
+lock; distribution checks current pins within that view. No credential snapshot
+survives the callback. This reduces repeated OS fetch/parse work while preserving
+enrollment fences, retryable storage errors and the OS-store record format. It is
+still synchronous work on the daemon thread, not an asynchronous storage API.
+
+Cloud identity keys, session keys, wrapped device keys and account identifiers are
+stored as one transactional record per service in the OS credential store: macOS
+Keychain or Linux Secret Service. Locked, denied or unavailable storage is an error;
+there is no plaintext fallback. The former owner-only JSON file is migrated only
+after a verified OS-store commit, then removed. Recovered legacy backups never
+silently overwrite the OS record or restore removed enrollment. See
+[ADR 0130](decisions/0130-os-credential-storage.md) for migration/recovery, platform
+access, headless prerequisites, prompt behavior and backup limitations.
+
+Enrollment commits hosted service, machine/workspace identifiers, account labels, key version, an empty
+pin set and workspace content-key migration in a single credential transaction. A failed write
+retains the complete previous enrollment and content keys on restart. Restore validates every
+required read before granting an identity or migrating legacy state; an unreadable control URL
+or pin record is an explicit error, never a default hosted service or legacy adoption permission. A
+record changed by another process during restore is rejected and retried by recreating the
+client. The remote Control v2 client likewise refuses a partial session/pin restore and preserves
+stored values; after OS access is recovered, recreate the client to reload the complete state.
 
 Deterministic tests use a fake provider and consume
 no model quota. Heartbeat snapshots are split into lossless, sequential batches
@@ -344,11 +381,11 @@ of at most 100 sessions, matching the Control API request bound; a later batch
 is not sent after an earlier failure and event/key synchronization starts only
 after the complete snapshot succeeds.
 
-The relay accepts the rest of a snapshot when it refuses some sessions (owned by
+The hosted service accepts the rest of a snapshot when it refuses some sessions (owned by
 another enrollment of the Mac, or behind the stored generation) and names them in
 `rejectedSessions`. Until a later heartbeat accepts them, the daemon keeps those
 sessions local: it uploads none of their events and wraps none of their keys,
-neither for known devices nor in a pairing approval, which the relay would refuse
+neither for known devices nor in a pairing approval, which the hosted service would refuse
 as a whole for one envelope it cannot hold.
 
 Control requests use HTTP/1.1, never HTTP/2. Over HTTP/2 every request shared
@@ -359,29 +396,34 @@ the Mac offline and commands were claimed again and again.
 A control reply that fails in transport (connection loss, transfer timeout,
 protocol error) is a failure even when its status line had already arrived.
 Treated as success, a `200` command poll whose body was lost dropped the
-commands the relay had just leased; they came back only after the 30 s lease
+commands the hosted service had just leased; they came back only after the 30 s lease
 lapsed, and each session's queue waited behind them. The daemon logs a poll
 that lost its leased commands and every failed command acknowledgement.
 
 Event uploads to `/v2/events:append` hold at most 100 events and at most
-768 KiB of encrypted envelopes, below the relay's 1 MiB request limit; a single
-event is always sent alone. When the relay, or a proxy in front of it, still
+768 KiB of encrypted envelopes, below the hosted service's 1 MiB request limit; a single
+event is always sent alone. When the hosted service, or a proxy in front of it, still
 answers 413 (with or without a JSON body), the daemon halves that session's
 batch and retries from the same cursor, down to one event, and doubles it again
 after each accepted batch. Any other failed upload makes that session generation
 wait before its events are sent again, one second doubling on each consecutive
 failure: up to five minutes after a refusal (a 4xx other than 401, 408 and 429,
-such as `stale_generation` for a session the relay has deleted), and up to one
-minute when the relay cannot be reached or fails, a wait that the next successful
-heartbeat ends. New journal events do not shorten the wait; without it, every
+such as `stale_generation` for a session the hosted service has deleted), up to one hour
+after `409 event_cursor_gap` (the hosted service waits for a cursor this journal has
+already pruned, so retrying cannot fill the gap), and up to one minute when the
+hosted service cannot be reached or fails, a wait that the next successful heartbeat
+ends. New journal events do not shorten the wait; without it, every
 event of every session retried each refused upload. A 401 waits only for the next
-credential, and an accepted batch clears the wait. Streamed deltas and `item.completed` envelopes also
+credential, and an accepted batch clears the wait. The daemon remembers the
+cursor the hosted service accepted through for each session generation, so an upload
+pass (on every heartbeat and journaled event) skips sessions that are in
+flight, waiting, or have nothing newer without reading the journal. Streamed deltas and `item.completed` envelopes also
 carry a plaintext `itemKey` (a truncated SHA-256 of session, generation and
 item id, never the id itself), and a completion whose cloud payload holds the
-item's whole text carries `supersedesDeltas`, so the relay can drop the
+item's whole text carries `supersedesDeltas`, so the hosted service can drop the
 streamed copy the way the local journal does. Neither field is inside the
 signed content. `itemKey` is a public linkage value: it hides the item id
-from casual reading, but the relay knows session and generation and can
+from casual reading, but the hosted service knows session and generation and can
 confirm a guessed provider item id. Each session's cloud cursor is registered with the
 journal once per sign-in, not on every upload, and an acknowledgement at or
 behind the stored cursor writes nothing. Advancing ACKs commit a monotonic cursor
@@ -411,7 +453,7 @@ physical caps, not a hard storage quota; see [ADR 0050](decisions/0050-bounded-j
 Cloud envelope cache cleanup has its own 256-candidate/1-MiB maintenance lane.
 Only rows with receipts for their exact sent ciphertext are eligible. An additive
 receipt flag defaults to pending for legacy/new cache; pre-dispatch verification
-resets it for retries. Receipt and a versioned relay/workspace/machine/key-scoped
+resets it for retries. Receipt and a versioned hosted service/workspace/machine/key-scoped
 recovery cursor commit together before credential mirroring and raw ACK; restart
 repairs these later steps without re-encrypting already accepted events.
 Old account callbacks and old raw cloud cursors cannot authorize a replacement
@@ -458,11 +500,11 @@ reclaim with batches of 32,768 pages (128 MB) (ADR 0108).
 Before an event enters the cloud encryption and retry path, the daemon projects
 command lifecycle payloads to the full command text plus identity, status and
 exit code. It removes aggregated output, output deltas and command actions. The
-local SQLite journal remains unchanged and authoritative, while neither relay
+local SQLite journal remains unchanged and authoritative, while neither hosted service
 ciphertext nor mobile replay carries command output. A phone reads one command's
 output tail (`session.output.read`) or a bounded JPEG of an image the journal
 references (`session.media.read`) on demand; neither result is stored on the
-relay. The same `session.media.read` with a worktree-relative `path` instead of
+hosted service. The same `session.media.read` with a worktree-relative `path` instead of
 `media_ref` previews an image from the session's worktree as it is on disk now
 (no revision fence; symlinks, paths escaping the worktree and files over 16 MB
 are refused). Previews are decoded off the daemon's main thread, on a pool of
@@ -578,14 +620,20 @@ to trigger that pass). The local `remote.audit` request returns them
 newest first (`limit`, 1–500, default 100; `device_id` to show one device's).
 
 Workspace file reads are fenced by the worktree revision the daemon publishes in
-each heartbeat (a hash of HEAD, the status and dirty content). The relay only
+each heartbeat (a hash of HEAD, the status and dirty content). The hosted service only
 accepts a read naming the revision it lists, which trails the worktree by up to a
 heartbeat while an agent edits it. A read naming a revision the daemon published
 for that session in the last 10 minutes is served from the worktree as it is
 now and answers with the requested revision, without running git again. Any
 other revision is recomputed with git before and after the read and fails as
 `stale_revision` when it differs. Heartbeats compute revisions on their own
-thread, so they never queue a phone's read.
+thread, so they never queue a phone's read. A heartbeat runs git for a worktree
+again only when a conversation on it recorded an event or changed state, git's
+`HEAD`, `logs/HEAD` or `index` file changed (found by walking up from the
+workspace, as for subfolders of a repository), or its revision is older than two minutes
+(edits made outside any conversation); otherwise it publishes the cached
+revision (`WorktreeRevisionCache`). A failed git run is not kept, so the next
+heartbeat tries again.
 
 The daemon process
 runs with umask 077; its state and token directories are owner-only, and the
@@ -654,9 +702,9 @@ Protocol code should be transport-independent. The desktop and daemon may link
 
 ```text
 mobile app
-  -> Ketsuite Gateway
+  -> hosted gateway
      -> KetPlus Control API
-     -> KetPlus Relay
+     -> the hosted service
         -> outbound daemon connection
            -> local capability check
               -> PTY, process, or workspace operation
@@ -667,62 +715,96 @@ mobile app
 - Use short-lived session credentials; keep long-lived device keys in the OS
   credential store, never plaintext configuration.
 - Authorize every operation by explicit capability and workspace scope.
-- Treat relay messages, terminal output, filenames, and mobile input as
+- Treat hosted service messages, terminal output, filenames, and mobile input as
   untrusted data with bounded sizes.
 - Make reconnect idempotent and prevent a stale client from reclaiming a newer
   session generation.
 - Redact secrets and user content from routine logs. Security audit events must
   identify subjects/devices without recording command payloads by default.
 
+**Devices are pinned, never taken from a service's word.** The daemon assumes the hosted service can be actively malicious: content, device identity and host identity must stay safe against it, while availability and metadata (sizes, timing, ids) are out of scope. `DevicePins` records each trusted device's id, key version and a fingerprint of both public keys in the daemon's credential file. A device row the service returns is only a hint. Session keys are wrapped, device-key answers accepted, peer offers verified and message-socket event links opened only for pinned devices whose keys match their pins; a removed or replaced pin closes that device's links at once. A pin comes only from an approval on this Mac: the user compares a confirmation code the daemon computed from the claimed keys with the one on the phone, and `remote.pairing.approve` carries the digest the user confirmed, so the service cannot swap keys and digest together. The daemon never recomputes trust from what the service later says: it recomputes the claim digest itself and refuses a mismatch.
+
 ### Daemon challenge authentication
 
-The daemon requests only `signatureVersion: 2` and `signatureAlgorithm: "Ed25519"`
-on both challenge issuance and credential redemption. Before signing, it checks the
-same scheme in the reply, the enrolled machine/key binding, ASCII identifiers and
-a canonical unpadded base64url nonce of exactly 32 bytes. Missing or legacy fields
-fail closed; there is no retry using a raw nonce signature.
+The daemon requests only `signatureVersion: 2` and `signatureAlgorithm: "Ed25519"` on both challenge issuance and credential redemption. Before signing, it checks the same scheme in the reply, the enrolled machine/key binding, ASCII identifiers and a canonical unpadded base64url nonce of exactly 32 bytes. Missing or legacy fields fail closed; there is no retry using a raw nonce signature.
 
-The identity key signs UTF-8 compact JSON
-`["ketplus",2,"daemon-challenge",id,machineId,keyVersion]`, one NUL byte, then the
-decoded nonce. The fixed domain prevents a relay from obtaining signatures for
-other identity-key protocols. The relay owns challenge expiry and atomic one-time
-redemption. Deploy a v2-capable relay before this client; an old relay cannot issue
-new credentials to it. Existing cached credentials remain usable until refresh.
-See [ADR 0036](decisions/0036-daemon-challenge-domain-separation.md) for the exact
-contract and compatibility rules. This documents client behavior, not relay deployment.
+The identity key signs UTF-8 compact JSON `["ketplus",2,"daemon-challenge",id,machineId,keyVersion]`, one NUL byte, then the decoded nonce. The fixed domain stops a verifier from obtaining signatures usable in other identity-key protocols. Existing cached credentials remain usable until refresh. See ADR 0036 for the contract and the compatibility rules. This documents the daemon's behaviour, not a deployment.
 
-### Relay address and sign-in
+### Service address and sign-in
 
-The relay is the standalone KétPlus runtime (`https://ketplus-staging.ketviet.vn`
-by default), which serves `/v2/...` at the root of its host. A base URL may still
-carry a path, as the tenant gateway's `/native/ketplus` did before the staging
-cutover: every request and the `/v2/relay` socket append their path to that base
-(`cloud/ControlEndpoint.h`); resolving an absolute path against it would drop it.
+Production packages compile the service address into the desktop and daemon (`KETPLUS_PRODUCTION_RELEASE=ON`); developer builds use a configurable default. The service answers `/v2/...` at the root of its host. A base URL may still carry a path: every request and the message socket append their path to that base (`cloud/ControlEndpoint.h`); resolving an absolute path against it would drop it.
 
-KetPlus never asks for a password. Signing a Mac in is a browser handoff
-(RFC 8252 with PKCE S256, `cloud/CloudControlSignIn.cpp`):
+KetPlus never asks for a password. Signing a Mac in is a browser handoff (RFC 8252 with PKCE S256, `cloud/CloudControlSignIn.cpp`):
 
-1. `remote.sign_in` listens on a random `127.0.0.1` port (`BrowserSignIn`),
-   posts `/v2/auth/handoffs` with the installation ID, the loopback redirect,
-   a random `state` and the code challenge, and answers with the relay's
-   `authorization_url`. The daemon refuses a page on another host than its relay.
-2. The desktop opens that page in the system browser. The gateway signs the
-   viewer in to the tenant and the viewer approves.
-3. The browser returns to the loopback port with a one-time code and the same
-   `state`; a request with any other state is refused and does not end the wait.
-   An `error` with the right state (the viewer declined, or the tenant failed)
-   ends the sign-in at once with a fixed message, "Sign-in was declined." for
-   `access_denied`; `error_description` is never shown (#84).
-4. The daemon redeems the code at `/v2/auth/token` with the verifier and uses
-   that user session once, to enroll the Mac. The session is not stored. Its
-   subject's `displayName` and `username` are stored with the enrollment and
-   removed on sign-out (ADR 0109).
+1. `remote.sign_in` listens on a random `127.0.0.1` port (`BrowserSignIn`), starts a handoff with the installation ID, the loopback redirect, a random `state` and the code challenge, and answers with the service's authorization URL. The daemon refuses a page on another host than its service.
+2. The desktop opens that page in the system browser, where the viewer signs in and approves.
+3. The browser returns to the loopback port with a one-time code and the same `state`; a request with any other state is refused and does not end the wait. An `error` with the right state (the viewer declined, or the sign-in failed) ends the sign-in at once with a fixed message, "Sign-in was declined." for `access_denied`; `error_description` is never shown (#84).
+4. The daemon redeems the code with the verifier and uses that user session once, to enroll the Mac. The session is not stored. Its subject's `displayName` and `username` are stored with the enrollment and removed on sign-out (ADR 0109).
 
-`remote.status` reports `sign_in_pending` while it waits (ten minutes at most)
-and `sign_in_error` when it failed; `remote.sign_in.cancel` and sign-out stop it.
-Once enrolled, it reports `account {display_name, username}`. Settings → Account
-& devices and the Connections account strip show it. An enrollment made before
-ADR 0109 has no `account` until the next sign-in.
+`remote.status` reports `sign_in_pending` while it waits (ten minutes at most) and `sign_in_error` when it failed; `remote.sign_in.cancel` and sign-out stop it. Once enrolled, it reports `account {display_name, username}`. Settings → Account & devices and the Connections account strip show it. An enrollment made before ADR 0109 has no `account` until the next sign-in.
+
+## Windows daemon (in progress)
+
+The daemon and `ketplusctl` build on Windows (MSVC, Qt 6) with the `daemon-dev` preset. What
+differs from macOS/Linux:
+
+- **Local IPC.** The endpoint is a named pipe, not a socket path. `DaemonPaths::socket()` returns
+  `ketplus-daemon-v0-<USERNAME>` (a `QLocalServer` name; the pipe namespace is machine-wide, so
+  the user is part of the name). `LocalIpcServer` keeps `QLocalServer::UserAccessOption`, which
+  makes Qt create the pipe with a security descriptor that admits only the current user. The
+  bearer credential in `local.token` is still required in `daemon.hello`; the pipe ACL is
+  an additional boundary, not a replacement. `--socket` may still name another pipe.
+  The pipe namespace is machine-wide and the name is predictable, so another account could create
+  the pipe first and wait for a client to send it the credential. The ACL only protects the
+  server's side. Before sending any credential, a client (`DaemonClient`, and the agent MCP
+  server's connection) therefore calls `remote::serverRunsAsCurrentUser`: it asks the pipe for its
+  server process (`GetNamedPipeServerProcessId`), opens that process's token and compares its user
+  SID with its own; a different or unreadable user closes the connection unsent.
+- **State and credential files.** Data lives under `%LOCALAPPDATA%\Ketsuite\KetPlus`
+  (`QStandardPaths::GenericDataLocation`). Mode bits and `umask` do not exist, so
+  `DaemonService::start()` replaces the DACL of the state and token directories with one
+  full-control entry for the current user, with inheritance blocked and object/container
+  inherit set (`remote::restrictToCurrentUser`, `modules/remote/src/OwnerOnlyAccess.cpp`).
+  The journal, its WAL/SHM files, the token and staged media inherit it. Unlike POSIX,
+  `readLocalDaemonCredential` does not re-verify the opened file's owner/mode; it relies on that
+  directory ACL and refuses symbolic links.
+- **Credential store.** `DpapiCredentialBackend` seals each service record with
+  `CryptProtectData` (current user scope, no UI) in `daemon\protected\<service>.dpapi`,
+  written atomically. The cross-process store lock is a `CreateFile` handle opened with share mode
+  0. Migration from the legacy plain file is not offered on Windows.
+- **Shutdown.** `WindowsShutdown` handles console Ctrl+C/Break/close/logoff/shutdown by quitting
+  the event loop, so the journal and endpoint close cleanly (the counterpart of `UnixSignals`).
+- **Process trees.** The daemon places itself in a kill-on-close Job Object at startup, so every
+  child it started ends with it. Each Codex, Claude and ACP provider process also gets a private
+  nested job (`platform/ProcessTree`): `killProcessTree` terminates the whole job and the job is
+  terminated again when the root exits, so shell wrappers and helper processes are not
+  orphaned. A grandchild spawned between `CreateProcess` and the job assignment escapes the
+  private job, but not the daemon-wide one.
+- **Provider launch.** `.cmd`/`.bat` wrappers must apply `nativeArguments` (see
+  [development](development.md)); the Copilot and Cursor adapters do. Codex and Cursor go through
+  `providers/WindowsScriptLaunch`: npm's `codex.cmd` is never run by cmd.exe; it is replaced by
+  `node.exe` on the package script (`tool_locations::npmCliCommand`, `modules/tools`), and is
+  refused when either is missing. Any other `.cmd`/`.bat` runs as `cmd.exe /d /v:off /s /c` with
+  `nativeArguments`, and a path or argument containing quotes, percent signs or newlines is
+  refused, not run. Cursor model ids, which reach that command line, must also match
+  `[A-Za-z0-9][A-Za-z0-9._:/@+-]*`; the launch check reports a refusal as the provider error.
+- **Not available.** Managed background process jobs (`ketplus_job_executor`, cgroup/process
+  group supervision) are POSIX-only. On Windows `ManagedTaskRuntime` refuses a `process` task with
+  `containment_unavailable`; `NativeJobUnsupported.cpp` only lets the daemon link.
+
+## Background job cleanup
+
+The daemon owns the cleanup of every managed background job and never hands it to the user
+([ADR 0127 §4a](decisions/0127-daemon-background-tasks.md#4a-daemon-owned-cleanup)). When
+an executor result leaves processes unconfirmed, `ManagedTaskRuntime` moves the job to
+`stopping` and, for a bounded window (30 seconds, per daemon start), lets the executor
+client probe the job's process group and signal the identities it re-verified (SIGTERM,
+then SIGKILL). A job always ends at its real state: `verified` with
+`process_group_empty` when the group is confirmed empty, otherwise `best_effort_complete`
+with the gap in `managed_job_diagnostics` and the daemon log. The slot is released on the
+terminal transition; a process the daemon cannot identify is never signalled. A record
+an earlier daemon left in `needs_attention` ends as `interrupted` when the registry opens.
+The protocol has no cleanup command and no `needs_attention` state.
 
 ## Lifecycle
 
@@ -786,7 +868,7 @@ Codex ownership migration is complete; terminal and cloud work remain incrementa
 1. Define versioned private protocol types and local IPC tests. (complete)
 2. Move Codex session/process ownership without changing UI. (complete)
 3. Run and reattach an external daemon in local-only mode. (complete)
-4. Add device registration and relay connection. (implemented in code; deployment pending)
+4. Add device registration and hosted service connection. (implemented in code; deployment pending)
 5. Enable mobile control only after capability and reconnect tests pass. (implemented in code;
    real staging end-to-end validation pending)
 
@@ -819,15 +901,19 @@ journal or by the provider, the next attempt hands off again. A switch whose `se
 journaled is rolled back, and the conversation stays with its previous provider and
 thread. The pending note is kept in memory only, so a daemon restart in between
 loses it.
+A team's context reset (ADR 0114 §11) takes the same path with the same provider:
+`startFreshContext` writes the transcript and retires the thread, `session.context_reset`
+is journaled, and the next turn starts with a note that points at the transcript and a
+team briefing.
 ### Conversation execution worktree (isolated implementation)
 
 `session.worktrees` returns a searched, touched-first page (20 default, 100 max). Local IPC may pass `repository_path` to list another repository's worktrees without switching or enrolling it; every result names the listed `repository_path` and marks the `main` worktree (ADR 0105). `session.worktree.switch` validates an idle Codex session, same Git repository and expected context revision. Remote commands/results are encrypted; the switch target opaque IDs are included in AAD. New catalog targets are published before the page response; switching requests an immediate heartbeat. Stable desktop navigation uses `conversation_navigation`, separate from execution cwd. `conversation_worktree_activity` stores new provider evidence, not inferred ownership or reconstructed history; see ADR 0015 and the execution-worktree test lane.
 
 ## Atlas live runtime
 
-`AtlasLiveRuntime` owns only the KetAtlas viewer and optional declared renderer it starts. Version 0.5.2 is required, the viewer is read-only, and framework startup uses the local renderer contract without a shell. Discovery returns opaque project IDs. `atlas.start` fences the selected execution context; reconnect by an existing attachment channel instead retains that runtime's source even after a conversation switches. Back releases the connection with a five-minute idle lease; `atlas.detach` explicitly stops the owned runtime. A runtime and its tunnel also stop when the device that opened it is revoked (here or reported by the relay), when its conversation generation is deleted, when the relay revokes this machine, and on sign-out. A device revocation is handled even when WebRTC peer transport is not negotiated. An `atlas.start` still scanning when its device or the machine is revoked creates no runtime, because it captures an access fence before the scan and checks it before creating the runtime. Existing desktop viewers are not adopted or stopped.
+`AtlasLiveRuntime` owns only the read-only static KetAtlas viewer it starts. Version 0.5.2 is required. Remote starts have no host-side per-launch renderer decision and do not opt into project commands, even when a renderer sidecar is present. Pairing and remote payload fields do not supply that decision; attachments expose only the viewer origin (ADR 0128). Discovery returns opaque project IDs. `atlas.start` fences the selected execution context; reconnect by an existing attachment channel instead retains that runtime's source even after a conversation switches. Back releases the connection with a five-minute idle lease; `atlas.detach` explicitly stops the owned runtime. A runtime and its tunnel also stop when the device that opened it is revoked (here or reported by the hosted service), when its conversation generation is deleted, when the hosted service revokes this machine, and on sign-out. A device revocation is handled even when peer transport peer transport is not negotiated. An `atlas.start` still scanning when its device or the machine is revoked creates no runtime, because it captures an access fence before the scan and checks it before creating the runtime. Existing desktop viewers are not adopted or stopped.
 
-`AtlasLiveTunnel` multiplexes bounded byte streams to registered loopback viewer/renderer ports over a persistent authenticated WebSocket. Each attachment gets a new random key/channel; AES-GCM frames bind channel, direction and exact sequence. The phone uses matching loopback origins and an ephemeral HttpOnly cookie for its native bridge. HTTP, streaming bodies, renderer WebSockets and SSE remain ordinary protocols inside the encrypted byte streams. The relay forwards ciphertext and rechecks grants periodically; it cannot see resource bodies. There is no automatic write replay. Stream EOF is sent when a disconnected origin
+`AtlasLiveTunnel` multiplexes bounded byte streams to registered loopback viewer/renderer ports over a persistent authenticated WebSocket. Each attachment gets a new random key/channel; AES-GCM frames bind channel, direction and exact sequence. The phone uses matching loopback origins and an ephemeral HttpOnly cookie for its native bridge. HTTP, streaming bodies, renderer WebSockets and SSE remain ordinary protocols inside the encrypted byte streams. The hosted service forwards ciphertext and rechecks grants periodically; it cannot see resource bodies. There is no automatic write replay. Stream EOF is sent when a disconnected origin
 has been fully drained, including drains triggered by WebSocket writes; the
 client need not return additional credit after receiving the complete response
 (ADR 0084).
@@ -839,7 +925,7 @@ callback is consumed before invocation and cannot run again when the process
 exits immediately after readiness (ADR 0083). Synthetic CLI regressions cover
 these boundaries without starting a real viewer or renderer.
 
-`AtlasLiveTunnel` multiplexes bounded byte streams to registered loopback viewer/renderer ports over a persistent authenticated WebSocket. Each attachment gets a new random key/channel; AES-GCM frames bind channel, direction and exact sequence. The phone uses matching loopback origins and an ephemeral HttpOnly cookie for its native bridge. HTTP, streaming bodies, renderer WebSockets and SSE remain ordinary protocols inside the encrypted byte streams. The relay forwards ciphertext and rechecks grants periodically; it cannot see resource bodies. There is no automatic write replay.
+`AtlasLiveTunnel` multiplexes bounded byte streams to registered loopback viewer/renderer ports over a persistent authenticated WebSocket. Each attachment gets a new random key/channel; AES-GCM frames bind channel, direction and exact sequence. The phone uses matching loopback origins and an ephemeral HttpOnly cookie for its native bridge. HTTP, streaming bodies, renderer WebSockets and SSE remain ordinary protocols inside the encrypted byte streams. The hosted service forwards ciphertext and rechecks grants periodically; it cannot see resource bodies. There is no automatic write replay.
 
 `session.resource.resolve` resolves only resource references recorded in an exact event. It returns an opaque source scope and current content revision, never a historical content snapshot or inferred legacy provenance. For agent messages, it also validates inline Markdown file destinations in that exact event. Relative destinations remain bound to the recorded execution context; absolute destinations may identify another existing Git checkout. Switching the current worktree does not rewrite a link’s source. Messages without a recorded context revision remain unverified.
 
@@ -853,7 +939,7 @@ checks, a consistent SQLite snapshot, exclusive delta cursor and projection
 revision. `raw_activity_details` is an explicit local read option used for
 conversation export. Sometimes an MCP step that joined a group completes with images. It
 then leaves the group, and its completion carries the group's new summary as
-`left_activity_group`. Relay/mobile remain on the legacy projection. See
+`left_activity_group`. Hosted service/mobile remain on the legacy projection. See
 [ADR 0022](decisions/0022-daemon-activity-group-details.md).
 
 Opening a journal only marks sessions whose activity index is behind in
@@ -888,6 +974,11 @@ Incremental discovery uses `session_catalog_live_only: true` with page version 1
 request, no tombstone query or deletion signals, and the same wire-byte guard.
 Older paged daemons return page one with live sessions; discovery ignores its
 deletion fields. Initial/reconnect reconciliation still walks the full catalog.
+Live sessions themselves are read in opt-in keyset pages by session id
+(`live_sessions_page_version: 1`, feature `session.catalog_pages/1`, at most 512
+rows and 512 KiB each; [ADR 0131](decisions/0131-paged-live-session-catalog.md)),
+so a catalog of thousands of conversations no longer exceeds the frame. Both
+readers return the pages as one `sessions` array; continuations are live-only.
 The tombstone, cleanup-work and purge-marker inserts must each affect one row.
 Each per-generation state delete must leave no matching row, and a history batch
 that removes nothing while rows remain fails the deletion. A failed statement or commit
@@ -900,7 +991,7 @@ retirement remains a separate hardening item.
 The heartbeat optionally carries `deletions` (session ID, generation, lifecycle
 revision and operation ID). Only an exact `acceptedDeletions` receipt clears cloud
 work. Missing receipts and transport failures retry after restart; absence from a
-session catalog alone never proves deletion. Relay consumers must deploy the
+session catalog alone never proves deletion. Hosted service consumers must deploy the
 additive control-v2 contract before relying on Mac-to-phone deletion propagation.
 
 Completion changes only the identified durable work row. Fully completed jobs are
@@ -927,8 +1018,12 @@ without normalizing or deleting their stored values. Both the local source and
 retained catalog are checked; see
 [ADR 0057](decisions/0057-preserve-unsupported-provider-ownership.md).
 Cursor has no supported
-thread-deletion API in this integration: an unshared Cursor thread currently rejects
-permanent deletion with `provider_cleanup_unsupported` and retains its conversation.
+thread-deletion API in this integration, and its ACP sessions live in Cursor's own store
+outside KetPlus-owned paths. Deleting a Cursor conversation, or one of a provider this
+daemon does not know, removes its local transcript, journal entry, handoff and review
+scratch directories and media, and queues no provider cleanup: that provider's history
+stays with the provider, as the delete dialog says (T-60, 2026-11-12; it was rejected
+with `provider_cleanup_unsupported` before). Codex and Claude cleanup is unchanged.
 This change does not scan or delete already orphaned historical provider sessions.
 
 ## Agent messaging (ADR 0027)
@@ -947,7 +1042,11 @@ reports a message the conversation sent (`sent`, with its delivery) or answered
 with its final message (`replied`), and held, failed and expired messages. While
 an automatic turn runs, the broker keeps its sender in memory: `session.list`
 adds it as `agent_turn` (`number`, `title`, `kind`) and the heartbeat seals it
-into the phone's session metadata as `agentTurn`, beside `number`.
+into the phone's session metadata as `agentTurn`, beside `number`. The sealed
+`awaitingAgentReply` Boolean reports current-generation, unexpired outbound
+`expect_reply` requests; the next heartbeat explicitly sends false after the
+last request is answered, fails or expires. It is distinct from `awaitingReply`
+(user input) and never appears in plaintext snapshots.
 
 The work report (ADR 0106) travels the same authenticated path:
 - the ketplus_agents server's `work_report` tool calls `agents.work_report`;
@@ -968,7 +1067,11 @@ of the markdown matrix.
 broker diffs two snapshot trees of the worktree (written through a copy of its
 index) and sends the reviewer a `review` request with `expect_reply`. The
 reviewer must be Claude. Its turn runs under the review guard: the sidecar stays
-in plan mode and denies every permission request. Review requests never join a
+in plan mode, and a `PreToolUse` hook refuses every tool but reading and the agents
+server, also against settings allow rules. A team's review round runs under
+the guard's verify profile instead (ADR 0067, `review-guard.mjs`): commands in the
+provider sandbox with writes limited to `review-scratch/<session id>` and the
+temporary directories, and a `PreToolUse` hook that refuses changes to the work. Review requests never join a
 user turn. The verdict line of the reply, whether it is the final answer or an
 `agents_send` reply, decides whether the working agent starts a fix turn or the
 reply is only recorded. `session.reviewer.get/set` are local Desktop operations;
@@ -1031,17 +1134,174 @@ a fully acknowledged session generation, verifies identity and SHA-256, and
 atomically replaces the replay manifest, cleans unreferenced chunks and advances
 projection revision. Images, legacy blobs and larger payloads remain retained.
 
-## Agent teams (ADR 0112)
+## Agent teams (ADR 0114)
 
 `apps/daemon/src/teams/` owns teams. `LocalJournalTeams.cpp` stores three tables:
 `teams` (one JSON document per team under a revision; `AUTOINCREMENT` ids are never
 reused), `team_members` (session id → team, the primary key enforces one team per
 conversation) and `team_updates` (the append-only log with its digest mark).
 `TeamRules` checks membership and task moves without side effects and returns the
-error code of ADR 0112; `TeamCoordinator` applies them, journals every change, emits
+error code of ADR 0114; `TeamCoordinator` applies them, journals every change, emits
 `team.changed` / `team.removed` to local clients, and decides which change starts a turn
 through its narrow `TeamHostPort` (conversation lookup, member scaffold, worktree
 switch, git queries, message posting through `AgentBroker`). `SessionHostTeams.cpp`
 dispatches the `team.*` requests of the `teams/1` and `teams.tasks/1` features and
 implements the port. Member agents reach the same coordinator through the `team_*`
 tools of the ketplus_agents server, with the caller's role checked by the daemon.
+What clients read is bounded by the size of the team, never by its age (ADR 0115):
+- `team.list` and `team.changed` carry the directory form (members only).
+- `team.get` carries a summary without history, with the newest page of Updates.
+- History, older Updates and older decisions come page by page.
+- `LocalIpcServer::send` replaces any message too large for one frame with a failure of
+  that request, or a `truncated` event, and never drops the client for it.
+
+### Consented SSH installer lifecycle
+
+ADR 0124 adds authenticated `daemon.stop_if_idle` for explicit uninstall of a
+receipt-owned SSH installation. It shares `daemon.prepare_upgrade`'s atomic
+`SessionHost::hasActiveSessions()` refusal and listener shutdown fence, without
+a replacement-version field. It cannot interrupt active turns or approvals.
+Upgrade continues to require a strictly newer `replacement_version`. An older
+daemon that lacks the stop operation refuses safely; the installer never sends
+a fake future version or kills an existing daemon as an uninstall fallback.
+
+## Scheduled runs (ADR 0126)
+
+The daemon owns schedules that send a prompt at a time or on a recurrence, including
+while the desktop window is closed. `daemon.hello` minor 1 advertises `schedules/1`
+now that the handlers below are registered.
+The shared documents are `ketplus::schedule::Schedule` and `Run` in
+`modules/remote/src/Schedule.h`, which the desktop includes through `ketplus_remote`.
+Wire names are snake_case. A schedule keeps its last 50 runs.
+
+`apps/daemon/src/protocol/ScheduleProtocol.h` validates the requests and events.
+Unknown fields, an empty prompt, a missing target and unknown enum values fail
+with a stable code (`unknown_field`, `empty_prompt`, `missing_target`,
+`invalid_enum`, and the codes in that header). The target is one of four kinds:
+
+- `conversation` — `{kind, session_id}`. The prompt is delivered into that conversation.
+- `new` — `{kind, workspace, provider, model, effort, isolated_worktree, title_template}`.
+  Each run creates a conversation. `workspace` is the repository path.
+- `team` — `{kind, team_id}`. The prompt is a work order for the team's leader. Any rule.
+- `team_start` — `{kind, team_id}`. No prompt, a `once` rule and `missed_policy` `run_once`.
+  This is the scheduled start of a team.
+
+`schedule.list` takes optional `target_kind`, `session_id` and `team_id` filters.
+The other requests are `schedule.get`, `schedule.create`, `schedule.update`,
+`schedule.delete`, `schedule.setEnabled`, `schedule.runNow` and `schedule.runs`
+(`id`, `limit` 1-50, `before_id`). Events are `schedule.changed`
+(`change`: `created`, `updated` or `deleted`, plus the schedule) and `schedule.run`
+(the run). `busy_policy` is `queue` or `skip`. `missed_policy` is `run_once` or `skip`.
+`rule` is an opaque JSON object string; the recurrence engine owns its schema, including
+daylight-saving behaviour (a skipped local time fires just after the gap; a repeated
+local time fires once, on the first occurrence). A team start's rule must say
+`"kind": "once"`.
+
+Success payloads carry `ok: true` and `schedules`, `schedule`, `id`, `runs` plus
+`has_more`, or `run`. A missing id is `schedule_not_found`. `schedule.runNow`
+calls `ScheduleRunner::runNow` through the journal store.
+
+### Runner
+
+`ScheduleRunner` (`apps/daemon/src/schedule/ScheduleRunner.h`) arms one timer for the
+earliest enabled `nextRunAt`. It re-arms when a schedule is created, updated, deleted
+or enabled, when a run completes, and when the clock jumps. It does not poll. The
+production alarm is a single one-shot `QTimer` (`Qt::PreciseTimer`) capped at 60
+minutes; a fire that is not yet due only re-arms the remainder. Tests inject the
+clock and the alarm.
+
+`SessionHost` starts the runner only after it has loaded conversations. A due or
+missed conversation therefore sees its session. A run still `running` when the
+process starts, and a `queued` run whose turn is gone (no session, or a session
+this startup marked `interrupted`), is stored as `failed` with `runtime_stopped`
+and `finished_at`, and emitted as `schedule.run`. That does not move `nextRunAt`.
+A queued run whose session is still idle is resumed. When a turn ends (`turn.completed`
+or `runtime.stopped`) the host calls `runFinished` for the run that started it and
+`turnFinished` so a queued run can start. System wake, and a wall-clock jump larger
+than the one-minute clock watch, call `noteClockChanged` so a sleep does not wait
+out the rest of a monotonic timer.
+
+A fire within 60 seconds of `nextRunAt` is on time. On daemon start or after a wake,
+anything later follows `missed_policy`: `run_once` delivers one catch-up and `skip`
+records one run with status `missed` and error `missed`. Intermediate slots are not
+replayed. `nextRunAt` then becomes the next fire after now.
+
+Before delivery the runner asks `ScheduleRuntime` whether the target is idle.
+`busy_policy` `queue` keeps one queued run and starts it when that turn ends
+(`turnFinished` or `runFinished`). A second fire while a run is already queued does
+not add another; the slot is still consumed. `skip` records status `skipped` and
+error `busy`.
+
+The runtime seam delivers the prompt. A `conversation` target starts a turn in the
+stored session. A `new` target creates a conversation in the stored workspace with
+that provider, model and effort. The user message the host journals comes from
+`scheduledUserMessage`: `text`, `schedule_id` and `run_id`, so a transcript can mark
+the prompt. `team` and `team_start` start a turn in the team's leader conversation;
+an empty team-start prompt is sent as "Start the team." The runner does not open
+the journal or call SessionHost. `JournalScheduleStore` and
+`SessionHostScheduleRuntime` plug in behind `ScheduleStore` and `ScheduleRuntime`.
+
+Provider not ready, signed out, a deleted target and a missing workspace record a
+`failed` run with `provider_not_ready`, `signed_out`, `target_deleted` or
+`workspace_missing`, and emit `schedule.run`. An unreadable rule records `invalid_rule`
+and disables the schedule so the timer cannot spin. A `once` schedule disables itself
+after a scheduled fire is consumed, including skip, miss and failure. `runNow` is an
+extra run: it ignores the rule, still honours `busy_policy`, returns the run id, and
+does not move `nextRunAt` or disable a once schedule. A `runNow` that queued because
+the conversation was busy still starts when that turn ends, including when the
+schedule is paused. Every transition persists
+`nextRunAt` and `lastRunAt`.
+
+An enabled schedule with an empty `nextRunAt` gets the next future fire, or is
+disabled when a once rule has none.
+
+Schedules are created only from New conversation and New team. `created_by` is
+set by the daemon from the connection (`user`, or the agent conversation id);
+a create that sends it is `unknown_field`. Agent-created schedules wait on the
+limits in decision D-2. Timestamps on the wire include `Z` or a numeric offset.
+Phone and cloud sync are out of scope for v1. `SessionHostSchedules.cpp` handles
+`schedule.list`, `schedule.get`, `schedule.create`, `schedule.update`,
+`schedule.delete`, `schedule.setEnabled` and `schedule.runs` through this parser
+and the journal below. A successful create, update, delete or `setEnabled` emits
+`schedule.changed`. `schedule.runNow` calls the runner and returns the run. It does
+not answer `not_implemented`; that code remains only for older clients.
+
+### Storage
+
+`LocalJournalSchedules.cpp` creates `schedules` and `schedule_runs` on open with
+`CREATE TABLE IF NOT EXISTS`. A journal written before schedules gains the empty
+tables, and the rows it already had stay as they were. The tables are additive, so
+`journal_format::current` stays 1: an older daemon ignores them and does not rewrite
+them (ADR 0095). Open creates the tables before it records the format marker. A
+failure closes the journal, and the next open tries again.
+
+A schedule row stores its id, name, enabled flag, prompt, and one target. A
+`conversation` target stores the session id. A `new` target stores the protocol
+`workspace` (the repository path) plus provider, model, effort, the isolated-worktree
+flag and the title template. A `team` or `team_start` target stores the team id.
+The recurrence rule is opaque JSON. `busy_policy` is `queue` or `skip`,
+`missed_policy` is `run_once` or `skip`. The row also stores who created it, the
+created and updated times, `next_run_at` and `last_run_at`. List filters by target
+kind, session id and team id, together.
+
+`status` is empty, or `target_deleted`. Deleting a conversation (`deleteSession`)
+disables every `conversation` schedule that names that session and sets
+`target_deleted`. The rows and their runs stay, so the disable is visible rather than
+a silent drop. Each of those schedules is then sent as `schedule.changed` with
+`change` `updated`. The wire document includes `status` when it is `target_deleted`
+and omits it otherwise, so a schedule the user paused (`enabled: false`, no status)
+is distinct from one whose conversation is gone. Enabling such a schedule is refused
+with `target_deleted` until an update points it at a conversation that still exists.
+`schedule.create` and `schedule.update` refuse a conversation that is not in the
+journal, and a `team` or `team_start` whose `team_id` is not that team's decimal id,
+with `target_not_found`. Deleting a schedule deletes its runs in the same transaction.
+Deleting a team (`deleteTeam`) deletes `team` and `team_start` schedules whose team
+id is that team's decimal id, and their runs, and emits `schedule.changed` with
+`change` `deleted` for each. Other schedules are left alone.
+
+`schedule_runs` records each firing (`queued`, `running`, `succeeded`, `failed`,
+`skipped` or `missed`), when it was due, when it started and finished, the session
+and turn it used, and any error. Runs are listed newest first, in pages. After each
+append the journal keeps the last 50 runs of that schedule
+(`LocalJournal::maximumScheduleRuns`) and deletes the older ones. Updating a run's
+status does not change that order.

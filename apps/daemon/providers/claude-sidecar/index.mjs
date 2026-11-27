@@ -4,15 +4,65 @@ import { deleteSessionCopies } from "./session-delete.mjs";
 import { authenticationOptions, authenticationChangedWhileBusy, redact } from "./authentication.mjs";
 import { ClaudeTranscript } from "./transcript.mjs";
 import { TurnInput, userMessage } from "./input.mjs";
+import { ProcessBarrier, refreshWithin } from "./process-barrier.mjs";
 import { BackgroundTasks } from "./tasks.mjs";
 import { ensureResumable } from "./resume.mjs";
-import { open, readFile } from "node:fs/promises";
+import { reviewDecision, reviewOptions, reviewProfile } from "./review-guard.mjs";
+import { backgroundDecision, backgroundOptions, teamDisallowedTools } from "./background-policy.mjs";
+import { open, readFile, readdir, stat } from "node:fs/promises";
 import path from "node:path";
 import { createInterface } from "node:readline";
 import { stdin as input, stdout, stderr } from "node:process";
 
 function emit(value) {
   stdout.write(`${JSON.stringify(redact(value))}\n`);
+}
+
+const leaderSkills = ["enterprise-grade", "ket-design-system"];
+const skippedSkillDirectories = new Set([
+  "node_modules", "build", "dist", "target", "out", "vendor", "DerivedData", "venv",
+]);
+const maxSkillScanDepth = 8;
+const maxSkillScanDirectories = 4096;
+const projectSkillCache = new Map();
+
+async function scanProjectSkillNames(cwd) {
+  const names = new Set();
+  const pending = [{ directory: cwd, depth: 0 }];
+  for (let index = 0; index < pending.length; index++) {
+    const { directory, depth } = pending[index];
+    const entries = await readdir(directory, { withFileTypes: true }).catch(() => []);
+    if (entries.some(entry => entry.name === ".claude" &&
+        (entry.isDirectory() || (depth === 0 && entry.isSymbolicLink())))) {
+      const skills = path.join(directory, ".claude", "skills");
+      const candidates = await readdir(skills).catch(() => []);
+      for (const name of candidates.sort()) {
+        const skill = await stat(path.join(skills, name, "SKILL.md")).catch(() => undefined);
+        if (skill?.isFile()) names.add(name);
+      }
+    }
+    if (depth === maxSkillScanDepth) continue;
+    for (const entry of entries.sort((a, b) => a.name.localeCompare(b.name))) {
+      if (pending.length === maxSkillScanDirectories) break;
+      if (entry.isDirectory() && !entry.name.startsWith(".") &&
+          !skippedSkillDirectories.has(entry.name) && !entry.name.startsWith("build-")) {
+        pending.push({ directory: path.join(directory, entry.name), depth: depth + 1 });
+      }
+    }
+  }
+  return [...names];
+}
+
+async function teamSkillNames(cwd, role) {
+  if (!projectSkillCache.has(cwd)) projectSkillCache.set(cwd, scanProjectSkillNames(cwd));
+  const projectNames = await projectSkillCache.get(cwd);
+  const names = ["ketplusdev", "ketvietdev", "ketplus-browser"];
+  if (role === "leader") names.push(...leaderSkills);
+  // The SDK accepts names only, so project names must obey the same role policy.
+  for (const name of projectNames) {
+    if (role === "leader" || !leaderSkills.includes(name)) names.push(name);
+  }
+  return [...new Set(names)];
 }
 
 function permissionMode(profile) {
@@ -152,11 +202,16 @@ async function listSupportedModels() {
   }
 }
 
+// The models an account may use change with its plan (a lapsed or renewed subscription), and
+// the sidecar outlives such changes. A live list is reused only briefly; the built-in fallback,
+// served when listing failed, is never kept, so the next request asks the SDK again.
+const catalogFreshMs = 5 * 60 * 1000;
 let catalogCache = null;
+let catalogCachedAt = 0;
 let catalogPromise = null;
 
 async function catalog() {
-  if (catalogCache) return catalogCache;
+  if (catalogCache && Date.now() - catalogCachedAt < catalogFreshMs) return catalogCache;
   if (!catalogPromise) {
     catalogPromise = (async () => {
       const fallback = fallbackCatalog();
@@ -174,12 +229,14 @@ async function catalog() {
         for (const extra of fallback.data) {
           if (!seen.has(extra.model)) data.push(extra);
         }
-        return data.length > 0 ? { data } : fallback;
+        return data.length > 0 ? { data, live: true } : fallback;
       } catch {
         return fallback;
       }
-    })().then((result) => {
-      catalogCache = result;
+    })().then(({ live, ...result }) => {
+      catalogCache = live ? result : null;
+      catalogCachedAt = Date.now();
+      catalogPromise = null;
       return result;
     });
   }
@@ -391,7 +448,8 @@ function launchKey(params) {
     params.readableDirectories || [],
     params.compactWindow || 0,
     params.authentication?.revision || "",
-    params.reviewGuard === true,
+    reviewProfile(params),
+    params.scratchDirectory || "",
   ]);
 }
 
@@ -416,7 +474,7 @@ function denyPendingPermissions(sessionId, message, interrupt = false) {
 
 // Starts a daemon turn on `run`. A turn the agent starts itself (it answers a
 // finished background task) has no request to reply to.
-function beginTurn(run, messageId) {
+function beginTurn(run, messageId, epoch = "") {
   clearTimeout(run.idleTimer);
   const turnId = `claude-turn-${Date.now()}`;
   run.current = {
@@ -427,7 +485,8 @@ function beginTurn(run, messageId) {
   };
   // Only an id the SDK issued is a thread; an empty one is filled in once it reports it.
   if (messageId !== undefined)
-    emit({ id: messageId, result: { turn: { id: turnId }, thread: { id: run.sdkSessionId } } });
+    emit({ id: messageId, result: { turn: { id: turnId }, thread: { id: run.sdkSessionId },
+      ...(epoch ? { managedTransportEpoch: epoch } : {}) } });
   // Every turn is started and completed exactly once, however early it ends.
   emitEvent(run.sessionId, "turn.started", { turn_id: turnId, thread_id: run.sdkSessionId });
   return run.current;
@@ -487,7 +546,7 @@ async function runTurn(messageId, params) {
     return;
   }
   const existing = activeTurns.get(sessionId);
-  if (existing?.current) {
+  if (existing?.current || existing?.booting) {
     emit({ id: messageId, error: { message: "A Claude turn is already running in this conversation." } });
     return;
   }
@@ -511,6 +570,10 @@ async function runTurn(messageId, params) {
     // A different launch cannot reuse the query; its background tasks end with it.
     existing.release();
     await existing.done;
+    if (existing.transportFailed && !(await existing.barrier.drain())) {
+      emit({ id: messageId, error: { message: "mutation_refresh_unavailable: The previous Claude process did not exit." } });
+      return;
+    }
   }
   await startRun(messageId, params, prompt, images);
 }
@@ -527,7 +590,8 @@ async function continueRun(run, messageId, params, prompt, images) {
   }
   const q = run.query;
   const effort = typeof params.effort === "string" ? params.effort : "";
-  run.permissionMode = params.reviewGuard === true ? "plan" : permissionMode(params.permission);
+  run.permissionMode = reviewProfile(params) === "read" ? "plan"
+    : reviewProfile(params) === "verify" ? "default" : permissionMode(params.permission);
   for (const change of [
     () => q.applyFlagSettings
       ? q.applyFlagSettings({ model: params.model || "sonnet", effortLevel: effort || null })
@@ -552,8 +616,12 @@ async function continueRun(run, messageId, params, prompt, images) {
 
 async function startRun(messageId, params, prompt, images) {
   const sessionId = params.sessionId;
-  const mode = params.reviewGuard === true ? "plan" : permissionMode(params.permission);
+  // ADR 0067 and ADR 0114 §2: a review turn's profile, decided by this launch alone.
+  const profile = reviewProfile(params);
+  const mode = profile === "read" ? "plan" : profile === "verify" ? "default" : permissionMode(params.permission);
   const abortController = new AbortController();
+  const epoch = typeof params.managedTransportEpoch === "string" ? params.managedTransportEpoch : "";
+  const barrier = new ProcessBarrier();
   const stop = {};
   let release;
   const released = new Promise((resolve) => { release = () => resolve(stop); });
@@ -565,6 +633,8 @@ async function startRun(messageId, params, prompt, images) {
     cwd: params.cwd || process.cwd(),
     permissionMode: mode,
     query: null,
+    barrier,
+    booting: Boolean(epoch),
     input: null,
     abortController,
     sdkSessionId: params.resume || "",
@@ -576,7 +646,8 @@ async function startRun(messageId, params, prompt, images) {
     tasks: new BackgroundTasks((payload) => emitEvent(sessionId, "tasks.changed", payload)),
   };
   activeTurns.set(sessionId, run);
-  const current = beginTurn(run, messageId);
+  let current = epoch ? null : beginTurn(run, messageId);
+  let acknowledged = !epoch;
   let grace = null;
 
   // Only the daemon supplies this map, rebuilt from local settings for every turn.
@@ -586,32 +657,47 @@ async function startRun(messageId, params, prompt, images) {
   const agentsInjected = Object.hasOwn(mcpServers, "ketplus_agents");
   // KetPlus Computer enforces per-app grants itself, so its tools need no prompt.
   const computerInjected = Object.hasOwn(mcpServers, "ketplus_computer");
-  // ADR 0067: a review of another conversation's turn may read and reply, nothing else.
-  const reviewGuard = params.reviewGuard === true;
-  const hostTools = reviewGuard ? (agentsInjected ? ["mcp__ketplus_agents__*"] : []) : [
+  const reviewContext = { scratch: params.scratchDirectory || "", cwd: run.cwd, agentsInjected, browserInjected };
+  const review = profile ? reviewOptions(profile, reviewContext) : null;
+  const hostTools = review ? review.allowedTools : [
     ...(browserInjected ? ["mcp__ketplus_browser__*"] : []),
     ...(agentsInjected ? ["mcp__ketplus_agents__*"] : []),
     ...(computerInjected ? ["mcp__ketplus_computer__*"] : []),
   ];
+  const readable = [...(Array.isArray(params.readableDirectories) ? params.readableDirectories : []),
+    ...(review?.additionalDirectories || [])];
   const effort = typeof params.effort === "string" ? params.effort : "";
   try {
     run.authenticationRevision = params.authentication?.revision || "";
     run.authentication = { enabled: params.authentication?.enabled === true,
       budget_usd: params.authentication?.budget_usd || 0 };
     emitUsageEvent(sessionId, "usage.session", sessionUsage(run.authentication));
-    run.input = new TurnInput(await promptMessage(prompt, images));
+    const firstPrompt = await promptMessage(prompt, images);
+    run.input = new TurnInput(firstPrompt, Boolean(epoch));
     if (params.resume) await ensureResumable(params.resume, run.cwd).catch(() => false);
+    const authentication = authenticationOptions(params.authentication);
+    const skills = ["leader", "developer", "reviewer"].includes(params.teamRole)
+      ? await teamSkillNames(run.cwd, params.teamRole) : undefined;
+    const teamRestrictions = teamDisallowedTools("claude", params.teamRole);
+    const appended = [typeof params.browserInstructions === "string" ? params.browserInstructions : "",
+      review?.instructions || ""].filter(Boolean).join("\n\n");
+    const background = backgroundOptions({ ...(authentication.env || process.env), ...review?.env },
+      review?.hooks, authentication.settings);
     const q = queryFn({
       prompt: run.input,
       options: {
-        ...authenticationOptions(params.authentication),
+        ...authentication,
+        // Keep credentials and review caches while enforcing native background
+        // blocking for every query, including full-access and resumed sessions.
+        ...background,
+        disallowedTools: [...background.disallowedTools, ...teamRestrictions],
+        ...(epoch ? { spawnClaudeCodeProcess: barrier.spawn } : {}),
         cwd: run.cwd,
         mcpServers,
         // The daemon derives this from the same launch as mcpServers on every query,
         // including resume. Preserve Claude Code's system prompt and the user's input.
-        ...(typeof params.browserInstructions === "string" && params.browserInstructions
-          ? { systemPrompt: { type: "preset", preset: "claude_code", append: params.browserInstructions } }
-          : {}),
+        ...(appended ? { systemPrompt: { type: "preset", preset: "claude_code", append: appended } } : {}),
+        ...(skills ? { skills } : {}),
         allowedTools: hostTools,
         model: params.model || "sonnet",
         // Per-launch CLI flag: do not replace the SDK's environment or model capacity.
@@ -619,24 +705,21 @@ async function startRun(messageId, params, prompt, images) {
         ...(effort ? { effort } : {}),
         ...(effort in thinkingTokens ? { maxThinkingTokens: thinkingTokens[effort] } : {}),
         // A handoff transcript from another provider, readable without a permission prompt.
-        ...(Array.isArray(params.readableDirectories) && params.readableDirectories.length > 0
-          ? { additionalDirectories: params.readableDirectories }
-          : {}),
-        permissionMode: reviewGuard ? "plan" : mode,
-        allowDangerouslySkipPermissions: !reviewGuard && mode === "bypassPermissions",
+        ...(readable.length > 0 ? { additionalDirectories: readable } : {}),
+        ...(review?.sandbox ? { sandbox: review.sandbox } : {}),
+        permissionMode: mode,
+        allowDangerouslySkipPermissions: !profile && mode === "bypassPermissions",
         includePartialMessages: true,
         persistSession: true,
         resume: params.resume || undefined,
         abortController,
         canUseTool: async (tool, toolInput) => {
+          const background = backgroundDecision(tool, toolInput);
+          if (background) return background;
           const requestId = `perm-${sessionId}-${Date.now()}-${Math.random().toString(16).slice(2)}`;
           const input = toolInput && typeof toolInput === "object" ? toolInput : {};
-          if (reviewGuard) {
-            // Refused without a prompt, so the user cannot grant a reviewer write access.
-            return agentsInjected && tool.startsWith("mcp__ketplus_agents__")
-              ? { behavior: "allow", updatedInput: input }
-              : { behavior: "deny", message: "A review is read-only: reply with your findings instead." };
-          }
+          // Decided without a prompt, so nobody can grant a reviewer more than its profile.
+          if (profile) return reviewDecision(profile, tool, input, reviewContext);
           if ((browserInjected && tool.startsWith("mcp__ketplus_browser__")) ||
               (computerInjected && tool.startsWith("mcp__ketplus_computer__")))
             return { behavior: "allow", updatedInput: input };
@@ -667,6 +750,21 @@ async function startRun(messageId, params, prompt, images) {
       },
     });
     run.query = q;
+    if (epoch) {
+      const initialized = await refreshWithin(q.initializationResult());
+      if (!initialized.hook_on_failure_supported)
+        throw new Error("mutation_refresh_unavailable: Claude cannot enforce failing hooks.");
+      const refreshed = await refreshWithin(q.setMcpServers(mcpServers));
+      if (!barrier.spawned || !refreshed || Object.keys(refreshed.errors || {}).length)
+        throw new Error("mutation_refresh_unavailable: Claude MCP setup was not confirmed.");
+      const statuses = await refreshWithin(q.mcpServerStatus());
+      if (!statuses.some(server => server.name === "ketplus_agents" && server.status === "connected"))
+        throw new Error("mutation_refresh_unavailable: Claude agent MCP is not connected.");
+      run.booting = false;
+      current = beginTurn(run, messageId, epoch);
+      acknowledged = true;
+      run.input.send(firstPrompt);
+    }
     if (current.interrupted) await q.interrupt?.();
 
     const messages = q[Symbol.asyncIterator]();
@@ -733,6 +831,8 @@ async function startRun(messageId, params, prompt, images) {
     }
     completeTurn(run);
   } catch (error) {
+    if (!acknowledged)
+      emit({ id: messageId, error: { message: "mutation_refresh_unavailable: Claude context setup failed." } });
     if (!run.current?.interrupted) {
       emitEvent(sessionId, "runtime.error", {
         message: error instanceof Error ? error.message : String(error),
@@ -750,8 +850,12 @@ async function startRun(messageId, params, prompt, images) {
     run.tasks.dispose();
     endedOutputs.set(sessionId, run.tasks);
     // Each query owns its MCP workers; never leave an old browser policy running.
-    try { run.query?.close?.(); } finally {
-      if (activeTurns.get(sessionId) === run) activeTurns.delete(sessionId);
+    try {
+      try { run.query?.close?.(); } catch { /* The actual-exit barrier still applies. */ }
+      if (epoch) run.transportFailed = !(await barrier.drain());
+    } finally {
+      run.booting = false;
+      if (!run.transportFailed && activeTurns.get(sessionId) === run) activeTurns.delete(sessionId);
       finished();
     }
   }

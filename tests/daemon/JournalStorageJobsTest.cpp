@@ -271,8 +271,10 @@ class JournalStorageJobsTest final : public QObject {
         QCOMPARE(files.size(), 1);
         QVERIFY(files.first().endsWith("-port-the-image-pipeline.json"));
         QFile file(folder.filePath(files.first()));
+#if !defined(Q_OS_WIN) // Access is an ACL here: see WindowsPlatformTest.
         QCOMPARE(file.permissions() & (QFileDevice::ReadGroup | QFileDevice::ReadOther),
                  QFileDevice::Permissions{});
+#endif
         QVERIFY(file.open(QIODevice::ReadOnly));
         const auto exported = QJsonDocument::fromJson(file.readAll()).object();
         QCOMPARE(exported.value("format"), QJsonValue("ketplus.conversation-export/1"));
@@ -323,10 +325,12 @@ class JournalStorageJobsTest final : public QObject {
         QVERIFY2(result.has_value(), qPrintable(error));
         QVERIFY(deleted);
         const QDir folder(result->value("directory").toString());
+#if !defined(Q_OS_WIN)
         QCOMPARE(QFileInfo(folder.path()).permissions() &
                      (QFileDevice::ReadGroup | QFileDevice::ReadOther | QFileDevice::ExeGroup |
                       QFileDevice::ExeOther),
                  QFileDevice::Permissions{});
+#endif
         const auto files = folder.entryList({"*.json"}, QDir::Files);
         QCOMPARE(files.size(), 1);
         QFile file(folder.filePath(files.first()));

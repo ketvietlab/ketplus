@@ -15,23 +15,27 @@ void CloudControlClient::initializePeerTransport() {
     signaling_ = new transport::Signaling(
         peers_,
         [this](const QString& device, int version, auto callback) {
-            const auto epoch = accountEpoch_;
+            const auto fence = accountFence();
+            if (!accountCurrent(fence)) {
+                callback({});
+                return;
+            }
             // The active device list is the pairing trust boundary; never admit a peer from
             // a historical device-key endpoint or from a key embedded in an untrusted offer.
             request("GET", "/v2/devices", {}, daemonToken_, {},
-                    [this, epoch, device, version, callback](int status, const QJsonValue& value,
+                    [this, fence, device, version, callback](int status, const QJsonValue& value,
                                                              const QString& error) {
-                        if (epoch != accountEpoch_ || status != 200 || !error.isEmpty() ||
+                        if (!accountCurrent(fence) || status != 200 || !error.isEmpty() ||
                             !value.isArray()) {
                             callback({});
                             return;
                         }
-                        const auto devices = trustedDevices(value.toArray());
+                        const auto devices = trustedDevices(value.toArray(), fence);
                         signaling_->refreshDevices(devices);
                         for (const auto& row : devices) {
                             const auto keys = row.toObject();
                             if (keys.value("id") == device &&
-                                keys.value("keyVersion").toInt() == version &&
+                                (version == 0 || keys.value("keyVersion").toInt() == version) &&
                                 (!keys.contains("status") || keys.value("status") == "active")) {
                                 callback(keys);
                                 return;
@@ -44,13 +48,34 @@ void CloudControlClient::initializePeerTransport() {
     connect(&wakeups_, &RelayWakeups::authorizationRevoked, this, [this] {
         signaling_->configure({}, {}, 1, false);
         daemonToken_.clear();
+        invalidateSenderKeys();
         // A revoked machine keeps no Atlas tunnel open for any device.
         revokeAtlasAccess();
     });
     // Revoking a device here or on another client closes the Atlas it was viewing.
-    connect(signaling_, &transport::Signaling::deviceRevoked, this,
-            [this](const QString& device) { revokeAtlasAccess(device); });
-    connect(&wakeups_, &RelayWakeups::message, signaling_, &transport::Signaling::receive);
+    connect(signaling_, &transport::Signaling::deviceRevoked, this, [this](const QString& device) {
+        invalidateSenderKeys();
+        revokeAtlasAccess(device);
+    });
+    // Runner messages leave first; the rest goes where it always went.
+    connect(&wakeups_, &RelayWakeups::message, signaling_, [this](const QJsonObject& message) {
+        if (runnerMessages_ && runnerMessages_(message))
+            return;
+        signaling_->receive(message);
+    });
+    pushSignals_ = new transport::PushSignals(
+        [this](const QJsonObject& message) { return wakeups_.send(message); },
+        [this] { return signaling_->forwardOnlyActive(); }, this);
+    signaling_->setRelaySender(
+        [this](const QJsonObject& message) { return wakeups_.send(message); });
+    connect(&wakeups_, &RelayWakeups::openChanged, this, [this](bool open) {
+        if (!open)
+            signaling_->relayLost();
+        if (open)
+            pushSignals_->flush();
+        if (open && relayOpened_)
+            relayOpened_();
+    });
     connect(signaling_, &transport::Signaling::outgoing, this, [this](const QJsonObject& message) {
         if (!wakeups_.send(message) && message.value("type") != "signal.end")
             signaling_->receive(
@@ -75,11 +100,26 @@ void CloudControlClient::initializePeerTransport() {
             });
 }
 
+void CloudControlClient::setRunnerMessages(RelayMessageTake take, std::function<void()> opened) {
+    runnerMessages_ = std::move(take);
+    relayOpened_ = std::move(opened);
+}
+
+bool CloudControlClient::sendRelayMessage(const QJsonObject& message) {
+    return wakeups_.send(message);
+}
+
 void CloudControlClient::negotiatePeerTransport(const QJsonValue& heartbeat) {
     const auto capabilities =
         heartbeat.toObject().value("compatibility").toObject().value("capabilities").toArray();
     signaling_->configure(workspaceId_, machineId_, machineKeyVersion_,
                           capabilities.contains("transport.webrtc/1"));
+    signaling_->setForwardOnly(capabilities.contains("events.forward_only/1"));
+    runnerRelayAvailable_ = capabilities.contains("runner.relay/1");
+    followEventsForwardOnly(capabilities.contains("events.forward_only/1"));
+    // Whole pass over every session, once per answer; each journaled event releases its own.
+    if (eventsForwardOnly())
+        releaseForwardOnlyRetention();
 }
 
 QJsonObject CloudControlClient::sealEvent(const QJsonObject& event, const QString& sessionId,
@@ -119,7 +159,7 @@ transport::EventPage CloudControlClient::peerEvents(const QString& sessionId, qi
     const auto selected = journal_->sessionHead(sessionId);
     if (selected.generation == 0 || selected.generation != generation ||
         refusedSessions_.contains(sessionId) || cursor > selected.cursor ||
-        selected.cursor - cursor > 2000) {
+        selected.cursor - cursor > peerEventWindow) {
         page.reset = true;
         page.generation = selected.generation == 0 ? generation : selected.generation;
         return page;

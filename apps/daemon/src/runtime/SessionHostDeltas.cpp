@@ -1,4 +1,5 @@
 #include "protocol/DaemonProtocol.h"
+#include "runtime/ManagedTaskBridge.h"
 #include "runtime/SessionHost.h"
 
 #include <QCryptographicHash>
@@ -40,7 +41,15 @@ void scheduleFlush(QTimer& timer, int delay) {
 } // namespace
 
 SessionHost::~SessionHost() {
+    stopScheduleRunner();
     deltaFlush_.stop();
+    // Questions to git nobody will read: the ones not started are dropped; the pool's own
+    // destructor waits for the one that runs.
+    teamGit_.clear();
+    teamBranchNames_.clear();
+    teamRemote_.clear();
+    worktreeListingReads_.clear();
+    teamRemoteStopping_->store(true);
     // The journal outlives this host and its media store.
     journal_->setImagePreviewWriter({});
     // Drain accepted in-memory data while storage is available. A failed write
@@ -58,6 +67,10 @@ SessionHost::~SessionHost() {
         }
     }
     deltaFlush_.stop();
+    // Destroy the dispatcher while session/journal fields still exist. QObject's
+    // child cleanup runs after C++ members have already been destroyed.
+    delete managedTasks_;
+    managedTasks_ = nullptr;
 }
 
 bool SessionHost::deferJournalEvent(Session& session, const QString& type,
@@ -122,6 +135,9 @@ bool SessionHost::deferJournalEvent(Session& session, const QString& type,
 
 bool SessionHost::appendEvent(Session& session, const QString& type,
                               const QJsonObject& providerPayload, QString* error) {
+    // Revoke even when terminal delivery is held in a journal retry queue.
+    if (type == "turn.completed" || type == "runtime.stopped" || type == "user.message")
+        session.mutationOrigin.revoke();
     // A turn's end tells readiness how the provider is doing (#170); errors gain a code.
     const QJsonObject payload = noteProviderOutcome(session, type, providerPayload);
     noteAwaitingReply(session, type, payload);

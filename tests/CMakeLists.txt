@@ -1,7 +1,18 @@
+include("${CMAKE_CURRENT_LIST_DIR}/daemon/credential-store/FixtureDaemon.cmake")
+
 if(APPLE)
     find_package(Python3 REQUIRED COMPONENTS Interpreter)
     add_test(NAME ketplus_macos_signing_cli_tests
         COMMAND "${Python3_EXECUTABLE}" "${PROJECT_SOURCE_DIR}/tests/packaging/test_signing_cli.py")
+    add_test(NAME ketplus_macos_update_build_policy_tests
+        COMMAND "${Python3_EXECUTABLE}" -I "${PROJECT_SOURCE_DIR}/tests/packaging/test_macos_update_build_policy.py")
+    set_tests_properties(ketplus_macos_update_build_policy_tests PROPERTIES
+        ENVIRONMENT "KETPLUS_TEST_CMAKE=${CMAKE_COMMAND}"
+        LABELS packaging)
+endif()
+
+if(APPLE AND KETPLUS_UPDATES_ENABLED)
+    add_subdirectory(updates)
 endif()
 
 function(ketplus_add_gui_test target)
@@ -11,6 +22,18 @@ function(ketplus_add_gui_test target)
     set_tests_properties(${target} PROPERTIES ENVIRONMENT
         "QT_QPA_PLATFORM=offscreen;KETPLUS_DISABLE_DAEMON_AUTOSTART=1;KETPLUS_BROWSER_TOOLS_CONFIG=${CMAKE_CURRENT_BINARY_DIR}/${target}-browser-tools.json;KETPLUS_COMPUTER_TOOLS_CONFIG=${CMAKE_CURRENT_BINARY_DIR}/${target}-computer-tools.json;KETPLUS_COMPUTER_DIR=${CMAKE_CURRENT_BINARY_DIR}/${target}-computer")
 endfunction()
+
+ketplus_add_gui_test(ketplus_qa_settings_isolation_tests
+    QaSettingsIsolationTest.cpp
+    "${PROJECT_SOURCE_DIR}/apps/desktop/src/app/QaSettingsIsolation.cpp")
+target_link_libraries(ketplus_qa_settings_isolation_tests PRIVATE Qt6::Test ketplus_app_updater)
+if(APPLE)
+    # Interpose the CFPreferences call made inside QtCore from a test-only dylib.
+    add_library(ketplus_qa_native_settings_probe SHARED QaNativeSettingsProbe.cpp)
+    target_link_libraries(ketplus_qa_native_settings_probe PRIVATE "-framework CoreFoundation")
+    ketplus_enable_warnings(ketplus_qa_native_settings_probe)
+    target_link_libraries(ketplus_qa_settings_isolation_tests PRIVATE ketplus_qa_native_settings_probe)
+endif()
 
 ketplus_add_gui_test(ketplus_codex_browser_tools_tests CodexBrowserToolsTest.cpp)
 target_link_libraries(ketplus_codex_browser_tools_tests PRIVATE Qt6::Test ketplus_browser_tools)
@@ -33,6 +56,9 @@ target_link_libraries(ketplus_spotlight_tests PRIVATE
 ketplus_add_gui_test(ketplus_atlas_tests AtlasTest.cpp)
 target_link_libraries(ketplus_atlas_tests PRIVATE Qt6::Test ketplus_atlas)
 
+ketplus_add_gui_test(ketplus_managed_atlas_viewers_tests ManagedAtlasViewersTest.cpp)
+target_link_libraries(ketplus_managed_atlas_viewers_tests PRIVATE Qt6::Test ketplus_atlas)
+
 ketplus_add_gui_test(ketplus_atlas_workspace_tests AtlasWorkspaceTest.cpp)
 target_link_libraries(ketplus_atlas_workspace_tests PRIVATE
     Qt6::Test
@@ -43,6 +69,12 @@ ketplus_add_gui_test(ketplus_desktop_zoom_tests DesktopZoomTest.cpp)
 target_link_libraries(ketplus_desktop_zoom_tests PRIVATE Qt6::Test ketplus_desktop_shell)
 ketplus_add_gui_test(ketplus_settings_storage_page_tests SettingsStoragePageTest.cpp)
 target_link_libraries(ketplus_settings_storage_page_tests PRIVATE Qt6::Test ketplus_desktop_shell)
+ketplus_add_gui_test(ketplus_settings_teams_page_tests SettingsTeamsPageTest.cpp)
+target_link_libraries(ketplus_settings_teams_page_tests PRIVATE Qt6::Test ketplus_desktop_shell)
+ketplus_add_gui_test(ketplus_runner_settings_model_tests RunnerSettingsModelTest.cpp)
+target_link_libraries(ketplus_runner_settings_model_tests PRIVATE Qt6::Test ketplus_desktop_shell)
+ketplus_add_gui_test(ketplus_settings_runners_page_tests SettingsRunnersPageTest.cpp)
+target_link_libraries(ketplus_settings_runners_page_tests PRIVATE Qt6::Test ketplus_desktop_shell)
 ketplus_add_gui_test(ketplus_settings_computer_page_tests SettingsComputerPageTest.cpp)
 target_link_libraries(ketplus_settings_computer_page_tests PRIVATE Qt6::Test ketplus_desktop_shell)
 
@@ -53,16 +85,30 @@ target_link_libraries(ketplus_interface_font_tests PRIVATE
     ketplus_typography
 )
 
+ketplus_add_gui_test(ketplus_background_task_transport_tests AgentBackgroundTaskTransportTest.cpp)
+target_link_libraries(ketplus_background_task_transport_tests PRIVATE Qt6::Test ketplus_ai)
+
+if(APPLE OR CMAKE_SYSTEM_NAME STREQUAL "Linux")
+    ketplus_add_gui_test(ketplus_managed_background_e2e_tests ManagedBackgroundEndToEndTest.cpp)
+    target_link_libraries(ketplus_managed_background_e2e_tests PRIVATE
+        Qt6::Test ketplus_ai ketplus_daemon_core)
+    add_dependencies(ketplus_managed_background_e2e_tests ketplus_job_executor)
+endif()
+
 ketplus_add_gui_test(ketplus_agent_tests
     AgentWorkspaceHistoryTest.cpp
     TranscriptInteractionTest.cpp
     TranscriptFileStepsTest.cpp
     TranscriptAgentNoteTest.cpp
+    TranscriptInternalStepsTest.cpp
+    TranscriptTeamBlockTest.cpp
     TranscriptWorkReportTest.cpp
     TranscriptProviderErrorTest.cpp
     AgentProviderSetupTest.cpp
     TranscriptTrimmedDetailTest.cpp
     AgentWorkspaceInteractionTest.cpp
+    AgentBackgroundTaskUiTest.cpp
+    AgentUsageCostDetailsTest.cpp
     AgentWorkspaceAtlasResultTest.cpp
     AgentWorkspaceRenderingTest.cpp
     AgentWorkspaceMotionTest.cpp
@@ -72,6 +118,7 @@ ketplus_add_gui_test(ketplus_agent_tests
     AgentWorkspaceMissingWorktreeTest.cpp
     AgentConversationForkMenuTest.cpp
     AgentReviewerPickerTest.cpp
+    AgentTeamHeaderTest.cpp
     AgentWorkspaceViewTest.cpp
     AgentWorkspaceViewTest.h
     TranscriptPhase5Test.cpp
@@ -88,6 +135,9 @@ target_link_libraries(ketplus_agent_shell_tests PRIVATE
     Qt6::Test
     ketplus_desktop_shell
 )
+
+ketplus_add_gui_test(ketplus_scheme_chat_tests SchemeChatTest.cpp)
+target_link_libraries(ketplus_scheme_chat_tests PRIVATE Qt6::Test Qt6::Quick ketplus_ai KetPlusCM::ui)
 
 ketplus_add_gui_test(ketplus_agent_streaming_tests AgentWorkspaceStreamingTest.cpp)
 target_link_libraries(ketplus_agent_streaming_tests PRIVATE Qt6::Test ketplus_ai)
@@ -123,6 +173,56 @@ target_link_libraries(ketplus_working_line_tests PRIVATE Qt6::Test ketplus_deskt
 
 ketplus_add_gui_test(ketplus_conversation_menu_tests ConversationMenuTest.cpp)
 target_link_libraries(ketplus_conversation_menu_tests PRIVATE Qt6::Test ketplus_desktop_shell)
+
+ketplus_add_gui_test(ketplus_sidebar_teams_tests SidebarTeamsTest.cpp)
+target_link_libraries(ketplus_sidebar_teams_tests PRIVATE Qt6::Test ketplus_desktop_shell)
+# Stable repository order across conversation/team updates, pins and conversation grouping.
+ketplus_add_gui_test(ketplus_sidebar_filter_tests SidebarFilterTest.cpp)
+target_link_libraries(ketplus_sidebar_filter_tests PRIVATE Qt6::Test ketplus_desktop_shell)
+ketplus_add_gui_test(ketplus_sidebar_repository_order_tests SidebarRepositoryOrderTest.cpp)
+target_link_libraries(ketplus_sidebar_repository_order_tests PRIVATE Qt6::Test
+                      ketplus_desktop_shell)
+ketplus_add_gui_test(ketplus_sidebar_scale_tests SidebarScaleTest.cpp)
+target_link_libraries(ketplus_sidebar_scale_tests PRIVATE Qt6::Test ketplus_desktop_shell)
+
+ketplus_add_gui_test(ketplus_team_dialogs_tests TeamDialogsTest.cpp)
+target_link_libraries(ketplus_team_dialogs_tests PRIVATE Qt6::Test ketplus_desktop_shell)
+ketplus_add_gui_test(ketplus_team_provider_dialog_tests TeamProviderDialogTest.cpp)
+target_link_libraries(ketplus_team_provider_dialog_tests PRIVATE Qt6::Test ketplus_desktop_shell)
+ketplus_add_gui_test(ketplus_team_sidebar_window_tests TeamSidebarWindowTest.cpp)
+target_link_libraries(ketplus_team_sidebar_window_tests PRIVATE Qt6::Test ketplus_desktop_shell)
+ketplus_add_gui_test(ketplus_copilot_presentation_tests CopilotPresentationTest.cpp)
+target_link_libraries(ketplus_copilot_presentation_tests PRIVATE
+    Qt6::Test Qt6::Quick ketplus_ai ketplus_desktop_shell)
+ketplus_add_gui_test(ketplus_team_page_tests TeamPageTest.cpp)
+ketplus_add_gui_test(ketplus_team_goal_form_tests TeamGoalFormTest.cpp)
+target_link_libraries(ketplus_team_goal_form_tests PRIVATE Qt6::Test ketplus_desktop_shell)
+ketplus_add_gui_test(ketplus_team_commands_tests TeamCommandsTest.cpp)
+target_link_libraries(ketplus_team_page_tests PRIVATE Qt6::Test ketplus_desktop_shell)
+target_link_libraries(ketplus_team_commands_tests PRIVATE Qt6::Test ketplus_desktop_shell)
+# T-6: the team page and the task dialog build only what a team change touched.
+ketplus_add_gui_test(ketplus_team_page_refresh_tests TeamPageRefreshTest.cpp)
+target_link_libraries(ketplus_team_page_refresh_tests PRIVATE Qt6::Test ketplus_desktop_shell)
+# T-56: the team page in its team's language, checked against the Vietnamese catalog.
+ketplus_add_gui_test(ketplus_team_page_language_tests TeamPageLanguageTest.cpp)
+target_link_libraries(ketplus_team_page_language_tests PRIVATE Qt6::Test ketplus_desktop_shell)
+target_compile_definitions(ketplus_team_page_language_tests PRIVATE
+    KETPLUS_TEAM_TS="${PROJECT_SOURCE_DIR}/modules/remote/translations/ketplus_teams_vi.ts")
+# Historical catalogs remain complete; new English UI text needs no Vietnamese translation.
+add_test(NAME ketplus_team_translation_catalog_tests
+    COMMAND Python3::Interpreter
+        "${PROJECT_SOURCE_DIR}/modules/remote/translations/update_team_translations.py"
+        --check-preserved "$<TARGET_FILE:Qt6::lupdate>" "${PROJECT_SOURCE_DIR}"
+        "${PROJECT_SOURCE_DIR}/modules/remote/translations/ketplus_teams_vi.ts")
+# ADR 0114 §10: the disk warning and the removal of a done task's worktree.
+ketplus_add_gui_test(ketplus_team_storage_page_tests TeamStoragePageTest.cpp)
+target_link_libraries(ketplus_team_storage_page_tests PRIVATE Qt6::Test ketplus_desktop_shell)
+ketplus_add_gui_test(ketplus_team_review_settings_tests TeamReviewSettingsTest.cpp)
+target_link_libraries(ketplus_team_review_settings_tests PRIVATE Qt6::Test ketplus_desktop_shell)
+# T-90 (ADR 0123): the team's Repository settings.
+ketplus_add_gui_test(ketplus_team_repository_settings_tests TeamRepositorySettingsTest.cpp)
+target_link_libraries(ketplus_team_repository_settings_tests PRIVATE Qt6::Test
+                      ketplus_desktop_shell)
 
 ketplus_add_gui_test(ketplus_settings_integration_tests MainWindowSettingsTest.cpp)
 target_link_libraries(ketplus_settings_integration_tests PRIVATE
@@ -164,10 +264,109 @@ target_link_libraries(ketplus_conversation_attention_tests PRIVATE
 )
 
 ketplus_add_gui_test(ketplus_remote_workspace_tests RemoteControlViewTest.cpp)
+target_include_directories(ketplus_remote_workspace_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(ketplus_remote_workspace_tests PRIVATE
     Qt6::Test
     ketplus_desktop_support
 )
+
+ketplus_add_gui_test(ketplus_machine_composition_tests MachineCompositionTest.cpp
+    FakeMachineBackend.h MachineHosts.h)
+target_link_libraries(ketplus_machine_composition_tests PRIVATE
+    Qt6::Test
+    ketplus_desktop_support
+)
+
+ketplus_add_gui_test(ketplus_machine_attachment_tests MachineAttachmentPanelTest.cpp)
+target_link_libraries(ketplus_machine_attachment_tests PRIVATE Qt6::Test ketplus_desktop_support)
+
+ketplus_add_gui_test(ketplus_machine_toast_tests MachineWorkspaceToastTest.cpp)
+target_link_libraries(ketplus_machine_toast_tests PRIVATE Qt6::Test ketplus_desktop_support)
+
+ketplus_add_gui_test(ketplus_machine_conversation_tests MachineConversationTest.cpp
+    FakeMachineBackend.h MachineHosts.h)
+target_link_libraries(ketplus_machine_conversation_tests PRIVATE
+    Qt6::Test
+    ketplus_desktop_support
+)
+ketplus_add_gui_test(ketplus_machine_preparation_tests MachinePreparationTest.cpp
+    FakeMachineBackend.h MachineHosts.h)
+target_link_libraries(ketplus_machine_preparation_tests PRIVATE
+    Qt6::Test ketplus_desktop_support)
+
+ketplus_add_gui_test(ketplus_machine_paging_tests MachineTranscriptPagingTest.cpp
+    FakeMachineBackend.h MachineHosts.h)
+target_link_libraries(ketplus_machine_paging_tests PRIVATE
+    Qt6::Test
+    ketplus_desktop_support
+)
+
+# ketplus#598: remote transcripts through This Mac's rich renderer.
+ketplus_add_gui_test(ketplus_machine_rich_transcript_tests MachineRichTranscriptTest.cpp
+    FakeMachineBackend.h MachineHosts.h MachineTranscriptRows.h)
+target_link_libraries(ketplus_machine_rich_transcript_tests PRIVATE
+    Qt6::Test
+    ketplus_desktop_support
+)
+
+ketplus_add_gui_test(ketplus_machine_queued_actions_tests MachineQueuedActionsTest.cpp
+    FakeMachineBackend.h MachineHosts.h)
+target_link_libraries(ketplus_machine_queued_actions_tests PRIVATE
+    Qt6::Test
+    ketplus_desktop_support
+)
+
+ketplus_add_gui_test(ketplus_machine_window_tests MachineWindowTest.cpp FakeMachineBackend.h)
+target_include_directories(ketplus_machine_window_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(ketplus_machine_window_tests PRIVATE
+    Qt6::Test
+    ketplus_desktop_shell
+)
+
+# #419 end to end: the window over a real daemon behind a loopback sshd, and over the
+# loopback relay (tests/daemon/SyntheticRelay.h). Needs sshd for the SSH case.
+ketplus_add_gui_test(ketplus_machine_end_to_end_tests MachineEndToEndTest.cpp)
+target_include_directories(ketplus_machine_end_to_end_tests PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/daemon)
+# The Relay case keeps credentials in memory, never in the login keychain.
+target_sources(ketplus_machine_end_to_end_tests PRIVATE daemon/cloud-privacy/MemoryCredentials.cpp)
+target_link_libraries(ketplus_machine_end_to_end_tests PRIVATE
+    Qt6::Test
+    ketplus_desktop_shell
+    ketplus_remote_ssh_backend
+    ketplus_remote_control
+)
+target_compile_definitions(ketplus_machine_end_to_end_tests PRIVATE
+    KETPLUS_TEST_DAEMON="$<TARGET_FILE:ketplus_fixture_daemon>")
+add_dependencies(ketplus_machine_end_to_end_tests ketplus_fixture_daemon)
+
+ketplus_add_gui_test(ketplus_linux_machines_tests LinuxMachinesSectionTest.cpp)
+target_include_directories(ketplus_linux_machines_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(ketplus_linux_machines_tests PRIVATE
+    Qt6::Test
+    ketplus_desktop_support
+)
+
+# Connections' SSH route against SshMachineBackend with a fake daemon behind a fake link.
+ketplus_add_gui_test(ketplus_linux_ssh_machines_tests LinuxSshMachinesTest.cpp)
+target_include_directories(ketplus_linux_ssh_machines_tests PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(ketplus_linux_ssh_machines_tests PRIVATE
+    Qt6::Test
+    ketplus_desktop_support
+)
+
+# Connections' Relay route against fake Relay links: state, entitlement, presence, pending.
+ketplus_add_gui_test(ketplus_linux_relay_machines_tests LinuxRelayMachinesTest.cpp)
+target_link_libraries(ketplus_linux_relay_machines_tests PRIVATE
+    Qt6::Test
+    ketplus_desktop_support
+)
+
+ketplus_add_gui_test(ketplus_schedule_client_tests ScheduleClientTest.cpp)
+target_link_libraries(ketplus_schedule_client_tests PRIVATE Qt6::Test ketplus_desktop_support)
+
+ketplus_add_gui_test(ketplus_schedule_window_tests ScheduleWindowTest.cpp)
+target_link_libraries(ketplus_schedule_window_tests PRIVATE Qt6::Test ketplus_desktop_support)
 
 add_subdirectory(daemon)
 
@@ -178,6 +377,7 @@ if(APPLE)
             "-DKETPLUS_APP_BUNDLE=$<TARGET_BUNDLE_DIR:ketplus>"
             "-DKETPLUS_PRODUCT_VERSION=${PROJECT_VERSION}"
             "-DKETPLUS_CONTROL_URL=${KETPLUS_CONTROL_URL}"
+            "-DKETPLUS_PRODUCTION_RELEASE=${KETPLUS_PRODUCTION_RELEASE}"
             -P "${PROJECT_SOURCE_DIR}/packaging/macos/VerifyBundle.cmake"
     )
 endif()
@@ -195,3 +395,4 @@ ketplus_add_gui_test(ketplus_activity_group_loader_tests ActivityGroupLoaderTest
 target_link_libraries(ketplus_activity_group_loader_tests PRIVATE Qt6::Test ketplus_ai)
 
 ketplus_tests_offscreen()
+ketplus_label_tests(desktop)

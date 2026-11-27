@@ -29,96 +29,106 @@ QtObject {
     readonly property var captures: ["sidebar", "editor", "settings"].map(name => ({
         source: "qrc:/qt/qml/KetPlusMock/assets/screenshot-" + name + ".png",
         caption: "Browser capture · " + name + ".png" }))
-    // Tag colours are user data, so they are literals rather than tokens.
-    readonly property var tagColors: ({
-        UI: "#4f6bed", Performance: "#c2780a", Review: "#7c5cd6", Atlas: "#3f8f7a",
-        Account: "#2f8f4e", Bug: "#d1453b", Docs: "#5b6b7f"
-    })
-    // A member's role in its team (Fixtures.teams): the first tag of its conversation. The team
-    // sets it, so it is not among the tags a user adds or removes.
-    // A team has one leader, one reviewer and this many developers at most (and one at least).
+    // A member's role in its team (Fixtures.teams), drawn as a locked tag beside its
+    // conversation. The team sets it; conversations carry no user tags (ADR 0117).
+    // A team has one leader and this many developers at most (and one at least).
     readonly property int mostDevelopers: 5
+    // T-23: a team has one or two reviewers.
+    readonly property int mostReviewers: 2
+    // ADR 0114, open point 2: Settings → Teams. A new team's automatic-turn budget starts from
+    // this value; each team then keeps its own, which changing this one leaves alone.
+    property int turnBudget: 40
+    readonly property int fewestTurns: 5
+    readonly property int mostTurns: 200
+    // The daemon's refusal, in the same words, for a value it would refuse.
+    function turnBudgetError(text) {
+        const trimmed = String(text).trim()
+        const value = Number(trimmed)
+        return /^[0-9]+$/.test(trimmed) && value >= fewestTurns && value <= mostTurns ? ""
+            : "Automatic turns are a whole number from " + fewestTurns + " to " + mostTurns + "."
+    }
     readonly property var roleColors: ({ leader: "#b4436c", developer: "#5b6b7f", reviewer: "#7c5cd6" })
     function roleTag(role) {
         return { label: role.charAt(0).toUpperCase() + role.slice(1), color: roleColors[role] || "#5b6b7f" }
     }
 
-    function tag(label) { return { label: label, color: tagColors[label] || "#5b6b7f" } }
-
+    // The goal --open=new-team-goal types: paragraphs of context, a link and a mention.
+    readonly property string longTeamGoal: "Make the first run explain itself: a new user should reach a first answer without reading the guide.\n\n"
+        + "Context: the welcome tour was cut in 1.3 and support tickets doubled (see https://cinder-trail.example/issues/139). "
+        + "@agent/8213 rebuilt the repository picker and knows where onboarding starts.\n\n"
+        + "Out of scope: the account flow and pricing."
     readonly property var repositories: [
         {
-            name: "ketplus-desktop",
+            name: "cinder-trail",
             conversations: [
-                { number: "4821", title: "Prepare the release", status: KetTheme.ConversationStatus.Completed,
-                  tags: [tag("Review")], worktree: "release/1.4", transcript: "turn-report", hasPlan: true, provider: "Codex",
+                { number: "4821", title: "Release handoff", status: KetTheme.ConversationStatus.Completed,
+                  canReview: true, worktree: "release/1.4", transcript: "turn-report", hasPlan: true, provider: "Codex",
                   providerId: "codex", model: "GPT-5.6 Luna", effort: "Medium" },
-                { number: "4822", title: "Prepare the hotfix", status: KetTheme.ConversationStatus.NeedsInput,
-                  tags: [tag("Review")], worktree: "fix/hotfix", transcript: "short", hasPlan: true,
-                  provider: "Codex", providerId: "codex", model: "GPT-5.6 Luna", effort: "Medium" },
-                { number: "2035", title: "Refine navigation", status: KetTheme.ConversationStatus.Completed,
-                  tags: [tag("UI")], worktree: "develop", transcript: "activity" },
+                { number: "2035", title: "Trail picker focus", status: KetTheme.ConversationStatus.Completed,
+                  worktree: "develop", transcript: "activity", provider: "Cursor",
+                  providerId: "cursor", model: "Composer 2", effort: "Default" },
                 // A finished turn and a running one, both closed by the work report (Fixtures.turnReport).
-                { number: "8213", title: "Finish the repository picker", status: KetTheme.ConversationStatus.Completed,
-                  tags: [tag("UI")], worktree: "develop", transcript: "report" },
-                { number: "8215", title: "Follow up on the new UI", status: KetTheme.ConversationStatus.Working,
-                  tags: [tag("UI")], worktree: "develop", transcript: "report-running" },
-                { number: "9410", title: "Review the startup flow", status: KetTheme.ConversationStatus.Working,
-                  tags: [tag("Performance"), tag("Review")], worktree: "develop", transcript: "running" },
-                { number: "3372", title: "Atlas: Onboarding experience", status: KetTheme.ConversationStatus.Completed,
-                  tags: [tag("Atlas")], worktree: "develop", transcript: "atlas" },
+                { number: "8213", title: "Verify trail picker", status: KetTheme.ConversationStatus.Completed,
+                  unread: true, worktree: "develop", transcript: "report", provider: "Codex",
+                  providerId: "codex", model: "GPT-5.6 Sol", effort: "Medium" },
+                { number: "8215", title: "Offline settings", status: KetTheme.ConversationStatus.Working,
+                  worktree: "develop", transcript: "report-running", provider: "Claude",
+                  providerId: "claude", model: "Opus 5.5", effort: "Medium" },
+                { number: "9410", title: "Profile cold start", status: KetTheme.ConversationStatus.Working,
+                  canReview: true, worktree: "develop", transcript: "running" },
+                { number: "3372", title: "Atlas Builder", status: KetTheme.ConversationStatus.Completed,
+                  worktree: "develop", transcript: "atlas" },
+                { number: "3366", title: "Offline onboarding", status: KetTheme.ConversationStatus.NeedsInput,
+                  canReview: true, worktree: "feat/offline-onboarding", transcript: "question" },
+                { number: "4822", title: "Prepare the hotfix", status: KetTheme.ConversationStatus.NeedsInput,
+                  canReview: true, worktree: "fix/hotfix", transcript: "short", hasPlan: true,
+                  provider: "Codex", providerId: "codex", model: "GPT-5.6 Luna", effort: "Medium" },
                 { number: "9079", title: "Check this worktree", status: KetTheme.ConversationStatus.Completed,
-                  tags: [], worktree: "feature-onboarding", transcript: "short" },
+                  worktree: "feat/offline-onboarding", transcript: "short" },
                 // The turn finished with a request for approval: "Waiting for you", not Completed.
                 { number: "7542", title: "Check this worktree", status: KetTheme.ConversationStatus.AwaitingReply,
-                  tags: [], worktree: "fix-scroll-anchor", transcript: "short" },
-                { number: "3366", title: "Review feature onboarding", status: KetTheme.ConversationStatus.NeedsInput,
-                  tags: [tag("Review")], worktree: "feature-onboarding", transcript: "question" },
+                  worktree: "fix/trail-picker", transcript: "short" },
                 // The reviewer of the Release 1.4 team (Fixtures.teams). A reviewer runs on Claude.
-                { number: "4583", title: "Review fix scroll anchor", status: KetTheme.ConversationStatus.Working,
-                  tags: [tag("Review")], worktree: "fix-scroll-anchor", transcript: "running",
+                { number: "4583", title: "Picker review", status: KetTheme.ConversationStatus.Working,
+                  canReview: true, worktree: "fix/trail-picker", transcript: "running",
                   provider: "Claude", providerId: "claude", model: "Opus 5.5", effort: "High" },
                 { number: "6120", title: "Profile the editor startup", status: KetTheme.ConversationStatus.Error,
-                  tags: [tag("Performance"), tag("Bug")], worktree: "develop", transcript: "error" },
+                  worktree: "develop", transcript: "error" },
                 // A turn the provider ended: the guide in the transcript (workspace/setup-expired…).
                 { number: "7310", title: "Speed up the cold start", status: KetTheme.ConversationStatus.Error,
-                  tags: [tag("Performance")], worktree: "develop", transcript: "setup", setup: "expired",
+                  worktree: "develop", transcript: "setup", setup: "expired",
                   provider: "Claude", providerId: "claude", model: "Opus 5.5", effort: "Medium" },
                 { number: "5904", title: "Draft release notes", status: KetTheme.ConversationStatus.Stopped,
-                  tags: [tag("Docs")], worktree: "develop", transcript: "short" },
+                  worktree: "develop", transcript: "short" },
                 // The rest of the Docs refresh team (teams).
                 { number: "5911", title: "Rewrite the build guide", status: KetTheme.ConversationStatus.Completed,
-                  tags: [tag("Docs")], worktree: "docs/1.4", transcript: "short" },
+                  worktree: "docs/1.4", transcript: "short" },
                 { number: "5923", title: "Review the user guide", status: KetTheme.ConversationStatus.Completed,
-                  tags: [tag("Docs"), tag("Review")], worktree: "docs/1.4", transcript: "short",
+                  canReview: true, worktree: "docs/1.4", transcript: "short",
                   provider: "Claude", providerId: "claude", model: "Opus 5.5", effort: "High" }
             ]
         },
         {
-            name: "ketviet",
+            name: "cinder-trail-lab",
             conversations: [
-                { number: "7992", title: "Refine navigation", status: KetTheme.ConversationStatus.Completed,
-                  tags: [tag("Account"), tag("UI")], worktree: "main", transcript: "activity" },
-                { number: "8503", title: "Review the startup flow", status: KetTheme.ConversationStatus.Working,
-                  tags: [tag("Account"), tag("Bug"), tag("Review")], worktree: "main", transcript: "running" },
+                { number: "7992", title: "Trail picker focus", status: KetTheme.ConversationStatus.Completed,
+                  worktree: "main", transcript: "activity" },
+                { number: "8503", title: "Profile cold start", status: KetTheme.ConversationStatus.Working,
+                  canReview: true, worktree: "main", transcript: "running" },
                 // Every content type of one provider's journal (workspace/claude, codex, cursor).
                 { number: "6120", title: "Fix the choppy sidebar spinner", status: KetTheme.ConversationStatus.Completed,
-                  tags: [tag("Performance")], worktree: "main", transcript: "claude", provider: "Claude",
+                  worktree: "main", transcript: "claude", provider: "Claude",
                   providerId: "claude", model: "Opus 5.5", effort: "Medium" },
                 { number: "6188", title: "Journal size warning", status: KetTheme.ConversationStatus.Stopped,
-                  tags: [tag("Bug")], worktree: "feat/journal-storage", transcript: "codex", provider: "Codex",
+                  worktree: "feat/journal-storage", transcript: "codex", provider: "Codex",
                   providerId: "codex", model: "GPT-5.6 Luna", effort: "Medium" },
-                { number: "6203", title: "Trace the staging tenant flow", status: KetTheme.ConversationStatus.Error,
-                  tags: [], worktree: "main", transcript: "cursor", provider: "Cursor",
-                  providerId: "cursor", model: "Composer 2", effort: "Default" }
-            ]
-        },
-        {
-            name: "ketplus-app",
-            conversations: [
-                { number: "1187", title: "Question sheet", status: KetTheme.ConversationStatus.Completed,
-                  tags: [], worktree: "develop", transcript: "short" },
-                { number: "1204", title: "iPhone connection", status: KetTheme.ConversationStatus.NotStarted,
-                  tags: [], worktree: "develop", transcript: "welcome" }
+                { number: "6203", title: "Trace an offline sync failure", status: KetTheme.ConversationStatus.Error,
+                  worktree: "main", transcript: "cursor", provider: "Cursor",
+                  providerId: "cursor", model: "Composer 2", effort: "Default" },
+                { number: "1187", title: "Offline note prompts", status: KetTheme.ConversationStatus.Completed,
+                  worktree: "develop", transcript: "short" },
+                { number: "1204", title: "Pair a field phone", status: KetTheme.ConversationStatus.NotStarted,
+                  worktree: "develop", transcript: "welcome" }
             ]
         }
     ]
@@ -126,45 +136,31 @@ QtObject {
     // The conversation's work report: what the agent reported through the `report` tool,
     // merged by key over four turns. The app counts it; cancelled items are not counted.
     readonly property var turnReport: ({
-        title: "Repository picker and new UI follow-ups",
+        title: "Trail picker release checks",
         turn: 4,
-        activity: "Editing ExecutionWorktreeDialog.cpp",
+        activity: "Running picker tests on Linux",
         groups: [
-            { title: "Pull requests", items: [
-                { key: "pr-399", title: "#399 Interface zoom separate from font size", status: "done", change: "",
-                  owner: "Agent", evidence: "Merged into feat/new-ui · review by @agent/7542 passed",
-                  verified: ["Tests", "Build"] },
-                { key: "pr-401", title: "#401 Mermaid labels meet AA contrast", status: "done", change: "",
-                  owner: "Agent", evidence: "The 4.45:1 label now reaches 4.6:1 · sweep regression added · merged",
-                  verified: ["Code", "Tests", "Build", "Capture"] }
+            { title: "Implementation", items: [
+                { key: "picker-focus", title: "Keep focus after filtering", status: "done", change: "updated",
+                  owner: "Agent", evidence: "2 picker tests passed on macOS",
+                  verified: ["Code", "Tests"] }
             ] },
-            { title: "Repository picker · #164", items: [
-                { key: "picker-daemon", title: "The daemon lists another repository's worktrees", status: "done",
-                  change: "new", owner: "Agent",
-                  evidence: "Lists them without switching or enrolling the repository · daemon_worktree_context 2/2 passed",
-                  verified: ["Code", "Tests"] },
-                { key: "picker-dialog", title: "The dialog follows the mock flow", status: "active", change: "updated",
-                  owner: "Agent", evidence: "Choose a repository, then one of its worktrees, or use the repository or create a worktree",
-                  remaining: "Worktree counts, the window's call site and the dialog tests",
-                  next: "Finish the dialog and run its tests", verified: ["Code"] },
-                { key: "picker-adr", title: "ADR 0105 and the daemon version", status: "waiting", change: "",
-                  owner: "Agent", next: "Write them once the dialog lands" }
-            ] },
-            { title: "Decisions", items: [
-                { key: "issue-402", title: "#402 Retire the compatibility stylesheet", status: "waiting", change: "new",
-                  owner: "You", remaining: "Now, or folded into #137–#139", next: "Choose when to do it" },
-                { key: "update-notice", title: "Toasts and the update notice", status: "blocked", change: "",
-                  owner: "You", remaining: "The notice needs approved wording", next: "Approve the notice wording" }
-            ] },
-            // Only cancelled items: the group reads Cancelled and adds nothing to the counts.
-            { title: "Dropped", items: [
-                { key: "legacy-picker", title: "Keep the old picker behind a setting", status: "cancelled", change: "",
-                  owner: "Agent", evidence: "Replaced by the mock flow in turn 3" }
+            { title: "Release verification", items: [
+                { key: "picker-dialog", title: "Verify offline on Linux", status: "blocked", change: "new",
+                  owner: "You", remaining: "The field dataset needs approval for testing.",
+                  next: "Choose a dataset in the conversation" },
+                { key: "picker-docs", title: "Update the release checklist", status: "done", change: "new",
+                  owner: "Agent", evidence: "Smoke commands and the offline gate are recorded.",
+                  verified: ["Code"] }
             ] }
         ]
     })
 
-    readonly property var machines: ["This Mac", "Linux · build-node-01"]
+    readonly property string accountName: "Tess Wayfern"
+    readonly property string atlasPrompt: "Map the first offline field note in Cinder Trail, from choosing a saved trail to saving an observation."
+    readonly property string datasetQuestion: "Which dataset should I use for the Linux offline check?"
+
+    readonly property var machines: ["This Mac", "Linux · cinder-build"]
 
     // Agent Workspace: models and permission modes in the composer toolbar.
     readonly property var models: ["Codex · GPT-5.6 Luna", "Codex · GPT-5.6 Sol", "Claude · Opus 5.5",
@@ -221,75 +217,87 @@ QtObject {
     ]
 
     readonly property string activityAnswer:
-        "## Transcript activity is explicit and easier to scan.\n\n"
-        + "The conversation now keeps the result separate from the work performed:\n\n"
-        + "- **Exact file and command actions** remain visible and expandable.\n"
-        + "- **Images, browser visits, searches, and app usage** have dedicated activity treatments.\n"
-        + "- **Unknown future events** fall back to a safe generic row instead of disappearing.\n\n"
-        + "Intermediate reasoning and progress narration are not included in the transcript."
+        "## Trail picker changes are ready to review\n\n"
+        + "Filtering keeps focus on the results. The selected trail stays open until you choose another one.\n\n"
+        + "The changes below cover the list, its row component, and the release checklist."
 
     readonly property string runningAnswer:
-        "I'm tracing the startup path from `main()` to the first painted frame. So far the "
-        + "workspace index and the provider handshake run in sequence; they can overlap.\n\n"
-        + "```cpp\nauto index = workspace.indexAsync();\nauto session = providers.connect();\n"
-        + "co_await whenAll(index, session);\n```"
+        "The first frame waits for the offline trail index. I’m measuring how much time we recover "
+        + "if the picker opens with cached trails and refreshes the index in the background.\n\n"
+        + "```cpp\nauto trails = trailStore.cachedTrails();\nshowTrailPicker(trails);\n"
+        + "trailStore.refreshIndexAsync();\n```"
 
     readonly property var changedFiles: [
-        { name: "NavigationRail.qml", path: "modules/ai/src/agent/qml", added: 18, removed: 6 },
-        { name: "WorktreeItem.qml", path: "modules/ai/src/agent/qml", added: 9, removed: 3 },
-        { name: "design-system.md", path: "docs", added: 1, removed: 0 }
+        { name: "TrailList.qml", path: "src/trails", added: 4, removed: 1, diff: sampleDiff },
+        { name: "TrailRow.qml", path: "src/trails", added: 1, removed: 1,
+          diff: "@@ -11,3 +11,3 @@ TrailRow\n     required property string title\n-    activeFocusOnTab: true\n+    activeFocusOnTab: visible && enabled\n     Accessible.name: title\n" },
+        { name: "release-checklist.md", path: "docs", added: 1, removed: 0,
+          diff: "@@ -7,2 +7,3 @@ Release checks\n - [x] Trail picker tests on macOS\n+- [ ] Offline smoke test on Linux\n - [ ] Approve the release build\n" }
     ]
 
     readonly property var stagedFiles: [
-        { name: "ThemeManager.cpp", path: "apps/desktop/src/ui", added: 4, removed: 2 }
+        { name: "offline-tests.cpp", path: "tests", added: 1, removed: 1,
+          diff: "@@ -30,3 +30,3 @@ PickerTests::restoresCachedTrails\n     const auto trails = store.cachedTrails();\n-    QVERIFY(!trails.empty());\n+    QCOMPARE(trails.size(), 3);\n }\n" }
     ]
 
     readonly property string sampleDiff:
-        "@@ -18,16 +18,28 @@ WorktreeItem\n"
-        + "     WorktreeItem {\n         id: worktreeRow\n         width: parent.width\n"
-        + "-        color: \"transparent\"\n-        radius: 2\n"
-        + "+        color: selected ? theme.accentSubtle\n+                        : \"transparent\"\n"
-        + "+        radius: theme.radiusSmall\n \n         Column {\n             spacing: 4\n"
-        + "             Text {\n                 text: worktree.branch\n"
-        + "-                color: theme.textSecondary\n"
-        + "+                color: selected ? theme.accent\n+                               : theme.textPrimary\n"
-        + "             }\n"
-        + "+            Text {\n+                visible: worktree.isRunning\n+                text: qsTr(\"Agent working\")\n"
-        + "+                color: theme.success\n+                font.pixelSize: theme.textSmall\n+            }\n"
-        + "         }\n     }\n"
+        "@@ -14,5 +14,8 @@ TrailList.qml\n"
+        + "     TrailFilter {\n         id: filter\n         width: parent.width\n"
+        + "-        onAccepted: trailList.currentIndex = 0\n"
+        + "+        onAccepted: {\n"
+        + "+            trailList.currentIndex = 0\n"
+        + "+            trailList.forceActiveFocus()\n"
+        + "+        }\n"
+        + "     }\n"
 
     // Files & Editor.
     readonly property var explorer: [
-        { name: "ketplus-desktop", folder: true, depth: 0, open: true, root: true },
-        { name: "apps", folder: true, depth: 1, open: true },
-        { name: "desktop", folder: true, depth: 2, open: true },
-        { name: "src", folder: true, depth: 3, open: false },
-        { name: "modules", folder: true, depth: 1, open: true },
-        { name: "ai", folder: true, depth: 2, open: true },
-        { name: "src / agent / qml", folder: true, depth: 3, open: true },
-        { name: "NavigationRail.qml", depth: 4, status: "M", path: "modules/ai/src/agent/qml" },
-        { name: "WorktreeItem.qml", depth: 4, status: "M", path: "modules/ai/src/agent/qml" },
-        { name: "atlas", folder: true, depth: 2, open: false },
+        { name: "cinder-trail", folder: true, depth: 0, open: true, root: true },
+        { name: "src", folder: true, depth: 1, open: true },
+        { name: "trails", folder: true, depth: 2, open: true },
+        { name: "TrailList.qml", depth: 3, status: "M", path: "src/trails" },
+        { name: "TrailRow.qml", depth: 3, status: "M", path: "src/trails" },
         { name: "docs", folder: true, depth: 1, open: true },
+        { name: "release-checklist.md", depth: 2, status: "M", path: "docs" },
         { name: "architecture.md", depth: 2, path: "docs" },
         { name: "design-system.md", depth: 2, path: "docs" },
         { name: "licensing.md", depth: 2, path: "docs" },
+        { name: "tests", folder: true, depth: 1, open: true },
+        { name: "offline-tests.cpp", depth: 2, path: "tests" },
         { name: "README.md", depth: 1, path: "" },
         { name: "CMakeLists.txt", depth: 1, path: "" }
     ]
 
-    readonly property string navigationRail:
-        "// NavigationRail.qml\nimport QtQuick\nimport QtQuick.Controls\n\nItem {\n"
-        + "    id: navigationRail\n\n    property string activeWorktree: \"develop\"\n"
-        + "    property var conversations: []\n\n    // Keep workspace context visible.\n"
-        + "    width: theme.sidebarWidth\n\n    Column {\n        anchors.fill: parent\n"
-        + "        spacing: theme.spacingSmall\n\n        RepositoryPicker {\n"
-        + "            repository: workspace.repository\n"
-        + "            onActivated: workspace.openPicker()\n        }\n\n        WorktreeList {\n"
-        + "            model: workspace.worktrees\n            currentPath: activeWorktree\n"
-        + "            onSelected: path => {\n                agent.selectWorktree(path)\n"
-        + "            }\n        }\n\n        ConversationList {\n"
-        + "            model: navigationRail.conversations\n        }\n    }\n}\n"
+    readonly property string trailList:
+        "import QtQuick\nimport QtQuick.Controls\n\nItem {\n"
+        + "    id: picker\n\n    required property var trailStore\n"
+        + "    signal trailOpened(string trailId)\n\n"
+        + "    Column {\n        anchors.fill: parent\n        spacing: 8\n\n"
+        + "        TrailFilter {\n            id: filter\n            width: parent.width\n"
+        + "            onAccepted: {\n                trailList.currentIndex = 0\n"
+        + "                trailList.forceActiveFocus()\n            }\n        }\n\n"
+        + "        ListView {\n            id: trailList\n            width: parent.width\n"
+        + "            model: picker.trailStore.filter(filter.text)\n"
+        + "            delegate: TrailRow {\n                width: ListView.view.width\n"
+        + "                onActivated: picker.trailOpened(trailId)\n            }\n        }\n    }\n}\n"
+
+    readonly property string trailRow:
+        "import QtQuick\nimport QtQuick.Controls\n\n"
+        + "ItemDelegate {\n    required property string trailId\n    required property string title\n"
+        + "    text: title\n    activeFocusOnTab: visible && enabled\n    Accessible.name: title\n}\n"
+
+    readonly property string releaseChecklist:
+        "# Cinder Trail 1.4 · release checklist\n\n"
+        + "The field journal should open a saved trail and record an observation with the network turned off.\n\n"
+        + "## Release checks\n\n"
+        + "- [x] Trail picker tests on macOS\n"
+        + "- [ ] Offline smoke test on Linux\n"
+        + "- [ ] Approve the release build\n\n"
+        + "## Offline smoke test\n\n"
+        + "Use the approved dataset. Disable Wi-Fi, open **Ember Ridge Loop**, and add a field note. "
+        + "Restart the app and confirm the note reappears before reconnecting.\n\n"
+        + "```sh\nctest --test-dir build -R 'trail_picker|offline_journal' --output-on-failure\n```\n\n"
+        + "> Record the dataset and build number in the work report before approving the release."
 
     readonly property string designSystem:
         "# Design system\n\nKetPlus uses **Két Design System** through the Két Qt kit.\n\n"
@@ -310,40 +318,38 @@ QtObject {
 
     // Repository & worktree picker.
     readonly property var pickerRepositories: [
-        { name: "ketplus-desktop", count: 2, worktrees: [
-            { branch: "develop", main: true, path: "/workspace/ketplus-desktop" },
-            { branch: "fix/compaction-status", path: "/workspace/ketplus-desktop-compaction" }] },
-        { name: "ketviet", count: 3, agent: true, worktrees: [
-            { branch: "main", main: true, path: "/workspace/ketviet" },
-            { branch: "feat/ketview-production-pilot", path: "/workspace/ketviet-pilot" },
-            { branch: "fix/relay-timeout", path: "/workspace/ketviet-relay" }] },
-        { name: "ketplus-app", count: 2, worktrees: [
-            { branch: "develop", main: true, path: "/workspace/ketplus-app" },
-            { branch: "feat/question-sheet", path: "/workspace/ketplus-app-questions" }] },
-        { name: "ketplus", count: 1, worktrees: [
-            { branch: "integration", main: true, path: "/workspace/ketplus" }] },
-        { name: "ketchat-desktop", count: 1, worktrees: [
-            { branch: "develop", main: true, path: "/workspace/ketchat-desktop" }] },
-        { name: "fusetter", count: 1, worktrees: [
-            { branch: "main", main: true, path: "/workspace/fusetter" }] }
+        { name: "cinder-trail", count: 2, worktrees: [
+            { branch: "develop", main: true, path: "/workspace/cinder-trail" },
+            { branch: "fix/trail-picker", path: "/workspace/cinder-trail-picker" }] },
+        { name: "cinder-trail-lab", count: 3, agent: true, worktrees: [
+            { branch: "main", main: true, path: "/workspace/cinder-trail-lab" },
+            { branch: "feat/sample-preview-pilot", path: "/workspace/cinder-trail-lab-pilot" },
+            { branch: "fix/sync-timeout", path: "/workspace/cinder-trail-lab-relay" }] },
+        { name: "cinder-trail-mobile", count: 2, worktrees: [
+            { branch: "develop", main: true, path: "/workspace/cinder-trail-mobile" },
+            { branch: "feat/question-sheet", path: "/workspace/cinder-trail-mobile-questions" }] },
+        { name: "cinder-trail-notes", count: 1, worktrees: [
+            { branch: "develop", main: true, path: "/workspace/cinder-trail-notes" }] },
+        { name: "cinder-trail-maps", count: 1, worktrees: [
+            { branch: "main", main: true, path: "/workspace/cinder-trail-maps" }] }
     ]
 
     // Quick search (Spotlight).
     readonly property var spotlightGroups: [
         { title: "Files", items: [
-            { id: "file:rail", title: "NavigationRail.qml", detail: "modules/ai/src/agent/qml",
+            { id: "file:rail", title: "TrailList.qml", detail: "src/trails",
               iconName: "file-code", screen: "editor" },
-            { id: "file:worktree", title: "WorktreeItem.qml", detail: "modules/ai/src/agent/qml",
+            { id: "file:worktree", title: "TrailRow.qml", detail: "src/trails",
               iconName: "file-code", screen: "editor" },
-            { id: "file:readme", title: "README.md", detail: "ketplus-desktop", iconName: "file",
+            { id: "file:readme", title: "README.md", detail: "cinder-trail", iconName: "file",
               screen: "editor" }] },
         { title: "Conversations", items: [
-            { id: "chat:2035", title: "Refine navigation", detail: "@agent/2035 · ketplus-desktop",
+            { id: "chat:2035", title: "Trail picker focus", detail: "@agent/2035 · cinder-trail",
               iconName: "bot", screen: "workspace" },
-            { id: "chat:9410", title: "Review the startup flow", detail: "@agent/9410 · develop",
+            { id: "chat:9410", title: "Profile cold start", detail: "@agent/9410 · develop",
               iconName: "bot", screen: "workspace" }] },
         { title: "Atlases", items: [
-            { id: "atlas:onboarding", title: "Onboarding experience", detail: "2 flows · 4 screens",
+            { id: "atlas:onboarding", title: "First field entry", detail: atlasSummary,
               iconName: "layers", screen: "atlas" }] },
         { title: "Commands", items: [
             { id: "go:settings", title: "Open Settings", detail: "⌘ ,", iconName: "settings",
@@ -354,39 +360,128 @@ QtObject {
 
     // Background tasks above the composer.
     readonly property var backgroundTasks: [
-        { title: "npm run dev", meta: "localhost:5173 · 2m 14s", kindIcon: "terminal", current: true,
+        { title: "Profile the trail index", meta: "cinder-build · 2m 14s", kindIcon: "terminal", current: true,
           status: KetTheme.TaskStatus.Running },
-        { title: "Review the diff", meta: "@agent/9410 · completed in 48s", kindIcon: "bot",
+        { title: "Review the picker diff", meta: "@agent/4583 · completed in 48s", kindIcon: "bot",
           status: KetTheme.TaskStatus.Completed },
-        { title: "ctest --test-dir build", meta: "2 tests failed", kindIcon: "terminal",
+        { title: "Offline smoke test", meta: "Waiting for the field dataset", kindIcon: "terminal",
           status: KetTheme.TaskStatus.Failed }
     ]
 
+    // ADR 0127 §7a: @agent/8213 ended its turn on a managed job it still owns. Each
+    // workspace/job-* state is one moment of that job; the sidebar row, the header, the
+    // turn's last line and the task bar read it (Main.jobFor), with the kit's WaitingOnTask
+    // and TaskNeedsAttention statuses.
+    readonly property string jobOwner: "8213"
+    readonly property string jobTitle: "Large library picker check"
+    readonly property var jobStates: ({
+        "job-running": {
+            status: KetTheme.ConversationStatus.WaitingOnTask, label: "Waiting on job", tone: KetTheme.BadgeTone.Info,
+            hint: "Waiting on 1 background job\n" + jobTitle + " · running 3m 14s",
+            line: "waiting on 1 background job · running 3m 14s", action: "Show job",
+            tasks: [{ title: jobTitle, meta: "Shell · 3m 14s · @agent/8213 wakes when it ends",
+                      kindIcon: "terminal", current: true, status: KetTheme.TaskStatus.Running }],
+            detail: { id: jobId, state: "Running", tone: KetTheme.BadgeTone.Accent, command: jobCommand,
+                facts: [["Started", "3m 14s ago by @agent/8213"], ["Timeout", "30m · stops in 26m 46s"],
+                        ["Cleanup", "Process group · contained"], ["When it ends", "@agent/8213 wakes and gets its result"]],
+                output: jobOutput + "\nRUN    scrollToLastTrail (200 trails)", footer: "Output read · refreshes every 2 s", actions: ["Stop task"] } },
+        "job-queued": {
+            status: KetTheme.ConversationStatus.WaitingOnTask, label: "Waiting on job", tone: KetTheme.BadgeTone.Info,
+            hint: "1 background job queued\n" + jobTitle + " · 4 of 4 slots held",
+            line: "1 background job queued · 4 of 4 slots held", action: "Show job",
+            tasks: [{ title: jobTitle, meta: "Queued 2m 05s · 4 of 4 slots held · @agent/8213 was told",
+                      kindIcon: "terminal", current: true, status: KetTheme.TaskStatus.Running }],
+            detail: { id: jobId, state: "Queued", tone: KetTheme.BadgeTone.Info, command: jobCommand,
+                facts: [["Queued", "2m 05s ago by @agent/8213 · not started"],
+                        ["Why", "Its root holds all 4 execution slots; it starts when one ends"],
+                        ["Slots held by", "Profile the trail index (running 12m) · Offline smoke test (running 9m) · "
+                                          + "Index the bundled dataset (running 7m) · Measure the first frame (stopping)"],
+                        ["Timeout", "30m from creation · 27m 55s left"],
+                        ["Agent", "@agent/8213 was told it is still queued, and why"]],
+                output: "", footer: "Starts when a slot frees", actions: ["Stop task"] } },
+        // Only the user can acknowledge cleanup, so this one waits for the user.
+        "job-attention": {
+            status: KetTheme.ConversationStatus.TaskNeedsAttention, label: "Needs attention", tone: KetTheme.BadgeTone.Warning,
+            hint: "1 background job needs attention\n" + jobTitle + " · cleanup unverified",
+            line: "1 background job needs attention · cleanup unverified", action: "Show job",
+            tasks: [{ title: jobTitle, meta: "Cleanup unverified · check its processes, then acknowledge",
+                      kindIcon: "terminal", current: true, status: KetTheme.TaskStatus.Stopping }],
+            detail: { id: jobId, state: "Needs attention", tone: KetTheme.BadgeTone.Warning, command: jobCommand,
+                banner: { title: "Cleanup unverified",
+                          message: "The job stopped, but KetPlus could not verify that its processes ended. "
+                                   + "Check for ctest and trail_picker_large, then acknowledge. Only you can do this." },
+                facts: [["Ended", "Root exit code 0 · cleanup remains unverified"],
+                        ["Limits", "Still holds 1 of 4 slots until cleanup is acknowledged"],
+                        ["Agent", "@agent/8213 was told and will not start it again"]],
+                output: jobOutput + "\nPASS   scrollToLastTrail (200 trails)       455 ms\n100% tests passed, 0 tests failed out of 1",
+                footer: "Output read", actions: ["Retry cleanup", "I checked it"] } },
+        // The job ended and woke its owner: the wake turn is an ordinary running turn.
+        "job-woke": {
+            status: KetTheme.ConversationStatus.Working, label: "Working", tone: KetTheme.BadgeTone.Accent,
+            hint: "Working\nWoken by " + jobTitle + " · completed in 6m 40s",
+            line: "waited 6m 40s on 1 background job", action: "",
+            tasks: [{ title: jobTitle, meta: "Completed in 6m 40s · follow-up delivered",
+                      kindIcon: "terminal", status: KetTheme.TaskStatus.Completed }],
+            detail: { id: jobId, state: "Completed", tone: KetTheme.BadgeTone.Success, command: jobCommand,
+                facts: [["Ended", "Completed in 6m 40s · exit code 0"],
+                        ["Cleanup", "Process group · verified"],
+                        ["Follow-up", "Delivered: woke @agent/8213"]],
+                output: jobOutput + "\nPASS   scrollToLastTrail (200 trails)       455 ms\n100% tests passed, 0 tests failed out of 1",
+                footer: "Output read", actions: ["Dismiss"] } }
+    })
+    readonly property string jobId: "bt-7f3a2c"
+    readonly property string jobCommand: "ctest --test-dir build -R trail_picker_large --output-on-failure"
+    readonly property string jobOutput: "Test project /workspace/cinder-trail/build\n"
+        + "    Start 42: trail_picker_large\n"
+        + "Loading 200 trails from fixtures/large-library.json\n"
+        + "PASS   filterKeepsFocus (200 trails)        412 ms\n"
+        + "PASS   openSelectedTrail (200 trails)       388 ms"
+
     // Atlas builder.
     readonly property var atlasFlows: [
-        { title: "Getting started", screens: 2 },
-        { title: "Reconnect a workspace", screens: 2 }
+        {
+            title: "Record a field note",
+            summary: "Choose a saved trail, log an observation and confirm it is stored.",
+            nodes: [
+                { kind: "trails", title: "Saved trails", heading: "Choose a trail", context: "Offline library",
+                  icon: "download", role: "Start", transition: "Open" },
+                { kind: "note", title: "Field editor", heading: "New observation", context: "Offline mode",
+                  icon: "wifi-off", role: "Input", transition: "Save" },
+                { kind: "receipt", title: "Local receipt", heading: "Observation saved", context: "Field journal",
+                  icon: "file-text", role: "End", status: "Saved on device",
+                  detail: "Queued until you reconnect.", action: "Review sync" }
+            ]
+        },
+        {
+            title: "Sync after the hike",
+            summary: "Review the local queue and confirm the note uploaded.",
+            nodes: [
+                { kind: "queue", title: "Sync queue", heading: "Ready to sync", context: "Back online",
+                  icon: "clock", role: "Start", transition: "Sync" },
+                { kind: "synced", title: "Sync receipt", heading: "Observation synced", context: "Field journal",
+                  icon: "check", role: "End", status: "Up to date",
+                  detail: "Available on your other devices.", action: "Back to trails" }
+            ]
+        }
     ]
+    readonly property string atlasSummary: atlasFlows.reduce((total, flow) => total + flow.nodes.length, 0)
+                                           + " screens · " + atlasFlows.length + " flows"
 
     // KetPlus Terminal sample output (mockups/terminal/demo/demo.sh): spans of [text, role],
     // where the role names a token colour; "" is text-main.
     readonly property var terminalLines: [
         [["$ ", "muted"], ["git status --short --branch", ""]],
-        [["## develop", "success"], ["...", ""], ["origin/develop", "danger"], [" [ahead 2]", ""]],
-        [[" M", "danger"], [" core/src/terminal/TerminalView.cpp", ""]],
-        [[" M", "danger"], [" mockups/terminal/src/TerminalMockWindow.cpp", ""]],
-        [["??", "danger"], [" mockups/terminal/demo/", ""]],
+        [["## develop", "success"], ["...origin/develop", "muted"]],
+        [[" M", "danger"], [" src/trails/TrailList.qml", ""]],
+        [[" M", "danger"], [" src/trails/TrailRow.qml", ""]],
+        [[" M", "danger"], [" docs/release-checklist.md", ""]],
+        [["M ", "success"], [" tests/offline-tests.cpp", ""]],
         [],
-        [["$ ", "muted"], ["ctest --test-dir build -R terminal", ""]],
-        [["1/3 Test #12: terminal_session ...........   ", ""], ["Passed", "success"], ["    0.41 sec", ""]],
-        [["2/3 Test #13: terminal_view ..............   ", ""], ["Passed", "success"], ["    0.88 sec", ""]],
-        [["3/3 Test #14: terminal_app ...............   ", ""], ["Passed", "success"], ["    1.02 sec", ""]],
-        [],
-        [["100% tests passed", "success"], [", 0 tests failed out of 3", ""]],
-        [],
-        [["info", "info"], ["  ", ""], ["warn", "warning"], ["  ", ""], ["error", "danger"], ["  ", ""], ["accent", "accent"], ["  ", ""], ["dim", "muted"]],
-        [],
-        [["➜ ", "success"], ["ketplus-desktop ", "info"], ["git:(", "accent"], ["develop", "danger"], [") ", "accent"]]
+        [["$ ", "muted"], ["ctest --test-dir build -R trail_picker", ""]],
+        [["1/2 Test #12: trail_picker_focus ..........  ", ""], ["Passed", "success"], ["   0.41 sec", ""]],
+        [["2/2 Test #13: trail_picker_filter .........  ", ""], ["Passed", "success"], ["   0.32 sec", ""]],
+        [["100% tests passed", "success"], [", 0 tests failed out of 2", ""]],
+        [["cinder-trail ", "info"], ["git:(", "accent"], ["develop", "danger"], [") $ ", "accent"]]
     ]
 
     // Settings › Providers, as SettingsProvidersPage reports them.
@@ -398,7 +493,7 @@ QtObject {
           rows: [["Version", "0.162.1"], ["Supported", "0.142.1 or newer · tested up to 0.154.0"],
                  ["Location", "~/.local/bin/codex"], ["Update with", "npm install -g @openai/codex@latest"]] },
         { id: "claude", name: "Claude Agent SDK", note: "", badge: "Ready", tone: "success",
-          rows: [["Version", "Agent SDK 0.3.289 · Claude Code 2.1.289"], ["Signed in", "Claude subscription"],
+          rows: [["Version", "Agent SDK 0.3.322 · Claude Code 2.1.322"], ["Signed in", "Claude subscription"],
                  ["Location", "/Applications/KetPlus.app/Contents/Resources/claude-sidecar/index.mjs"]] },
         { id: "cursor", name: "Cursor CLI", note: "", badge: "Ready", tone: "success",
           rows: [["Version", "2026.9.18"], ["Supported", "2026.6.25 or newer · tested up to 2026.9.18"],
@@ -474,7 +569,7 @@ QtObject {
             ],
             primary: "Check again", secondary: "Add an API key", secondaryAction: "settings/providers",
             ready: "Claude is signed in",
-            rows: [["Version", "Agent SDK 0.3.289 · Claude Code 2.1.289"], ["Signed in", "No credential found"]]
+            rows: [["Version", "Agent SDK 0.3.322 · Claude Code 2.1.322"], ["Signed in", "No credential found"]]
         },
         "sidecar-missing": {
             provider: "claude", name: "Claude", model: "Opus 5.5", blocking: true, tone: "danger",
@@ -502,7 +597,7 @@ QtObject {
             ],
             primary: "Retry", secondary: "Use an API key", secondaryAction: "settings/providers",
             prompt: "Find what makes the first window take four seconds on a cold start.",
-            rows: [["Version", "Agent SDK 0.3.289 · Claude Code 2.1.289"], ["Signed in", "Expired at 09:12"]]
+            rows: [["Version", "Agent SDK 0.3.322 · Claude Code 2.1.322"], ["Signed in", "Expired at 09:12"]]
         },
         "key-rejected": {
             provider: "claude", name: "Claude", model: "Opus 5.5", blocking: false, tone: "danger",
@@ -517,7 +612,7 @@ QtObject {
             ],
             primary: "Open Settings", primaryAction: "settings/providers", secondary: "Retry", secondaryAction: "retry",
             prompt: "Find what makes the first window take four seconds on a cold start.",
-            rows: [["Version", "Agent SDK 0.3.289 · Claude Code 2.1.289"], ["Signed in", "API key · rejected"]]
+            rows: [["Version", "Agent SDK 0.3.322 · Claude Code 2.1.322"], ["Signed in", "API key · rejected"]]
         },
         "limit": {
             provider: "codex", name: "Codex", model: "GPT-5.6 Luna", blocking: false, tone: "warning",
@@ -559,7 +654,7 @@ QtObject {
                 { text: "Or choose Auto, or another model on the CLI's plan, and retry.", turn: true }
             ],
             primary: "Choose model", primaryAction: "model", secondary: "Retry", secondaryAction: "retry",
-            prompt: "Trace how a staging tenant is created, end to end.", topic: "Trace the staging tenant flow",
+            prompt: "Trace how a staging tenant is created, end to end.", topic: "Trace an offline sync failure",
             rows: [["Version", "2026.9.18"], ["Signed in", "dev@example.com · plan without Composer 2"]]
         }
     })
@@ -578,7 +673,7 @@ QtObject {
             { number: "5498", title: "Port the image pipeline", provider: "Codex", size: "349 MB", note: "318 generated images" },
             { number: "5208", title: "Browser screenshot audit", provider: "Codex", size: "123 MB", note: "2,140 browser tool results" },
             { number: "7045", title: "Refactor the daemon journal", provider: "Codex", size: "115 MB", note: "6,800 commands" },
-            { number: "8854", title: "Review the startup flow", provider: "Claude", size: "80 MB", note: "5,200 commands" }
+            { number: "8854", title: "Profile cold start", provider: "Claude", size: "80 MB", note: "5,200 commands" }
         ]
     })
 
@@ -588,119 +683,138 @@ QtObject {
     // and acceptance criteria only the leader changes. Questions for the user wait in
     // `decisions`; `updates` are task changes that woke nobody and reach the leader as one digest.
     // Members are conversations of `repositories` above, so their rows open them.
+    // `teams/live`: a team as its members write it. Choices are sentences, a task carries a long
+    // Markdown description and lanes are long, and an update is a paragraph. The page and
+    // its dialogs must stay inside their width with this content.
+    // Synthetic long-form variant; no private repository tasks or source paths.
+    readonly property var liveTeam: Object.assign({}, teams[0], {
+        id: "pilot", name: "Sample release",
+        goal: "Prepare a sample release with clear tasks, review criteria and decisions. "
+              + "This fixture demonstrates layout only and contains no live project data."
+    })
+
+    // T-37 (ADR 0114 §10): the free space, in GB, under which the team page warns, and under
+    // which it says builds should stop.
+    readonly property int diskWarnGb: 20
+    readonly property int diskStopGb: 12
+    readonly property string unmovedConversationNote: "“Quick search” (Wait for startup or shutdown to finish, or answer the pending request before switching.) could not be moved to the main checkout and still points at the removed folder. Open it on another folder before its next turn."
+    readonly property string dirtyWorktreeRefusal: "The worktree has uncommitted or untracked changes (2 files). Commit or discard them, then remove it again."
+    readonly property string releaseBriefName: "Morning release brief"
+    readonly property string releaseBriefPrompt: "Summarize the Cinder Trail release checks and surface any blockers before the 09:00 handoff."
+    readonly property var releaseLead: repositories[0].conversations[0]
+
+    function releaseMember(number, assignment) {
+        const conversation = repositories[0].conversations.find(entry => entry.number === number)
+        return Object.assign({
+            number: conversation.number,
+            title: conversation.title,
+            provider: conversation.provider + " · " + conversation.model,
+            lane: ""
+        }, assignment)
+    }
+
     readonly property var teams: [
         {
-            id: "release", name: "Release 1.4",
-            goal: "Ship the new navigation, the repository picker and Settings in KétPlus Pro 1.4.",
-            repository: "ketplus-desktop", branch: "release/1.4", paused: false, merges: "leader",
+            id: "release", name: "Cinder Trail 1.4",
+            goal: "Ship offline field notes. Keep the trail picker fast, prove notes survive a restart, and sign off the Linux release check.\n\n"
+                  + "Context: the offline library now keeps the last selected trail and restores saved notes. "
+                  + "Ask @agent/8213 about the bundled dataset and Linux smoke plan.\n\n"
+                  + "Done means the keyboard review has passed, a note survives an offline restart, "
+                  + "and the guide explains what happens to queued uploads.",
+            repository: repositories[0].name, branch: releaseLead.worktree, paused: false, merges: "leader",
+            turnBudget: 60, automaticTurns: 23,
+            storage: { free: 64.2, worktrees: [
+                { id: "T-2", path: "/workspace/cinder-trail-offline-notes", size: "4.2 GB" }] },
             members: [
-                { number: "4821", title: "Prepare the release", role: "leader", provider: "Codex · GPT-5.6 Luna",
-                  lane: "", paths: [], state: "working", now: "Ordering the merges into release/1.4" },
-                { number: "2035", title: "Refine navigation", role: "developer", provider: "Claude · Opus 5.5",
-                  lane: "Navigation", paths: ["apps/desktop/src/workspace/"], state: "waiting", now: "T-1 is in review" },
-                { number: "8213", title: "Finish the repository picker", role: "developer", provider: "Claude · Opus 5.5",
-                  lane: "Repository picker", paths: ["apps/desktop/src/app/picker/"], state: "working", now: "T-3 · step 3 of 4" },
-                { number: "8215", title: "Follow up on the new UI", role: "developer", provider: "Claude · Opus 5.5",
-                  lane: "Settings", paths: ["apps/desktop/src/settings/", "apps/desktop/src/overlays/"], state: "blocked", now: "T-5 waits for your decision" },
-                { number: "4583", title: "Review fix scroll anchor", role: "reviewer", provider: "Claude · Opus 5.5",
-                  lane: "", reviews: ["Navigation", "Repository picker", "Settings"], paths: [], state: "working", now: "Reviewing T-1 · #412" }
+                releaseMember("4821", { role: "leader", state: "working", now: "Tracking release checks" }),
+                releaseMember("2035", { role: "developer", lane: "Trail picker",
+                    state: "idle", now: "T-1 · review passed" }),
+                releaseMember("8213", { role: "developer", lane: "Offline QA",
+                    state: "blocked", now: "T-5 · waiting for D-1" }),
+                releaseMember("8215", { role: "developer", lane: "Offline settings",
+                    state: "working", now: "T-6 · preparing review" }),
+                releaseMember("4583", { role: "reviewer", reviews: ["Trail picker", "Offline QA", "Offline settings"],
+                    state: "idle", now: "T-1 · keyboard review passed" })
             ],
             tasks: [
-                { id: "T-1", title: "Sidebar destinations and their counts", owner: "2035", lane: "Navigation", state: "review",
-                  pr: "#412", branch: "feat/nav-destinations", worktree: "ketplus-desktop-nav", dependsOn: "",
+                { id: "T-1", title: "Keep keyboard focus after filtering", owner: "2035", lane: "Trail picker",
+                  state: "done", pr: "#412", branch: "fix/trail-picker", worktree: "", dependsOn: "",
                   criteria: [
-                      { text: "The four destinations match the mock at 100% and 125% zoom", done: true },
-                      { text: "Source Control shows the number of changed files", done: true },
-                      { text: "Every destination is reachable by keyboard", done: true }],
+                      { text: "Enter moves focus from the filter to the results", done: true },
+                      { text: "Opening the selected trail works with the keyboard", done: true }],
                   history: [
-                      { when: "Today, 09:10", text: "@agent/4821 wrote the acceptance criteria and assigned @agent/2035" },
-                      { when: "Today, 11:42", text: "@agent/2035 opened #412 and moved the task to In review" },
-                      { when: "Today, 11:43", text: "@agent/4583 started the review" }] },
-                { id: "T-2", title: "Quick search opens with ⌘K", owner: "2035", lane: "Navigation", state: "done",
-                  pr: "#405", branch: "feat/quick-search-shortcut", worktree: "", dependsOn: "",
+                      { when: "Today, 10:12", text: "@agent/2035 submitted #412 for review" },
+                      { when: "Today, 10:42", text: "@agent/4583 passed review: both keyboard checks passed" }] },
+                { id: "T-2", title: "Restore a saved note after restart", owner: "8213", lane: "Offline QA",
+                  state: "done", pr: "#405", branch: "fix/restore-note", worktree: "cinder-trail-offline-notes", dependsOn: "",
                   criteria: [
-                      { text: "⌘K opens Quick search from every screen", done: true },
-                      { text: "Escape returns focus to where it was", done: true }],
-                  history: [
-                      { when: "Yesterday, 16:20", text: "@agent/4583 passed the review with one finding" },
-                      { when: "Yesterday, 16:48", text: "@agent/2035 fixed the finding and merged #405 into release/1.4" }] },
-                { id: "T-3", title: "Repository picker: recent and pinned repositories", owner: "8213", lane: "Repository picker", state: "doing",
-                  pr: "", branch: "feat/picker-recents", worktree: "ketplus-desktop-picker", dependsOn: "",
-                  outsideLane: { path: "apps/desktop/src/workspace/ActivityBar.cpp", lane: "Navigation", owner: "2035" },
+                      { text: "Restarting offline restores the note text and its trail", done: true },
+                      { text: "Restoring a note does not queue a duplicate upload", done: true }],
+                  history: [{ when: "Yesterday, 16:20", text: "@agent/4583 verified restore and sync; #405 merged" }] },
+                { id: "T-3", title: "Verify trail picker with a large library", owner: "8213", lane: "Offline QA",
+                  state: "doing", pr: "", branch: "test/large-trail-library", worktree: "cinder-trail-library", dependsOn: "",
                   criteria: [
-                      { text: "The five most recent repositories come first", done: true },
-                      { text: "A pinned repository stays above the recent ones", done: true },
-                      { text: "Typing filters by name and by path", done: false },
-                      { text: "The list works with 0, 1 and 200 repositories", done: false }],
-                  criteriaNote: "Changed today at 10:05: “200 repositories” was added. @agent/8213 was told.",
-                  history: [
-                      { when: "Today, 09:12", text: "@agent/4821 wrote the acceptance criteria and assigned @agent/8213" },
-                      { when: "Today, 10:05", text: "@agent/4821 changed the acceptance criteria" },
-                      { when: "Today, 11:30", text: "@agent/8213 edited ActivityBar.cpp, a file of the Navigation lane" }] },
-                { id: "T-4", title: "Repository picker: empty and error states", owner: "8213", lane: "Repository picker", state: "todo",
-                  pr: "", branch: "", worktree: "", dependsOn: "T-3",
+                      { text: "Recently opened trails appear first", done: true },
+                      { text: "Filtering preserves keyboard focus", done: true },
+                      { text: "The picker handles 0, 1 and 200 saved trails", done: false }],
+                  criteriaNote: "The leader added the 200-trail case this morning.",
+                  history: [{ when: "Today, 11:30", text: "@agent/8213 asked @agent/2035 for the picker change it needs" }] },
+                { id: "T-4", title: "Check the empty offline library", owner: "8213", lane: "Offline QA",
+                  state: "todo", pr: "", branch: "", worktree: "", dependsOn: "T-3",
+                  criteria: [{ text: "An empty library offers a way to save a trail", done: false }],
+                  history: [{ when: "Today, 09:14", text: "@agent/4821 wrote the acceptance criteria" }] },
+                { id: "T-5", title: "Verify an offline note on Linux", owner: "8213", lane: "Offline QA",
+                  state: "blocked", pr: "", branch: "develop", worktree: "", dependsOn: "", decision: "D-1",
                   criteria: [
-                      { text: "No repository yet: one action that opens a folder", done: false },
-                      { text: "A repository that moved says so and offers Locate", done: false }],
-                  history: [
-                      { when: "Today, 09:14", text: "@agent/4821 wrote the acceptance criteria and assigned @agent/8213" }] },
-                { id: "T-5", title: "Settings: zoom and text size", owner: "8215", lane: "Settings", state: "blocked",
-                  pr: "", branch: "feat/settings-zoom", worktree: "ketplus-desktop-settings", dependsOn: "", decision: "D-1",
+                      { text: "A note saves with the network off", done: false },
+                      { text: "The note survives a restart", done: false }],
+                  history: [{ when: "Today, 11:05", text: "The smoke test is waiting for the dataset choice" }] },
+                { id: "T-6", title: "Show pending sync in settings", owner: "8215", lane: "Offline settings",
+                  state: "review", pr: "#418", branch: "feat/pending-sync", worktree: "", dependsOn: "",
                   criteria: [
-                      { text: "Zoom offers 90% to 150% in steps of 10", done: true },
-                      { text: "Text size is in pixels, from 12 to 18", done: true },
-                      { text: "A change applies as the decision says", done: false }],
-                  history: [
-                      { when: "Today, 09:15", text: "@agent/4821 wrote the acceptance criteria and assigned @agent/8215" },
-                      { when: "Today, 11:05", text: "@agent/8215 asked whether a change applies at once; @agent/4821 put it to you" }] },
-                { id: "T-6", title: "Settings: the update reminder", owner: "8215", lane: "Settings", state: "review",
-                  pr: "#418", branch: "feat/update-reminder", worktree: "", dependsOn: "",
+                      { text: "Settings show how many notes are waiting to sync", done: true },
+                      { text: "The count clears once the queued notes upload", done: true }],
+                  history: [{ when: "Today, 10:50", text: "@agent/8215 submitted #418 for review" }] },
+                { id: "T-7", title: "Verify keyboard navigation in the field editor", owner: "", lane: "Trail picker",
+                  state: "todo", pr: "", branch: "", worktree: "", dependsOn: "T-1",
+                  criteria: [{ text: "Tab reaches the observation field and Save offline", done: false }],
+                  history: [{ when: "Today, 09:20", text: "@agent/4821 wrote the acceptance criteria" }] },
+                { id: "T-8", title: "Publish the offline release notes", owner: "4821", lane: "",
+                  state: "todo", pr: "", branch: "", worktree: "", dependsOn: "T-1, T-3, T-5", decision: "D-2",
                   criteria: [
-                      { text: "The reminder shows the version and what Restart does", done: true },
-                      { text: "It stays out of the way of a running turn", done: true }],
-                  history: [
-                      { when: "Today, 10:50", text: "@agent/8215 opened #418 and moved the task to In review" }] },
-                { id: "T-7", title: "Keyboard path through the sidebar", owner: "", lane: "Navigation", state: "todo",
-                  pr: "", branch: "", worktree: "", dependsOn: "T-1",
-                  criteria: [
-                      { text: "Tab reaches every row in reading order", done: false },
-                      { text: "Arrow keys move inside a repository's conversations", done: false }],
-                  history: [
-                      { when: "Today, 09:20", text: "@agent/4821 wrote the acceptance criteria" }] },
-                { id: "T-8", title: "Release notes and the version number", owner: "4821", lane: "", state: "todo",
-                  pr: "", branch: "", worktree: "", dependsOn: "T-1, T-3, T-5", decision: "D-2",
-                  criteria: [
-                      { text: "The full test suite passes on release/1.4", done: false },
-                      { text: "The notes name every change a user can see", done: false }],
-                  history: [
-                      { when: "Today, 09:22", text: "@agent/4821 kept this task for the end of the epic" }] }
+                      { text: "The Linux release gate passes", done: false },
+                      { text: "The guide explains where queued notes appear", done: false }],
+                  history: [{ when: "Today, 09:22", text: "@agent/4821 added the release gate as a dependency" }] }
             ],
             decisions: [
-                { id: "D-1", question: "Should a change of zoom or text size apply at once, or after Apply?",
-                  detail: "Applying at once is what Appearance already does for the theme. An Apply button lets you compare before the window changes.",
-                  askedBy: "4821", task: "T-5", when: "42 min ago", options: ["Apply at once", "After Apply"], recommended: 0 },
-                { id: "D-2", question: "Which languages do the 1.4 release notes ship in?",
-                  detail: "Vietnamese adds about a day: the notes are reviewed by a person, not by the team.",
-                  askedBy: "4821", task: "T-8", when: "2 hours ago", options: ["English only", "English and Vietnamese"], recommended: 0 }
+                { id: "D-1", question: datasetQuestion, detail: "The bundled set covers the release gate. The full QA set adds sync history.",
+                  askedBy: releaseLead.number, task: "T-5", when: "8 min ago",
+                  options: ["Bundled trail dataset", "Full QA dataset"], recommended: 0 },
+                { id: "D-2", question: "Which languages should the offline guide ship in?",
+                  detail: "The Vietnamese guide needs one more editorial review.",
+                  askedBy: releaseLead.number, task: "T-8", when: "2 hours ago",
+                  options: ["English only", "English and Vietnamese"], recommended: 0 }
             ],
             updates: [
-                { icon: "pull-request", text: "T-1 moved to In review", detail: "@agent/2035 · #412", when: "18 min ago" },
-                { icon: "warning", text: "T-3 edited a file of another lane", detail: "@agent/8213 · ActivityBar.cpp belongs to Navigation", when: "30 min ago", warning: true },
-                { icon: "clock", text: "T-5 is blocked on a decision", detail: "@agent/8215 · D-1 waits for you", when: "55 min ago" },
+                { icon: "check", text: "T-1 review passed · 2/2 criteria",
+                  detail: "@agent/4583 · Keyboard focus and trail selection verified", when: "24 min ago" },
+                { icon: "warning", text: "T-3 edited a file in the Trail picker lane", detail: "@agent/8213 · TrailList.qml", when: "30 min ago", warning: true },
+                { icon: "clock", text: "T-5 is blocked on a decision", detail: "@agent/8213 · D-1 waits for you", when: "55 min ago" },
                 { icon: "pull-request", text: "T-6 moved to In review", detail: "@agent/8215 · #418", when: "1 hour ago" }
             ]
         },
         {
             id: "docs", name: "Docs refresh",
             goal: "Bring the user guide in line with 1.4.",
-            repository: "ketplus-desktop", branch: "docs/1.4", paused: false, merges: "user",
+            repository: "cinder-trail", branch: "docs/1.4", paused: false, merges: "user",
+            turnBudget: 40, automaticTurns: 4,
             members: [
                 { number: "5904", title: "Draft release notes", role: "leader", provider: "Claude · Opus 5.5",
-                  lane: "", paths: [], state: "idle", now: "Waiting for its first task list" },
+                  lane: "", state: "idle", now: "Waiting for its first task list" },
                 { number: "5911", title: "Rewrite the build guide", role: "developer", provider: "Claude · Opus 5.5",
-                  lane: "Guides", paths: ["docs/guide/"], state: "idle", now: "No task yet" },
+                  lane: "Guides", state: "idle", now: "No task yet" },
                 { number: "5923", title: "Review the user guide", role: "reviewer", provider: "Claude · Opus 5.5",
-                  lane: "", paths: [], reviews: ["Guides"], state: "idle", now: "No review yet" }
+                  lane: "", reviews: ["Guides"], state: "idle", now: "No review yet" }
             ],
             tasks: [], decisions: [], updates: []
         }

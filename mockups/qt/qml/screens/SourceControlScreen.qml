@@ -11,7 +11,8 @@ Item {
     id: screen
 
     required property var window
-    property string selected: "NavigationRail.qml"
+    property string selected: Fixtures.changedFiles[0].name
+    readonly property var selectedFile: Fixtures.changedFiles.concat(Fixtures.stagedFiles).find(file => file.name === selected)
     property int mode: 0 // 0 inline, 1 side by side (shown inline in the mock)
 
     function px(value) { return KetTheme.px(value, KetTheme.zoom) }
@@ -172,7 +173,7 @@ Item {
 
             KetBreadcrumb {
                 Layout.fillWidth: true
-                path: ["modules", "ai", "src", "agent", "qml"]
+                path: screen.selectedFile ? screen.selectedFile.path.split("/") : []
                 KetSegmentedControl {
                     options: ["Inline", "Side by side"]
                     currentIndex: screen.mode
@@ -198,14 +199,14 @@ Item {
                             anchors.rightMargin: screen.px(20)
                             anchors.verticalCenter: parent.verticalCenter
                             spacing: screen.px(8)
-                            Text { text: "+28"; color: KetTheme.t.success; font.family: KetTheme.monoFontFamily; font.pixelSize: screen.px(14) }
-                            Text { text: "−9"; color: KetTheme.t.danger; font.family: KetTheme.monoFontFamily; font.pixelSize: screen.px(14) }
+                            Text { text: "+" + (screen.selectedFile ? screen.selectedFile.added : 0); color: KetTheme.t.success; font.family: KetTheme.monoFontFamily; font.pixelSize: screen.px(14) }
+                            Text { text: "−" + (screen.selectedFile ? screen.selectedFile.removed : 0); color: KetTheme.t.danger; font.family: KetTheme.monoFontFamily; font.pixelSize: screen.px(14) }
                         }
                     }
                     KetDiffView {
                         id: diff
                         width: parent.width
-                        lines: parseUnified(Fixtures.sampleDiff)
+                        lines: parseUnified(screen.selectedFile ? screen.selectedFile.diff : "")
                     }
                     Item {
                         width: parent.width

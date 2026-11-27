@@ -79,7 +79,7 @@ LocalJournal::LocalJournal(const QString& path)
     // Operations reset their own errors. Keep failed startup unusable even if a later
     // operation clears that diagnostic; recovery requires a freshly initialized journal.
     if (!acceptsFormat() || !initialize() || !initializeActivityGroups() || !initializeAgents() ||
-        !initializeTeams() || !markFormat())
+        !initializeTeams() || !initializeSchedules() || !initializeManagedTasks() || !markFormat())
         database_.close();
 }
 
@@ -139,6 +139,13 @@ bool LocalJournal::initialize() {
             "CREATE TABLE IF NOT EXISTS journal_metadata_gc ("
             "table_name TEXT PRIMARY KEY, age_row INTEGER NOT NULL DEFAULT 0 CHECK(age_row>=0), "
             "cap_row INTEGER NOT NULL DEFAULT 0 CHECK(cap_row>=0))"),
+        QStringLiteral(
+            "CREATE TABLE IF NOT EXISTS session_preparations ("
+            "session_id TEXT PRIMARY KEY, owner TEXT NOT NULL, request_id TEXT NOT NULL, "
+            "worktree_path TEXT NOT NULL, options TEXT NOT NULL, expires_at INTEGER NOT NULL, "
+            "state TEXT NOT NULL, UNIQUE(owner,request_id))"),
+        QStringLiteral("CREATE INDEX IF NOT EXISTS session_preparations_expiry "
+                       "ON session_preparations(state,expires_at)"),
         QStringLiteral("CREATE TABLE IF NOT EXISTS sessions ("
                        "id TEXT PRIMARY KEY, worktree_path TEXT NOT NULL, adapter TEXT NOT NULL, "
                        "thread_id TEXT NOT NULL, turn_id TEXT NOT NULL, state TEXT NOT NULL, "
@@ -391,6 +398,14 @@ bool LocalJournal::migrateTranscriptSchema() {
     if (!index.exec(QStringLiteral("CREATE INDEX IF NOT EXISTS replay_events_item_transfer ON "
                                    "replay_events(session_id, generation, item_id, "
                                    "json_extract(payload,'$.large_event.transfer_id'))"))) {
+        setError(index.lastError().text());
+        return false;
+    }
+    if (!index.exec(
+            QStringLiteral("CREATE INDEX IF NOT EXISTS events_background_wake_held ON "
+                           "events(session_id, generation, json_extract(payload, '$.event_id')) "
+                           "WHERE event_type = 'agent_message.state' "
+                           "AND json_extract(payload, '$.kind') = 'background_wake_held'"))) {
         setError(index.lastError().text());
         return false;
     }
@@ -933,6 +948,14 @@ bool LocalJournal::deleteSession(const QString& sessionId, const qint64 generati
                          : session.lastError().text();
         return false;
     }
+    // The conversation is gone. Schedules that name it stay, disabled, with a recorded status.
+    if (!sessionId.isEmpty()) {
+        if (QString scheduleError; !disableSchedulesForSession(sessionId, &scheduleError)) {
+            if (error != nullptr)
+                *error = scheduleError;
+            return false;
+        }
+    }
     if (!database_.commit()) {
         if (error != nullptr)
             *error = database_.lastError().text();
@@ -1049,27 +1072,46 @@ std::optional<QList<StoredSession>> LocalJournal::readSessions() const {
     QList<StoredSession> result;
     QSqlQuery query(database_);
     if (!query.exec(QStringLiteral(
-            "SELECT id, worktree_path, adapter, thread_id, turn_id, state, generation, "
-            "last_cursor, current_turn_sequence, title, configuration_revision, model, effort, "
-            "execution_policy, mode, provider_threads, last_seen_cursor, last_turn_started_at, "
-            "context_revision, compact_window, archived_at, tags, awaiting_reply "
-            "FROM sessions ORDER BY id"))) {
+            "SELECT s.id, s.worktree_path, s.adapter, s.thread_id, s.turn_id, s.state, "
+            "s.generation, "
+            "s.last_cursor, s.current_turn_sequence, s.title, s.configuration_revision, s.model, "
+            "s.effort, s.execution_policy, s.mode, s.provider_threads, s.last_seen_cursor, "
+            "s.last_turn_started_at, s.context_revision, s.compact_window, s.archived_at, s.tags, "
+            "s.awaiting_reply, n.repository_path, n.path FROM sessions s "
+            "LEFT JOIN conversation_navigation n ON n.session_id=s.id AND "
+            "n.generation=s.generation "
+            "ORDER BY s.id"))) {
         setError(query.lastError().text());
         return std::nullopt;
     }
     while (query.next()) {
-        result.append({query.value(0).toString(),    query.value(1).toString(),
-                       query.value(2).toString(),    query.value(3).toString(),
-                       query.value(4).toString(),    query.value(5).toString(),
-                       query.value(6).toLongLong(),  query.value(7).toLongLong(),
-                       query.value(8).toLongLong(),  query.value(9).toString(),
-                       query.value(10).toLongLong(), query.value(11).toString(),
-                       query.value(12).toString(),   query.value(13).toString(),
-                       query.value(14).toString(),   query.value(15).toString(),
-                       query.value(16).toLongLong(), query.value(17).toString(),
-                       query.value(18).toLongLong(), query.value(19).toLongLong(),
-                       query.value(20).toString(),   storedTags(query.value(21).toString()),
-                       query.value(22).toBool()});
+        result.append(
+            {query.value(0).toString(),
+             query.value(1).toString(),
+             query.value(2).toString(),
+             query.value(3).toString(),
+             query.value(4).toString(),
+             query.value(5).toString(),
+             query.value(6).toLongLong(),
+             query.value(7).toLongLong(),
+             query.value(8).toLongLong(),
+             query.value(9).toString(),
+             query.value(10).toLongLong(),
+             query.value(11).toString(),
+             query.value(12).toString(),
+             query.value(13).toString(),
+             query.value(14).toString(),
+             query.value(15).toString(),
+             query.value(16).toLongLong(),
+             query.value(17).toString(),
+             query.value(18).toLongLong(),
+             query.value(19).toLongLong(),
+             query.value(20).toString(),
+             storedTags(query.value(21).toString()),
+             query.value(22).toBool(),
+             query.value(23).isNull() ? std::nullopt
+                                      : std::optional<QString>{query.value(23).toString()},
+             query.value(24).isNull() ? query.value(1).toString() : query.value(24).toString()});
     }
     if (query.lastError().isValid()) {
         setError(query.lastError().text());
@@ -1240,6 +1282,12 @@ qint64 LocalJournal::appendEventWithMutation(const QString& sessionId, const qin
             *error = projectionError;
         return -1;
     }
+    if (!advanceWorkReportRequest(sessionId, generation, cursor, type, payload, &projectionError)) {
+        database_.rollback();
+        if (error)
+            *error = projectionError;
+        return -1;
+    }
     if (mutation && !mutation()) {
         database_.rollback();
         if (error != nullptr)
@@ -1274,6 +1322,24 @@ qint64 LocalJournal::appendEventWithMutation(const QString& sessionId, const qin
         return -1;
     }
     return cursor;
+}
+
+std::optional<bool> LocalJournal::hasBackgroundWakeHoldNotice(const QString& sessionId,
+                                                              const qint64 generation,
+                                                              const QString& eventId) const {
+    QSqlQuery query(database_);
+    query.prepare(QStringLiteral(
+        "SELECT 1 FROM events WHERE session_id = ? AND generation = ? "
+        "AND event_type = 'agent_message.state' AND json_extract(payload, '$.kind') = "
+        "'background_wake_held' AND json_extract(payload, '$.event_id') = ? LIMIT 1"));
+    query.addBindValue(sessionId);
+    query.addBindValue(generation);
+    query.addBindValue(eventId);
+    if (!query.exec()) {
+        setError(query.lastError().text());
+        return std::nullopt;
+    }
+    return query.next();
 }
 
 QJsonArray LocalJournal::eventsAfter(const QString& sessionId, const qint64 generation,

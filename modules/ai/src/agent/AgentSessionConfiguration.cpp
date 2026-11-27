@@ -93,7 +93,7 @@ void AgentSessionManager::setConversationConfiguration(const QString& worktreePa
                                                                                      : "ask");
             payload.insert("risk_acknowledged", normalizedPermission == "danger-full-access");
         }
-        server_->executionWorktreeCommand(
+        serverExecutionWorktreeCommand(
             session->threadId, "session.configuration.apply", payload,
             [this, session](const QJsonObject& result, const QString& error) {
                 if (!error.isEmpty() || !result.value("ok").toBool()) {
@@ -103,7 +103,7 @@ void AgentSessionManager::setConversationConfiguration(const QString& worktreePa
                     const auto message =
                         reason.isEmpty() ? tr("Settings were not applied. Refresh and try again.")
                                          : reason;
-                    server_->executionWorktreeCommand(
+                    serverExecutionWorktreeCommand(
                         session->threadId, "session.configuration.read", {},
                         [this, session, message](const QJsonObject& fresh,
                                                  const QString& readError) {
@@ -143,7 +143,7 @@ void AgentSessionManager::setConversationConfiguration(const QString& worktreePa
     rememberLastConversationConfiguration(
         session->model, session->effort, session->permission,
         session->options.value("provider").toString().trimmed().toLower());
-    emit conversationsChanged(session->path, conversations(session->path));
+    notifyConversationsChanged(session->path);
     emitConfiguration(session);
     emitUsageSnapshot(session);
     finish();

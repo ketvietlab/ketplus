@@ -7,7 +7,7 @@ Date: 2026-10-08
 
 A server without a Desktop or display must own agent processes and repositories,
 while a Desktop on another machine and a phone send remote commands. The existing
-local daemon and encrypted Control v2 relay already own these responsibilities,
+local daemon and encrypted hosted service already own these responsibilities,
 but enrollment assumes a local browser and workspace discovery assumes Desktop
 has opened a repository.
 
@@ -15,7 +15,7 @@ has opened a repository.
 
 - Build the daemon independently with `KETPLUS_BUILD_DESKTOP=OFF`; keep it private
   in `ketplus-desktop`. Public CM remains immutable and has no remote-control code.
-- Use the existing outbound HTTPS/WebSocket Control v2 relay. A Unix socket is
+- Use the existing outbound HTTPS/WebSocket hosted service. A Unix socket is
   strictly local administration; no daemon TCP listener is introduced.
 - Add an installation- and PKCE-bound, ten-minute device authorization grant.
   Browser approval requires the authenticated viewer and same-origin CSRF consent.
@@ -36,10 +36,10 @@ has opened a repository.
 
 ## Consequences
 
-The same relay and E2EE contracts serve local macOS and remote Linux hosts. There
+The same hosted service and E2EE contracts serve local macOS and remote Linux hosts. There
 is no direct network filesystem or process access from a client. Account login
 alone does not grant session keys; pairing is still approved on the host. Release
-builds bind the intended relay at configure time. Local tests cannot stand in for
-production relay deployment or physical-device acceptance. See
+builds bind the intended hosted service at configure time. Local tests cannot stand in for
+production service deployment or physical-device acceptance. See
 [`linux-headless-daemon.md`](../linux-headless-daemon.md) for the operational flow
 and current Desktop-backend coverage.

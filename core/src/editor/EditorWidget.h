@@ -26,6 +26,7 @@ class Breadcrumb;
 namespace ketplus {
 
 class MarkdownModeController;
+struct ColorScheme;
 
 struct FindResult final {
     bool found{false};
@@ -102,6 +103,7 @@ class EditorWidget final : public ScintillaEditBase {
     [[nodiscard]] const EditorViewOptions& viewOptions() const noexcept;
     void shareDocumentWith(const EditorWidget& source);
     void applyTheme(const ThemePalette& palette);
+    void applyColorScheme(const ColorScheme& scheme);
     void setMarkdownPreviewVisible(bool visible);
     bool isMarkdownPreviewVisible() const;
     void setPreviewTypography(int fontSizePixels, int lineHeightPixels);
@@ -236,6 +238,7 @@ class EditorWidget final : public ScintillaEditBase {
     std::unique_ptr<Document> document_;
     EditorSettings editorSettings_{EditorSettings::defaults()};
     EditorViewOptions viewOptions_;
+    std::shared_ptr<const ColorScheme> colorScheme_;
     // Until applyTheme() runs, the current theme's muted text.
     QString foldMarkerColor_{currentThemePalette().textMuted};
     QString lexerName_;

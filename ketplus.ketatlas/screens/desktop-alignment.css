@@ -1,4 +1,4 @@
-/* Desktop adaptation of ketplus-app e909d4e: quiet surfaces, readable activity,
+/* Desktop review adaptation: quiet surfaces, readable activity,
    repository/conversation hierarchy and a shared input + toolbar composition.
    Két semantic tokens and materialized component assets remain authoritative. */
 body { --kp-text-reading: 15px; --kp-conversation-width: 760px; }

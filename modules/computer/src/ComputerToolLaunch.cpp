@@ -135,7 +135,7 @@ QString fileStem(const QString& conversationId) {
 std::optional<Launch> launchForConversation(const Settings& settings, const QString& conversationId,
                                             const QString& applicationDir,
                                             const QString& directory) {
-    if (!settings.enabled || conversationId.isEmpty())
+    if (!isSupportedOnThisPlatform() || !settings.enabled || conversationId.isEmpty())
         return std::nullopt;
     const QString front = findFrontExecutable(applicationDir);
     if (front.isEmpty())

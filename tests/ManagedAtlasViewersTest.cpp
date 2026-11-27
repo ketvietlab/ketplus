@@ -1,0 +1,459 @@
+#include "atlas/ManagedAtlasViewers.h"
+#include "KetButton.h"
+#include "KetDialog.h"
+#include "atlas/AtlasRendererPermission.h"
+#include "ui/Theme.h"
+
+#include <QApplication>
+#include <QDesktopServices>
+#include <QDir>
+#include <QFile>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QLabel>
+#include <QProcess>
+#include <QScreen>
+#include <QSettings>
+#include <QTemporaryDir>
+#include <QtTest>
+#include <memory>
+#ifdef Q_OS_UNIX
+#include <sys/stat.h>
+#include <unistd.h>
+#endif
+
+class ManagedAtlasViewersTest final : public QObject {
+    Q_OBJECT
+    std::unique_ptr<QTemporaryDir> root_;
+    QByteArray oldCli_, oldRecord_;
+    static bool write(const QString& path, const QByteArray& bytes) {
+        QDir().mkpath(QFileInfo(path).absolutePath());
+        QFile file(path);
+        return file.open(QIODevice::WriteOnly) && file.write(bytes) == bytes.size();
+    }
+    static QByteArray read(const QString& path) {
+        QFile file(path);
+        return file.open(QIODevice::ReadOnly) ? file.readAll() : QByteArray{};
+    }
+    static QByteArray contract(const QString& cwd = ".") {
+        return QJsonDocument(
+                   QJsonObject{
+                       {"version", 1},
+                       {"framework", "fixture"},
+                       {"cwd", cwd},
+                       {"command", QJsonArray{QCoreApplication::applicationFilePath(),
+                                              "<b>local only</b>", "{port}", "{atlasDirectory}"}}})
+            .toJson();
+    }
+    ketplus::AtlasDescriptor fixture() {
+        const auto path = root_->filePath("sample.ketatlas/atlas.json");
+        write(path, R"({"version":1,"title":"Local fixture","screens":[],"flows":[]})");
+        write(root_->filePath("sample.ketatlas/atlas.renderer.json"), contract());
+        return ketplus::AtlasIndex::readManifest(path, root_->path());
+    }
+    static ket::Dialog* pending(QWidget& window) {
+        for (auto* dialog : window.findChildren<ket::Dialog*>("atlasRendererPermission"))
+            if (dialog->isOpen())
+                return dialog;
+        return nullptr;
+    }
+    static void restore(const char* name, const QByteArray& bytes) {
+        bytes.isNull() ? qunsetenv(name) : qputenv(name, bytes);
+    }
+
+  public slots:
+    void openUrl(const QUrl&) {} // Never invoke a real browser from these fixtures.
+
+  private slots:
+    void initTestCase() { QDesktopServices::setUrlHandler("http", this, "openUrl"); }
+    void cleanupTestCase() { QDesktopServices::unsetUrlHandler("http"); }
+    void init() {
+        root_ = std::make_unique<QTemporaryDir>();
+        QVERIFY(root_->isValid());
+        oldCli_ = qgetenv("KETPLUS_KETATLAS_CLI");
+        oldRecord_ = qgetenv("KETPLUS_ATLAS_FIXTURE_RECORD");
+        QSettings::setDefaultFormat(QSettings::IniFormat);
+        QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, root_->path());
+        QFile source(QFINDTESTDATA("fixtures/fake-atlas-managed.sh"));
+        QVERIFY(source.open(QIODevice::ReadOnly));
+        const auto cli = root_->filePath("fake-atlas");
+        QVERIFY(write(cli, source.readAll()));
+        QVERIFY(QFile::setPermissions(cli, QFileDevice::ReadOwner | QFileDevice::WriteOwner |
+                                               QFileDevice::ExeOwner));
+        qputenv("KETPLUS_KETATLAS_CLI", cli.toUtf8());
+        qputenv("KETPLUS_ATLAS_FIXTURE_RECORD", root_->path().toUtf8());
+    }
+    void cleanup() {
+        restore("KETPLUS_KETATLAS_CLI", oldCli_);
+        restore("KETPLUS_ATLAS_FIXTURE_RECORD", oldRecord_);
+        root_.reset();
+    }
+    void consent_data() {
+        QTest::addColumn<QString>("action");
+        for (const auto* action :
+             {"run", "return-run", "return-static", "refuse", "escape", "close", "contract-change",
+              "manifest-change", "cwd-change", "sidecar-link", "cwd-link", "bundle-link", "stop",
+              "no-anchor", "invalid", "static"})
+            QTest::newRow(action) << QString::fromLatin1(action);
+    }
+    void consent() {
+#ifndef Q_OS_UNIX
+        QSKIP("The fake CLI fixture uses a Unix shell.");
+#else
+        QFETCH(QString, action);
+        const auto atlas = fixture();
+        QVERIFY(!atlas.path.isEmpty());
+        const auto sidecar = atlas.directory + "/atlas.renderer.json";
+        if (action == "static")
+            QVERIFY(QFile::remove(sidecar));
+        if (action == "invalid")
+            QVERIFY(write(sidecar, "not json"));
+        if (action == "cwd-link") {
+            QVERIFY(QDir().mkpath(atlas.directory + "/work"));
+            QVERIFY(write(sidecar, contract("work")));
+        }
+        QWidget window;
+        window.resize(1000, 720);
+        window.show();
+        ketplus::ManagedAtlasViewers viewers;
+        viewers.open(atlas, action == "no-anchor" ? nullptr : &window);
+        auto* dialog = pending(window);
+        const bool prompt = action != "static" && action != "invalid" && action != "no-anchor";
+        QCOMPARE(dialog != nullptr, prompt);
+        if (dialog) {
+            QVERIFY(!QFileInfo::exists(root_->filePath("argv")));
+            auto* label = dialog->findChild<QLabel*>("atlasRendererCommand");
+            QVERIFY(label);
+            QCOMPARE(label->textFormat(), Qt::PlainText);
+            QVERIFY(label->text().contains("<b>local only</b>"));
+            QVERIFY(label->text().contains(atlas.directory));
+            QVERIFY(!label->text().contains("{port}"));
+            viewers.open(atlas, &window);
+            QCOMPARE(window.findChildren<ket::Dialog*>("atlasRendererPermission").size(), 1);
+            if (action == "contract-change")
+                QVERIFY(write(sidecar, contract() + "\n"));
+            if (action == "manifest-change")
+                QVERIFY(write(atlas.path, read(atlas.path) + "\n"));
+            if (action == "cwd-change") {
+                QVERIFY(QDir().mkpath(atlas.directory + "/new-cwd"));
+                QVERIFY(write(sidecar, contract("new-cwd")));
+            }
+            if (action == "sidecar-link") {
+                const auto outside = root_->filePath("other/atlas.renderer.json");
+                QVERIFY(write(outside, contract()));
+                QVERIFY(QFile::remove(sidecar));
+                QCOMPARE(::symlink(QFile::encodeName(outside), QFile::encodeName(sidecar)), 0);
+            }
+            if (action == "cwd-link") {
+                QVERIFY(QDir(atlas.directory).rename("work", "old-work"));
+                QVERIFY(QDir().mkpath(atlas.directory + "/other-work"));
+                QCOMPARE(::symlink("other-work", QFile::encodeName(atlas.directory + "/work")), 0);
+            }
+            if (action == "bundle-link") {
+                QVERIFY(QDir(root_->path()).rename("sample.ketatlas", "moved.ketatlas"));
+                QCOMPARE(::symlink("moved.ketatlas", QFile::encodeName(atlas.directory)), 0);
+            }
+            if (action == "stop") {
+                viewers.stop(atlas.path);
+                QTest::qWait(50);
+                QVERIFY(!QFileInfo::exists(root_->filePath("argv")));
+                QVERIFY(viewers.viewers().isEmpty());
+                return;
+            }
+            if (action == "escape")
+                QTest::keyClick(dialog, Qt::Key_Escape);
+            else if (action.startsWith("return-")) {
+                auto* button = dialog->findChild<ket::Button*>(
+                    action == "return-run" ? "atlasRendererRun" : "atlasRendererStatic");
+                window.activateWindow();
+                QCoreApplication::processEvents();
+                button->setFocus();
+                QVERIFY(button->hasFocus());
+                QTest::keyClick(button, Qt::Key_Return);
+            } else if (action == "close")
+                dialog->reject();
+            else
+                dialog
+                    ->findChild<ket::Button*>(action == "refuse" ? "atlasRendererStatic"
+                                                                 : "atlasRendererRun")
+                    ->click();
+        }
+        if (action == "bundle-link") {
+            QVERIFY(viewers.viewers().isEmpty());
+            QVERIFY(!viewers.errorFor(atlas.path).isEmpty());
+            QVERIFY(!QFileInfo::exists(root_->filePath("argv")));
+            return;
+        }
+        QTRY_COMPARE(viewers.runningCount(), 1);
+        const auto arguments = read(root_->filePath("argv"));
+        const bool authorized = action == "run" || action == "return-run";
+        QCOMPARE(arguments.contains("--renderer\n"), authorized);
+        QCOMPARE(QFileInfo::exists(root_->filePath("renderer")), authorized);
+        QCOMPARE(read(root_->filePath("cwd")).trimmed(), atlas.directory.toUtf8());
+        QVERIFY(arguments.contains("--no-preload"));
+        if (action.endsWith("change") || action.endsWith("link") || action == "invalid")
+            QVERIFY(!viewers.errorFor(atlas.path).isEmpty());
+        viewers.stop(atlas.path);
+        QTRY_VERIFY(viewers.viewers().isEmpty());
+#endif
+    }
+    void reopenAndRestartRequireFreshConsent() {
+#ifndef Q_OS_UNIX
+        QSKIP("The fake CLI fixture uses a Unix shell.");
+#else
+        const auto atlas = fixture();
+        QWidget window;
+        window.resize(1000, 720);
+        window.show();
+        for (int restart = 0; restart < 2; ++restart) {
+            ketplus::ManagedAtlasViewers viewers;
+            for (int reopen = 0; reopen < 2; ++reopen) {
+                viewers.open(atlas, &window);
+                auto* dialog = pending(window);
+                QVERIFY(dialog);
+                dialog->findChild<ket::Button*>("atlasRendererRun")->click();
+                QTRY_COMPARE(viewers.runningCount(), 1);
+                viewers.stop(atlas.path);
+                QTRY_VERIFY(viewers.viewers().isEmpty());
+                QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+            }
+        }
+#endif
+    }
+    void nonRegularInputs_data() {
+        QTest::addColumn<QString>("input");
+        QTest::addColumn<QString>("kind");
+        QTest::addColumn<bool>("afterConsent");
+        QTest::newRow("sidecar-fifo") << QString("sidecar") << QString("fifo") << false;
+        QTest::newRow("sidecar-fifo-after-consent")
+            << QString("sidecar") << QString("fifo") << true;
+        QTest::newRow("sidecar-fifo-link") << QString("sidecar") << QString("fifo-link") << false;
+        QTest::newRow("sidecar-directory") << QString("sidecar") << QString("directory") << false;
+        QTest::newRow("sidecar-device") << QString("sidecar") << QString("device") << false;
+        QTest::newRow("sidecar-oversized") << QString("sidecar") << QString("oversized") << false;
+        QTest::newRow("manifest-fifo") << QString("manifest") << QString("fifo") << false;
+        QTest::newRow("manifest-fifo-after-consent")
+            << QString("manifest") << QString("fifo") << true;
+    }
+    void nonRegularInputs() {
+#ifndef Q_OS_UNIX
+        QSKIP("Non-regular input fixtures require Unix filesystem APIs.");
+#else
+        QFETCH(QString, input);
+        QFETCH(QString, kind);
+        QFETCH(bool, afterConsent);
+        if (!qEnvironmentVariableIsSet("KETPLUS_ATLAS_NONREGULAR_WORKER")) {
+            // Keep a blocking-open regression from hanging the test runner itself.
+            QProcess child;
+            auto environment = QProcessEnvironment::systemEnvironment();
+            environment.insert("KETPLUS_ATLAS_NONREGULAR_WORKER", "1");
+            environment.insert("QT_QPA_PLATFORM", "offscreen");
+            child.setProcessEnvironment(environment);
+            child.setProcessChannelMode(QProcess::MergedChannels);
+            child.start(
+                QCoreApplication::applicationFilePath(),
+                {QString("nonRegularInputs:") + QString::fromLatin1(QTest::currentDataTag())});
+            QVERIFY(child.waitForStarted());
+            const bool finished = child.waitForFinished(10000);
+            if (!finished) {
+                child.kill();
+                child.waitForFinished();
+            }
+            const auto output = child.readAll().right(6000);
+            QVERIFY2(finished, ("Non-regular input exceeded watchdog. " + output).constData());
+            QCOMPARE(child.exitStatus(), QProcess::NormalExit);
+            QVERIFY2(child.exitCode() == 0, output.constData());
+            return;
+        }
+        const auto atlas = fixture();
+        QVERIFY(!atlas.path.isEmpty());
+        QWidget window;
+        window.resize(1000, 720);
+        window.show();
+        ketplus::ManagedAtlasViewers viewers;
+        if (afterConsent) {
+            viewers.open(atlas, &window);
+            QVERIFY(pending(window));
+            QVERIFY(!QFileInfo::exists(root_->filePath("argv")));
+        }
+        const auto path =
+            input == "manifest" ? atlas.path : atlas.directory + "/atlas.renderer.json";
+        QVERIFY(QFile::remove(path));
+        if (kind == "directory")
+            QVERIFY(QDir().mkpath(path));
+        else if (kind == "device")
+            QCOMPARE(::symlink("/dev/zero", QFile::encodeName(path)), 0);
+        else if (kind == "oversized")
+            QVERIFY(write(path, QByteArray(1024 * 1024 + 1, ' ')));
+        else if (kind == "fifo-link") {
+            const auto target = root_->filePath("pipe");
+            QCOMPARE(::mkfifo(QFile::encodeName(target), 0600), 0);
+            QCOMPARE(::symlink(QFile::encodeName(target), QFile::encodeName(path)), 0);
+        } else
+            QCOMPARE(::mkfifo(QFile::encodeName(path), 0600), 0);
+        const auto permission = ketplus::AtlasRendererPermission::read(
+            atlas, QProcessEnvironment::systemEnvironment(), 43121);
+        QVERIFY(permission.present);
+        QVERIFY(!permission.error.isEmpty());
+        if (afterConsent)
+            pending(window)->findChild<ket::Button*>("atlasRendererRun")->click();
+        else
+            viewers.open(atlas, &window);
+        QVERIFY(!pending(window));
+        QVERIFY(!viewers.errorFor(atlas.path).isEmpty());
+        if (input == "manifest") {
+            QVERIFY(viewers.viewers().isEmpty());
+            QVERIFY(!QFileInfo::exists(root_->filePath("argv")));
+        } else {
+            QTRY_COMPARE(viewers.runningCount(), 1);
+            QVERIFY(!read(root_->filePath("argv")).contains("--renderer\n"));
+            QVERIFY(!QFileInfo::exists(root_->filePath("renderer")));
+            viewers.stop(atlas.path);
+            QTRY_VERIFY(viewers.viewers().isEmpty());
+        }
+#endif
+    }
+    void commandDetailsEscapeControls() {
+        const auto atlas = fixture();
+        auto object = QJsonDocument::fromJson(contract()).object();
+        object.insert("command", QJsonArray{QCoreApplication::applicationFilePath(),
+                                            QStringLiteral("one\ntwo") + QChar(0x202e) +
+                                                QChar(0x2028) + QChar(0x2029) + "<tag>"});
+        QVERIFY(write(atlas.directory + "/atlas.renderer.json", QJsonDocument(object).toJson()));
+        const auto permission = ketplus::AtlasRendererPermission::read(
+            atlas, QProcessEnvironment::systemEnvironment(), 43121);
+        QVERIFY(permission.error.isEmpty());
+        QWidget window;
+        window.resize(1000, 720);
+        auto* dialog = ketplus::rendererPermissionDialog(&window, permission);
+        const auto text = dialog->findChild<QLabel*>("atlasRendererCommand")->text();
+        QVERIFY(!text.contains(QChar(0x202e)));
+        QVERIFY(!text.contains(QChar(0x2028)));
+        QVERIFY(!text.contains(QChar(0x2029)));
+        QVERIFY(!text.contains(QStringLiteral("one\ntwo")));
+        QVERIFY(text.contains("u000a"));
+        QVERIFY(text.contains("u202e"));
+        QVERIFY(text.contains("u2028"));
+        QVERIFY(text.contains("u2029"));
+        QVERIFY(text.contains("<tag>"));
+        delete dialog;
+    }
+    void cwdSymlinkParentMatchesCli_data() {
+        QTest::addColumn<QString>("cwd");
+        QTest::addColumn<QString>("expected");
+        QTest::newRow("symlink-target") << "work" << "other/nested";
+        QTest::newRow("lexical-parent") << "work/.." << ".";
+        QTest::newRow("lexical-parent-child") << "work/../nested" << "nested";
+    }
+    void sidecarSymlinkUsesCanonicalTargetDirectory() {
+#ifndef Q_OS_UNIX
+        QSKIP("This contract fixture uses Unix symbolic links.");
+#else
+        const auto atlas = fixture();
+        const auto target = root_->filePath("shared/atlas.renderer.json");
+        QVERIFY(write(target, contract()));
+        const auto sidecar = atlas.directory + "/atlas.renderer.json";
+        QVERIFY(QFile::remove(sidecar));
+        QCOMPARE(::symlink(QFile::encodeName(target), QFile::encodeName(sidecar)), 0);
+        const auto permission = ketplus::AtlasRendererPermission::read(
+            atlas, QProcessEnvironment::systemEnvironment(), 43121);
+        QVERIFY(permission.error.isEmpty());
+        // The CLI canonicalizes the contract itself before deriving its directory.
+        const auto canonicalTarget = QFileInfo(target).canonicalFilePath();
+        const auto directory = QFileInfo(canonicalTarget).absolutePath();
+        QCOMPARE(permission.contractPath, canonicalTarget);
+        QCOMPARE(permission.workingDirectory, directory);
+        QCOMPARE(permission.command.last(), directory);
+#endif
+    }
+    void cwdSymlinkParentMatchesCli() {
+#ifndef Q_OS_UNIX
+        QSKIP("This contract fixture uses Unix symbolic links.");
+#else
+        QFETCH(QString, cwd);
+        QFETCH(QString, expected);
+        const auto atlas = fixture();
+        QVERIFY(QDir().mkpath(atlas.directory + "/other/nested"));
+        QVERIFY(QDir().mkpath(atlas.directory + "/nested"));
+        QCOMPARE(::symlink("other/nested", QFile::encodeName(atlas.directory + "/work")), 0);
+        QVERIFY(write(atlas.directory + "/atlas.renderer.json", contract(cwd)));
+        const auto permission = ketplus::AtlasRendererPermission::read(
+            atlas, QProcessEnvironment::systemEnvironment(), 43121);
+        QVERIFY(permission.error.isEmpty());
+        // KetAtlas 0.6.1 uses fs.realpath(path.resolve(contractDirectory, cwd)).
+        // path.resolve removes '..' lexically before resolving symlink targets.
+        const auto cliCwd = QFileInfo(QDir::cleanPath(QDir(atlas.directory).filePath(expected)))
+                                .canonicalFilePath();
+        QCOMPARE(permission.workingDirectory, cliCwd);
+#endif
+    }
+    void liveThemeZoomAndLayout() {
+        ketplus::ThemeManager theme(*qApp);
+        QWidget window;
+        if (QGuiApplication::platformName() == "cocoa") {
+            const auto screens = QGuiApplication::screens();
+            if (screens.size() < 2)
+                QSKIP("Native capture requires the secondary work display.");
+            window.setScreen(screens.at(1));
+            window.move(screens.at(1)->availableGeometry().topLeft() + QPoint(24, 24));
+            qInfo() << "Native permission UI" << screens.at(1)->name() << "DPR"
+                    << screens.at(1)->devicePixelRatio();
+        }
+        window.resize(1000, 720);
+        window.show();
+        const auto atlas = fixture();
+        auto object = QJsonDocument::fromJson(contract()).object();
+        object.insert("command", QJsonArray{QCoreApplication::applicationFilePath(),
+                                            QStringLiteral("one") + QChar(0x2028) + "two" +
+                                                QChar(0x2029) + "<plain argument>"});
+        QVERIFY(write(atlas.directory + "/atlas.renderer.json", QJsonDocument(object).toJson()));
+        const auto permission = ketplus::AtlasRendererPermission::read(
+            atlas, QProcessEnvironment::systemEnvironment(), 43121);
+        QVERIFY(permission.error.isEmpty());
+        auto* dialog = ketplus::rendererPermissionDialog(&window, permission);
+        const auto details = dialog->findChild<QLabel*>("atlasRendererCommand")->text();
+        QVERIFY(details.contains("u2028") && details.contains("u2029"));
+        for (const auto mode :
+             {ketplus::ThemeManager::Mode::Light, ketplus::ThemeManager::Mode::Dark,
+              ketplus::ThemeManager::Mode::System}) {
+            theme.setMode(mode);
+            for (const int zoom : {90, 100, 110, 125}) {
+                theme.setInterfaceScale(13, zoom);
+                for (const auto size : {QSize(1000, 720), QSize(640, 600)}) {
+                    window.resize(size);
+                    QCoreApplication::processEvents();
+                    QVERIFY(window.rect().contains(dialog->card()->geometry()));
+                    for (auto* button : dialog->findChildren<ket::Button*>()) {
+                        const auto position = button->mapTo(dialog->card(), QPoint{});
+                        QVERIFY(dialog->card()->rect().contains(QRect(position, button->size())));
+                        QVERIFY(button->isVisible());
+                    }
+                }
+            }
+        }
+        if (const auto dir = qEnvironmentVariable("KETPLUS_ATLAS_PERMISSION_CAPTURE_DIR");
+            !dir.isEmpty()) {
+            QVERIFY(QDir().mkpath(dir));
+            for (const auto mode :
+                 {ketplus::ThemeManager::Mode::Light, ketplus::ThemeManager::Mode::Dark}) {
+                theme.setMode(mode);
+                QCoreApplication::processEvents();
+                QVERIFY(window.grab().save(dir + (mode == ketplus::ThemeManager::Mode::Light
+                                                      ? "/light.png"
+                                                      : "/dark.png")));
+            }
+        }
+        dialog->reject();
+        delete dialog;
+    }
+};
+
+int main(int argc, char** argv) {
+    QApplication app(argc, argv);
+    QCoreApplication::setOrganizationName("KetPlusTests");
+    QCoreApplication::setApplicationName("ManagedAtlasViewersTest");
+    ManagedAtlasViewersTest test;
+    return QTest::qExec(&test, argc, argv);
+}
+#include "ManagedAtlasViewersTest.moc"

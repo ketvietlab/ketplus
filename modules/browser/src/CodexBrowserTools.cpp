@@ -1,6 +1,7 @@
 #include "CodexBrowserTools.h"
 #include "BrowserToolLaunch.h"
 
+#include "ToolLocations.h"
 #include "ToolPackageRegistry.h"
 
 #include <QCryptographicHash>
@@ -153,6 +154,11 @@ QString prerequisiteCacheKey(const Settings& settings, const QString& searchStar
     if (playwright.isEmpty())
 #if defined(Q_OS_MACOS)
         playwright = QDir::home().filePath(QStringLiteral("Library/Caches/ms-playwright"));
+#elif defined(Q_OS_WIN)
+        playwright =
+            QDir(qEnvironmentVariable("LOCALAPPDATA",
+                                      QDir::home().filePath(QStringLiteral("AppData/Local"))))
+                .filePath(QStringLiteral("ms-playwright"));
 #else
         playwright = QDir::home().filePath(QStringLiteral(".cache/ms-playwright"));
 #endif
@@ -318,6 +324,35 @@ QString detectBrowserAppPath(const QString& startDirectory) {
 Probes systemProbes() {
     Probes probes;
     probes.nodeCandidates = [] {
+#if defined(Q_OS_WIN)
+        QStringList candidates;
+        // PATH, then the usual tool directories a GUI app started from the Start menu lacks.
+        const QString found = ketplus::tool_locations::findTool(QStringLiteral("node"));
+        // PATHEXT can resolve "node" to node.cmd or node.bat, which would start the MCP server
+        // through cmd.exe; only a real node.exe is a runtime.
+        if (found.endsWith(QStringLiteral(".exe"), Qt::CaseInsensitive))
+            candidates.append(found);
+        // The Node installer, then nvm for Windows (a symlink to the active version).
+        for (const char* variable : {"ProgramFiles", "ProgramFiles(x86)", "NVM_SYMLINK"}) {
+            const QString base = qEnvironmentVariable(variable);
+            if (base.isEmpty())
+                continue;
+            candidates.append(QDir(base).filePath(qstrcmp(variable, "NVM_SYMLINK") == 0
+                                                      ? QStringLiteral("node.exe")
+                                                      : QStringLiteral("nodejs/node.exe")));
+        }
+        if (const QString nvmHome = qEnvironmentVariable("NVM_HOME"); !nvmHome.isEmpty()) {
+            QDir versions(nvmHome);
+            QStringList installed =
+                versions.entryList({QStringLiteral("v*")}, QDir::Dirs | QDir::NoDotAndDotDot);
+            std::sort(installed.begin(), installed.end(), [](const QString& a, const QString& b) {
+                return QVersionNumber::fromString(a.mid(1)) > QVersionNumber::fromString(b.mid(1));
+            });
+            for (const QString& version : installed)
+                candidates.append(versions.filePath(version + QStringLiteral("/node.exe")));
+        }
+        return candidates;
+#else
         QStringList candidates{QStringLiteral("/opt/homebrew/bin/node"),
                                QStringLiteral("/usr/local/bin/node")};
         const QString onPath = QStandardPaths::findExecutable(QStringLiteral("node"));
@@ -334,6 +369,7 @@ Probes systemProbes() {
         for (const QString& version : installed)
             candidates.append(versions.filePath(version + QStringLiteral("/bin/node")));
         return candidates;
+#endif
     };
     probes.nodeVersion = [](const QString& node) {
         if (!QFileInfo(node).isExecutable())

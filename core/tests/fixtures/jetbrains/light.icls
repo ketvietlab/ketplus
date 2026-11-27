@@ -1,0 +1,7 @@
+<scheme name="Test Paper" version="142" parent_scheme="Default">
+  <attributes>
+    <option name="DEFAULT_TEXT"><value><option name="FOREGROUND" value="112233"/><option name="BACKGROUND" value="fafafa"/></value></option>
+    <option name="DEFAULT_KEYWORD"><value><option name="FOREGROUND" value="3344aa"/><option name="FONT_TYPE" value="0"/><option name="EFFECT_TYPE" value="-1"/></value></option>
+    <option name="DEFAULT_STRING"><value><option name="FOREGROUND" value="008800"/><option name="EFFECT_TYPE" value="0"/></value></option>
+  </attributes>
+</scheme>

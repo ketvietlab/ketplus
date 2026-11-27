@@ -17,7 +17,7 @@ the history, could not tell an archived conversation from a visible one, so
   `setSessionArchived` does.
 - `session.set_archived` with `{archived: true|false}` (mutating, deduplicated
   by `message_id`) sets or clears it. Only local clients can send it; the
-  cloud relay does not route it until phones can archive.
+  hosted service does not route it until phones can archive.
   - Archiving an already archived conversation keeps the first time, so the
     period counts from when it was hidden.
   - `session.list` reports `archived_at` for archived conversations. Daemons

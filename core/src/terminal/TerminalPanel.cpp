@@ -3,6 +3,7 @@
 #include "KetIcons.h"
 #include "terminal/TerminalTab.h"
 #include "terminal/TerminalView.h"
+#include "ui/theme/ColorScheme.h"
 #include <QDir>
 #include <QHBoxLayout>
 #include <QPointer>
@@ -22,6 +23,7 @@ TerminalPanel::TerminalPanel(QWidget* parent)
     tabs_->setElideMode(Qt::ElideMiddle);
     tabs_->tabBar()->setExpanding(false);
     auto* actions = new QWidget(tabs_);
+    actions_ = actions;
     auto* row = new QHBoxLayout(actions);
     row->setContentsMargins(0, 0, 4, 0);
     row->setSpacing(0);
@@ -75,7 +77,10 @@ TerminalTab* TerminalPanel::currentTab() const {
 }
 void TerminalPanel::addTab(bool startSession) {
     auto* tab = new TerminalTab(workingDirectory_, {}, tabs_);
-    tab->applyTheme(palette_);
+    if (scheme_)
+        tab->applyColorScheme(*scheme_);
+    else
+        tab->applyTheme(palette_);
     tab->setTypography(fontSizePixels_, lineHeightPixels_, fontFamily_);
     const int index = tabs_->addTab(tab, tab->title());
     tabs_->setTabToolTip(index, tab->workingDirectory());
@@ -104,9 +109,15 @@ void TerminalPanel::typeText(const QString& text) {
 }
 
 void TerminalPanel::typeTextInNewTab(const QString& text) {
-    if (currentTab() != nullptr)
+    if (!singleSession_ && currentTab() != nullptr)
         addTab(true);
     typeText(text);
+}
+
+void TerminalPanel::setSingleSession(const bool single) {
+    singleSession_ = single;
+    tabs_->tabBar()->setVisible(!single);
+    actions_->setVisible(!single);
 }
 
 void TerminalPanel::focusTerminal() {
@@ -123,10 +134,18 @@ void TerminalPanel::focusTerminal() {
     });
 }
 void TerminalPanel::applyTheme(const ThemePalette& palette) {
+    scheme_.reset();
     palette_ = palette;
     for (int i = 0; i < tabs_->count(); ++i)
         if (auto* tab = qobject_cast<TerminalTab*>(tabs_->widget(i)))
             tab->applyTheme(palette);
+}
+void TerminalPanel::applyColorScheme(const ColorScheme& scheme) {
+    scheme_ = std::make_shared<const ColorScheme>(resolveColorScheme(scheme));
+    palette_ = colorSchemePalette(*scheme_);
+    for (int i = 0; i < tabs_->count(); ++i)
+        if (auto* tab = qobject_cast<TerminalTab*>(tabs_->widget(i)))
+            tab->applyColorScheme(*scheme_);
 }
 void TerminalPanel::setTypography(int fontSize, int lineHeight, const QString& family) {
     fontSizePixels_ = fontSize;

@@ -54,6 +54,7 @@ QString navigationIcon(const QString& id) {
         {QStringLiteral("storage"), QStringLiteral("layers")},
         {QStringLiteral("updates"), QStringLiteral("download")},
         {QStringLiteral("agent-models"), QStringLiteral("sliders-horizontal")},
+        {QStringLiteral("teams"), QStringLiteral("bot")},
     };
     return ket::Icons::codeForLucide(names.value(id, QStringLiteral("archive")));
 }
@@ -375,6 +376,18 @@ void SettingsWorkspace::addSection(const QString& title, const QString& id, QWid
 
 void SettingsWorkspace::addLink(const QString& title, const QString& id) {
     addNavigation(title, id);
+}
+
+// The dialog goes first. Its controls and pages now live on this page, and Qt deletes them
+// before the dialog, its last child; a page's destruction would otherwise make the dialog read
+// controls already deleted.
+SettingsWorkspace::~SettingsWorkspace() {
+    // Canceling a scheme preview during child destruction must not restyle the
+    // partly destroyed widget tree, even while this QObject still receives signals.
+    disconnect(&ket::Appearance::instance(), nullptr, this, nullptr);
+    if (auto* theme = dialog_->theme())
+        disconnect(theme, nullptr, this, nullptr);
+    delete dialog_;
 }
 
 void SettingsWorkspace::showSection(const QString& id) {

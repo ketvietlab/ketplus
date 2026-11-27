@@ -86,7 +86,7 @@ void AgentSessionManager::continueDaemonHistoryCatchup(const SessionPtr& session
         });
         return;
     }
-    server_->finishDaemonTranscriptCatchup(
+    serverFinishDaemonTranscriptCatchup(
         session->threadId, page, [this, session](const QJsonObject&, const QString& error) {
             if (!error.isEmpty()) {
                 // The installed pages remain valid even if live buffering

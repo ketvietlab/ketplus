@@ -39,6 +39,14 @@ executable's canonical path, size and modification time, so later launches check
 without a new process and an update on disk is noticed at the next launch. A
 probe that prints nothing is not cached.
 
+Codex's model catalog follows the CLI version: OpenAI lists a new model only to
+clients new enough for it. The daemon's app-server can run for days, so the Codex
+adapter records the fingerprint it launched and compares it on every `model/list`.
+When the CLI on disk changed and the provider is idle (no active turn, pending call
+or busy session worker), it stops the process the same planned way as a browser-settings
+reload, emits `reloaded("executable_updated")`, and the listing starts the updated
+CLI. A busy provider keeps the running CLI and moves on at a later listing.
+
 - `outdated` fails the pending requests with a message naming the version, the
   minimum and the update command. The turn ends with the existing
   `runtime.error`, so Desktop shows it without new UI.
@@ -219,7 +227,9 @@ builds keep working. Minor 1 features are `provider.runtime_status`,
 `session.fork` (ADR 0016), `transcript.window/1` and
 `transcript.large_event/1`. The per-response fields
 `transcript_window_version` and `transcript_large_event_version` remain for
-minor-0 clients. `DaemonClient` exposes `protocolMinor()` and `hasFeature()`;
+minor-0 clients. Later minor-1 features are additive the same way; for
+example `daemon.host_identity/1` adds `host_key_fingerprint` to the hello reply
+(ADR 0119 "Machine identity"). `DaemonClient` exposes `protocolMinor()` and `hasFeature()`;
 Desktop reports `provider/runtimeStatus` as unsupported when the daemon lacks
 the feature. ADR 0003's rollover stays the path for major changes.
 

@@ -1,8 +1,11 @@
 #include "DaemonClient.h"
 #include "TranscriptWindowTestSupport.h"
+#include "cloud-privacy/MemoryCredentials.h"
 
 #include <QDir>
 #include <QElapsedTimer>
+#include <QJsonArray>
+#include <QRegularExpression>
 #include <QSignalSpy>
 #include <QSqlDatabase>
 #include <QSqlQuery>
@@ -58,6 +61,7 @@ class DesktopSessionDiscoveryTest final : public QObject {
 
   private slots:
     void initTestCase() { QStandardPaths::setTestModeEnabled(true); }
+    void init() { r03::resetCredentials(); }
 
     void discoversAnotherClientThroughRealDaemon_data() {
         QTest::addColumn<int>("tombstones");
@@ -71,7 +75,7 @@ class DesktopSessionDiscoveryTest final : public QObject {
         Environment env;
         QVERIFY(env.directory.isValid());
         const auto path = QFileInfo(env.directory.path()).canonicalFilePath();
-        const auto executable = env.directory.filePath("fake-codex");
+        const auto executable = env.directory.filePath(fixtureName("fake-codex"));
         QVERIFY(writeFakeCodex(executable, env.directory.filePath("provider.log")));
         {
             LocalJournal journal(env.directory.filePath("journal.sqlite3"));
@@ -164,7 +168,7 @@ class DesktopSessionDiscoveryTest final : public QObject {
         Environment env;
         QVERIFY(env.directory.isValid());
         const auto path = QFileInfo(env.directory.path()).canonicalFilePath();
-        const auto executable = env.directory.filePath("fake-codex");
+        const auto executable = env.directory.filePath(fixtureName("fake-codex"));
         QVERIFY(writeFakeCodex(executable, env.directory.filePath("provider.log")));
         const auto journalPath = env.directory.filePath("journal.sqlite3");
         {
@@ -223,23 +227,25 @@ class DesktopSessionDiscoveryTest final : public QObject {
         QCOMPARE(archivedAt("archived-elsewhere"), QString("2026-01-01T00:00:00.000Z"));
     }
 
-    void tagsAreStoredByTheDaemon() {
+    // ADR 0117: the daemon keeps conversation tags; the desktop lists none and offers no way to
+    // change them. Another client's change still reaches the desktop as `tags.changed`, which
+    // it takes without an error or a warning.
+    void tagsStayInTheDaemon() {
         Environment env;
         QVERIFY(env.directory.isValid());
         const auto path = QFileInfo(env.directory.path()).canonicalFilePath();
-        const auto executable = env.directory.filePath("fake-codex");
+        const auto executable = env.directory.filePath(fixtureName("fake-codex"));
         QVERIFY(writeFakeCodex(executable, env.directory.filePath("provider.log")));
         const auto journalPath = env.directory.filePath("journal.sqlite3");
         {
             LocalJournal journal(journalPath);
-            for (const auto* id : {"tagged-elsewhere", "plain"})
-                QVERIFY(journal.upsertSession(
-                    {id, path, "codex", {}, {}, "ready", 1, 0, 0, QString::fromLatin1(id)}));
-            QVERIFY(journal.setSessionTags("tagged-elsewhere", 1, {"Review", "Mine"}));
+            QVERIFY(journal.upsertSession(
+                {"tagged", path, "codex", {}, {}, "ready", 1, 0, 0, QStringLiteral("tagged")}));
+            QVERIFY(journal.setSessionTags("tagged", 1, {"Review"}));
         }
-        const auto storedTags = [&](const QString& id) {
+        const auto storedTags = [&] {
             for (const auto& session : LocalJournal(journalPath).sessions())
-                if (session.id == id)
+                if (session.id == QStringLiteral("tagged"))
                     return session.tags;
             return QStringList{"missing"};
         };
@@ -250,131 +256,51 @@ class DesktopSessionDiscoveryTest final : public QObject {
         QVERIFY2(service.start(), qPrintable(service.errorString()));
         CodexAppServer server;
         AgentSessionManager desktop(&server);
-        const auto row = [&](const QString& id) {
+        const auto row = [&] {
             for (const auto& value : desktop.conversations(path))
-                if (value.toMap().value("id").toString() == id)
+                if (value.toMap().value("id").toString() == QStringLiteral("tagged"))
                     return value.toMap();
             return QVariantMap{};
-        };
-        const auto labels = [&](const QString& id) {
-            QStringList result;
-            for (const auto& tag : row(id).value("tags").toList())
-                result.append(tag.toMap().value("label").toString());
-            return result;
         };
         desktop.activate(path);
         QTRY_VERIFY(server.isReady());
         QTRY_VERIFY(!server.isRestoring());
-        QVERIFY(server.hasTagSupport());
-        // Tags another client set arrive with the catalog, each with its colour.
-        QTRY_COMPARE_WITH_TIMEOUT(labels("tagged-elsewhere"), (QStringList{"Review", "Mine"}),
-                                  5000);
-        const auto listed = row("tagged-elsewhere").value("tags").toList();
-        QCOMPARE(listed.at(0).toMap().value("color").toString(), QString("#7c5cd6"));
-        QCOMPARE(listed.at(1).toMap().value("color").toString(), QString("#5b6b7f"));
-        QVERIFY(row("plain").value("tagsEditable").toBool());
+        QTRY_VERIFY_WITH_TIMEOUT(!row().isEmpty(), 5000);
+        QVERIFY(!row().contains("tags"));
+        QVERIFY(!row().contains("tagsEditable"));
 
-        desktop.setConversationTag(path, "plain", "UI", true);
-        QTRY_COMPARE_WITH_TIMEOUT(storedTags("plain"), QStringList{"UI"}, 5000);
-        QTRY_COMPARE_WITH_TIMEOUT(labels("plain"), QStringList{"UI"}, 5000);
-        desktop.setConversationTag(path, "plain", "UI", true); // already there
-        desktop.setConversationTag(path, "tagged-elsewhere", "review", false);
-        QTRY_COMPARE_WITH_TIMEOUT(storedTags("tagged-elsewhere"), QStringList{"Mine"}, 5000);
-        QTRY_COMPARE_WITH_TIMEOUT(labels("tagged-elsewhere"), QStringList{"Mine"}, 5000);
-        QCOMPARE(storedTags("plain"), QStringList{"UI"});
-        // Changes made before the daemon answers add up; none undoes an earlier one.
-        desktop.setConversationTag(path, "plain", "Docs", true);
-        desktop.setConversationTag(path, "plain", "Bug", true);
-        desktop.setConversationTag(path, "plain", "ui", false);
-        desktop.setConversationTag(path, "plain", "Docs", true); // already wanted
-        QTRY_COMPARE_WITH_TIMEOUT(storedTags("plain"), (QStringList{"Docs", "Bug"}), 5000);
-        QTRY_COMPARE_WITH_TIMEOUT(labels("plain"), (QStringList{"Docs", "Bug"}), 5000);
-    }
-
-    // #429: the catalog lives in the daemon; every window hears a change at once, and a
-    // label chosen before the first turn is stored with it.
-    void tagCatalogIsSharedAndLive() {
-        Environment env;
-        QVERIFY(env.directory.isValid());
-        const auto path = QFileInfo(env.directory.path()).canonicalFilePath();
-        const auto executable = env.directory.filePath("fake-codex");
-        QVERIFY(writeFakeCodex(executable, env.directory.filePath("provider.log")));
-        const auto journalPath = env.directory.filePath("journal.sqlite3");
-        {
-            LocalJournal journal(journalPath);
-            QVERIFY(journal.upsertSession(
-                {"tagged", path, "codex", {}, {}, "ready", 1, 0, 0, QStringLiteral("tagged")}));
-            QVERIFY(journal.setSessionTags("tagged", 1, {"Review"}));
-        }
-        DaemonService service({journalPath, env.directory.filePath("local.token"),
-                               env.directory.filePath("daemon.sock"), executable,
-                               env.directory.filePath("missing-claude"),
-                               env.directory.filePath("missing-cursor")});
-        QVERIFY2(service.start(), qPrintable(service.errorString()));
-        CodexAppServer firstServer;
-        AgentSessionManager first(&firstServer);
-        CodexAppServer secondServer;
-        AgentSessionManager second(&secondServer);
-        const auto labels = [&](AgentSessionManager& desktop, const QString& id) {
-            QStringList result;
-            for (const auto& value : desktop.conversations(path))
-                if (value.toMap().value("id").toString() == id)
-                    for (const auto& tag : value.toMap().value("tags").toList())
-                        result.append(tag.toMap().value("label").toString());
-            return result;
+        QSignalSpy errors(&desktop, &AgentSessionManager::errorOccurred);
+        QTest::failOnWarning(QRegularExpression(QStringLiteral(".*")));
+        remote::DaemonClient watcher;
+        remote::DaemonClient other;
+        QTRY_VERIFY(watcher.isReady() && other.isReady());
+        QSignalSpy pushed(&watcher, &remote::DaemonClient::noticeReceived);
+        // The desktop's own connection: its handlers run while the notice is emitted.
+        auto* desktopClient = server.findChild<remote::DaemonClient*>();
+        QVERIFY(desktopClient != nullptr);
+        QSignalSpy desktopNotices(desktopClient, &remote::DaemonClient::noticeReceived);
+        const auto desktopReceived = [&] {
+            for (const auto& notice : desktopNotices)
+                if (notice.first().toString() == QStringLiteral("tags.changed"))
+                    return true;
+            return false;
         };
-        const auto catalogLabels = [](const QVariantList& catalog) {
-            QStringList result;
-            for (const auto& tag : catalog)
-                result.append(tag.toMap().value("label").toString());
-            return result;
-        };
-        first.activate(path);
-        second.activate(path);
-        QTRY_VERIFY(firstServer.isReady() && secondServer.isReady());
-        QTRY_VERIFY(!firstServer.isRestoring() && !secondServer.isRestoring());
-        QVERIFY(firstServer.hasTagCatalogSupport());
-        QTRY_COMPARE_WITH_TIMEOUT(labels(second, "tagged"), QStringList{"Review"}, 5000);
-        QCOMPARE(catalogLabels(first.tagCatalog()).size(), 7);
-
-        QSignalSpy secondCatalog(&second, &AgentSessionManager::tagCatalogChanged);
-        first.saveTagCatalog({QVariantMap{{"label", "UI"}, {"color", "#4f6bed"}},
-                              QVariantMap{{"label", "Reviewed"}, {"color", "#0e7c86"}}},
-                             {{"Review", "Reviewed"}});
-        QTRY_COMPARE_WITH_TIMEOUT(catalogLabels(second.tagCatalog()),
-                                  (QStringList{"UI", "Reviewed"}), 5000);
-        QVERIFY(!secondCatalog.isEmpty());
-        QTRY_COMPARE_WITH_TIMEOUT(labels(second, "tagged"), QStringList{"Reviewed"}, 5000);
-        QCOMPARE(labels(first, "tagged"), QStringList{"Reviewed"});
-        for (const auto& value : second.conversations(path))
-            if (value.toMap().value("id").toString() == "tagged")
-                QCOMPARE(value.toMap().value("tags").toList().first().toMap().value("color"),
-                         QVariant(QStringLiteral("#0e7c86")));
-
-        first.setConversationTag(path, "tagged", "UI", true);
-        QTRY_COMPARE_WITH_TIMEOUT(labels(second, "tagged"), (QStringList{"Reviewed", "UI"}), 5000);
-
-        // Before the first turn: kept by the window, stored once the daemon knows it.
-        const QString fresh = QDir(path).filePath("fresh");
-        QVERIFY(QDir().mkpath(fresh));
-        const QString freshPath = QFileInfo(fresh).canonicalFilePath();
-        first.activate(freshPath);
-        QTRY_VERIFY(!first.conversations(freshPath).isEmpty());
-        const QVariantMap draft = first.conversations(freshPath).first().toMap();
-        QVERIFY(draft.value("tagsEditable").toBool());
-        const QString draftId = draft.value("id").toString();
-        first.setConversationTag(freshPath, draftId, "UI", true);
-        QCOMPARE(first.conversations(freshPath).first().toMap().value("tags").toList().size(), 1);
-        QSignalSpy errors(&first, &AgentSessionManager::errorOccurred);
-        first.submitPrompt(freshPath, "hello");
-        const auto storedTags = [&] {
-            for (const auto& session : LocalJournal(journalPath).sessions())
-                if (QFileInfo(session.worktreePath).canonicalFilePath() == freshPath)
-                    return session.tags;
-            return QStringList{};
-        };
-        QTRY_COMPARE_WITH_TIMEOUT(storedTags(), QStringList{"UI"}, 10000);
+        bool saved = false;
+        other.call(QStringLiteral("tags.catalog.set"),
+                   {{"tags", QJsonArray{QJsonObject{{"label", "Reviewed"}, {"color", "#0e7c86"}}}},
+                    {"renames", QJsonObject{{"Review", "Reviewed"}}}},
+                   {}, -1, [&](const QJsonObject&, const QString& error) {
+                       QVERIFY2(error.isEmpty(), qPrintable(error));
+                       saved = true;
+                   });
+        QTRY_VERIFY_WITH_TIMEOUT(saved, 5000);
+        QTRY_VERIFY_WITH_TIMEOUT(!pushed.isEmpty(), 5000);
+        QCOMPARE(pushed.first().first().toString(), QStringLiteral("tags.changed"));
+        QCOMPARE(storedTags(), QStringList{"Reviewed"});
+        // The same push reaches the desktop's own connection and passes without an error.
+        QTRY_VERIFY_WITH_TIMEOUT(desktopReceived(), 5000);
         QVERIFY(errors.isEmpty());
+        QVERIFY(!row().contains("tags"));
     }
 
     void anotherDesktopsArchiveIsNotUndone_data() {
@@ -388,7 +314,7 @@ class DesktopSessionDiscoveryTest final : public QObject {
         Environment env;
         QVERIFY(env.directory.isValid());
         const auto path = QFileInfo(env.directory.path()).canonicalFilePath();
-        const auto executable = env.directory.filePath("fake-codex");
+        const auto executable = env.directory.filePath(fixtureName("fake-codex"));
         QVERIFY(writeFakeCodex(executable, env.directory.filePath("provider.log")));
         const auto journalPath = env.directory.filePath("journal.sqlite3");
         seedArchiveJournal(journalPath, path, archived);
@@ -435,7 +361,7 @@ class DesktopSessionDiscoveryTest final : public QObject {
         Environment env;
         QVERIFY(env.directory.isValid());
         const auto path = QFileInfo(env.directory.path()).canonicalFilePath();
-        const auto executable = env.directory.filePath("fake-codex");
+        const auto executable = env.directory.filePath(fixtureName("fake-codex"));
         QVERIFY(writeFakeCodex(executable, env.directory.filePath("provider.log")));
         const auto journalPath = env.directory.filePath("journal.sqlite3");
         seedArchiveJournal(journalPath, path, true);

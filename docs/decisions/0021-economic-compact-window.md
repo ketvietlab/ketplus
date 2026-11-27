@@ -1,6 +1,6 @@
 # 0021: Provider-native economic compact window
 
-Status: accepted (explicit session policy; automatic cache-aware selection remains planned)
+Status: accepted (explicit session policy; a team member woken after its cache went cold starts a fresh context, ADR 0114 §11; automatic cache-aware compact-window selection remains planned)
 Date: 2026-10-07
 
 ## Context
@@ -39,6 +39,56 @@ different `in_memory`/`24h` retention behavior. Anthropic documents 5-minute and
 which retention a CLI, gateway or subscription actually uses. See
 [OpenAI prompt caching](https://developers.openai.com/api/docs/guides/prompt-caching)
 and [Anthropic prompt caching](https://platform.claude.com/docs/en/build-with-claude/prompt-caching).
+
+### Agent CLI cache evidence
+
+**Claude.** Anthropic's explicit breakpoints cache an ordered prefix of tools,
+system blocks and messages. A 1-hour entry refreshes on reuse and costs 2×
+ordinary input to write under standard API pricing. Treat only the Claude Code
+core as a candidate for sharing globally within the applicable cache scope.
+KetPlus role instructions and conversation history require matching prefixes
+and compatible scope. The CLI chooses the effective breakpoints and lifetime.
+The 1-hour setting and cross-member reuse have no controlled measurement here.
+
+**Codex.** OpenAI supports automatic exact-prefix reuse with model-dependent
+eligibility, retention and routing. The daemon's app-server boundary preserves
+the native thread ID for resume. It neither sets nor stores a
+`prompt_cache_key` or a separate cache-affinity override. The
+[upstream Codex request builder](https://github.com/openai/codex/blob/main/codex-rs/core/src/client.rs)
+can derive a key from session identity, use an override or omit it. It also
+describes session-header affinity for ChatGPT. The installed executable and
+backend determine the effective behavior. A resumed thread preserves native
+conversation identity. A new member thread or provider switch has no
+KetPlus-provided promise of the same routing key.
+[ADR 0114](0114-agent-teams.md#prompt-prefix-reuse-across-providers) traces the
+host instructions and their differences between members.
+
+A passive check of an existing local Codex rollout found one reported
+`last_token_usage` sample with 30,336 cached input tokens out of 35,519 input
+tokens. This shows reported cache reads in that rollout. It gives no evidence
+about the matching breakpoint, cache key, TTL or sharing across team members.
+The daemon forwards the modern `thread/tokenUsage/updated` object, while the
+legacy `codex/event/token_count` projection in
+[`SessionHost.cpp`](../../apps/daemon/src/runtime/SessionHost.cpp) drops the
+cached-input breakdown.
+
+**Cursor and Copilot.** Both use ACP. The
+[`AcpTurns.cpp`](../../apps/daemon/src/providers/acp/AcpTurns.cpp) path prepends
+host guidance as prompt text when applicable and projects usage into context
+occupancy. It does not expose a cache read/write breakdown in that projection.
+Neither provider has a verified cache measurement here. Breakpoints, retention,
+affinity and sharing across sessions remain unknown. Occupancy alone cannot
+establish cache economics.
+
+For a future quota-approved measurement, record the adapter and CLI versions,
+model, endpoint or account class, tool configuration and elapsed time. Use
+synthetic prompts and stable settings. Compare a cold first request with an
+identical-prefix follow-up in the same native session, a new same-role session,
+and a switched session. Vary one prefix component at a time. For Cursor and
+Copilot, inspect each CLI's raw ACP usage and any provider-supported usage
+export before normalization. Record input, cached reads and cache writes when
+available. Treat unavailable fields as unknown and latency as supporting
+evidence only. Keep payloads and account identifiers out of the record.
 
 ### Cost model
 
@@ -159,7 +209,12 @@ native threshold, and expected next-request headroom.
    be presented as an observed cache miss. Subscription limits are not API USD.
 
 The current protocol implements the explicit request, not this automatic
-scheduler. It does not infer a payer from the device, hard-code a shared TTL,
+scheduler. One cache-aware rule exists outside it: a turn that a team starts for a
+member (ADR 0114 §11) begins a fresh native context, not a different compact window,
+when the thread rested at least the team's `context_reset_idle_minutes` (60 by default),
+counted from the end of its last turn, and its last recorded context size is 50,000
+tokens or more. It reads no payer, retention or model; a thread whose time or size is not
+known keeps its context. It does not infer a payer from the device, hard-code a shared TTL,
 call a summarizer, or trigger an additional compaction request.
 
 ### Boundaries and observation

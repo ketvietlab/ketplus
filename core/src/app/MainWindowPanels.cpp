@@ -84,7 +84,7 @@ TerminalPanel* MainWindow::ensureTerminal() {
     }
 
     terminal_ = new TerminalPanel(mainSplit_);
-    terminal_->applyTheme(theme_.palette());
+    terminal_->applyColorScheme(theme_.colorScheme());
     terminal_->setTypography(appearanceSettings_.terminal.fontSizePixels,
                              appearanceSettings_.terminal.lineHeightPixels,
                              appearanceSettings_.terminalFontFamily);
@@ -143,7 +143,7 @@ ExplorerPanel* MainWindow::ensureExplorer() {
             [this](const QString& from, const QString& to) {
                 for (EditorWidget* editor : tab_paths::retarget(tabs_, from, to)) {
                     editor->configureLexerForPath(editor->document().filePath());
-                    editor->applyTheme(theme_.palette());
+                    editor->applyColorScheme(theme_.colorScheme());
                     updateTabTitle(editor);
                 }
             });
@@ -185,8 +185,8 @@ void MainWindow::setExplorerVisible(bool visible) {
         }
         explorer->show();
         QList<int> sizes(workspaceSplit_->count(), 0);
-        // The mock's 248 px column, at the interface zoom.
-        const int width = qRound(ket::Appearance::instance().scaled(248));
+        // One width for the Explorer and Source Control, as they were last dragged.
+        const int width = navigationWidth_.shown();
         sizes[workspaceSplit_->indexOf(explorer)] = width;
         sizes[workspaceSplit_->indexOf(editorColumn_)] =
             qMax(420, workspaceSplit_->width() - width);
@@ -251,8 +251,8 @@ void MainWindow::setSourceControlVisible(bool visible) {
         }
         changes->show();
         QList<int> sizes(workspaceSplit_->count(), 0);
-        // As wide as the Explorer, as in the mock.
-        const int width = qRound(ket::Appearance::instance().scaled(248));
+        // One width for the Explorer and Source Control, as they were last dragged.
+        const int width = navigationWidth_.shown();
         sizes[workspaceSplit_->indexOf(changes)] = width;
         sizes[workspaceSplit_->indexOf(editorColumn_)] =
             qMax(420, workspaceSplit_->width() - width);

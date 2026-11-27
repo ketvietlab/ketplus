@@ -1,0 +1,1163 @@
+{
+    "counts": {
+        "approximated": 61,
+        "mapped": 6,
+        "skipped": 125
+    },
+    "diagnostics": [
+    ],
+    "items": [
+        {
+            "disposition": "skipped",
+            "reason": "Preserved as inert metadata only; semantic highlighting is not applied",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/semanticTokenColors",
+            "targetPath": "metadata.vscodeSemanticTokenColors"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Declaration preserved without enabling semantic highlighting",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/semanticHighlighting",
+            "targetPath": "metadata"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Theme metadata/property has no supported KetPlus behavior",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/$schema",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Preserved as inert metadata only; semantic highlighting is not applied",
+            "sourcePath": "extensions/theme-defaults/themes/light_plus.json/semanticTokenColors",
+            "targetPath": "metadata.vscodeSemanticTokenColors"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Declaration preserved without enabling semantic highlighting",
+            "sourcePath": "extensions/theme-defaults/themes/light_plus.json/semanticHighlighting",
+            "targetPath": "metadata"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Theme metadata/property has no supported KetPlus behavior",
+            "sourcePath": "extensions/theme-defaults/themes/light_plus.json/$schema",
+            "targetPath": ""
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/colors/editor.background",
+            "targetPath": "editor.bg"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/colors/editor.foreground",
+            "targetPath": "editor.fg"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "First available fallback color used for nearest KetPlus component",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/colors/editor.foreground",
+            "targetPath": "editor.caret"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "First available fallback color used for nearest KetPlus component",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/colors/editor.background",
+            "targetPath": "editor.gutterBg"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "First available fallback color used for nearest KetPlus component",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/colors/editor.foreground",
+            "targetPath": "editor.gutterFg"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "First available fallback color used for nearest KetPlus component",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/colors/editor.background",
+            "targetPath": "ui.chrome.appBackground"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/colors/editor.background",
+            "targetPath": "ui.chrome.pageBackground"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "First available fallback color used for nearest KetPlus component",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/colors/editor.background",
+            "targetPath": "ui.chrome.panelBackground"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/colors/sideBarSectionHeader.background",
+            "targetPath": "ui.chrome.panelSubtle"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "First available fallback color used for nearest KetPlus component",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/colors/editor.foreground",
+            "targetPath": "ui.chrome.textMain"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "First available fallback color used for nearest KetPlus component",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/colors/editor.foreground",
+            "targetPath": "ui.chrome.textSecondary"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "First available fallback color used for nearest KetPlus component",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/colors/editor.background",
+            "targetPath": "ui.sidebar.bg"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "First available fallback color used for nearest KetPlus component",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/colors/editor.foreground",
+            "targetPath": "ui.sidebar.fg"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "First available fallback color used for nearest KetPlus component",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/colors/editor.background",
+            "targetPath": "ui.input.bg"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "First available fallback color used for nearest KetPlus component",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/colors/editor.foreground",
+            "targetPath": "ui.input.fg"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/colors/list.hoverBackground",
+            "targetPath": "ui.list.hover"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "First available fallback color used for nearest KetPlus component",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/colors/editor.foreground",
+            "targetPath": "ui.list.fg"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "First available fallback color used for nearest KetPlus component",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/colors/editor.background",
+            "targetPath": "ui.tab.activeBg"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "First available fallback color used for nearest KetPlus component",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/colors/editor.foreground",
+            "targetPath": "ui.tab.activeFg"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/colors/tab.inactiveForeground",
+            "targetPath": "ui.tab.inactiveFg"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "First available fallback color used for nearest KetPlus component",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/colors/editor.background",
+            "targetPath": "terminal.bg"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "First available fallback color used for nearest KetPlus component",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/colors/editor.foreground",
+            "targetPath": "terminal.fg"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/colors/actionBar.toggledBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/colors/activityBarBadge.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/colors/agentsChatInput.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/colors/agentsNewSessionButton.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/colors/agentsPanel.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/colors/browser.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/colors/checkbox.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/colors/diffEditor.unchangedRegionBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/colors/editor.inactiveSelectionBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/colors/editor.selectionHighlightBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/colors/editorGroupHeader.connectedTabsBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/colors/editorGroupHeader.tabsBorder",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/colors/editorIndentGuide.activeBackground1",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/colors/editorIndentGuide.background1",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/colors/editorSuggestWidget.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/colors/input.placeholderForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/colors/list.activeSelectionIconForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/colors/list.focusAndSelectionOutline",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/colors/menu.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/colors/modernActivityBar.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/colors/modernActivityBarItem.activeBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/colors/modernActivityBarItem.activeForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/colors/modernActivityBarItem.hoverBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/colors/modernActivityBarItem.hoverForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/colors/notebook.cellBorderColor",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/colors/notebook.selectedCellBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/colors/ports.iconRunningProcessForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/colors/searchEditor.textInputBorder",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/colors/settings.numberInputBorder",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/colors/settings.textInputBorder",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/colors/sideBarSectionHeader.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/colors/sideBarTitle.foreground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/colors/statusBar.inactiveBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/colors/statusBarItem.errorBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/colors/statusBarItem.remoteBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/colors/statusBarItem.remoteForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/colors/surface.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/colors/tab.lastPinnedBorder",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/colors/tab.selectedBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/colors/tab.selectedForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/colors/terminal.inactiveSelectionBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/colors/titleBar.inactiveBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/colors/widget.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/tokenColors/0/scope/meta.embedded",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/tokenColors/0/scope/source.groovy.embedded",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/tokenColors/0/scope/string meta.image.inline.markdown",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/tokenColors/0",
+            "targetPath": "syntax.variable"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/tokenColors/1/scope/emphasis",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/tokenColors/2/scope/strong",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/tokenColors/3/scope/meta.diff.header",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/tokenColors/4",
+            "targetPath": "syntax.comment"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/tokenColors/5",
+            "targetPath": "syntax.constant"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/tokenColors/6",
+            "targetPath": "syntax.number"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/tokenColors/6",
+            "targetPath": "syntax.variable"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/tokenColors/6",
+            "targetPath": "syntax.operator"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/tokenColors/7",
+            "targetPath": "syntax.constant"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/tokenColors/8/scope/entity.name.tag",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/tokenColors/9/scope/entity.name.selector",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/tokenColors/10",
+            "targetPath": "syntax.attribute"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/tokenColors/11/scope/source.css entity.other.attribute-name.class",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/tokenColors/11/scope/source.css entity.other.attribute-name.pseudo-class",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/tokenColors/11/scope/source.css.less entity.other.attribute-name.id",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/tokenColors/11",
+            "targetPath": "syntax.attribute"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/tokenColors/12/scope/invalid",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/tokenColors/13/scope/markup.underline",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/tokenColors/14/scope/markup.bold",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/tokenColors/15/scope/markup.heading",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/tokenColors/16/scope/markup.italic",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/tokenColors/17/scope/markup.strikethrough",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/tokenColors/18/scope/markup.inserted",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/tokenColors/19/scope/markup.deleted",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/tokenColors/20/scope/markup.changed",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/tokenColors/21/scope/punctuation.definition.quote.begin.markdown",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/tokenColors/21/scope/punctuation.definition.list.begin.markdown",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/tokenColors/22/scope/markup.inline.raw",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/tokenColors/23/scope/punctuation.definition.tag",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/tokenColors/24/scope/meta.preprocessor",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/tokenColors/24",
+            "targetPath": "syntax.function"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/tokenColors/25/scope/meta.preprocessor.string",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/tokenColors/26/scope/meta.preprocessor.numeric",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/tokenColors/27/scope/meta.structure.dictionary.key.python",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/tokenColors/28/scope/storage",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/tokenColors/29",
+            "targetPath": "syntax.type"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/tokenColors/30",
+            "targetPath": "syntax.keyword"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/tokenColors/30",
+            "targetPath": "syntax.operator"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/tokenColors/31/scope/meta.embedded.assembly",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/tokenColors/31",
+            "targetPath": "syntax.string"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/tokenColors/32",
+            "targetPath": "syntax.string"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/tokenColors/33",
+            "targetPath": "syntax.string"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/tokenColors/34/scope/punctuation.definition.template-expression.begin",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/tokenColors/34/scope/punctuation.definition.template-expression.end",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/tokenColors/34/scope/punctuation.section.embedded",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/tokenColors/35/scope/meta.template.expression",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/tokenColors/36/scope/support.constant.property-value",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/tokenColors/36/scope/support.constant.font-name",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/tokenColors/36/scope/support.constant.media-type",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/tokenColors/36/scope/support.constant.media",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/tokenColors/36/scope/support.constant.color",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/tokenColors/36",
+            "targetPath": "syntax.constant"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/tokenColors/37/scope/source.css variable",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/tokenColors/37/scope/source.coffee.embedded",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/tokenColors/37",
+            "targetPath": "syntax.type"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/tokenColors/38",
+            "targetPath": "syntax.type"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/tokenColors/39",
+            "targetPath": "syntax.keyword"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/tokenColors/40",
+            "targetPath": "syntax.keyword"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/tokenColors/41",
+            "targetPath": "syntax.operator"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/tokenColors/42",
+            "targetPath": "syntax.operator"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/tokenColors/43",
+            "targetPath": "syntax.keyword"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/tokenColors/44/scope/punctuation.section.embedded.begin.php",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/tokenColors/44/scope/punctuation.section.embedded.end.php",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/tokenColors/45",
+            "targetPath": "syntax.function"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/tokenColors/46",
+            "targetPath": "syntax.constant"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/tokenColors/47",
+            "targetPath": "syntax.keyword"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/tokenColors/47",
+            "targetPath": "syntax.variable"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extensions/theme-defaults/themes/light_vs.json/tokenColors/48",
+            "targetPath": "syntax.variable"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-defaults/themes/light_plus.json/tokenColors/0/scope/support.constant.handlebars",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-defaults/themes/light_plus.json/tokenColors/0/scope/source.powershell variable.other.member",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-defaults/themes/light_plus.json/tokenColors/0/scope/entity.name.operator.custom-literal",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extensions/theme-defaults/themes/light_plus.json/tokenColors/0",
+            "targetPath": "syntax.function"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-defaults/themes/light_plus.json/tokenColors/1/scope/entity.name.namespace",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-defaults/themes/light_plus.json/tokenColors/1/scope/entity.other.attribute",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-defaults/themes/light_plus.json/tokenColors/1/scope/entity.name.scope-resolution",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extensions/theme-defaults/themes/light_plus.json/tokenColors/1",
+            "targetPath": "syntax.type"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-defaults/themes/light_plus.json/tokenColors/2/scope/meta.type.cast.expr",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-defaults/themes/light_plus.json/tokenColors/2/scope/meta.type.new.expr",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-defaults/themes/light_plus.json/tokenColors/2/scope/support.constant.math",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-defaults/themes/light_plus.json/tokenColors/2/scope/support.constant.dom",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-defaults/themes/light_plus.json/tokenColors/2/scope/support.constant.json",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-defaults/themes/light_plus.json/tokenColors/2/scope/entity.other.inherited-class",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-defaults/themes/light_plus.json/tokenColors/2/scope/punctuation.separator.namespace.ruby",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-defaults/themes/light_plus.json/tokenColors/3/scope/source.cpp keyword.operator.new",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-defaults/themes/light_plus.json/tokenColors/3/scope/source.cpp keyword.operator.delete",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-defaults/themes/light_plus.json/tokenColors/3/scope/entity.name.operator",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extensions/theme-defaults/themes/light_plus.json/tokenColors/3",
+            "targetPath": "syntax.keyword"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-defaults/themes/light_plus.json/tokenColors/4/scope/meta.definition.variable.name",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-defaults/themes/light_plus.json/tokenColors/4/scope/support.variable",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-defaults/themes/light_plus.json/tokenColors/4/scope/entity.name.variable",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extensions/theme-defaults/themes/light_plus.json/tokenColors/4",
+            "targetPath": "syntax.variable"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extensions/theme-defaults/themes/light_plus.json/tokenColors/4",
+            "targetPath": "syntax.constant"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extensions/theme-defaults/themes/light_plus.json/tokenColors/5",
+            "targetPath": "syntax.variable"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-defaults/themes/light_plus.json/tokenColors/6/scope/meta.object-literal.key",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-defaults/themes/light_plus.json/tokenColors/7/scope/support.constant.property-value",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-defaults/themes/light_plus.json/tokenColors/7/scope/support.constant.font-name",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-defaults/themes/light_plus.json/tokenColors/7/scope/support.constant.media-type",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-defaults/themes/light_plus.json/tokenColors/7/scope/support.constant.media",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-defaults/themes/light_plus.json/tokenColors/7/scope/support.constant.color",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extensions/theme-defaults/themes/light_plus.json/tokenColors/7",
+            "targetPath": "syntax.constant"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-defaults/themes/light_plus.json/tokenColors/8/scope/punctuation.definition.group.regexp",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-defaults/themes/light_plus.json/tokenColors/8/scope/punctuation.definition.group.assertion.regexp",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-defaults/themes/light_plus.json/tokenColors/8/scope/punctuation.definition.character-class.regexp",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-defaults/themes/light_plus.json/tokenColors/8/scope/punctuation.character.set.begin.regexp",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-defaults/themes/light_plus.json/tokenColors/8/scope/punctuation.character.set.end.regexp",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-defaults/themes/light_plus.json/tokenColors/8/scope/support.other.parenthesis.regexp",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extensions/theme-defaults/themes/light_plus.json/tokenColors/8",
+            "targetPath": "syntax.operator"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extensions/theme-defaults/themes/light_plus.json/tokenColors/9",
+            "targetPath": "syntax.constant"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extensions/theme-defaults/themes/light_plus.json/tokenColors/10",
+            "targetPath": "syntax.operator"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extensions/theme-defaults/themes/light_plus.json/tokenColors/11",
+            "targetPath": "syntax.operator"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extensions/theme-defaults/themes/light_plus.json/tokenColors/11",
+            "targetPath": "syntax.keyword"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extensions/theme-defaults/themes/light_plus.json/tokenColors/12",
+            "targetPath": "syntax.constant"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "extensions/theme-defaults/themes/light_plus.json/tokenColors/13",
+            "targetPath": "syntax.constant"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "extensions/theme-defaults/themes/light_plus.json/tokenColors/14/scope/entity.name.label",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Missing/unknown kind inferred from opaque editor background, otherwise dark",
+            "sourcePath": "extensions/theme-defaults/themes/light_plus.json/type",
+            "targetPath": "kind"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Lexilla uses shared roles, not TextMate scope stacks; rule order is parent first then child, later explicit fields override",
+            "sourcePath": "extensions/theme-defaults/themes/light_plus.json",
+            "targetPath": "syntax"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Extension JavaScript, grammars, semantic token providers and UI contributions are never executed",
+            "sourcePath": "extensions/theme-defaults/themes/light_plus.json",
+            "targetPath": ""
+        }
+    ]
+}

@@ -1,4 +1,5 @@
 #include "providers/compat/ProviderVersionProbe.h"
+#include "BinaryStdio.h"
 
 #include <QCoreApplication>
 #include <QFile>
@@ -22,6 +23,7 @@ Policy fixturePolicy() {
 }
 
 int emitVersion(const QString& mode, const QString& marker) {
+    makeStdioBinary();
     QFile output;
     QFile errors;
     if (!output.open(stdout, QIODevice::WriteOnly, QFile::DontCloseHandle) ||
@@ -102,8 +104,10 @@ class ProviderVersionProbeTest final : public QObject {
         QCOMPARE(result->executable, executable);
         QCOMPARE(result->status, accepted ? SupportStatus::Supported : SupportStatus::Unknown);
         QCOMPARE(probe.cached(executable).has_value(), accepted);
+#if !defined(Q_OS_WIN) // QProcess drains the pipe in a thread, so a producer finishes first.
         if (mode == "flood")
             QVERIFY(!QFile::exists(marker));
+#endif
         mode = "valid";
         result.reset();
         probe.check(executable, [&](const Runtime& value) {

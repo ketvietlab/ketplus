@@ -1,0 +1,241 @@
+{
+  "case_count": 10,
+  "date": "2026-11-16",
+  "environment": {
+    "architecture": "aarch64",
+    "cgroup_mount": "rw,nsdelegate,memory_recursiveprot",
+    "distribution": "Ubuntu 24.04.4 LTS",
+    "driver_uid": 501,
+    "kernel": "6.8.0-117-generic",
+    "systemd": "255.4-1ubuntu8.15",
+    "virtualization": "Colima VZ"
+  },
+  "expected_outcomes_verified": true,
+  "guest_setup": {
+    "apparmor_audit": "unprivileged_userns denied CAP_SYS_ADMIN",
+    "dbus_socket_started": true,
+    "initial_unshare": "uid_map EPERM",
+    "initial_user_bus": false,
+    "installed_package": "dbus-user-session",
+    "kernel.apparmor_restrict_unprivileged_userns_after": 0,
+    "kernel.apparmor_restrict_unprivileged_userns_before": 1,
+    "kernel.unprivileged_userns_clone": 1,
+    "user_manager_lingering": true
+  },
+  "observations": [
+    {
+      "cgroup_type": "domain",
+      "kernel": "6.8.0-117-generic",
+      "uid": 501
+    },
+    {
+      "case": "delegation-only",
+      "populated_after_kill": false,
+      "populated_before": false,
+      "sibling_populated": true,
+      "worker": {
+        "attempts": {
+          "inherited_cgroup_fd": "allowed",
+          "inherited_root_alias": "allowed",
+          "path": "allowed",
+          "proc_peer_root": "allowed",
+          "setns_ancestor": "EPERM"
+        },
+        "cgroup_remount": "EPERM",
+        "double_fork_setsid_observed": true,
+        "namespace_root_membership": false,
+        "uid": 501
+      }
+    },
+    {
+      "case": "descriptor-leak",
+      "populated_after_kill": false,
+      "populated_before": true,
+      "sibling_populated": true,
+      "worker": {
+        "attempts": {
+          "inherited_cgroup_fd": "allowed",
+          "inherited_root_alias": "ENOENT",
+          "path": "ENOENT",
+          "proc_peer_root": "ENOENT",
+          "remount_sibling": "ENOENT",
+          "setns_ancestor": "EPERM"
+        },
+        "cgroup_remount": "mounted",
+        "double_fork_setsid_observed": true,
+        "namespace_root_membership": false,
+        "uid": 0
+      }
+    },
+    {
+      "case": "barrier-crash",
+      "populated": false,
+      "pre_exec_marker": false
+    },
+    {
+      "case": "kill-tree",
+      "populated_after_kill": false,
+      "populated_before": true,
+      "sibling_populated": false,
+      "worker": {
+        "attempts": {
+          "inherited_cgroup_fd": "EBADF",
+          "inherited_root_alias": "ENOENT",
+          "path": "ENOENT",
+          "proc_peer_root": "ENOENT",
+          "remount_sibling": "ENOENT",
+          "setns_ancestor": "EPERM"
+        },
+        "cgroup_remount": "mounted",
+        "double_fork_setsid_observed": true,
+        "namespace_root_membership": true,
+        "uid": 0
+      }
+    },
+    {
+      "case": "namespace-init-death",
+      "namespace_descendants_reclaimed": true
+    },
+    {
+      "case": "namespace-init-death",
+      "populated_after_kill": false,
+      "populated_before": true,
+      "sibling_populated": false,
+      "worker": {
+        "attempts": {
+          "inherited_cgroup_fd": "EBADF",
+          "inherited_root_alias": "ENOENT",
+          "path": "ENOENT",
+          "proc_peer_root": "ENOENT",
+          "remount_sibling": "ENOENT",
+          "setns_ancestor": "EPERM"
+        },
+        "cgroup_remount": "mounted",
+        "double_fork_setsid_observed": true,
+        "namespace_root_membership": true,
+        "uid": 0
+      }
+    },
+    {
+      "case": "lease-eof",
+      "populated_after_kill": false,
+      "populated_before": true,
+      "sibling_populated": false,
+      "worker": {
+        "attempts": {
+          "inherited_cgroup_fd": "EBADF",
+          "inherited_root_alias": "ENOENT",
+          "path": "ENOENT",
+          "proc_peer_root": "ENOENT",
+          "remount_sibling": "ENOENT",
+          "setns_ancestor": "EPERM"
+        },
+        "cgroup_remount": "mounted",
+        "double_fork_setsid_observed": true,
+        "namespace_root_membership": true,
+        "uid": 0
+      }
+    },
+    {
+      "case": "daemon-crash",
+      "lease_cleanup_confirmed": true
+    },
+    {
+      "case": "daemon-crash",
+      "populated_after_kill": false,
+      "populated_before": true,
+      "sibling_populated": false,
+      "worker": {
+        "attempts": {
+          "inherited_cgroup_fd": "EBADF",
+          "inherited_root_alias": "ENOENT",
+          "path": "ENOENT",
+          "proc_peer_root": "ENOENT",
+          "remount_sibling": "ENOENT",
+          "setns_ancestor": "EPERM"
+        },
+        "cgroup_remount": "mounted",
+        "double_fork_setsid_observed": true,
+        "namespace_root_membership": true,
+        "uid": 0
+      }
+    },
+    {
+      "case": "supervisor-crash",
+      "survives_supervisor_crash": true
+    },
+    {
+      "case": "supervisor-crash",
+      "populated_after_kill": false,
+      "populated_before": true,
+      "sibling_populated": false,
+      "worker": {
+        "attempts": {
+          "inherited_cgroup_fd": "EBADF",
+          "inherited_root_alias": "ENOENT",
+          "path": "ENOENT",
+          "proc_peer_root": "ENOENT",
+          "remount_sibling": "ENOENT",
+          "setns_ancestor": "EPERM"
+        },
+        "cgroup_remount": "mounted",
+        "double_fork_setsid_observed": true,
+        "namespace_root_membership": true,
+        "uid": 0
+      }
+    },
+    {
+      "case": "same-uid-peer",
+      "peer_migrations": [
+        "allowed",
+        "allowed",
+        "allowed",
+        "allowed"
+      ]
+    },
+    {
+      "case": "same-uid-peer",
+      "populated_after_kill": false,
+      "populated_before": true,
+      "sibling_populated": true,
+      "worker": {
+        "attempts": {
+          "inherited_cgroup_fd": "EBADF",
+          "inherited_root_alias": "ENOENT",
+          "path": "ENOENT",
+          "proc_peer_root": "ENOENT",
+          "remount_sibling": "ENOENT",
+          "setns_ancestor": "EPERM"
+        },
+        "cgroup_remount": "mounted",
+        "double_fork_setsid_observed": true,
+        "namespace_root_membership": true,
+        "uid": 0
+      }
+    },
+    {
+      "result": "primitive probes completed; not production acceptance"
+    },
+    {
+      "case": "user-unit-supervisor-crash",
+      "cgroup_removed": true,
+      "double_fork": true,
+      "result": "user manager reclaimed the crashed supervisor's subtree",
+      "uid": 501
+    }
+  ],
+  "production_acceptance": false,
+  "schema_version": 1,
+  "scope": "Disposable guest; primitive/environment probes only; no production daemon or provider invoked",
+  "source_sha256": {
+    "tests/daemon/linux-containment/probe.py": "edd02da623b12f3e18a803c04dc6f51efe5e272300839ad8872debbc234bd0c9",
+    "tests/daemon/linux-containment/user_unit.py": "46fb678cfdcbf751f43e385e0230a8a1165462b2a67173397a64ebf901a074e9"
+  },
+  "unverified": [
+    "production ledger, identity and recovery",
+    "user manager death or restart",
+    "real PID or inode reuse",
+    "other architectures and kernel/systemd versions",
+    "all external same-UID authority and service requests"
+  ]
+}

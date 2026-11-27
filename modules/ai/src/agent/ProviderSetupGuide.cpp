@@ -1,4 +1,5 @@
 #include "agent/ProviderSetupGuide.h"
+#include "agent/CopilotSetupGuide.h"
 
 #include <QCoreApplication>
 #include <QDateTime>
@@ -32,6 +33,8 @@ QString shortName(const QString& provider) {
         return QStringLiteral("Claude");
     if (provider == QStringLiteral("cursor"))
         return QStringLiteral("Cursor");
+    if (provider == QStringLiteral("copilot"))
+        return QStringLiteral("GitHub Copilot");
     return QStringLiteral("Codex");
 }
 
@@ -124,6 +127,17 @@ QString resetText(const qint64 secondsSinceEpoch) {
 
 QVariantMap guide(const QJsonObject& provider, const QJsonObject& turnError, const QString& model) {
     const QString id = provider.value(QStringLiteral("provider")).toString();
+    if (id == QStringLiteral("copilot")) {
+#if defined(Q_OS_WIN)
+        const QString platform = QStringLiteral("windows");
+#elif defined(Q_OS_MACOS)
+        const QString platform = QStringLiteral("macos");
+#else
+        const QString platform = QStringLiteral("linux");
+#endif
+        if (const auto result = copilotGuide(provider, turnError, platform); !result.isEmpty())
+            return result;
+    }
     const QJsonObject readiness = provider.value(QStringLiteral("readiness")).toObject();
     const bool fromTurn = !turnError.value(QStringLiteral("code")).toString().isEmpty();
     const QString setupId =
@@ -138,7 +152,8 @@ QVariantMap guide(const QJsonObject& provider, const QJsonObject& turnError, con
     const QString message = fromTurn ? turnError.value(QStringLiteral("message")).toString()
                                      : readiness.value(QStringLiteral("message")).toString();
     const QString install = readiness.value(QStringLiteral("install_command")).toString();
-    const QString login = readiness.value(QStringLiteral("login_command")).toString();
+    const QString login = readiness.value(QStringLiteral("login_command"))
+                              .toString(id == "copilot" ? "copilot login" : QString{});
     const QString update =
         readiness.value(QStringLiteral("update_command"))
             .toString(provider.value(QStringLiteral("update_command")).toString());
@@ -169,7 +184,7 @@ QVariantMap guide(const QJsonObject& provider, const QJsonObject& turnError, con
                               "find it.")
                                .arg(thisComputer()));
         value.insert(QStringLiteral("error"), firstLine(message));
-        value.insert(QStringLiteral("source"), QStringLiteral("KetPlus"));
+        value.insert(QStringLiteral("source"), QStringLiteral("ketPlus"));
         steps << step(tr("Install the %1 in a terminal.").arg(cli), install)
               << step(id == QStringLiteral("cursor")
                           ? tr("Sign in with the account that has your Cursor plan. A browser "
@@ -271,7 +286,7 @@ QVariantMap guide(const QJsonObject& provider, const QJsonObject& turnError, con
                      tr("The Claude Agent SDK that ships inside KetPlus is missing, often after an "
                         "interrupted update. Your conversations are safe."));
         value.insert(QStringLiteral("error"), firstLine(message));
-        value.insert(QStringLiteral("source"), QStringLiteral("KetPlus"));
+        value.insert(QStringLiteral("source"), QStringLiteral("ketPlus"));
         steps << step(tr("Install the latest KetPlus over this copy from Settings › Updates, or "
                          "download it again."))
               << step(tr("Reopen KetPlus. Nothing else needs to change."));
@@ -356,7 +371,7 @@ QVariantMap guide(const QJsonObject& provider, const QJsonObject& turnError, con
                      tr("Anthropic refuses the saved API key, so Claude turns fail. The key may "
                         "have been revoked, or its organization disabled."));
         value.insert(QStringLiteral("error"), message);
-        value.insert(QStringLiteral("source"), QStringLiteral("KetPlus"));
+        value.insert(QStringLiteral("source"), QStringLiteral("ketPlus"));
         steps << step(tr("Create a new key in Anthropic Console › API keys."))
               << step(tr("Paste it in Settings › Providers › Claude API access and save."))
               << step(tr("Retry, or set Authentication back to your Claude subscription."), {},

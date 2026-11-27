@@ -1,10 +1,14 @@
 #include "git/GitChangesPanel.h"
 #include "ui/Theme.h"
+#include "workspace/TreeRowColumns.h"
 
 #include "KetAppearance.h"
 #include "KetControlRecipes.h"
 #include "KetSurfaceRecipes.h"
+#include <QAction>
+#include <QImage>
 #include <QLabel>
+#include <QMenu>
 #include <QScrollBar>
 #include <QSignalSpy>
 #include <QTreeWidget>
@@ -16,6 +20,8 @@ class GitChangesPanelTest final : public QObject {
   private slots:
     void rendersRepositoryAndGroupedFiles();
     void keepsSelectionAcrossRefreshes();
+    void aFilesIconSitsUnderItsGroupsTitle();
+    void contextMenuKeepsItsTargetAcrossRefresh();
 };
 
 void GitChangesPanelTest::rendersRepositoryAndGroupedFiles() {
@@ -120,6 +126,93 @@ void GitChangesPanelTest::keepsSelectionAcrossRefreshes() {
     QCOMPARE(tree->currentItem()->text(0), QStringLiteral("file30.cpp"));
     QCOMPARE(tree->verticalScrollBar()->value(), scroll);
     QCOMPARE(diffRequested.count(), 0);
+}
+
+// The icon of a changed file starts where its group's title does, the chevron's width in,
+// at every interface zoom.
+void GitChangesPanelTest::aFilesIconSitsUnderItsGroupsTitle() {
+    ketplus::ThemeManager theme(*qApp);
+    ketplus::GitSnapshot snapshot;
+    snapshot.repositoryRoot = QStringLiteral("/tmp/ketplus-columns");
+    snapshot.branch = QStringLiteral("develop");
+    snapshot.files = {{QStringLiteral("src/main.cpp"), {}, QLatin1Char('.'), QLatin1Char('M')}};
+    ketplus::GitChangesPanel panel;
+    panel.resize(320, 900);
+    panel.setSnapshot(snapshot);
+    panel.show();
+    QTest::qWait(50);
+    auto* tree = panel.findChild<QTreeWidget*>(QStringLiteral("sourceControlFiles"));
+    QVERIFY(tree);
+    auto* group = tree->topLevelItem(0);
+    QVERIFY(group && group->childCount() == 1);
+    group->setExpanded(true);
+
+    const auto hasInk = [](const QImage& image, const QRect& row, int from, int to,
+                           const QColor& background) {
+        // The outer two pixels of the row are left out: the keyboard focus ring runs along them.
+        for (int y = row.top() + 2; y <= row.bottom() - 2 && y < image.height(); ++y)
+            for (int x = qMax(2, from); x < to && x < image.width(); ++x)
+                if (image.pixelColor(x, y) != background)
+                    return true;
+        return false;
+    };
+    auto& appearance = ket::Appearance::instance();
+    const qreal zoom = appearance.zoom();
+    for (const qreal step : {1.0, 1.25, 1.5}) {
+        appearance.setZoom(step);
+        QTest::qWait(50);
+        const QImage image = tree->viewport()->grab().toImage();
+        const auto px = [&appearance](qreal v) { return qRound(appearance.scaled(v)); };
+        const auto file = ket::fileRowRecipe(false, {}, appearance.theme());
+        const auto header = ket::groupHeaderRecipe(false, {}, appearance.theme());
+        const auto columns = ketplus::tree_rows::sourceControlColumns(file, header, px);
+        const QRect groupRow = tree->visualItemRect(group);
+        const QRect fileRow = tree->visualItemRect(group->child(0));
+        const QColor groupBackground = image.pixelColor(image.width() - 8, groupRow.center().y());
+        const QColor fileBackground = image.pixelColor(image.width() - 8, fileRow.center().y());
+        const QString label = QStringLiteral("zoom %1").arg(step);
+        // The group: its chevron, then its title.
+        QVERIFY2(hasInk(image, groupRow, columns.groupChevron, columns.groupText, groupBackground),
+                 qPrintable(label));
+        // The file: nothing before the group's title column, then the icon.
+        QVERIFY2(!hasInk(image, fileRow, 0, columns.fileIcon, fileBackground), qPrintable(label));
+        QVERIFY2(hasInk(image, fileRow, columns.fileIcon, columns.fileIcon + px(file.iconSize),
+                        fileBackground),
+                 qPrintable(label));
+        QVERIFY2(!hasInk(image, fileRow, columns.fileIcon + px(file.iconSize), columns.fileText,
+                         fileBackground),
+                 qPrintable(label));
+        QCOMPARE(columns.fileIcon, columns.groupText);
+    }
+    appearance.setZoom(zoom);
+}
+
+void GitChangesPanelTest::contextMenuKeepsItsTargetAcrossRefresh() {
+    ketplus::GitChangesPanel panel;
+    ketplus::GitSnapshot snapshot;
+    snapshot.repositoryRoot = QStringLiteral("/tmp/ketplus-refresh");
+    snapshot.files = {{QStringLiteral("one.txt"), {}, QLatin1Char('.'), QLatin1Char('M')}};
+    panel.setSnapshot(snapshot);
+    panel.resize(320, 480);
+    panel.show();
+    auto* tree = panel.findChild<QTreeWidget*>(QStringLiteral("sourceControlFiles"));
+    QVERIFY(tree);
+    const QPoint position = tree->visualItemRect(tree->topLevelItem(0)->child(0)).center();
+    QSignalSpy requested(&panel, &ketplus::GitChangesPanel::diffRequested);
+    QTimer::singleShot(0, &panel, [&] {
+        auto* menu = qobject_cast<QMenu*>(QApplication::activePopupWidget());
+        if (!menu) {
+            QApplication::closeAllWindows();
+            return;
+        }
+        snapshot.files.first().path = QStringLiteral("two.txt");
+        panel.setSnapshot(snapshot);
+        menu->actions().first()->trigger();
+        menu->close();
+    });
+    emit tree->customContextMenuRequested(position);
+    QTRY_COMPARE(requested.size(), 1);
+    QCOMPARE(requested.first().at(0).toString(), QStringLiteral("/tmp/ketplus-refresh/one.txt"));
 }
 
 QTEST_MAIN(GitChangesPanelTest)

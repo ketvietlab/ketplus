@@ -1,5 +1,6 @@
 #include "agent/DaemonTranscriptNotices.h"
 #include "agent/DaemonTranscriptProjection.h"
+#include "agent/ProviderDisplay.h"
 #include "agent/TranscriptSanitizer.h"
 #include <cmath>
 
@@ -9,7 +10,9 @@ namespace {
 QString providerName(const QString& provider) {
     if (provider.isEmpty())
         return QStringLiteral("another provider");
-    return provider.left(1).toUpper() + provider.mid(1);
+    if (provider == QStringLiteral("copilot"))
+        return QStringLiteral("GitHub Copilot");
+    return provider_display::name(provider);
 }
 // What retention reduced in a turn, as the mock's note: "This turn is older than 30 days:
 // 38 commands and 12 tool results were reduced to their summaries (1.2 MB)."
@@ -152,6 +155,12 @@ QVariantMap daemonEventNotice(const QString& type, const QJsonObject& data, cons
         detail = provider.isEmpty()
                      ? QStringLiteral("Its history comes along")
                      : providerName(provider) + (model.isEmpty() ? QString{} : " · " + model);
+    } else if (type == "session.context_reset") {
+        // T-1: a turn the team started began a fresh native context with the same provider.
+        title = "Started a fresh context";
+        detail = data.value("reason").toString() == QLatin1String("task_changed")
+                     ? QStringLiteral("New task; the transcript stays readable")
+                     : QStringLiteral("Turn threshold reached; the transcript stays readable");
     } else if (type == "session.renamed") {
         title = "Conversation renamed";
         detail = data.value("title").toString();

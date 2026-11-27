@@ -1,8 +1,11 @@
 #include "preview/MermaidRenderer.h"
+#include "KetAppearance.h"
+#include "preview/MermaidLaunch.h"
 
 #include "ui/Theme.h"
 
 #include <QByteArrayView>
+#include <QColor>
 #include <QCryptographicHash>
 #include <QDir>
 #include <QFile>
@@ -14,6 +17,9 @@
 #include <QRegularExpression>
 #include <QSet>
 #include <QStandardPaths>
+
+#include <algorithm>
+#include <cmath>
 
 static void initializeMermaidThemeResources() {
     [[maybe_unused]] static const bool initialized = [] {
@@ -29,11 +35,36 @@ namespace {
 // v5: node labels carry an explicit fill; cached state diagrams drew them black.
 // v6: Qt-readable class colours, Két theme, early stylesheets and rounded rectangles.
 // v8: Két Blue theme snapshots from design system 0.1.44 (v7: 12px diagram corners).
-constexpr auto cacheVersion = "ketplus-mermaid-v9";
+// v11: the mermaid.live look (ELK layout, neo look, redux themes) with mermaid's own corners.
+constexpr auto cacheVersion = "ketplus-mermaid-v11";
 
 bool isExecutableFile(const QString& path) {
     const QFileInfo file(path);
     return file.isFile() && file.isExecutable();
+}
+
+// Mermaid's redux themes write stylesheet colours as hsl(), which Qt SVG does not parse: it
+// paints those shapes black. Write them as hex instead; Qt SVG has no hsla() alpha either,
+// so a translucent colour becomes opaque, which is closer than black.
+QString withHexColours(QString css) {
+    static const QRegularExpression hsl(
+        QStringLiteral(
+            R"re(hsla?\(\s*(-?[0-9.]+)(?:deg)?\s*,\s*([0-9.]+)%\s*,\s*([0-9.]+)%\s*(?:,\s*[0-9.]+%?\s*)?\))re"),
+        QRegularExpression::CaseInsensitiveOption);
+    auto colours = hsl.globalMatch(css);
+    QList<QRegularExpressionMatch> matches;
+    while (colours.hasNext())
+        matches.append(colours.next());
+    for (auto it = matches.crbegin(); it != matches.crend(); ++it) {
+        const double hue = std::fmod(std::fmod(it->captured(1).toDouble(), 360.0) + 360.0, 360.0);
+        const double saturation = std::clamp(it->captured(2).toDouble() / 100.0, 0.0, 1.0);
+        const double lightness = std::clamp(it->captured(3).toDouble() / 100.0, 0.0, 1.0);
+        css.replace(it->capturedStart(), it->capturedLength(),
+                    QColor::fromHslF(static_cast<float>(hue / 360.0),
+                                     static_cast<float>(saturation), static_cast<float>(lightness))
+                        .name());
+    }
+    return css;
 }
 
 QByteArray mermaidConfiguration(const bool darkTheme) {
@@ -55,9 +86,11 @@ QByteArray mermaidConfiguration(const bool darkTheme) {
     if (configuration.isEmpty())
         return {};
     QJsonObject variables = configuration.value(QStringLiteral("themeVariables")).toObject();
-    const QString text = variables.value(QStringLiteral("textColor")).toString();
-    // Mermaid state SVG labels need an explicit fill in Qt; the canonical browser theme
-    // supplies the remaining colors, geometry and semantic classes unchanged.
+    QString text = variables.value(QStringLiteral("textColor")).toString();
+    if (text.isEmpty())
+        text = themeTokenColor(QStringLiteral("text-main"), darkTheme).toLower();
+    // Mermaid state SVG labels need an explicit fill in Qt; the mermaid theme supplies the
+    // remaining colors, geometry and semantic classes unchanged.
     variables.insert(QStringLiteral("stateLabelColor"), text);
     configuration.insert(QStringLiteral("themeVariables"), variables);
     configuration.insert(QStringLiteral("themeCSS"),
@@ -70,6 +103,8 @@ QByteArray mermaidConfiguration(const bool darkTheme) {
 
 MermaidRenderer::MermaidRenderer(QObject* parent)
     : QObject(parent), executablePath_(discoverExecutable()), process_(new QProcess(this)) {
+    connect(&ket::Appearance::instance(), &ket::Appearance::themeChanged, this,
+            &MermaidRenderer::invalidateColors);
     cacheDirectory_ = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
     if (cacheDirectory_.isEmpty()) {
         cacheDirectory_ = QStandardPaths::writableLocation(QStandardPaths::TempLocation) +
@@ -152,7 +187,7 @@ QByteArray MermaidRenderer::qtReadableSvg(const QByteArray& svg) {
     while (css.hasNext())
         cssMatches.append(css.next());
     for (auto it = cssMatches.crbegin(); it != cssMatches.crend(); ++it) {
-        const QString cleaned = QString(it->captured(0)).remove(important);
+        const QString cleaned = withHexColours(QString(it->captured(0)).remove(important));
         source.replace(it->capturedStart(), it->capturedLength(), cleaned);
     }
     // Qt applies a stylesheet only to elements parsed after it. Mermaid sequences put
@@ -169,36 +204,7 @@ QByteArray MermaidRenderer::qtReadableSvg(const QByteArray& svg) {
     if (root.hasMatch())
         source.insert(root.capturedEnd(), styles);
 
-    // SVG rx/ry work in both Qt and browsers; CSS border-radius does not round SVG rects.
-    // Use the canonical diagram's 12px radius, retaining larger radii for pill/stadium shapes.
-    static const QRegularExpression rectangle(QStringLiteral(R"re(<rect\b[^>]*>)re"));
-    QString rounded;
-    qsizetype copied = 0;
-    auto rectangles = rectangle.globalMatch(source);
-    while (rectangles.hasNext()) {
-        const auto rect = rectangles.next();
-        rounded += QStringView(source).mid(copied, rect.capturedStart() - copied);
-        copied = rect.capturedEnd();
-        QString element = rect.captured(0);
-        for (const QString& axis : {QStringLiteral("rx"), QStringLiteral("ry")}) {
-            const QRegularExpression attribute(QStringLiteral(R"re(\s%1="([^"]*)")re").arg(axis));
-            const auto existing = attribute.match(element);
-            if (existing.hasMatch()) {
-                bool numeric = false;
-                const double radius = existing.captured(1).toDouble(&numeric);
-                if (numeric && radius < 12.0)
-                    element.replace(existing.capturedStart(), existing.capturedLength(),
-                                    QStringLiteral(" %1=\"12\"").arg(axis));
-            } else {
-                const qsizetype end = element.endsWith(QStringLiteral("/>")) ? element.size() - 2
-                                                                             : element.size() - 1;
-                element.insert(end, QStringLiteral(" %1=\"12\"").arg(axis));
-            }
-        }
-        rounded += element;
-    }
-    rounded += QStringView(source).mid(copied);
-    return flattenLabelRows(rounded.toUtf8());
+    return flattenLabelRows(source.toUtf8());
 }
 
 QByteArray MermaidRenderer::flattenLabelRows(const QByteArray& svg) {
@@ -271,9 +277,20 @@ bool MermaidRenderer::isAvailable() const noexcept { return !executablePath_.isE
 
 const QString& MermaidRenderer::executablePath() const noexcept { return executablePath_; }
 
+void MermaidRenderer::invalidateColors() {
+    lightConfiguration_.reset();
+    darkConfiguration_.reset();
+}
+
 MermaidRenderer::Result MermaidRenderer::request(const QString& source, const bool darkTheme,
                                                  const bool raster) {
-    const QString cacheKey = keyFor(source, darkTheme, raster);
+    auto& cached = darkTheme ? darkConfiguration_ : lightConfiguration_;
+    if (!cached) {
+        const auto json = mermaidConfiguration(darkTheme);
+        cached = Configuration{json, QCryptographicHash::hash(json, QCryptographicHash::Sha256)};
+    }
+    const auto& configuration = cached->json;
+    const QString cacheKey = keyFor(source, darkTheme, raster, cached->fingerprint);
     const QString outputPath = outputPathFor(cacheKey, raster);
     if (!isAvailable()) {
         executablePath_ = discoverExecutable();
@@ -292,7 +309,7 @@ MermaidRenderer::Result MermaidRenderer::request(const QString& source, const bo
         return {State::Pending, cacheKey, {}, {}};
     }
 
-    queue_.append({cacheKey, source, outputPath, darkTheme});
+    queue_.append({cacheKey, source, outputPath, darkTheme, configuration});
     queuedKeys_.insert(cacheKey);
     startNext();
     return {State::Pending, cacheKey, {}, {}};
@@ -310,6 +327,21 @@ QString MermaidRenderer::discoverExecutable() {
     }
 
     const QString home = QDir::homePath();
+#if defined(Q_OS_WIN)
+    // Shims of npm (`mmdc.cmd`), Volta and nvm-windows. A variable that is unset or relative must
+    // not turn a candidate into a path relative to the working directory, where a workspace could
+    // plant its own mmdc.
+    QStringList fixedCandidates;
+    const auto addUnder = [&fixedCandidates](const char* variable, const QString& relative) {
+        const QString base = qEnvironmentVariable(variable);
+        if (!base.isEmpty() && QDir::isAbsolutePath(base))
+            fixedCandidates.append(QDir(base).filePath(relative));
+    };
+    addUnder("APPDATA", QStringLiteral("npm/mmdc.cmd"));
+    addUnder("LOCALAPPDATA", QStringLiteral("Volta/bin/mmdc.exe"));
+    addUnder("NVM_SYMLINK", QStringLiteral("mmdc.cmd"));
+    fixedCandidates.append(QDir(home).filePath(QStringLiteral(".volta/bin/mmdc.exe")));
+#else
     const QStringList fixedCandidates{
         QStringLiteral("/opt/homebrew/bin/mmdc"),
         QStringLiteral("/usr/local/bin/mmdc"),
@@ -319,12 +351,14 @@ QString MermaidRenderer::discoverExecutable() {
         home + QStringLiteral("/.local/share/fnm/aliases/default/bin/mmdc"),
         home + QStringLiteral("/.npm-global/bin/mmdc"),
     };
+#endif
     for (const auto& candidate : fixedCandidates) {
         if (isExecutableFile(candidate)) {
             return candidate;
         }
     }
 
+#if !defined(Q_OS_WIN)
     QDir nvmVersions(home + QStringLiteral("/.nvm/versions/node"));
     const QFileInfoList nodeVersions =
         nvmVersions.entryInfoList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Time);
@@ -334,15 +368,18 @@ QString MermaidRenderer::discoverExecutable() {
             return candidate;
         }
     }
+#endif
     return {};
 }
 
-QString MermaidRenderer::keyFor(const QString& source, const bool darkTheme, const bool raster) {
+QString MermaidRenderer::keyFor(const QString& source, const bool darkTheme, const bool raster,
+                                const QByteArray& fingerprint) {
     QCryptographicHash hash(QCryptographicHash::Sha256);
     hash.addData(cacheVersion);
     const char themeMarker = darkTheme ? '\1' : '\0';
     hash.addData(QByteArrayView(&themeMarker, 1));
     hash.addData(raster ? "png" : "svg");
+    hash.addData(fingerprint);
     hash.addData(source.toUtf8());
     return QString::fromLatin1(hash.result().toHex());
 }
@@ -377,7 +414,7 @@ void MermaidRenderer::startNext() {
 
     const QString configPath =
         QDir(cacheDirectory_).filePath(currentJob_->cacheKey + QStringLiteral(".json"));
-    const QByteArray configuration = mermaidConfiguration(currentJob_->darkTheme);
+    const QByteArray configuration = currentJob_->configuration;
     if (configuration.isEmpty()) {
         finishCurrent(false, QStringLiteral("The bundled Mermaid theme is unavailable."));
         return;
@@ -404,9 +441,20 @@ void MermaidRenderer::startNext() {
 #ifdef Q_OS_WIN
     if (executablePath_.endsWith(QStringLiteral(".cmd"), Qt::CaseInsensitive) ||
         executablePath_.endsWith(QStringLiteral(".bat"), Qt::CaseInsensitive)) {
-        arguments.prepend(executablePath_);
-        arguments.prepend(QStringLiteral("/C"));
-        process_->start(qEnvironmentVariable("COMSPEC", QStringLiteral("cmd.exe")), arguments);
+        QStringList nodeCandidates{QDir(executableDirectory).filePath(QStringLiteral("node.exe"))};
+        const QString nodeOnPath = QStandardPaths::findExecutable(QStringLiteral("node.exe"));
+        if (!nodeOnPath.isEmpty())
+            nodeCandidates.append(nodeOnPath);
+        const MermaidLaunch launch =
+            mermaidWindowsLaunch(qEnvironmentVariable("COMSPEC", QStringLiteral("cmd.exe")),
+                                 executablePath_, arguments, nodeCandidates);
+        if (!launch.error.isEmpty()) {
+            finishCurrent(false, launch.error);
+            return;
+        }
+        if (!launch.nativeArguments.isEmpty())
+            process_->setNativeArguments(launch.nativeArguments);
+        process_->start(launch.program, launch.arguments);
         return;
     }
 #endif

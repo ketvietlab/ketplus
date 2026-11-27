@@ -1,5 +1,7 @@
 #include "runtime/SessionHost.h"
 
+#include "agents/ReviewerPolicy.h"
+
 #include <QSet>
 
 namespace ketplus::daemon {
@@ -38,7 +40,7 @@ QJsonObject SessionHost::conversationReviewer(const QJsonObject& request, const 
     if (const auto checked = checkedSession(request, &session); !checked.isEmpty())
         return checked;
     const QString sessionId = session->stored.id;
-    // ADR 0112: the team's reviewer reviews a member's tasks; the setting waits meanwhile.
+    // ADR 0114: the team's reviewer reviews a member's tasks; the setting waits meanwhile.
     if (apply && teams_->isMember(sessionId))
         return failure(QStringLiteral("team_member"),
                        QStringLiteral("This conversation is on a team, whose reviewer reviews "
@@ -62,11 +64,15 @@ QJsonObject SessionHost::conversationReviewer(const QJsonObject& request, const 
             if (!reviewerId.isEmpty() && !sessions_.contains(reviewerId))
                 return failure(QStringLiteral("reviewer_not_found"),
                                QStringLiteral("The reviewer conversation no longer exists."));
-            if (!AgentBroker::enforcesReviewGuard(reviewerId.isEmpty()
-                                                      ? newProvider
-                                                      : sessions_.value(reviewerId).stored.adapter))
+            // A new reviewer starts read-only, so only Claude can be a new one (ketplus#295).
+            const QString provider =
+                reviewerId.isEmpty() ? newProvider : sessions_.value(reviewerId).stored.adapter;
+            const QString policy = reviewerId.isEmpty()
+                                       ? QString{}
+                                       : sessions_.value(reviewerId).stored.executionPolicy;
+            if (!reviewer::supported(provider, policy))
                 return failure(QStringLiteral("invalid_reviewer"),
-                               QStringLiteral("A reviewer must be a Claude conversation."));
+                               reviewer::unsupportedMessage(provider));
             if (rounds < 1 || rounds > maximumReviewRounds)
                 return failure(QStringLiteral("invalid_reviewer"),
                                QStringLiteral("Review rounds must be between 1 and 3."));

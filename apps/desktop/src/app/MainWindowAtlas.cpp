@@ -236,7 +236,8 @@ void MainWindow::openAtlasBuilder(AtlasTab* picker) {
     ensureAgentWorkspace();
     agentWorkspace_->hide();
     auto* builder = new AtlasBuilderTab(atlasIndex_, workspaceRoot_, atlasTabs_);
-    builder->chatView()->applyTheme(theme_.palette(), appearanceSettings_.interfaceZoomPercent);
+    builder->chatView()->applyColorScheme(theme_.colorScheme(),
+                                          appearanceSettings_.interfaceZoomPercent);
     connectAtlasBuilder(builder);
 
     atlasTabs_->removeTab(index);

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "providers/ProviderAdapter.h"
+#include "providers/ProviderExecutable.h"
 
 #include <QDeadlineTimer>
 #include <QElapsedTimer>
@@ -41,6 +42,7 @@ class ClaudeAdapter final : public ProviderAdapter {
     void respondError(const QJsonValue& requestId, const QString& code,
                       const QString& message) override;
     void stop() override;
+    [[nodiscard]] bool supportsManagedMutations() const override { return true; }
     void setCredentials(ClaudeCredentials* credentials) { credentials_ = credentials; }
 
     [[nodiscard]] static QString missingSidecarMessage();
@@ -74,7 +76,7 @@ class ClaudeAdapter final : public ProviderAdapter {
     void configureProcess();
 
     ClaudeCredentials* credentials_{nullptr};
-    QString executable_;
+    ProviderExecutable executable_;
     QProcess* process_{nullptr};
     QByteArray stdoutBuffer_;
     QByteArray stderrBuffer_;

@@ -38,6 +38,7 @@ Item {
         }
         Text {
             width: parent.width
+            visible: text !== ""
             wrapMode: Text.Wrap
             text: heading.description
             color: KetTheme.t.textSecondary

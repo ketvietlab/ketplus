@@ -3,6 +3,7 @@
 
 #include "cloud/CloudControlClient.h"
 #include "protocol/DaemonProtocol.h"
+#include "runner/RunnerService.h"
 #include "runtime/SessionHost.h"
 
 #include "KetPlusProductVersion.h"
@@ -54,7 +55,13 @@ LocalIpcServer::LocalIpcServer(SessionHost* host, const QString& serverName,
     connect(server_, &QLocalServer::newConnection, this, &LocalIpcServer::acceptConnections);
     connect(host_, &SessionHost::eventReady, this, &LocalIpcServer::broadcastEvent);
     connect(host_, &SessionHost::teamEvent, this, &LocalIpcServer::broadcastTeamEvent);
+    connect(host_, &SessionHost::scheduleEvent, this, &LocalIpcServer::broadcastTeamEvent);
     connect(host_, &SessionHost::noticeReady, this, &LocalIpcServer::broadcastNotice);
+    if (cloud_ != nullptr)
+        connect(&cloud_->runners(), &runner::RunnerService::pairingChanged, this,
+                [this](const QJsonObject& payload) {
+                    broadcastNotice(QStringLiteral("runner.pairing.changed"), payload);
+                });
 }
 
 LocalIpcServer::~LocalIpcServer() { close(); }
@@ -278,47 +285,48 @@ void LocalIpcServer::consumeFrame(QLocalSocket* socket, const QByteArray& frame)
         }
         const int minor = protocol::negotiatedMinor(payload);
         it->activityGroups = minor >= 1 && payload.value("transcript_activity_groups").toBool();
-        send(socket,
-             protocol::response(
-                 request,
-                 {{QStringLiteral("ok"), true},
-                  {QStringLiteral("protocol_version"), protocol::currentVersion},
-                  {QStringLiteral("protocol_minor"), minor},
-                  {QStringLiteral("features"), protocol::features(minor)},
-                  {QStringLiteral("daemon_version"), QStringLiteral(KETPLUS_PRODUCT_VERSION)},
-                  {QStringLiteral("client_id"), it->clientId},
-                  {QStringLiteral("maximum_frame_bytes"),
-                   static_cast<qint64>(protocol::maximumFrameBytes)},
-                  {QStringLiteral("capabilities"),
-                   QJsonArray{QStringLiteral("storage.size.read"),
-                              QStringLiteral("storage.size.apply"),
-                              QStringLiteral("storage.retention.read"),
-                              QStringLiteral("storage.retention.apply"),
-                              QStringLiteral("storage.options.read"),
-                              QStringLiteral("storage.options.apply"),
-                              QStringLiteral("storage.compaction.start"),
-                              QStringLiteral("storage.compaction.read"),
-                              QStringLiteral("storage.breakdown.read"),
-                              QStringLiteral("storage.export.start"),
-                              QStringLiteral("storage.export.read"), QStringLiteral("session.read"),
-                              QStringLiteral("session.control"), QStringLiteral("session.delete"),
-                              QStringLiteral("transcript.read"), QStringLiteral("approval.resolve"),
-                              QStringLiteral("session.agent_messages.read"),
-                              QStringLiteral("session.agent_messages.release"),
-                              QStringLiteral("session.reviewer.get"),
-                              QStringLiteral("session.reviewer.set"),
-                              QStringLiteral("session.work_report.read"),
-                              QStringLiteral("session.configuration.read"),
-                              QStringLiteral("session.configuration.apply"),
-                              QStringLiteral("session.execution_policy.apply"),
-                              QStringLiteral("session.mode.apply"),
-                              QStringLiteral("attachment.stage.begin"),
-                              QStringLiteral("attachment.stage.chunk"),
-                              QStringLiteral("attachment.stage.commit"),
-                              QStringLiteral("attachment.stage.cancel"),
-                              // MCP media is journaled as media_ref blocks resolved from the
-                              // owner-only <state dir>/media store (same user; no IPC bytes).
-                              QStringLiteral("media.local_store")}}}));
+        // ADR 0119: an SSH client names this machine by its host key (daemon.host_identity/1).
+        QString hostKeyFingerprint;
+        if (minor >= 1 && hostKeyFingerprint_)
+            hostKeyFingerprint = hostKeyFingerprint_();
+        QJsonObject hello{
+            {QStringLiteral("ok"), true},
+            {QStringLiteral("protocol_version"), protocol::currentVersion},
+            {QStringLiteral("protocol_minor"), minor},
+            {QStringLiteral("features"), protocol::features(minor)},
+            {QStringLiteral("daemon_version"), QStringLiteral(KETPLUS_PRODUCT_VERSION)},
+            {QStringLiteral("client_id"), it->clientId},
+            {QStringLiteral("maximum_frame_bytes"),
+             static_cast<qint64>(protocol::maximumFrameBytes)},
+            {QStringLiteral("capabilities"),
+             QJsonArray{
+                 QStringLiteral("storage.size.read"), QStringLiteral("storage.size.apply"),
+                 QStringLiteral("storage.retention.read"),
+                 QStringLiteral("storage.retention.apply"), QStringLiteral("storage.options.read"),
+                 QStringLiteral("storage.options.apply"),
+                 QStringLiteral("storage.compaction.start"),
+                 QStringLiteral("storage.compaction.read"),
+                 QStringLiteral("storage.breakdown.read"), QStringLiteral("storage.export.start"),
+                 QStringLiteral("storage.export.read"), QStringLiteral("session.read"),
+                 QStringLiteral("session.control"), QStringLiteral("session.delete"),
+                 QStringLiteral("transcript.read"), QStringLiteral("approval.resolve"),
+                 QStringLiteral("session.agent_messages.read"),
+                 QStringLiteral("session.agent_messages.release"),
+                 QStringLiteral("session.reviewer.get"), QStringLiteral("session.reviewer.set"),
+                 QStringLiteral("session.work_report.read"),
+                 QStringLiteral("session.configuration.read"),
+                 QStringLiteral("session.configuration.apply"),
+                 QStringLiteral("session.execution_policy.apply"),
+                 QStringLiteral("session.mode.apply"), QStringLiteral("attachment.stage.begin"),
+                 QStringLiteral("attachment.stage.chunk"),
+                 QStringLiteral("attachment.stage.commit"),
+                 QStringLiteral("attachment.stage.cancel"), QStringLiteral("session.prepare/1"),
+                 // MCP media is journaled as media_ref blocks resolved from the
+                 // owner-only <state dir>/media store (same user; no IPC bytes).
+                 QStringLiteral("media.local_store")}}};
+        if (!hostKeyFingerprint.isEmpty())
+            hello.insert(QStringLiteral("host_key_fingerprint"), hostKeyFingerprint);
+        send(socket, protocol::response(request, hello));
         return;
     }
     if (type == QStringLiteral("daemon.hello")) {
@@ -333,17 +341,27 @@ void LocalIpcServer::consumeFrame(QLocalSocket* socket, const QByteArray& frame)
         return;
     }
     if (!it->agentToken.isEmpty()) {
-        send(socket, AgentBroker::isOperation(type)
-                         ? protocol::response(
-                               request, host_->handleAgentCommand(
-                                            it->agentToken, type,
-                                            request.value(QStringLiteral("payload")).toObject()))
-                         : protocol::failure(request, QStringLiteral("forbidden"),
-                                             QStringLiteral("Agent connections may only call "
-                                                            "agents.* operations.")));
+        if (!AgentBroker::isOperation(type) && !SessionHost::isManagedTaskCommand(type)) {
+            send(socket, protocol::failure(request, QStringLiteral("forbidden"),
+                                           QStringLiteral("Agent connections may only call "
+                                                          "agents.* or managed task operations.")));
+            return;
+        }
+        // Answered at once, except a team's task tool that waits for git (ADR 0114 §1).
+        const QPointer<QLocalSocket> guardedSocket(socket);
+        host_->handleAgentCommandDeferred(
+            it->agentToken, type, request.value(QStringLiteral("payload")).toObject(),
+            [server = QPointer<LocalIpcServer>(this), guardedSocket,
+             request](const QJsonObject& result) {
+                if (!server || guardedSocket.isNull() ||
+                    !server->connections_.contains(guardedSocket))
+                    return;
+                server->send(guardedSocket, protocol::response(request, result));
+            });
         return;
     }
-    if (type == QStringLiteral("daemon.prepare_upgrade")) {
+    if (type == QStringLiteral("daemon.prepare_upgrade") ||
+        type == QStringLiteral("daemon.stop_if_idle")) {
         const QVersionNumber current =
             QVersionNumber::fromString(QStringLiteral(KETPLUS_PRODUCT_VERSION));
         const QVersionNumber replacement =
@@ -351,7 +369,8 @@ void LocalIpcServer::consumeFrame(QLocalSocket* socket, const QByteArray& frame)
                                            .toObject()
                                            .value(QStringLiteral("replacement_version"))
                                            .toString());
-        if (replacement.isNull() || QVersionNumber::compare(replacement, current) <= 0) {
+        if (type == QStringLiteral("daemon.prepare_upgrade") &&
+            (replacement.isNull() || QVersionNumber::compare(replacement, current) <= 0)) {
             send(socket, protocol::failure(
                              request, QStringLiteral("invalid_replacement_version"),
                              QStringLiteral("The replacement must be newer than this daemon.")));
@@ -426,14 +445,20 @@ void LocalIpcServer::consumeFrame(QLocalSocket* socket, const QByteArray& frame)
         });
         return;
     }
-    if (SessionHost::isBackgroundTaskCommand(type)) {
+    // Answered later: a background task command, and a team command or worktree listing that
+    // waits for git.
+    if (SessionHost::isManagedTaskCommand(type) || SessionHost::isBackgroundTaskCommand(type) ||
+        type.startsWith(QStringLiteral("team.")) || type == QStringLiteral("session.worktrees")) {
         const QPointer<QLocalSocket> guardedSocket(socket);
-        host_->handleCommandDeferred(
-            request, it->clientId, [this, guardedSocket, request](const QJsonObject& result) {
-                if (guardedSocket.isNull() || !connections_.contains(guardedSocket))
-                    return;
-                send(guardedSocket, protocol::response(request, result));
-            });
+        host_->handleCommandDeferred(request, it->clientId,
+                                     [server = QPointer<LocalIpcServer>(this), guardedSocket,
+                                      request](const QJsonObject& result) {
+                                         if (!server || guardedSocket.isNull() ||
+                                             !server->connections_.contains(guardedSocket))
+                                             return;
+                                         server->send(guardedSocket,
+                                                      protocol::response(request, result));
+                                     });
         return;
     }
     if (cloud_ != nullptr && cloud_->handles(type)) {
@@ -447,7 +472,8 @@ void LocalIpcServer::consumeFrame(QLocalSocket* socket, const QByteArray& frame)
                      remoteError.isEmpty()
                          ? protocol::response(request, result)
                          : protocol::failure(request, QStringLiteral("remote_error"), remoteError));
-            });
+            },
+            it->clientId);
         return;
     }
     auto result = host_->handleCommand(request, it->clientId);
@@ -484,16 +510,25 @@ void LocalIpcServer::consumeFrame(QLocalSocket* socket, const QByteArray& frame)
 }
 
 void LocalIpcServer::send(QLocalSocket* socket, const QJsonObject& envelope) {
-    const QByteArray frame = protocol::encodeFrame(envelope);
-    if (frame.size() > protocol::maximumFrameBytes + 4 ||
-        socket->bytesToWrite() + frame.size() > protocol::maximumQueuedBytes) {
+    QByteArray frame = protocol::encodeFrame(envelope);
+    if (frame.size() > protocol::maximumFrameBytes + 4) {
+        // ADR 0115: a message too large for one frame never costs the client its connection.
+        qWarning("Replacing %s of %lld bytes: it exceeds the frame limit.",
+                 qUtf8Printable(envelope.value(QStringLiteral("message_type")).toString()),
+                 static_cast<long long>(frame.size()));
+        frame = protocol::encodeFrame(protocol::oversizedReplacement(envelope, frame.size()));
+    }
+    if (socket->bytesToWrite() + frame.size() > protocol::maximumQueuedBytes) {
+        // A client that stopped reading is dropped; it reconnects and reads the state again.
+        qWarning("Dropping a client: %lld bytes already queued.",
+                 static_cast<long long>(socket->bytesToWrite()));
         socket->abort();
         return;
     }
     socket->write(frame);
 }
 
-// ADR 0112: team.changed and team.removed reach every authenticated client, never an agent.
+// Team and schedule events reach every authenticated client, never an agent.
 void LocalIpcServer::broadcastTeamEvent(const QString& type, const QJsonObject& payload) {
     const QJsonObject envelope{
         {QStringLiteral("protocol_version"), protocol::currentVersion},

@@ -1,151 +1,273 @@
 #include "cloud/CredentialStore.h"
-
+#include "cloud/CredentialBackend.h"
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QJsonDocument>
+#include <QScopeGuard>
 #include <QStandardPaths>
+#include <QTemporaryDir>
 #include <QtTest>
-
-namespace ketplus::daemon {
-class CredentialStoreTestAccess final {
-  public:
-    static int fileReads(const CredentialStore& store) { return store.fileReads_; }
-    static int fileWrites(const CredentialStore& store) { return store.fileWrites_; }
-};
-} // namespace ketplus::daemon
-
+#if defined(Q_OS_UNIX)
+#include <sys/file.h>
+#endif
 using namespace ketplus::daemon;
-
 namespace {
-QString credentialFile(const QString& service) {
-    return QDir(QStandardPaths::writableLocation(QStandardPaths::GenericDataLocation))
-        .filePath(QStringLiteral("Ketsuite/KetPlus/daemon/credentials-%1.json").arg(service));
-}
+class Backend final : public CredentialBackend {
+  public:
+    QByteArray record;
+    bool exists{false};
+    bool locked{false};
+    bool failWrite{false};
+    bool failVerification{false};
+    int writes{0};
+    std::function<void()> afterWrite;
+    Result read(const QString&, QByteArray* value, QString* error) override {
+        if (locked || (failVerification && writes > 0)) {
+            if (error)
+                *error = "Synthetic store unavailable";
+            return Result::Error;
+        }
+        *value = record;
+        return exists ? Result::Found : Result::Missing;
+    }
+    bool write(const QString&, const QByteArray& value, QString* error) override {
+        if (locked || failWrite) {
+            if (error)
+                *error = "Synthetic store write denied";
+            return false;
+        }
+        ++writes;
+        exists = true;
+        record = value;
+        if (afterWrite)
+            afterWrite();
+        return true;
+    }
+};
+struct Fixture {
+    QTemporaryDir directory;
+    QString path{directory.filePath("credentials-test.json")};
+    std::shared_ptr<Backend> backend{std::make_shared<Backend>()};
+    CredentialStore store{"test", backend, path};
+    QByteArray legacyBytes{
+        QJsonDocument(QJsonObject{{"private-key", "c3ludGhldGlj"}, {"machine-id", "bWFjaGluZQ=="}})
+            .toJson()};
+    void legacy(const QByteArray& bytes = {}) {
+        QFile file(path);
+        if (!file.open(QIODevice::WriteOnly) ||
+            !file.setPermissions(QFile::ReadOwner | QFile::WriteOwner) ||
+            file.write(bytes.isEmpty() ? legacyBytes : bytes) < 0)
+            qFatal("Unable to create synthetic legacy fixture");
+    }
+    QByteArray onDisk() {
+        QFile file(path);
+        if (!file.open(QIODevice::ReadOnly))
+            return {};
+        return file.readAll();
+    }
+};
 } // namespace
-
 class CredentialStoreTest final : public QObject {
     Q_OBJECT
-
   private slots:
     void initTestCase() { QStandardPaths::setTestModeEnabled(true); }
-
-    void storesBinaryValuesInOwnerOnlyFile() {
-        const QString service = QStringLiteral("credential-store-roundtrip");
-        QFile::remove(credentialFile(service));
-        CredentialStore store(service);
-        QByteArray secret(32, Qt::Uninitialized);
-        for (int index = 0; index < secret.size(); ++index)
-            secret[index] = static_cast<char>(index * 7);
-
-        QCOMPARE(store.read(QStringLiteral("missing")), QByteArray());
+    void productionBackendIsDisabledInTests() {
         QString error;
-        QVERIFY2(store.write(QStringLiteral("signing-private-key"), secret, &error),
-                 qPrintable(error));
-        QVERIFY(store.write(QStringLiteral("machine-id"), "machine"));
-        QCOMPARE(store.read(QStringLiteral("signing-private-key")), secret);
-        QCOMPARE(CredentialStore(service).read(QStringLiteral("machine-id")),
-                 QByteArray("machine"));
-#if defined(Q_OS_UNIX)
-        QCOMPARE(QFileInfo(credentialFile(service)).permissions() &
-                     (QFileDevice::ReadGroup | QFileDevice::ReadOther | QFileDevice::WriteGroup |
-                      QFileDevice::WriteOther),
-                 QFileDevice::Permissions());
-#endif
-
-        QVERIFY(store.remove(QStringLiteral("machine-id")));
-        QVERIFY(store.remove(QStringLiteral("machine-id")));
-        QCOMPARE(store.read(QStringLiteral("machine-id")), QByteArray());
-        QCOMPARE(store.read(QStringLiteral("signing-private-key")), secret);
+        CredentialStore store("synthetic-no-native-access");
+        QVERIFY(store.read("key", &error).isEmpty());
+        QVERIFY(!error.isEmpty());
+        QVERIFY(!store.write("key", "synthetic", &error));
     }
-
-    void removesMatchingAccountsWithOneWrite() {
-        const QString service = QStringLiteral("credential-store-batch");
-        QFile::remove(credentialFile(service));
-        CredentialStore store(service);
-        for (int session = 0; session < 5; ++session)
-            QVERIFY(store.write(QStringLiteral("uploaded-cursor-%1-1").arg(session), "7"));
-        QVERIFY(store.write(QStringLiteral("machine-id"), "machine-a"));
-        const int writes = CredentialStoreTestAccess::fileWrites(store);
-        QVERIFY(store.removeIf([](const QString& account) {
-            return account.startsWith(QStringLiteral("uploaded-cursor-"));
+    void roundTripWithoutPlaintextFile() {
+        Fixture f;
+        QString error;
+        QVERIFY(f.store.read("missing", &error).isEmpty());
+        QVERIFY(error.isEmpty());
+        const QByteArray binary("synthetic\0key", 13);
+        QVERIFY(f.store.write("private-key", binary, &error));
+        QCOMPARE(f.store.read("private-key"), binary);
+        QCOMPARE(CredentialStore("test", f.backend, f.path).read("private-key"), binary);
+        QVERIFY(!QFile::exists(f.path));
+#if !defined(Q_OS_WIN) // Windows access is an ACL, not mode bits: see WindowsPlatformTest.
+        QCOMPARE(QFileInfo(f.directory.path()).permissions() &
+                     (QFile::ReadOther | QFile::WriteOther),
+                 QFile::Permissions{});
+#endif
+    }
+    void migrationIsVerifiedThenRemoved() {
+        Fixture f;
+        f.legacy();
+        QCOMPARE(f.store.read("private-key"), "synthetic");
+        QCOMPARE(f.backend->writes, 1);
+        QVERIFY(!QFile::exists(f.path));
+        QCOMPARE(f.store.read("machine-id"), "machine");
+        QVERIFY(f.store.remove("machine-id"));
+        // A backup from before sign-out must never resurrect an enrollment.
+        f.legacy();
+        QCOMPARE(f.store.read("machine-id"), QByteArray{});
+        QCOMPARE(f.store.read("private-key"), "synthetic");
+        QVERIFY(!QFile::exists(f.path));
+        QCOMPARE(f.backend->writes, 2);
+    }
+    void unavailableStoreNeverReadsOrOverwritesLegacy() {
+        Fixture f;
+        f.legacy();
+        f.backend->locked = true;
+        QString error;
+        QVERIFY(f.store.read("private-key", &error).isEmpty());
+        QVERIFY(!error.isEmpty());
+        QVERIFY(!f.store.write("private-key", "replacement", &error));
+        QCOMPARE(f.onDisk(), f.legacyBytes);
+        QCOMPARE(f.backend->writes, 0);
+        f.backend->locked = false;
+        QCOMPARE(f.store.read("private-key"), "synthetic");
+    }
+    void migrationFailureRetriesWithoutLosingSource_data() {
+        QTest::addColumn<bool>("verification");
+        QTest::newRow("write") << false;
+        QTest::newRow("read-back") << true;
+    }
+    void migrationFailureRetriesWithoutLosingSource() {
+        QFETCH(bool, verification);
+        Fixture f;
+        f.legacy();
+        f.backend->failWrite = !verification;
+        f.backend->failVerification = verification;
+        QString error;
+        QVERIFY(f.store.read("private-key", &error).isEmpty());
+        QVERIFY(!error.isEmpty());
+        QCOMPARE(f.onDisk(), f.legacyBytes);
+        f.backend->failWrite = f.backend->failVerification = false;
+        QCOMPARE(f.store.read("private-key"), "synthetic");
+        QVERIFY(!QFile::exists(f.path));
+        QCOMPARE(f.backend->writes, 1);
+    }
+    void cleanupFailureRetriesTheCommittedMigration() {
+#if defined(Q_OS_WIN)
+        QSKIP("The failure is induced with POSIX directory permissions.");
+#endif
+        Fixture f;
+        f.legacy();
+        const auto restore = qScopeGuard([&] {
+            QFile::setPermissions(f.directory.path(),
+                                  QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner);
+        });
+        f.backend->afterWrite = [&] {
+            QVERIFY(QFile::setPermissions(f.directory.path(), QFile::ReadOwner | QFile::ExeOwner));
+        };
+        QString error;
+        QVERIFY(f.store.read("private-key", &error).isEmpty());
+        QVERIFY(error.contains("cleanup"));
+        QCOMPARE(f.onDisk(), f.legacyBytes);
+        QCOMPARE(f.backend->writes, 1);
+        QVERIFY(QFile::setPermissions(f.directory.path(),
+                                      QFile::ReadOwner | QFile::WriteOwner | QFile::ExeOwner));
+        f.backend->afterWrite = {};
+        QCOMPARE(f.store.read("private-key", &error), "synthetic");
+        QVERIFY2(error.isEmpty(), qPrintable(error));
+        QVERIFY(!QFile::exists(f.path));
+        QCOMPARE(f.backend->writes, 1);
+    }
+    void corruptOsRecordNeverFallsBackToLegacy() {
+        Fixture f;
+        f.legacy();
+        f.backend->exists = true;
+        f.backend->record = "not-json";
+        QString error;
+        QVERIFY(f.store.read("private-key", &error).isEmpty());
+        QVERIFY(!error.isEmpty());
+        QVERIFY(!f.store.write("private-key", "replacement", &error));
+        QCOMPARE(f.onDisk(), f.legacyBytes);
+        QCOMPARE(f.backend->record, "not-json");
+        QCOMPARE(f.backend->writes, 0);
+    }
+    void conflictingBackupRequiresExplicitRecovery() {
+        Fixture f;
+        f.legacy();
+        QCOMPARE(f.store.read("private-key"), "synthetic");
+        const auto committed = f.backend->record;
+        f.legacy("{\"private-key\":\"b3RoZXI=\"}");
+        const auto conflict = f.onDisk();
+        QString error;
+        QVERIFY(f.store.read("private-key", &error).isEmpty());
+        QVERIFY(error.contains("conflict"));
+        QCOMPARE(f.onDisk(), conflict);
+        QCOMPARE(f.backend->record, committed);
+    }
+    void rejectsUnsafeOrCorruptLegacy_data() {
+        QTest::addColumn<QString>("kind");
+        for (const auto* kind : {"permissions", "symlink", "corrupt", "base64", "type"})
+            QTest::newRow(kind) << QString::fromLatin1(kind);
+    }
+    void rejectsUnsafeOrCorruptLegacy() {
+        QFETCH(QString, kind);
+#if defined(Q_OS_WIN)
+        if (kind == "permissions" || kind == "symlink")
+            QSKIP("Mode bits and symbolic links are POSIX; Windows uses ACLs and .lnk shortcuts.");
+#endif
+        Fixture f;
+        f.legacy();
+        if (kind == "permissions")
+            QVERIFY(QFile::setPermissions(f.path,
+                                          QFile::ReadOwner | QFile::WriteOwner | QFile::ReadOther));
+        else if (kind == "symlink") {
+            QVERIFY(QFile::rename(f.path, f.path + ".target"));
+            QVERIFY(QFile::link(f.path + ".target", f.path));
+        } else if (kind == "corrupt")
+            f.legacy("not-json");
+        else if (kind == "base64")
+            f.legacy("{\"key\":\"!bad!\"}");
+        else
+            f.legacy("{\"key\":42}");
+        QString error;
+        QVERIFY(f.store.read("key", &error).isEmpty());
+        QVERIFY(!error.isEmpty());
+        QCOMPARE(f.backend->writes, 0);
+        QVERIFY(QFile::exists(f.path));
+    }
+    void failedSignOutBatchPreservesKeysAndEnrollment() {
+        Fixture f;
+        QVERIFY(f.store.update([](auto& accounts) {
+            accounts.insert("machine-id", "synthetic-machine");
+            accounts.insert("pin", "synthetic-pin");
+            accounts.insert("private-key", "synthetic-key");
         }));
-        QCOMPARE(CredentialStoreTestAccess::fileWrites(store), writes + 1);
-        QCOMPARE(CredentialStore(service).read(QStringLiteral("uploaded-cursor-3-1")),
-                 QByteArray());
-        QCOMPARE(CredentialStore(service).read(QStringLiteral("machine-id")),
-                 QByteArray("machine-a"));
-
-        // Nothing to remove leaves the file alone.
-        QVERIFY(store.removeIf([](const QString&) { return false; }));
-        QVERIFY(store.remove(QStringLiteral("uploaded-cursor-3-1")));
-        QCOMPARE(CredentialStoreTestAccess::fileWrites(store), writes + 1);
+        const auto before = f.backend->record;
+        f.backend->failWrite = true;
+        QString error;
+        const auto enrolled = [](const QString& account) { return account != "private-key"; };
+        QVERIFY(!f.store.removeIf(enrolled, &error));
+        QVERIFY(!error.isEmpty());
+        QCOMPARE(f.backend->record, before);
+        f.backend->failWrite = false;
+        QVERIFY(f.store.removeIf(enrolled));
+        QVERIFY(f.store.read("machine-id").isEmpty());
+        QCOMPARE(f.store.read("private-key"), "synthetic-key");
+        QCOMPARE(f.backend->writes, 2);
+        QVERIFY(f.store.removeIf(enrolled));
+        QCOMPARE(f.backend->writes, 2);
     }
-
-    void readsTheFileAgainOnlyWhenItChanges() {
-        const QString service = QStringLiteral("credential-store-snapshot");
-        const QString path = credentialFile(service);
-        QFile::remove(path);
-        CredentialStore store(service);
-        QVERIFY(store.write(QStringLiteral("machine-id"), "machine-a"));
-        for (int read = 0; read < 3; ++read)
-            QCOMPARE(store.read(QStringLiteral("machine-id")), QByteArray("machine-a"));
-        QCOMPARE(CredentialStoreTestAccess::fileReads(store), 0);
-
-        // Another store's same-size write, in the same millisecond as the last one, is seen.
-        QVERIFY(CredentialStore(service).write(QStringLiteral("machine-id"), "machine-b"));
-        QCOMPARE(store.read(QStringLiteral("machine-id")), QByteArray("machine-b"));
-        QCOMPARE(store.read(QStringLiteral("machine-id")), QByteArray("machine-b"));
-        QCOMPARE(CredentialStoreTestAccess::fileReads(store), 1);
-
-        // So is a rewrite in place that restores the modification time.
-        QFile file(path);
-        QVERIFY(file.open(QIODevice::ReadWrite));
-        const QDateTime modified = file.fileTime(QFileDevice::FileModificationTime);
-        QByteArray bytes = file.readAll();
-        const qsizetype value = bytes.indexOf(QByteArray("machine-b").toBase64());
-        QVERIFY(value >= 0);
-        bytes.replace(value, 12, QByteArray("machine-c").toBase64());
-        QVERIFY(file.seek(0));
-        QCOMPARE(file.write(bytes), bytes.size());
-        QVERIFY(file.setFileTime(modified, QFileDevice::FileModificationTime));
-        file.close();
-        QCOMPARE(store.read(QStringLiteral("machine-id")), QByteArray("machine-c"));
-
-        // The file's safety is checked on every read, not only when it is parsed.
+    void lockAndStoreFailuresAreNotMissing() {
 #if defined(Q_OS_UNIX)
-        QVERIFY(QFile::setPermissions(path, QFileDevice::ReadOwner | QFileDevice::WriteOwner |
-                                                QFileDevice::ReadOther));
+        Fixture f;
+        QVERIFY(f.store.write("key", "synthetic"));
         QString error;
-        QCOMPARE(store.read(QStringLiteral("machine-id"), &error), QByteArray());
+        QFile lock(f.path + ".lock");
+        QVERIFY(lock.open(QIODevice::ReadWrite));
+        QCOMPARE(::flock(lock.handle(), LOCK_EX | LOCK_NB), 0);
+        QVERIFY(f.store.read("key", &error).isEmpty());
+        QVERIFY(error.contains("busy"));
+        lock.close();
+        f.backend->locked = true;
+        QVERIFY(f.store.read("key", &error).isEmpty());
         QVERIFY(!error.isEmpty());
-        QVERIFY(QFile::setPermissions(path, QFileDevice::ReadOwner | QFileDevice::WriteOwner));
-        QCOMPARE(store.read(QStringLiteral("machine-id")), QByteArray("machine-c"));
+        f.backend->locked = false;
+        QCOMPARE(f.store.read("key"), "synthetic");
+#else
+        QSKIP("Native credential locking is supported on macOS and Linux.");
 #endif
-        QVERIFY(QFile::remove(path));
-        QCOMPARE(store.read(QStringLiteral("machine-id")), QByteArray());
-    }
-
-    void corruptFileIsAnErrorAndIsNeverOverwritten() {
-        const QString service = QStringLiteral("credential-store-corrupt");
-        const QString path = credentialFile(service);
-        QVERIFY(QDir().mkpath(QFileInfo(path).absolutePath()));
-        QFile file(path);
-        QVERIFY(file.open(QIODevice::WriteOnly | QIODevice::Truncate));
-        QVERIFY(file.write("{not json") > 0);
-        file.close();
-        QVERIFY(QFile::setPermissions(path, QFileDevice::ReadOwner | QFileDevice::WriteOwner));
-
-        CredentialStore store(service);
-        QString error;
-        QCOMPARE(store.read(QStringLiteral("signing-private-key"), &error), QByteArray());
-        QVERIFY(!error.isEmpty());
-        error.clear();
-        QVERIFY(!store.write(QStringLiteral("signing-private-key"), "replacement", &error));
-        QVERIFY(!error.isEmpty());
-        QVERIFY(file.open(QIODevice::ReadOnly));
-        QCOMPARE(file.readAll(), QByteArray("{not json"));
     }
 };
-
 QTEST_GUILESS_MAIN(CredentialStoreTest)
 #include "CredentialStoreTest.moc"

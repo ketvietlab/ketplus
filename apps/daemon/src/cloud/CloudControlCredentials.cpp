@@ -22,7 +22,7 @@ void CloudControlClient::ensureDaemonCredential(ReadyCallback callback) {
         return;
     }
     credentialRequestInFlight_ = true;
-    const quint64 requestEpoch = accountEpoch_;
+    const auto requestAccount = accountFence();
     const QJsonObject challengeRequest{
         {QStringLiteral("machineId"), machineId_},
         {QStringLiteral("keyVersion"), machineKeyVersion_},
@@ -30,11 +30,30 @@ void CloudControlClient::ensureDaemonCredential(ReadyCallback callback) {
         {QStringLiteral("signatureAlgorithm"), QStringLiteral("Ed25519")}};
     request(
         "POST", QStringLiteral("/v2/daemon/challenges"), challengeRequest, {}, {},
-        [this, requestEpoch](const int status, const QJsonValue& value,
-                             const QString& transportError) {
-            if (requestEpoch != accountEpoch_)
+        [this, requestAccount](const int status, const QJsonValue& value,
+                               const QString& transportError) {
+            if (!accountCurrent(requestAccount))
                 return;
             const QJsonObject challenge = object(value);
+            if (status == 404 && transportError.isEmpty() &&
+                responseCode(value, {}) == QStringLiteral("machine_not_found")) {
+                // A removed/revoked enrollment cannot acquire another credential. Leave the
+                // account once instead of retrying the same missing machine on every timer tick.
+                // The normal sign-out also closes peer/Atlas access and preserves local work.
+                signOut([this](const QJsonObject&, const QString& error) {
+                    if (error.isEmpty())
+                        return;
+                    // Disk failure must not keep a revoked identity connected in this process.
+                    wakeups_.stop();
+                    machineId_.clear();
+                    workspaceId_.clear();
+                    accountName_.clear();
+                    accountUsername_.clear();
+                    daemonToken_.clear();
+                    finishCredentialWaiters(false, error);
+                });
+                return;
+            }
             if (status != 201 || !transportError.isEmpty()) {
                 finishCredentialWaiters(
                     false, transportError.isEmpty()
@@ -62,9 +81,10 @@ void CloudControlClient::ensureDaemonCredential(ReadyCallback callback) {
             request(
                 "POST", QStringLiteral("/v2/daemon/credentials"), body, {},
                 {{QByteArray("X-KetPlus-Machine-Signature"), CloudCrypto::base64Url(signature)}},
-                [this, requestEpoch](const int credentialStatus, const QJsonValue& credentialValue,
-                                     const QString& credentialError) {
-                    if (requestEpoch != accountEpoch_)
+                [this, requestAccount](const int credentialStatus,
+                                       const QJsonValue& credentialValue,
+                                       const QString& credentialError) {
+                    if (!accountCurrent(requestAccount))
                         return;
                     const QJsonObject credential = object(credentialValue);
                     if (credentialStatus != 201 || !credentialError.isEmpty()) {

@@ -2,8 +2,9 @@ name: os-suite
 
 # One edition's test suite on several versions of one operating system. The
 # build job compiles the test targets once, on the oldest runner of the set so
-# its binaries load on the newer ones, and hands the build tree to a test job
-# per runner version. Called from build.yml only.
+# its binaries load on the newer ones, and hands the build tree to test jobs:
+# test-shards per runner version, each running its share of the suite
+# (tools/ci/shard_tests.py). Called from build.yml only.
 on:
   workflow_call:
     inputs:
@@ -45,6 +46,11 @@ on:
         required: false
         type: number
         default: 45
+      test-shards:
+        description: "Test jobs per runner version; each runs one cost-balanced share"
+        required: false
+        type: number
+        default: 1
 
 permissions:
   contents: read
@@ -58,9 +64,18 @@ jobs:
   build:
     runs-on: ${{ inputs.build-runner }}
     timeout-minutes: ${{ inputs.build-timeout }}
+    outputs:
+      shards: ${{ steps.shards.outputs.list }}
     env:
       SCCACHE_GHA_ENABLED: "true"
     steps:
+      - name: List the test shards
+        id: shards
+        shell: bash
+        env:
+          SHARDS: ${{ inputs.test-shards }}
+        run: echo "list=[$(seq -s, 1 "$SHARDS")]" >> "$GITHUB_OUTPUT"
+
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           persist-credentials: false
@@ -118,10 +133,22 @@ jobs:
           node_path="$(command -v node)"
           echo "args=-DKETPLUS_NODE_EXECUTABLE=$node_path -DKETPLUS_SIDECAR_TEST_NODE=$node_path" >> "$GITHUB_OUTPUT"
 
+      # CTest serializes Python3_EXECUTABLE, including imported interpreter targets.
+      # A toolcache path from the build image need not exist on either test image.
+      # The checkout path is already checked when the artifact is restored.
+      - name: Locate relocatable Python
+        id: python
+        if: runner.os == 'macOS' && inputs.suite == 'pro'
+        shell: bash
+        run: |
+          packaging/macos/ci-python3 --version
+          python3 tests/packaging/test_ci_python_launcher.py
+          echo "args=-DPython3_EXECUTABLE=$GITHUB_WORKSPACE/packaging/macos/ci-python3" >> "$GITHUB_OUTPUT"
+
       # The runner's default shell: Git Bash's coreutils `link` would shadow
       # MSVC's linker on Windows.
       - name: Configure
-        run: cmake -S . -B build -G Ninja ${{ inputs.configure-args }} ${{ steps.node.outputs.args }}
+        run: cmake -S . -B build -G Ninja ${{ inputs.configure-args }} ${{ steps.node.outputs.args }} ${{ steps.python.outputs.args }}
 
       - name: Build
         run: cmake --build build
@@ -160,6 +187,8 @@ jobs:
       fail-fast: false
       matrix:
         os: ${{ fromJSON(inputs.test-runners) }}
+        shard: ${{ fromJSON(needs.build.outputs.shards) }}
+    name: test (${{ matrix.os }}, ${{ matrix.shard }}/${{ inputs.test-shards }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: ${{ inputs.test-timeout }}
     env:
@@ -209,8 +238,40 @@ jobs:
           done < build/ci-paths.txt
           exit "$status"
 
+      - name: Check test-runner Python
+        if: runner.os == 'macOS' && inputs.suite == 'pro'
+        run: packaging/macos/ci-python3 --version
+
       - name: Test
+        if: inputs.test-shards == 1
         run: ctest --test-dir build --output-on-failure ${{ inputs.ctest-args }}
+
+      # Every shard plans the same split from the same build tree and runs its part.
+      - name: Test shard
+        if: inputs.test-shards > 1
+        shell: bash
+        env:
+          SHARDS: ${{ inputs.test-shards }}
+          SHARD: ${{ matrix.shard }}
+        run: |
+          python="$(command -v python3 || command -v python)"
+          regex="$("$python" -I tools/ci/shard_tests.py plan --test-dir build --shards "$SHARDS" --index "$SHARD")"
+          if [ -z "$regex" ]; then
+            echo "Shard $SHARD of $SHARDS has no tests."
+            exit 0
+          fi
+          ctest --test-dir build --output-on-failure ${{ inputs.ctest-args }} -R "$regex"
+
+      # Measured durations for refreshing tests/test-costs.txt
+      # (python3 tools/ci/shard_tests.py costs <files>).
+      - name: Keep test durations
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: test-costs-${{ inputs.suite }}-${{ matrix.os }}-${{ matrix.shard }}
+          path: build/Testing/Temporary/CTestCostData.txt
+          if-no-files-found: ignore
+          retention-days: 14
 
       - name: Diagnose Windows test failures
         if: failure() && runner.os == 'Windows'
@@ -220,3 +281,17 @@ jobs:
             Write-Host "== $($_.Name) =="
             Get-Content $_
           }
+
+  # One result for the whole matrix, whatever the shard count.
+  tests-passed:
+    needs: test
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Every test job passed
+        env:
+          RESULT: ${{ needs.test.result }}
+        run: |
+          echo "test jobs: $RESULT"
+          test "$RESULT" = success

@@ -66,8 +66,10 @@ class ComputerToolLaunchTest final : public QObject {
         QFile file(path);
         QVERIFY(file.open(QIODevice::ReadOnly));
         QCOMPARE(QJsonDocument::fromJson(file.readAll()).object().value("future").toInt(), 7);
+#if !defined(Q_OS_WIN) // Windows reports group/other read from ACLs, not from a mode.
         QCOMPARE(QFileInfo(path).permissions() & (QFileDevice::ReadGroup | QFileDevice::ReadOther),
                  QFileDevice::Permissions{});
+#endif
     }
 
     void hostKeyIsPrivateAndStable() {
@@ -76,6 +78,7 @@ class ComputerToolLaunchTest final : public QObject {
         const QByteArray key = computer::ensureHostKey(directory);
         QCOMPARE(key.size(), 32);
         QCOMPARE(computer::ensureHostKey(directory), key);
+#if !defined(Q_OS_WIN) // Windows reports group/other access from ACLs, not from a mode.
         const auto keyPermissions =
             QFileInfo(directory + QStringLiteral("/host.key")).permissions();
         QCOMPARE(keyPermissions & (QFileDevice::ReadGroup | QFileDevice::ReadOther),
@@ -83,9 +86,20 @@ class ComputerToolLaunchTest final : public QObject {
         QCOMPARE(QFileInfo(directory).permissions() &
                      (QFileDevice::ExeGroup | QFileDevice::ExeOther),
                  QFileDevice::Permissions{});
+#endif
+    }
+
+    void computerUseIsMacOnly() {
+#if defined(Q_OS_WIN)
+        QVERIFY(!computer::isSupportedOnThisPlatform());
+#else
+        QVERIFY(computer::isSupportedOnThisPlatform());
+#endif
     }
 
     void launchNeedsEnabledSettingsAndTheApp() {
+        if (!computer::isSupportedOnThisPlatform())
+            QSKIP("Computer use is macOS-only.");
         QTemporaryDir root;
         const QString directory = root.filePath(QStringLiteral("computer"));
         computer::Settings settings;

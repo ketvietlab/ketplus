@@ -1,14 +1,20 @@
 #pragma once
 
 #include "agents/AgentBroker.h"
+#include "agents/AgentInstructions.h"
+#include "agents/AgentMutationOrigin.h"
 #include "agents/AgentToolLaunch.h"
 #include "runtime/JournalStorageJobs.h"
 #include "runtime/ProviderCatalogCache.h"
 #include "runtime/ProviderReadiness.h"
+#include "runtime/WorktreePathCache.h"
 #include "storage/LocalJournal.h"
 #include "storage/McpMediaStore.h"
 #include "teams/TeamCoordinator.h"
+#include "teams/TeamRemoteView.h"
+#include "teams/TeamRoutingEvidence.h"
 
+#include <QDateTime>
 #include <QDeadlineTimer>
 #include <QHash>
 #include <QJsonArray>
@@ -21,8 +27,10 @@
 #include <QThreadPool>
 #include <QTimer>
 
+#include <atomic>
 #include <functional>
 #include <memory>
+#include <optional>
 
 namespace ketplus::daemon {
 
@@ -32,6 +40,10 @@ class ClaudeAccountUsage;
 class CodexAdapter;
 class CursorAdapter;
 class ProviderAdapter;
+class ManagedTaskBridge;
+namespace runner::entry {
+class RemoteJobPort;
+}
 
 class SessionHost final : public QObject, private AgentHostPort, private teams::TeamHostPort {
     Q_OBJECT
@@ -42,9 +54,13 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
                 QObject* parent = nullptr);
     SessionHost(LocalJournal* journal, CodexAdapter* adapter, ClaudeAdapter* claude,
                 CursorAdapter* cursor, QObject* parent = nullptr);
+    SessionHost(LocalJournal* journal, CodexAdapter* adapter,
+                QList<ProviderAdapter*> additionalProviders, QObject* parent = nullptr);
     ~SessionHost() override;
 
     void setClaudeAccountUsage(ClaudeAccountUsage* usage) { claudeAccountUsage_ = usage; }
+    // T-10: replaces the wall clock that times how long a thread rested, for tests.
+    void setClockForTest(std::function<QDateTime()> clock) { clock_ = std::move(clock); }
     // ADR 0110: the provider's credential changed, so its reported failures no longer apply.
     void forgetProviderFailure(const QString& provider) { readiness_.forget(provider); }
 
@@ -56,8 +72,22 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     // answers lost the text whenever the provider then refused it. A steer whose provider never
     // answers within steerOutcomeTimeoutMs, or whose daemon restarted before it answered, ends
     // as steer_outcome_unknown rather than being sent twice.
+    // Whether a team's check still waits for git's answer (ADR 0114, open point 3).
+    [[nodiscard]] bool teamChecksPending() const;
     void handleCommandDeferred(const QJsonObject& request, const QString& clientId,
                                CommandCallback done);
+    // ADR 0116: a team command a paired phone sent, already opened and scoped by the cloud
+    // layer. `request` is a local team.* request whose message_id is the mailbox command id;
+    // team.create names its repository by path. The command meets the same TeamCoordinator
+    // rules as a local client's; the answer is the phone's read model (TeamRemoteView.h), and
+    // a change's answer is kept under the command id, so a repeated delivery acts once.
+    void remoteTeamCommand(const QJsonObject& request, const teams::remote::Ids& ids,
+                           CommandCallback done);
+    [[nodiscard]] static bool isRemoteTeamCommand(const QString& type);
+    [[nodiscard]] static bool isRemoteTeamRead(const QString& type);
+    // ADR 0116 §3: the `team` field {id, revision, role} of each member conversation's
+    // sealed metadata, by session id.
+    [[nodiscard]] QHash<QString, QJsonObject> teamMetadata() const;
     static constexpr int steerOutcomeTimeoutMs = 20'000;
     // Streamed text is journaled at most this often per session: consecutive deltas of one item
     // become one event. One event per provider chunk (a word or less) made every reader, above
@@ -86,7 +116,9 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     // the task_id its latest tasks.changed event listed. Answers once the provider has replied.
     void backgroundTaskCommand(const QJsonObject& request, CommandCallback done);
     [[nodiscard]] static bool isBackgroundTaskCommand(const QString& type);
-    // ADR 0015 capability of the provider behind `adapter` ("codex", "claude" or "cursor").
+    [[nodiscard]] static bool isManagedTaskCommand(const QString& type);
+    // ADR 0015 capability of the provider behind `adapter` ("codex", "claude", "cursor" or
+    // "copilot").
     [[nodiscard]] bool providerSupports(const QString& adapter, const QString& capability) const;
     // The provider for a session's adapter name, or nullptr when it is not installed.
     [[nodiscard]] ProviderAdapter* provider(const QString& adapter) const;
@@ -101,22 +133,42 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     // agents.* operations of the conversation that holds `token`.
     [[nodiscard]] QJsonObject handleAgentCommand(const QString& token, const QString& type,
                                                  const QJsonObject& payload);
+    // The same, answered through `done`: at once, or for a team's task tool that asks git,
+    // after git was read off the event loop (ADR 0114 §1).
+    void handleAgentCommandDeferred(const QString& token, const QString& type,
+                                    const QJsonObject& payload, CommandCallback done);
     [[nodiscard]] QString agentToken(const QString& sessionId);
+    void setRemoteJobs(runner::entry::RemoteJobPort* port);
 
   signals:
     void eventReady(const QJsonObject& event);
-    // ADR 0112: team.changed or team.removed, for every local client.
+    // ADR 0114: team.changed or team.removed, for every local client.
     void teamEvent(const QString& type, const QJsonObject& payload);
+    // ADR 0126: schedule.changed, for every local client. schedule.run is the runner's.
+    void scheduleEvent(const QString& type, const QJsonObject& payload);
     // A change every desktop window shows at once that is not a session event (#429):
     // `tags.changed` with the catalog and/or the sessions whose labels changed.
     void noticeReady(const QString& type, const QJsonObject& payload);
 
   private:
+    friend class ManagedTaskBridge;
+    friend class ManagedTaskOriginHostTest;
+    void initializeManagedTasks();
+    void managedTaskCommand(const QJsonObject& request, const QString& clientId,
+                            CommandCallback done, bool agentCaller = false,
+                            std::optional<AgentMutationGrant> origin = std::nullopt);
+    bool managedTaskPermission(const QJsonValue& requestId, const QJsonObject& result);
+    void holdManagedTaskWake(const QString& sessionId, qint64 generation, const QString& reason);
+    void resumeManagedTaskWake(const QString& sessionId, qint64 generation);
+    [[nodiscard]] QJsonObject managedTaskSnapshot(const QString& sessionId,
+                                                  qint64 generation) const;
+    ManagedTaskBridge* managedTasks_{nullptr};
     ClaudeAccountUsage* claudeAccountUsage_{nullptr};
     void readClaudeAccountUsage(const QJsonObject& request, const QString& clientId,
                                 CommandCallback done);
     struct Session final {
         StoredSession stored;
+        AgentMutationOrigin mutationOrigin;
         QString pendingProviderTitle;
         bool attachedToProvider{false};
         qint64 providerCompactWindow{0};
@@ -128,6 +180,8 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
         bool interruptPending{false};
         // A client's Stop is ending this turn, so its interrupted end says so.
         bool stopRequested{false};
+        // Who asked for that Stop when it was not a client: "leader" (ADR 0114 §11).
+        QString stoppedBy;
         // #125: this turn's last answer, and whether the agent asked the user to decide.
         QString lastAnswerText;
         bool decisionRequested{false};
@@ -135,6 +189,9 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
         // completion for it, or a late turn/started, must not end or restart the turn that runs
         // now. Cleared when the process stops or reloads, since the next one may reuse ids.
         QString completedTurnId;
+        // The verified process/context owning these identity caches. Only a fresh epoch ACK
+        // after transport closure permits reuse of provider-native turn/item ids.
+        QString providerIdentityEpoch;
         // The turn a final provider error ended (Codex `error` with willRetry false), which may
         // never send turn/completed. Its approvals are closed: a later request for it is declined.
         // Cleared with completedTurnId.
@@ -158,6 +215,14 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
         // Set when the stored thread belonged to another provider (an old journal): the next
         // turn starts a fresh thread pointed at the transcript of this provider's history.
         QString handoffFrom;
+        // T-1: the note that points a fresh context of the same provider at the transcript,
+        // with the team's briefing; kept, like handoffFrom, until the provider takes a turn.
+        QString contextResetNote;
+        // T-10: what this daemon saw of the native thread: when its last turn ended and the
+        // context size its last usage.context named (-1: none since the thread began). Not
+        // stored: a thread this daemon has not seen work is never judged to have a cold cache.
+        QDateTime lastTurnEnded;
+        qint64 contextTokens{-1};
         // Set when the running turn called a KetPlus browser tool; its end closes the sessions.
         bool browserUsedThisTurn{false};
         // Last `provider.runtime` warning journaled for this session in this daemon.
@@ -179,6 +244,10 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
         QString lastJournalError;
         bool journalBufferFullReported{false};
     };
+    void prepareManagedTaskOrigin(Session& session, const QJsonObject& options);
+    [[nodiscard]] bool isManagedTaskEpoch(const Session& session, const QString& epoch) const;
+    bool acknowledgeManagedTaskOrigin(Session& session, const QString& epoch,
+                                      const QJsonObject& result);
 
     [[nodiscard]] QJsonObject listSessions(const QJsonObject& payload) const;
     [[nodiscard]] QJsonObject storageRetention(const QString& type, const QJsonObject& payload);
@@ -217,6 +286,12 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     void recordWorktreeActivity(Session& session, const QString& type, const QJsonObject& payload,
                                 qint64 cursor);
     void processDeletionWork();
+    [[nodiscard]] QJsonObject prepareSession(const QJsonObject& request);
+    [[nodiscard]] QJsonObject cancelPreparedSession(const QJsonObject& request);
+    [[nodiscard]] QJsonObject authorizePreparation(const QJsonObject& request) const;
+    [[nodiscard]] QJsonObject checkedAttachmentSession(const QJsonObject& request,
+                                                       Session** session);
+    void expirePreparedSessions();
     // Drives bounded passes over deleted sessions' remaining history (ADR 0093).
     void scheduleHistoryPurge(int delayMs);
     void purgeDeletedHistory();
@@ -231,8 +306,56 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     qint64 deletionWorkCursor_{0};
     [[nodiscard]] QJsonObject resolveResource(const QJsonObject& request);
     [[nodiscard]] QString worktreeCatalogRoot(const Session& session) const;
+    // What worktreeCatalogRoot stores for an existing checkout, without git on this thread: a
+    // turn start then holds up no other conversation's events (T-28).
+    void rememberRepositoryIdentity(const QString& worktree);
+    // Read-only filesystem identity at creation; empty is confirmed no-repo, nullopt unknown.
+    [[nodiscard]] std::optional<QString>
+    sidebarRepositoryAtCreation(const QString& path) const override;
     [[nodiscard]] QJsonObject sessionWorktrees(const QJsonObject& request);
+    // What session.worktrees asks git, read without the journal so a deferred request reads
+    // it on worktreeListingReads_ and the listing holds up no other command or event.
+    struct WorktreeListing final {
+        QString sessionWorktree;
+        QString recordedRoot;
+        QString requested;
+        bool sessionExists{false};
+        // The git common directory of the conversation's checkout, when it exists.
+        QString sessionCommon;
+        // worktreeCatalogRoot's answer, and the common directory of that root.
+        QString sessionCatalogRoot;
+        QString sessionCatalogCommon;
+        // The repository listed: the requested one, or the conversation's.
+        QString catalogRoot;
+        QString catalogCommon;
+        QJsonArray entries;
+    };
+    [[nodiscard]] static WorktreeListing readWorktreeListing(const QString& sessionWorktree,
+                                                             const QString& recordedRoot,
+                                                             const QString& requested);
+    [[nodiscard]] QJsonObject worktreePage(Session& current, const QJsonObject& payload,
+                                           const WorktreeListing& listing);
+    void sessionWorktreesDeferred(const QJsonObject& request, const QString& clientId,
+                                  CommandCallback done);
+    // Set only while handleCommand answers a deferred session.worktrees that read it.
+    const WorktreeListing* prefetchedWorktreeListing_{nullptr};
+    // The checkouts recordWorktreeActivity matches a tool call's paths against, read from
+    // Git's files so a provider event never waits for a git process.
+    WorktreePathCache worktreePaths_;
     [[nodiscard]] QJsonObject switchWorktree(const QJsonObject& request);
+    // What git says about a switch's target; read on any thread.
+    struct WorktreeFacts final {
+        bool repository{false};
+        bool registered{false};
+        QString branch;
+    };
+    [[nodiscard]] static WorktreeFacts worktreeFacts(const QString& target);
+    // The checks of a switch that need no git. Empty when it may go on, with the target.
+    [[nodiscard]] QJsonObject switchRefusal(const QJsonObject& request, Session** session,
+                                            QString* target);
+    [[nodiscard]] QJsonObject finishSwitch(Session& session, const QString& target,
+                                           const WorktreeFacts& facts, const QString& messageId);
+    [[nodiscard]] QJsonObject pointRequest(const QString& sessionId, const QString& worktree) const;
     // Where a turn runs: the conversation's worktree, or after it was deleted the repository's
     // primary worktree (else the nearest surviving parent folder).
     [[nodiscard]] QString executionDirectory(const Session& session) const;
@@ -240,7 +363,8 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     // Follows an explicitly used checkout, or a replacement of a deleted checkout, after a turn.
     void followRecreatedWorktree(Session& session);
     [[nodiscard]] QJsonObject moveSessionWorktree(Session& session, const QString& target,
-                                                  const QString& messageId);
+                                                  const QString& messageId,
+                                                  const std::optional<QString>& branch = {});
     [[nodiscard]] QJsonObject renameSession(const QJsonObject& request);
     [[nodiscard]] QJsonObject markSessionSeen(const QJsonObject& request);
     [[nodiscard]] QJsonObject setSessionArchived(const QJsonObject& request);
@@ -261,6 +385,9 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     [[nodiscard]] QJsonObject steer(const QJsonObject& request, CommandCallback outcome = {},
                                     bool localClient = true, const QJsonObject& agentOrigin = {});
     [[nodiscard]] QJsonObject interrupt(const QJsonObject& request);
+    // ADR 0114 §11 (SessionHostTeamInterrupt.cpp): team_member_interrupt of the leader.
+    [[nodiscard]] QJsonObject teamMemberInterrupt(const QString& leaderSession,
+                                                  const QJsonObject& payload);
     // A turn.completed payload; it takes the session's pending Stop and carries the work report
     // the turn ended with (ADR 0106).
     [[nodiscard]] QJsonObject turnCompletion(Session& session, const QString& status);
@@ -279,35 +406,163 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     [[nodiscard]] QJsonObject reviewerJson(const QString& sessionId) const;
     QString startReviewerConversation(const Session& working, const QString& provider,
                                       QString* error);
-    // ADR 0112, in SessionHostTeams.cpp.
+    // ADR 0114, in SessionHostTeams.cpp.
     [[nodiscard]] std::optional<teams::TeamConversation>
     teamConversation(const QString& sessionId) const override;
+    [[nodiscard]] std::optional<teams::TeamConversation>
+    conversationByNumber(const QString& number) const override;
+    [[nodiscard]] QString conversationRepository(const QString& sessionId) const override;
     [[nodiscard]] bool onTeam(const QString& sessionId) const override;
+    [[nodiscard]] bool teamLimitsMessage(const AgentMessageRecord& message) const override;
+    QString takeTeamTurn(const QString& sessionId) override;
     std::optional<teams::TaskWorktree>
     createTaskWorktree(const teams::Team& team, const teams::Task& task, QString* error) override;
+    [[nodiscard]] teams::RepositoryCheck
+    checkRepository(const QString& path, const QString& integrationBranch) const override;
+    [[nodiscard]] std::optional<bool> branchTaken(const QString& repository,
+                                                  const QString& branch) const override;
     QString pointConversationAt(const QString& sessionId, const QString& worktree) override;
+    void askPointConversationAt(const QString& sessionId, const QString& worktree,
+                                teams::PointDone done) override;
     [[nodiscard]] std::optional<bool> hasUncommittedWork(const QString& worktree) const override;
-    [[nodiscard]] QString headCommit(const QString& worktree) const override;
+    void askTasks(const teams::Team& team, const QList<teams::Task>& tasks,
+                  teams::TaskQuestion question, teams::TaskFactsDone done) override;
+    void askPullRequests(const teams::Team& team, const QStringList& urls,
+                         teams::PullRequestsDone done) override;
+    void askPullRequestLinks(const teams::Team& team, const QList<teams::Task>& tasks,
+                             teams::PullRequestLinksDone done) override;
+    void askPostReviewComment(const teams::Team& team, const teams::Task& task, const QString& body,
+                              teams::ReviewCommentDone done) override;
+    void askDiff(const teams::Team& team, const teams::Task& task,
+                 teams::TaskDiffDone done) override;
+    void askWorktree(const teams::Team& team, const teams::Task& task,
+                     teams::WorktreeDone done) override;
+    void askHandoff(const teams::Team& team, const teams::Task& task,
+                    teams::HandoffDone done) override;
+    // ADR 0114 §10 (SessionHostTeamStorage.cpp): the disk under a team's worktrees and the
+    // removal of a done task's worktree, for the desktop's team.storage.get and
+    // team.worktree.remove.
+    void askStorage(const QString& volumePath, const QStringList& worktrees,
+                    teams::StorageDone done) override;
+    void askRemoveWorktree(const QString& repository, const QString& worktree,
+                           teams::RemovalDone done) override;
+    void schedulesDeleted(const QList<ScheduleRecord>& schedules) override;
+    [[nodiscard]] QString conversationRunningIn(const QString& path) const override;
+    [[nodiscard]] QList<teams::FolderConversation>
+    conversationsIn(const QString& path) const override;
+    void teamStorageCommand(const QJsonObject& request, CommandCallback done);
+    [[nodiscard]] QString taskCommit(const teams::Team& team,
+                                     const teams::Task& task) const override;
+    [[nodiscard]] std::optional<QString> ownHead(const teams::Team& team,
+                                                 const teams::Task& task) const override;
+    [[nodiscard]] std::optional<teams::TaskDiff> taskDiff(const teams::Team& team,
+                                                          const teams::Task& task) const override;
+    [[nodiscard]] std::optional<bool> isMerged(const teams::Team& team,
+                                               const teams::Task& task) const override;
+    [[nodiscard]] std::optional<review_integrity::Scope>
+    teamReviewScope(const QString& reviewerSession, const QString& requestId) const override;
+    void teamReviewTampered(const QString& reviewerSession, const AgentMessageRecord& request,
+                            const QJsonArray& changes) override;
+    void teamRequestFinished(const QString& sessionId, const AgentMessageRecord& request,
+                             const QString& text, const QString& failure) override;
+    void agentMessageFailed(const AgentMessageRecord& message, const QString& reason) override;
     QString postTeamMessage(const teams::TeamMessage& message) override;
+    [[nodiscard]] bool teamMessagePosted(const QString& id) const override;
     [[nodiscard]] QJsonObject teamMembership(const QString& sessionId) const override;
+    [[nodiscard]] QString memberNumber(const QString& sessionId) const;
     [[nodiscard]] QString teamRoleNumber(const QString& sessionId,
                                          const QString& role) const override;
     QJsonObject teamOperation(const QString& sessionId, const QString& operation,
                               const QJsonObject& payload) override;
     QJsonObject teamDecisionOperation(const QString& sessionId, const QString& operation,
                                       const QJsonObject& payload);
-    [[nodiscard]] QString teamInstructionsFor(const QString& sessionId) const;
+    QJsonObject teamRoutingOperation(const QString& sessionId, const QString& operation,
+                                     const QJsonObject& payload);
+    void prepareTeamRouting(const QString& sessionId, const QJsonObject& payload,
+                            std::function<void()> then);
+    [[nodiscard]] std::optional<teams::risk::VerifiedEvidence>
+    routingEvidence(const teams::Team& team, const teams::Task& task,
+                    const QString& id) const override;
+    teams::RoutingEvidence routingEvidence_;
+    QHash<QString, QJsonObject> routingReplies_;
+    int routingVerifications_{0};
+    [[nodiscard]] agent_messaging::TeamRoleContext teamContextFor(const QString& sessionId) const;
     void noteInConversation(const QString& sessionId, const QJsonObject& note) override;
+    void releaseTeamHeldMessages(const QStringList& sessionIds) override;
+    void holdTeamDelivery(const QString& sessionId, bool hold) override;
     [[nodiscard]] QString repositoryOf(const QString& worktreePath) const;
+    [[nodiscard]] bool repositoryKnown(const QString& worktreePath) const;
+    void noteRepository(const QString& worktreePath, const QString& repository) const;
+    void learnRepositories(const QStringList& paths, std::function<void()> then);
+    [[nodiscard]] QStringList teamCommandPaths(const QJsonObject& payload) const;
     void startTeams();
+    // Reads the teams and gives back the member name to members an agent message titled.
+    void loadTeams();
     [[nodiscard]] QJsonObject teamCommand(const QString& type, const QJsonObject& request);
+    // ADR 0126, in SessionHostSchedules.cpp. Parses with the shared schedule contract,
+    // then reads and writes LocalJournal. schedule.runNow calls the runner.
+    [[nodiscard]] QJsonObject scheduleCommand(const QString& type, const QJsonObject& request);
+    void startScheduleRunner();
+    void stopScheduleRunner();
+    void noteSchedulesChanged();
+    Q_INVOKABLE void noteScheduleClockChanged();
+    void noteScheduleTurnEnded(const QString& sessionId, bool succeeded, const QString& errorCode,
+                               const QString& errorMessage);
+    [[nodiscard]] QJsonObject runScheduleNow(const QString& id);
+    friend class HostScheduleRuntime;
+    struct ScheduleEngine;
+    ScheduleEngine* scheduleEngine_{nullptr};
+    void publishScheduleChange(const QString& change, const ScheduleRecord& record);
+    void publishDisabledSessionSchedules(const QString& sessionId);
     [[nodiscard]] QJsonObject teamTaskCommand(const QString& type, const QJsonObject& request);
+    // Has the git a task command will ask for read off the event loop, then calls `then`,
+    // where the command runs as always: a client's request, and a member's team_task_* tool.
+    void prepareTeamTask(const QJsonObject& request, std::function<void()> then);
+    void prepareTeamOperation(const QString& sessionId, const QString& operation,
+                              const QJsonObject& payload, std::function<void()> then);
+    // The member a leader names by its conversation number; empty when it is not on the team.
+    [[nodiscard]] QString teamMemberByNumber(const teams::Team& team, const QString& number) const;
     [[nodiscard]] QJsonObject createTeam(const QJsonObject& payload);
+    // SessionHostTeamMembers.cpp: team.member.add, one member or (T-4) several developers.
+    [[nodiscard]] QJsonObject addTeamMembers(qint64 teamId, const QJsonObject& payload);
+    // T-2 (SessionHostTeamProvider.cpp): team.provider.set, and the three steps of startTurn
+    // that apply a member's pending switch through the provider handoff. Nothing in the team
+    // changes until the turn is accepted, so a refused start_turn keeps the switch pending.
+    // takeTeamProviderSwitch runs once the session may take a turn, before the turn picks its
+    // adapter: it points `options` at a switch that applies, or says why one no longer does.
+    // applyTeamProviderSwitch runs after the turn captured the settings it compares: the
+    // model, effort and a reviewer's policy follow the switch, so the turn reports them as
+    // changed. finishTeamProviderSwitch runs once the turn was accepted.
+    struct TeamProviderSwitch {
+        std::optional<teams::ProviderSwitch> applies;
+        // Why a pending switch no longer applies; the member stays where it is.
+        QString dropped;
+        // T-3: the execution policy the team's Full access gives this member's conversation.
+        QString policy;
+    };
+    [[nodiscard]] QJsonObject setTeamProvider(const QJsonObject& payload);
+    [[nodiscard]] TeamProviderSwitch takeTeamProviderSwitch(const Session& session,
+                                                            QJsonObject& options) const;
+    void applyTeamProviderSwitch(Session& session, const TeamProviderSwitch& change) const;
+    void finishTeamProviderSwitch(Session& session, const TeamProviderSwitch& change);
+    // Why `provider` cannot take a turn now, as {error_code, error_message}; empty when it can.
+    [[nodiscard]] QJsonObject providerNotReady(const QString& provider) const;
+    // Why `session` (a member with `role`) cannot move to `provider`, as {error_code, reason};
+    // empty when it can.
+    [[nodiscard]] QJsonObject providerSwitchBlocker(const Session& session, const QString& role,
+                                                    const QString& provider,
+                                                    const QString& teamPolicy) const;
+    // ADR 0116, in SessionHostTeamsRemote.cpp: the local answer of a phone's team command,
+    // for the phone.
+    [[nodiscard]] QJsonObject remoteTeamAnswer(const QString& type, const QJsonObject& request,
+                                               const teams::remote::Ids& ids);
     // A member conversation that has not had a turn yet. Returns its id, or empty with
     // `problem` set.
     QString createMemberConversation(const QString& worktree, const QString& provider,
                                      const QString& model, const QString& effort,
-                                     const QString& title, QString* problem);
+                                     const QString& title, QString* problem,
+                                     const QString& executionPolicy = {},
+                                     const QString& reservedSessionId = {});
     void discardMemberConversation(const QString& sessionId);
     // Copies the source history in bounded event-loop passes (ADR 0094), then answers.
     struct PendingFork;
@@ -340,8 +595,8 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
                    const QJsonObject& options);
     void beginClaudeTurn(const QString& sessionId, qint64 generation, const QJsonArray& input,
                          const QJsonObject& options);
-    void beginCursorTurn(const QString& sessionId, qint64 generation, const QJsonArray& input,
-                         const QJsonObject& options);
+    void beginAcpTurn(const QString& sessionId, qint64 generation, const QJsonArray& input,
+                      const QJsonObject& options);
     void handleProviderNotification(const QString& method, const QJsonObject& params);
     // ADR 0015 §5: false when a Codex notification must not be handled. Methods KetPlus does
     // not act on are counted; known ones missing a required field journal
@@ -430,6 +685,7 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     // ADR 0106, in SessionHostWorkReports.cpp.
     QJsonObject recordUserDecision(const QString& sessionId, qint64 generation,
                                    const QJsonObject& payload) override;
+    void publishWorkReportScope(Session& session, qint64 acceptedCursor);
     QJsonObject recordWorkReport(const QString& sessionId, qint64 generation,
                                  const QJsonObject& payload) override;
     [[nodiscard]] QJsonObject readWorkReport(const QJsonObject& request);
@@ -454,6 +710,8 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     QList<ProviderAdapter*> providers_;
     ApprovalBroker* approvals_{nullptr};
     QHash<QString, Session> sessions_;
+    // Never enumerated by session/catalog APIs; only attachment staging uses these contexts.
+    QHash<QString, Session> preparedSessions_;
     QHash<QString, QString> sessionsByThread_;
     QHash<QString, QString> pendingProviderByRequest_;
     // Codex notifications ignored since the daemon started, per method (diagnostics only).
@@ -461,14 +719,56 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     // Where a conversation's handoff transcript is written; readable by the providers it hands
     // over to.
     [[nodiscard]] QString handoffDirectory(const QString& sessionId) const;
+    // T-1 (SessionHostContextReset.cpp): what a fresh native context replaced, to put back
+    // when the step that follows it fails.
+    struct FreshContextUndo final {
+        QString adapter;
+        QString threadId;
+        QString providerThreads;
+        bool attachedToProvider{false};
+        QDateTime lastTurnEnded;
+        qint64 contextTokens{-1};
+    };
+    // The one way a conversation leaves its native thread, for a provider handoff and a team's
+    // context reset alike: writes the transcript (its path in `transcript`), keeps the thread
+    // in providerThreads for scoped deletion and leaves the session on `adapter` with no
+    // thread. When the transcript cannot be written nothing changes: nullopt, `error` set.
+    std::optional<FreshContextUndo> startFreshContext(Session& session, const QString& adapter,
+                                                      QString* transcript, QString* error);
+    void undoFreshContext(Session& session, const FreshContextUndo& undo);
+    // T-1: a turn its team starts may begin a fresh context of the same provider
+    // (TeamCoordinator::planContextReset); sets contextResetNote when it does. A failure keeps
+    // the current thread and the turn runs on it.
+    void resetTeamContext(Session& session, const QString& taskHint);
+    // T-10: the clock the cold-cache reason reads; tests set a fake one.
+    std::function<QDateTime()> clock_{[] { return QDateTime::currentDateTimeUtc(); }};
+    // T-1: the task a team message names, kept by the message's id until the turn it is
+    // delivered in starts (a team wake reads it) or it is delivered otherwise.
+    struct TeamWakeTask final {
+        QString sessionId;
+        QString taskId;
+    };
+    QHash<QString, TeamWakeTask> teamWakeTasks_;
+    // The task of the last message the turn delivers that names one; forgets the session's
+    // hints for messages already delivered (a user's turn, a steer).
+    QString takeTeamWakeTask(const QString& sessionId, const QJsonObject& agentOrigin);
+    void forgetTeamWakeTasks(const QJsonObject& agentOrigin);
+    // ADR 0114 §2: the one directory a team's reviewer may write in during a review round.
+    [[nodiscard]] QString reviewScratchDirectory(const QString& sessionId) const;
     QTemporaryDir attachmentDirectory_;
     McpMediaStore mediaStore_;
     // Whether each provider can start a turn (#170); observed failures persist next to the journal.
     ProviderReadiness readiness_;
     AgentBroker* agents_{nullptr};
     teams::TeamCoordinator* teams_{nullptr};
+    // T-8: per team, how often one of its members started or ended a turn since the daemon
+    // started. The sealed `team` metadata carries it, so a phone reads team.list again when
+    // the team's activity changes, without a revision a phone command would be fenced on.
+    QHash<qint64, qint64> teamActivity_;
     // Worktree path → the repository's main worktree, for team membership.
     mutable QHash<QString, QString> repositoryByWorktree_;
+    // Paths git did not answer for, until the event loop turns: one command asks once.
+    mutable QSet<QString> failedRepositoryLookups_;
     QString agentSocket_;
     QString agentExecutable_;
     // Previews decode on their own small pool and queue: one decode may hold a 64-megapixel
@@ -479,6 +779,33 @@ class SessionHost final : public QObject, private AgentHostPort, private teams::
     int mediaReadsInFlight_{0};
     // Last member: its destructor waits for running decodes before anything else goes away.
     QThreadPool mediaReads_;
+    // T-93: the branch names of each repository as git last listed them, read on
+    // teamBranchNames_ so a new task's name is checked without git on the event loop. `read`
+    // is invalid until the first listing arrives; a listing older than branchNamesAgeMs is
+    // asked again.
+    struct BranchNames final {
+        QSet<QString> names;
+        QDateTime read;
+        bool reading{false};
+    };
+    static constexpr qint64 branchNamesAgeMs = 30 * 1000;
+    mutable QHash<QString, BranchNames> branchNames_;
+    // One thread for what a team's own checks ask git, in the order they were asked.
+    QThreadPool teamGit_;
+    // T-23: a done worktree's removal, apart from teamGit_, so deleting several gigabytes holds
+    // no worktree, switch, merge check or review diff of any team behind it. One at a time.
+    QThreadPool teamWorktreeRemovals_;
+    // T-93: one thread for the branch listings, apart from teamGit_ so a listing never holds
+    // a worktree, a switch or a merge check behind it.
+    QThreadPool teamBranchNames_;
+    // ADR 0118: the remote's pull requests, apart from git, so a slow network holds no merge
+    // check, review diff or worktree. Set when the host stops, to end a batch early.
+    QThreadPool teamRemote_;
+    // session.worktrees listings, apart from the team's git so a picker never waits on a team.
+    static constexpr int worktreeListingThreads = 2;
+    QThreadPool worktreeListingReads_;
+    std::shared_ptr<std::atomic_bool> teamRemoteStopping_{
+        std::make_shared<std::atomic_bool>(false)};
 };
 
 } // namespace ketplus::daemon

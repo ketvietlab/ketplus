@@ -1,3 +1,4 @@
+#include "TestPaths.h"
 #include "agents/AgentBroker.h"
 #include "agents/AgentInstructions.h"
 #include "agents/AgentMcpServer.h"
@@ -16,6 +17,9 @@
 #include <QJsonDocument>
 #include <QLocalSocket>
 #include <QRegularExpression>
+#include <QScopeGuard>
+#include <QSqlDatabase>
+#include <QSqlQuery>
 #include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QtTest>
@@ -190,6 +194,59 @@ class AgentMessagingTest final : public QObject {
         QCOMPARE(inbox.value("messages").toArray().size(), 2);
     }
 
+    // A runtime.error inside a turn that goes on ends nothing, also when the journal takes
+    // it late and the conversation is idle by then: the answer still reaches the sender.
+    void anErrorInsideATurnDoesNotFailItsRequest_data() {
+        QTest::addColumn<bool>("journaledLate");
+        QTest::newRow("at once") << false;
+        QTest::newRow("journaled late") << true;
+    }
+
+    void anErrorInsideATurnDoesNotFailItsRequest() {
+        QFETCH(bool, journaledLate);
+        Fixture fixture;
+        QVERIFY(fixture.open());
+        const QString sender = fixture.start("codex", "sender");
+        const QString receiver = fixture.start("claude", "receiver");
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(sender, "turn.completed"), 1, 5000);
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(receiver, "turn.completed"), 1, 5000);
+        const QJsonObject sent = fixture.agents(sender, "agents.send",
+                                                {{"to", "#" + fixture.number(receiver)},
+                                                 {"text", "please hang"},
+                                                 {"expect_reply", true}});
+        QVERIFY2(sent.value("ok").toBool(), qPrintable(text(sent)));
+        const QString id = sent.value("message_id").toString();
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.journal->agentMessage(id)->state,
+                                  QStringLiteral("delivered"), 5000);
+        QTRY_VERIFY_WITH_TIMEOUT(logText(fixture.claudeLog).contains("please hang"), 5000);
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(receiver, "turn.started"), 2, 5000);
+        {
+            auto database = QSqlDatabase::addDatabase("QSQLITE", "late-error");
+            database.setDatabaseName(fixture.directory.filePath("journal.sqlite3"));
+            QVERIFY(database.open());
+            QSqlQuery query(database);
+            if (journaledLate)
+                QVERIFY(query.exec(
+                    "CREATE TRIGGER late_error BEFORE INSERT ON events WHEN NEW.event_type = "
+                    "'runtime.error' BEGIN SELECT RAISE(ABORT, 'not now'); END"));
+            fixture.claude->canonicalEvent(receiver, "runtime.error",
+                                           {{"message", "a tool failed; the turn goes on"}});
+            QCOMPARE(fixture.journal->agentMessage(id)->state, QStringLiteral("delivered"));
+            fixture.claude->canonicalEvent(receiver, "item.completed",
+                                           {{"item_id", "late-answer"},
+                                            {"item_type", "agentMessage"},
+                                            {"text", "Recovered answer"}});
+            fixture.claude->canonicalEvent(receiver, "turn.completed", {{"status", "completed"}});
+            if (journaledLate)
+                QVERIFY(query.exec("DROP TRIGGER late_error"));
+            database.close();
+        }
+        QSqlDatabase::removeDatabase("late-error");
+        QTRY_VERIFY_WITH_TIMEOUT(
+            fixture.journal->agentMessage(id)->state != QStringLiteral("delivered"), 5000);
+        QCOMPARE(fixture.journal->agentMessage(id)->state, QStringLiteral("answered"));
+    }
+
     void busyReceiverGetsMessagesWhenItsTurnEnds() {
         Fixture fixture;
         QVERIFY(fixture.open());
@@ -345,26 +402,49 @@ class AgentMessagingTest final : public QObject {
         QVERIFY(!fixture.host->agentTurnSenders().contains(sender));
     }
 
-    void urgentMessageSteersTheRunningTurn() {
+    // ADR 0027: an urgent message never steers; it queues behind the running turn, comes first
+    // in the batch, and the batch starts one turn.
+    void urgentMessageQueuesFirstAndNeverSteers() {
         Fixture fixture;
         QVERIFY(fixture.open());
         const QString sender = fixture.start("claude", "sender");
         QTRY_COMPARE_WITH_TIMEOUT(fixture.count(sender, "turn.completed"), 1, 5000);
         const QString receiver = fixture.start("claude", "hang");
         QTRY_COMPARE_WITH_TIMEOUT(fixture.count(receiver, "turn.started"), 1, 5000);
-        const QJsonObject sent = fixture.agents(
+        const QJsonObject first = fixture.agents(
+            sender, "agents.send", {{"to", fixture.number(receiver)}, {"text", "plain one"}});
+        const QJsonObject second = fixture.agents(
             sender, "agents.send",
-            {{"to", fixture.number(receiver)}, {"text", "stop and check"}, {"urgent", true}});
-        QCOMPARE(sent.value("delivery").toString(), "steering");
-        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(receiver, "turn.steered"), 1, 5000);
-        const QJsonObject steered = fixture.payloads(receiver, "turn.steered").first();
-        QCOMPARE(steered.value("origin").toString(), "agent");
-        QCOMPARE(steered.value("text").toString(), "stop and check");
-        QVERIFY(logText(fixture.claudeLog).contains("steer:" + receiver.toUtf8()));
-        QCOMPARE(fixture.journal->agentMessage(sent.value("message_id").toString())->delivery,
-                 "steer");
-        // The running turn was steered, not replaced by an automatic one.
-        QCOMPARE(fixture.count(receiver, "user.message"), 1);
+            {{"to", fixture.number(receiver)}, {"text", "urgent two"}, {"urgent", true}});
+        const QJsonObject third = fixture.agents(
+            sender, "agents.send", {{"to", fixture.number(receiver)}, {"text", "plain three"}});
+        for (const QJsonObject& sent : {first, second, third}) {
+            QCOMPARE(sent.value("delivery").toString(), "queued");
+            QVERIFY(!sent.contains("waiting_on"));
+        }
+        QTest::qWait(100);
+        QVERIFY(!logText(fixture.claudeLog).contains("steer:" + receiver.toUtf8()));
+        QCOMPARE(fixture.count(receiver, "turn.steered"), 0);
+        QCOMPARE(fixture.journal->agentMessage(second.value("message_id").toString())->state,
+                 "queued");
+        // The running turn ends: everything arrives together, in one turn, urgent first.
+        QVERIFY(fixture.host
+                    ->handleCommand(request("session.interrupt", {}, receiver, 1), "desktop-test")
+                    .value("ok")
+                    .toBool());
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(receiver, "user.message"), 2, 5000);
+        const QString text =
+            fixture.payloads(receiver, "user.message").last().value("text").toString();
+        const qsizetype urgentAt = text.indexOf("urgent two");
+        QVERIFY2(urgentAt >= 0, qPrintable(text));
+        QVERIFY(urgentAt < text.indexOf("plain one"));
+        QVERIFY(text.indexOf("plain one") < text.indexOf("plain three"));
+        QCOMPARE(fixture.count(receiver, "turn.steered"), 0);
+        QVERIFY(!logText(fixture.claudeLog).contains("steer:" + receiver.toUtf8()));
+        for (const QJsonObject& sent : {first, second, third})
+            QTRY_COMPARE_WITH_TIMEOUT(
+                fixture.journal->agentMessage(sent.value("message_id").toString())->state,
+                "delivered", 5000);
     }
 
     void heldReleaseWaitsForBusyReceiverAndValidatesTheWholeBatch() {
@@ -587,6 +667,10 @@ class AgentMessagingTest final : public QObject {
         QVERIFY(providerLog.contains("[KetPlus agent message]"));
         QVERIFY(providerLog.contains("[KetPlus conversation references]"));
         QVERIFY(providerLog.contains(("- #" + number + ": \"").toUtf8()));
+        // `@agent/NNNN`, as the header shows a conversation, resolves the same way.
+        QCOMPARE(fixture.start("claude", "ask @agent/" + number + " again", receiver), receiver);
+        QTRY_COMPARE_WITH_TIMEOUT(fixture.count(receiver, "turn.completed"), 3, 5000);
+        QCOMPARE(logText(fixture.claudeLog).count(("- #" + number + ": \"").toUtf8()), 2);
         const auto held = fixture.journal->agentMessage("deep-message");
         QCOMPARE(held->state, "delivered");
         QCOMPARE(held->delivery, "user_turn");
@@ -718,6 +802,14 @@ class AgentMessagingTest final : public QObject {
     }
 
     void providersReceiveTheirOwnAgentServer() {
+        const auto oldInputLog = qgetenv("KETPLUS_FAKE_CODEX_LOG_INPUT");
+        qputenv("KETPLUS_FAKE_CODEX_LOG_INPUT", "1");
+        const auto restoreInputLog = qScopeGuard([oldInputLog] {
+            if (oldInputLog.isNull())
+                qunsetenv("KETPLUS_FAKE_CODEX_LOG_INPUT");
+            else
+                qputenv("KETPLUS_FAKE_CODEX_LOG_INPUT", oldInputLog);
+        });
         Fixture fixture;
         QVERIFY(fixture.open(true));
         const QString claude = fixture.start("claude", "hello");
@@ -726,6 +818,8 @@ class AgentMessagingTest final : public QObject {
         QTRY_COMPARE_WITH_TIMEOUT(fixture.count(claude, "turn.completed"), 1, 5000);
         QTRY_COMPARE_WITH_TIMEOUT(fixture.count(codex, "turn.completed"), 1, 5000);
         QTRY_COMPARE_WITH_TIMEOUT(fixture.count(cursor, "turn.completed"), 1, 8000);
+        for (const auto& session : {claude, codex, cursor})
+            QVERIFY(fixture.payloads(session, "runtime.error").isEmpty());
         const QByteArray claudeLog = logText(fixture.claudeLog);
         QVERIFY(claudeLog.contains("\"ketplus_agents\""));
         QVERIFY(claudeLog.contains(fixture.host->agentToken(claude).toUtf8()));
@@ -746,7 +840,7 @@ class AgentMessagingTest final : public QObject {
     void agentConnectionsOnlyReachAgentOperations() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const QString codexPath = directory.filePath("fake-codex");
+        const QString codexPath = directory.filePath(fixtureName("fake-codex"));
         QVERIFY(writeFakeCodex(codexPath, directory.filePath("codex.log")));
         DaemonConfiguration configuration;
         configuration.statePath = directory.filePath("journal.sqlite3");
@@ -827,19 +921,23 @@ class AgentMessagingTest final : public QObject {
         const QString token = tokenPattern.match(QString::fromUtf8(providerLog)).captured(1);
         QVERIFY(!token.isEmpty());
 
-        QLocalSocket agent;
-        agent.connectToServer(directory.filePath("daemon.sock"));
-        QVERIFY(agent.waitForConnected(3000));
-        QCOMPARE(roundTrip(agent, request("daemon.hello", {{"agent_token", "forged"}}))
+        QLocalSocket refused;
+        refused.connectToServer(directory.filePath("daemon.sock"));
+        QVERIFY(refused.waitForConnected(3000));
+        QCOMPARE(roundTrip(refused, request("daemon.hello", {{"agent_token", "forged"}}))
                      .value("error_code")
                      .toString(),
                  "authentication_failed");
-        agent.abort();
+        refused.abort();
+        // A new socket object, not `refused` again: on Windows a QLocalSocket that connects
+        // again right after abort() connects but never gets a reply (measured: 3 of 3 runs hang
+        // when the object is reused, 0 of 4 with a new object, and the server is the same).
+        QLocalSocket agent;
         agent.connectToServer(directory.filePath("daemon.sock"));
         QVERIFY(agent.waitForConnected(3000));
-        QVERIFY(roundTrip(agent, request("daemon.hello", {{"agent_token", token}}))
-                    .value("agent")
-                    .toBool());
+        const auto agentHello = roundTrip(agent, request("daemon.hello", {{"agent_token", token}}));
+        QVERIFY2(agentHello.value("agent").toBool(),
+                 QJsonDocument(agentHello).toJson(QJsonDocument::Compact).constData());
         QCOMPARE(roundTrip(agent, request("agents.whoami")).value("number").toString(),
                  started.value("number").toString());
         QCOMPARE(roundTrip(agent, request("session.list")).value("error_code").toString(),
@@ -899,7 +997,7 @@ class AgentMessagingTest final : public QObject {
                 .toObject()
                 .value("tools")
                 .toArray();
-        QCOMPARE(tools.size(), 6); // with work_report and request_user_decision
+        QCOMPARE(tools.size(), 11); // messaging/work report plus five managed background tools
         const QJsonObject whoami = agent_mcp::handleMessage(
             {{"jsonrpc", "2.0"},
              {"id", 3},
@@ -933,7 +1031,7 @@ class AgentMessagingTest final : public QObject {
                      .value("code")
                      .toInt(),
                  -32602);
-        // tools/list asks whoami whether to add the team tools (ADR 0112).
+        // tools/list asks whoami whether to add the team tools (ADR 0114).
         QCOMPARE(operations, (QStringList{"agents.whoami", "agents.whoami", "agents.send"}));
     }
 };

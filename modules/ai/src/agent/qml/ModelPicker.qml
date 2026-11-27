@@ -59,8 +59,18 @@ Basic.Popup {
     readonly property string cursorInstallCommand: Qt.platform.os === "windows"
         ? "irm 'https://cursor.com/install?win32=true' | iex"
         : "curl https://cursor.com/install -fsS | bash"
+    readonly property bool hasCopilotModels: models.some(function(model) {
+        return model.provider === "copilot" && !model.hidden
+            && model.permissions && model.permissions.length > 0
+    })
+    readonly property string copilotInstallCommand: Qt.platform.os === "windows"
+        ? "winget install GitHub.Copilot"
+        : Qt.platform.os === "osx" ? "brew install --cask copilot-cli"
+        : "npm install -g @github/copilot"
     readonly property var providerModels: models.filter(function(model) {
         return model.provider === picker.selectedProviderTab && !model.hidden
+            && (model.provider !== "copilot" || (model.permissions && model.permissions.length > 0
+                && !(picker.draftSetup && picker.draftSetup.blocking)))
     })
     readonly property var filteredModels: {
         const query = modelSearch.text.trim().toLocaleLowerCase()
@@ -142,7 +152,7 @@ Basic.Popup {
                 break
             }
         }
-        if (!matchedPreferred && selectedModel) {
+        if (!matchedPreferred && selectedModel && tab !== "copilot") {
             for (let i = 0; i < models.length; ++i) {
                 if (catalogMatches(models[i], selectedModel) && models[i].provider) {
                     tab = models[i].provider
@@ -153,6 +163,7 @@ Basic.Popup {
         // A provider with a setup guide keeps its tab, so its banner says what to do.
         if (tab === "claude" && !hasClaudeModels && !hasSetup("claude")) tab = "codex"
         if (tab === "cursor" && !hasCursorModels && !hasSetup("cursor")) tab = "codex"
+        if (tab === "copilot" && !hasCopilotModels && !hasSetup("copilot")) tab = "codex"
         if (lockedProvider) tab = lockedProvider
         selectedProviderTab = tab
         syncCurrentModel()
@@ -262,8 +273,10 @@ Basic.Popup {
                 id: settingsBody
                 width: settingsScroll.availableWidth
                 spacing: 0
-        ModelProviderTabs {
+        ModelProviderSelect {
+            objectName: "providerSelectRow"
             Layout.fillWidth: true
+            providers: agentHost.providerChoices || []
             Layout.leftMargin: KetTheme.px(22, KetTheme.zoom)
             Layout.rightMargin: KetTheme.px(22, KetTheme.zoom)
             Layout.topMargin: KetTheme.px(22, KetTheme.zoom)
@@ -271,7 +284,9 @@ Basic.Popup {
             lockedProvider: picker.lockedProvider
             hasClaudeModels: picker.hasClaudeModels
             hasCursorModels: picker.hasCursorModels
+            hasCopilotModels: picker.hasCopilotModels
             cursorInstallCommand: picker.cursorInstallCommand
+            copilotInstallCommand: picker.copilotInstallCommand
             setupProviders: Object.keys(picker.setups)
             onProviderChosen: (provider) => {
                 picker.selectedProviderTab = provider
@@ -313,6 +328,12 @@ Basic.Popup {
                     ? (picker.hasCursorModels
                        ? "Cursor lists models from the installed CLI (`agent models`)."
                        : "Install Cursor CLI: " + picker.cursorInstallCommand)
+                  : picker.selectedProviderTab === "copilot"
+                    ? (picker.hasCopilotModels
+                       ? "GitHub Copilot lists models from its installed CLI through ACP."
+                       : "Install GitHub Copilot CLI: " + picker.copilotInstallCommand)
+                  : picker.hasCopilotModels
+                    ? "Codex is ready. GitHub Copilot is available."
                   : picker.hasClaudeModels && picker.hasCursorModels
                     ? "Codex is ready. Claude and Cursor are available."
                   : picker.hasClaudeModels
@@ -558,7 +579,7 @@ Basic.Popup {
                 id: effortSlider
                 objectName: "effortSlider"
                 Layout.fillWidth: true
-                Layout.preferredHeight: KetTheme.px(21, KetTheme.zoom)
+                Layout.preferredHeight: recipe.notchHeight
                 from: 0
                 to: Math.max(1, picker.displayedEfforts.length - 1)
                 stepSize: 1
@@ -570,53 +591,89 @@ Basic.Popup {
                     if (index >= 0 && index < picker.displayedEfforts.length)
                         picker.draftEffort = picker.displayedEfforts[index].reasoningEffort
                 }
-                // Drawn from ket::sliderRecipe like KetSlider; the handle hides until an effort is chosen.
+                // The kit's notched step slider (KetStepSlider), drawn from ket::sliderRecipe and
+                // ket::stepNotchCentre: a pill holds the track with one dot per effort, the chosen
+                // effort is a ringed thumb and the track fills up to it. It stays a Slider because
+                // no effort may be chosen yet (the thumb and fill hide) and only a user move picks
+                // one. The padding puts the handle's centre on the notches, so a press or drag
+                // snaps to the nearest one.
                 readonly property var recipe: KetTheme.sliderRecipe(KetTheme.dark, KetTheme.zoom, hovered, pressed, enabled, visualFocus)
+                readonly property int steps: Math.max(2, picker.displayedEfforts.length)
+                readonly property real trackStart: recipe.notchInset - recipe.notchTrackHeight / 2
+                function centre(index) {
+                    return KetTheme.stepNotchCentre(width, recipe.notchInset, steps, index)
+                }
                 hoverEnabled: true
-                padding: 0
+                topPadding: 0
+                bottomPadding: 0
+                leftPadding: recipe.notchInset - recipe.notchThumbSize / 2
+                rightPadding: leftPadding
                 opacity: recipe.opacity
-                background: Item {
-                    x: effortSlider.leftPadding + effortSlider.recipe.handleSize / 2
-                    width: effortSlider.availableWidth - effortSlider.recipe.handleSize
+                background: Rectangle {
+                    objectName: "effortTrack"
+                    width: effortSlider.width
                     height: effortSlider.height
+                    radius: height / 2
+                    color: effortSlider.recipe.notchPill
                     Rectangle {
+                        x: effortSlider.trackStart
                         y: (parent.height - height) / 2
-                        width: parent.width
-                        height: effortSlider.recipe.trackHeight
+                        width: Math.max(0, parent.width - effortSlider.trackStart * 2)
+                        height: effortSlider.recipe.notchTrackHeight
                         radius: height / 2
                         color: effortSlider.recipe.track
                     }
                     Rectangle {
+                        objectName: "effortFill"
+                        x: effortSlider.trackStart
                         y: (parent.height - height) / 2
-                        width: effortSlider.visualPosition * parent.width
-                        height: effortSlider.recipe.trackHeight
+                        width: Math.max(0, effortSlider.handle.x + effortSlider.handle.width / 2
+                                        - effortSlider.trackStart + effortSlider.recipe.notchTrackHeight / 2)
+                        height: effortSlider.recipe.notchTrackHeight
                         radius: height / 2
                         color: effortSlider.recipe.fill
                         visible: picker.effortIndex >= 0
                     }
-                }
-                handle: Item {
-                    objectName: "effortHandle"
-                    x: effortSlider.leftPadding + effortSlider.visualPosition * (effortSlider.availableWidth - width)
-                    y: (effortSlider.height - height) / 2
-                    width: effortSlider.recipe.handleSize
-                    height: width
-                    visible: picker.effortIndex >= 0
-                    Rectangle {
-                        anchors.fill: parent
-                        anchors.margins: -2
-                        visible: effortSlider.recipe.focusRing.a > 0
-                        radius: width / 2
-                        color: "transparent"
-                        border.width: 2
-                        border.color: effortSlider.recipe.focusRing
+                    Repeater {
+                        model: picker.displayedEfforts.length
+                        Rectangle {
+                            required property int index
+                            objectName: "effortNotch" + index
+                            width: effortSlider.recipe.notchDotSize
+                            height: width
+                            radius: width / 2
+                            x: effortSlider.centre(index) - width / 2
+                            y: (parent.height - height) / 2
+                            color: effortSlider.recipe.notch
+                        }
                     }
                     Rectangle {
                         anchors.fill: parent
+                        anchors.margins: effortSlider.recipe.focusRingWidth / 2
+                        visible: effortSlider.recipe.focusRing.a > 0
+                        radius: height / 2
+                        color: "transparent"
+                        border.width: effortSlider.recipe.focusRingWidth
+                        border.color: effortSlider.recipe.focusRing
+                    }
+                }
+                handle: Rectangle {
+                    objectName: "effortHandle"
+                    x: effortSlider.leftPadding + effortSlider.visualPosition * (effortSlider.availableWidth - width)
+                    y: (effortSlider.height - height) / 2
+                    width: effortSlider.recipe.notchThumbSize
+                    height: width
+                    radius: width / 2
+                    visible: picker.effortIndex >= 0
+                    color: effortSlider.recipe.handle
+                    border.width: effortSlider.recipe.notchRingWidth
+                    border.color: effortSlider.recipe.handleBorder
+                    Rectangle {
+                        anchors.centerIn: parent
+                        width: effortSlider.recipe.notchDotSize
+                        height: width
                         radius: width / 2
-                        color: effortSlider.recipe.handle
-                        border.width: effortSlider.recipe.handleBorderWidth
-                        border.color: effortSlider.recipe.handleBorder
+                        color: effortSlider.recipe.fill
                     }
                 }
                 Accessible.name: "Reasoning effort"

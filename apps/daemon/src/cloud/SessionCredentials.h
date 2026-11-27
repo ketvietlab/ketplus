@@ -1,5 +1,7 @@
 #pragma once
 
+#include <QByteArray>
+#include <QHash>
 #include <QSet>
 #include <QString>
 
@@ -32,6 +34,9 @@ class SessionCredentials final {
     // beside the enrollment because sign-out removes the enrollment's; keys from before it was
     // recorded are kept in use.
     bool adoptWorkspace(const QString& workspaceId, QString* error = nullptr) const;
+
+    // Apply the same workspace-key transition inside a larger credential transaction.
+    static void adoptWorkspace(QHash<QString, QByteArray>& accounts, const QString& workspaceId);
 
   private:
     CredentialStore* store_;

@@ -52,4 +52,9 @@ void AgentWorkspaceView::toggleWindowFullScreen() {
     top->setWindowState(top->windowState() ^ Qt::WindowFullScreen);
 }
 
+QRect AgentWorkspaceView::hostWindowGeometry() const {
+    const QWidget* top = window();
+    return top->isVisible() ? top->geometry() : QRect(mapToGlobal(QPoint(0, 0)), size());
+}
+
 } // namespace ketplus

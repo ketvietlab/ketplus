@@ -1,6 +1,7 @@
 #include "runtime/SessionHost.h"
 
 #include "providers/ClaudeAdapter.h"
+#include "runtime/BackgroundTaskSummary.h"
 
 #include <QSet>
 
@@ -98,7 +99,10 @@ void SessionHost::recordBackgroundTasks(Session& session, const QJsonArray& sour
     if (!journal_->storeBackgroundTasks(session.stored.id, session.stored.generation, tasks))
         qWarning("Unable to store background tasks of %s: %s", qUtf8Printable(session.stored.id),
                  qUtf8Printable(journal_->errorString()));
-    (void)appendEvent(session, QStringLiteral("tasks.changed"), {{QStringLiteral("tasks"), tasks}});
+    auto projection = managedTaskSnapshot(session.stored.id, session.stored.generation);
+    if (projection.isEmpty())
+        projection = {{"tasks", tasks}, {"summary", backgroundTaskSummary({}, tasks)}};
+    (void)appendEvent(session, QStringLiteral("tasks.changed"), projection);
 }
 
 void SessionHost::endBackgroundTasks(Session& session, const QString& reason) {
@@ -143,8 +147,8 @@ void SessionHost::backgroundTaskCommand(const QJsonObject& request, CommandCallb
                        QStringLiteral("This background task is no longer reported.")));
         return;
     }
-    const bool stop =
-        request.value(QStringLiteral("message_type")).toString() == QStringLiteral("session.task.stop");
+    const bool stop = request.value(QStringLiteral("message_type")).toString() ==
+                      QStringLiteral("session.task.stop");
     if (stop && !liveStatus((*listed).toObject().value(QStringLiteral("status")).toString())) {
         done(taskError(QStringLiteral("task_not_running"),
                        QStringLiteral("This background task has already ended.")));

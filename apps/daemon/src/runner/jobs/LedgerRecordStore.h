@@ -1,0 +1,52 @@
+#pragma once
+
+#include "runner/jobs/RemoteJobPorts.h"
+
+#include <QHash>
+#include <QSqlDatabase>
+
+namespace ketplus::daemon {
+class BackgroundTaskLedger;
+}
+
+// Remote job records in the background task registry. Each put writes the record and moves
+// its registry task in one transaction; a task must have been created with runs_on, and its
+// first record needs the task still queued and approved.
+namespace ketplus::daemon::runner::jobs {
+
+class LedgerRecordStore final : public RecordStore {
+  public:
+    LedgerRecordStore(QSqlDatabase database, BackgroundTaskLedger& ledger);
+
+    [[nodiscard]] bool put(const RemoteJobRecord& record, qint64 expected) override;
+    // Every record that still has its task; one that cannot be read is skipped.
+    [[nodiscard]] QList<RemoteJobRecord> load() const override;
+
+    // The tasks whose record could not be read at the last load.
+    [[nodiscard]] QStringList unreadable() const { return unreadable_; }
+    // Tasks created with runs_on that have no record yet; nullopt when they cannot be read.
+    [[nodiscard]] std::optional<QStringList> reserved() const;
+    // How many of those tasks have not ended; nullopt when they cannot be counted.
+    [[nodiscard]] std::optional<int> unfinishedReserved() const;
+    // The labels and timeout a task without a record was created with; nullopt when it has a
+    // record, is not remote or cannot be read.
+    struct Reservation {
+        QStringList runsOn;
+        qint64 timeoutMs = 0;
+    };
+    [[nodiscard]] std::optional<Reservation> reservation(const QString& taskId) const;
+
+    // Ends a task whose record could not be read: interrupted, reason record_unreadable, cleanup
+    // not confirmed, and a readable record in its place so no later load finds it again. Answers
+    // the job id the row names (empty when none), or nullopt when nothing could be written.
+    [[nodiscard]] std::optional<QString> abandonUnreadable(const QString& taskId);
+
+  private:
+    bool write(const RemoteJobRecord& record, qint64 expected);
+
+    QSqlDatabase database_;
+    BackgroundTaskLedger& ledger_;
+    mutable QStringList unreadable_;
+};
+
+} // namespace ketplus::daemon::runner::jobs

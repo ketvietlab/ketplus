@@ -12,6 +12,7 @@ Rectangle {
     required property var window
     property var session: null
     property var planRun: null
+    property bool reportEvidence: false
     readonly property var document: session ? session.current : null
     readonly property string tab: document ? document.kind : ""
     signal closeRequested()
@@ -21,15 +22,14 @@ Rectangle {
         return ({ terminal: "terminal", plan: "check-all", report: "view-list", diff: "compare", changes: "compare", atlas: "layers", file: "file-code" })[kind] || "file-text"
     }
     function openFile(name) {
-        const code = name === "NavigationRail.qml" ? Fixtures.navigationRail
-            : "// WorktreeItem.qml · sample source\nimport QtQuick\n\nItem {\n    id: worktreeRow\n    property string branch: \"develop\"\n    property bool selected: false\n}\n"
-        session.open("file", "modules/ai/src/agent/qml/" + name, name, code)
+        const code = name === "TrailList.qml" ? Fixtures.trailList : Fixtures.trailRow
+        session.open("file", "src/trails/" + name, name, code)
     }
     function openContent(kind) {
         if (!session) return
         if (kind === "terminal") session.newTerminal()
         else if (kind === "plan") session.open("plan", "conversation-plan", "Plan", "")
-        else if (kind === "atlas") session.open("atlas", "onboarding.ketatlas", "onboarding.ketatlas", "")
+        else if (kind === "atlas") session.open("atlas", "first-field-entry.ketatlas", "first-field-entry.ketatlas", "")
         else if (kind === "report") session.open("report", "conversation-report", "Report", "")
         else session.open("changes", "conversation-changes", "Changes", "")
     }
@@ -119,21 +119,33 @@ Rectangle {
                     width: parent.width
                     report: Fixtures.turnReport
                     ledger: true
+                    openItem: pane.reportEvidence ? "picker-dialog" : ""
                 }
                 KetChangedFiles {
                     visible: pane.tab === "changes"
                     width: parent.width
                     files: Fixtures.changedFiles
-                    note: "develop · sample changes"
+                    note: "develop · uncommitted"
                     onFileActivated: index => {
                         const file = Fixtures.changedFiles[index]
-                        pane.session.open("diff", file.path + "/" + file.name, file.name + " · diff", Fixtures.sampleDiff)
+                        pane.session.open("diff", file.path + "/" + file.name, file.name + " · diff", file.diff)
                     }
                     footer: KetButton {
                         text: "Open Source Control"
                         controlSize: KetTheme.ControlSize.Small
                         onClicked: pane.window.showScreen("changes")
                     }
+                }
+                KetPaneHeader {
+                    visible: pane.tab === "changes" || (pane.tab === "report" && pane.reportEvidence)
+                    width: parent.width
+                    title: Fixtures.changedFiles[0].name
+                    iconName: "compare"
+                }
+                KetDiffView {
+                    visible: pane.tab === "changes" || (pane.tab === "report" && pane.reportEvidence)
+                    width: parent.width
+                    lines: parseUnified(Fixtures.sampleDiff)
                 }
                 KetDiffView {
                     id: diff
@@ -144,7 +156,7 @@ Rectangle {
 
                 Repeater {
                     model: pane.tab === "atlas" ? [
-                        { title: "Onboarding experience", detail: "2 flows · 4 screens · sample Atlas" }
+                        { title: "First field entry", detail: Fixtures.atlasSummary + " · preview validated" }
                     ] : []
                     Rectangle {
                         required property var modelData
@@ -205,12 +217,12 @@ Rectangle {
     KetMenu {
         id: addMenu
         KetMenuItem { text: "New terminal"; iconName: "terminal"; onTriggered: pane.openContent("terminal") }
-        KetMenuItem { text: "NavigationRail.qml"; iconName: "file-code"; onTriggered: pane.openFile("NavigationRail.qml") }
-        KetMenuItem { text: "WorktreeItem.qml"; iconName: "file-code"; onTriggered: pane.openFile("WorktreeItem.qml") }
+        KetMenuItem { text: "TrailList.qml"; iconName: "file-code"; onTriggered: pane.openFile("TrailList.qml") }
+        KetMenuItem { text: "TrailRow.qml"; iconName: "file-code"; onTriggered: pane.openFile("TrailRow.qml") }
         KetMenuItem { text: "Conversation plan"; iconName: "check-all"; enabled: !!pane.planRun; onTriggered: pane.planRequested() }
         KetMenuItem { text: "Changes"; iconName: "compare"; onTriggered: pane.openContent("changes") }
         KetMenuItem { text: "Work report"; iconName: "view-list"; onTriggered: pane.openContent("report") }
-        KetMenuItem { text: "onboarding.ketatlas"; iconName: "layers"; onTriggered: pane.openContent("atlas") }
+        KetMenuItem { text: "first-field-entry.ketatlas"; iconName: "layers"; onTriggered: pane.openContent("atlas") }
     }
     KetMenu {
         id: tabMenu

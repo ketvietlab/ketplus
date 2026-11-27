@@ -2,8 +2,8 @@
 
 #include <QByteArray>
 #include <QJsonObject>
-#include <QString>
 #include <QProcessEnvironment>
+#include <QString>
 #include <QStringList>
 
 #include <functional>
@@ -27,6 +27,8 @@ struct WorkspaceFileScope final {
 class ReadOnlyWorkspaceFiles final {
   public:
     static constexpr int maximumTreeEntries = 200;
+    // Tree requests above this bound return oversized before pagination.
+    static constexpr int maximumTreeCandidates = 10'000;
     static constexpr int maximumSearchResults = 100;
     static constexpr qsizetype maximumFileBytes = 512 * 1024;
     static constexpr qsizetype maximumDiffBytes = 512 * 1024;

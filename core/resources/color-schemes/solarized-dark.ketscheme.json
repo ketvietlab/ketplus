@@ -1,0 +1,198 @@
+{
+    "editor": {
+        "bg": "#002B36",
+        "caret": "#D30102",
+        "fg": "#839496",
+        "gutterBg": "#002B36",
+        "gutterFg": "#839496",
+        "lineHighlight": "#073642",
+        "selection": "#274642"
+    },
+    "extends": "builtin-dark",
+    "id": "builtin.solarized-dark",
+    "kind": "dark",
+    "metadata": {
+        "author": "Microsoft Corporation",
+        "importReport": {
+            "counts": {
+                "approximated": 35,
+                "mapped": 36,
+                "skipped": 106
+            },
+            "path": "docs/theme-import-reports/solarized-dark.json"
+        },
+        "license": "MIT",
+        "manualAdjustments": [
+        ],
+        "sourceApp": "VS Code",
+        "sourceFile": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json",
+        "sourceLabel": "VS Code",
+        "upstream": {
+            "author": "Microsoft Corporation",
+            "commit": "1b509615d9f84db862313485737c05e8b81d2977",
+            "files": [
+                {
+                    "path": "LICENSE.txt",
+                    "sha256": "9480271317925265e806a9a196aaa33410a962fa9d4d1e248a4a5187bc8c9df9",
+                    "url": "https://raw.githubusercontent.com/microsoft/vscode/1b509615d9f84db862313485737c05e8b81d2977/LICENSE.txt"
+                },
+                {
+                    "path": "extensions/theme-defaults/themes/dark_plus.json",
+                    "sha256": "409f33088a5cfd6589384900ef80627787c568d367c25b12f31bc7940936e573",
+                    "url": "https://raw.githubusercontent.com/microsoft/vscode/1b509615d9f84db862313485737c05e8b81d2977/extensions/theme-defaults/themes/dark_plus.json"
+                },
+                {
+                    "path": "extensions/theme-defaults/themes/dark_vs.json",
+                    "sha256": "9fc2c16761400632eac6166ff7bb0435c5190a94bffa51ec1ef19b2ce78576b2",
+                    "url": "https://raw.githubusercontent.com/microsoft/vscode/1b509615d9f84db862313485737c05e8b81d2977/extensions/theme-defaults/themes/dark_vs.json"
+                },
+                {
+                    "path": "extensions/theme-defaults/themes/light_plus.json",
+                    "sha256": "26fbb053bec8ce2b65706d5fcb993da8c19174cfdbf35a49b465236b5ed26203",
+                    "url": "https://raw.githubusercontent.com/microsoft/vscode/1b509615d9f84db862313485737c05e8b81d2977/extensions/theme-defaults/themes/light_plus.json"
+                },
+                {
+                    "path": "extensions/theme-defaults/themes/light_vs.json",
+                    "sha256": "ce562a2ebec8c9a91021afb9ba7c9e8bcf4176df634fec8b77c748b42e3ce748",
+                    "url": "https://raw.githubusercontent.com/microsoft/vscode/1b509615d9f84db862313485737c05e8b81d2977/extensions/theme-defaults/themes/light_vs.json"
+                },
+                {
+                    "path": "extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json",
+                    "sha256": "920e68b8a62e3e6581cee8d7900af1772865e5fe2b9efe5904baa4a8a89bc445",
+                    "url": "https://raw.githubusercontent.com/microsoft/vscode/1b509615d9f84db862313485737c05e8b81d2977/extensions/theme-solarized-dark/themes/solarized-dark-color-theme.json"
+                }
+            ],
+            "key": "vscode",
+            "license": "MIT",
+            "licenseFiles": [
+                {
+                    "distributionFile": "VSCode-Themes-MIT.txt",
+                    "source": "LICENSE.txt"
+                }
+            ],
+            "repo": "microsoft/vscode"
+        },
+        "upstreamCredits": [
+            {
+                "author": "Ethan Schoonover",
+                "commit": "62f656a02f93c5190a8753159e34b385588d5ff3",
+                "files": [
+                    {
+                        "path": "LICENSE",
+                        "sha256": "494aefdabf86acce06bd63001ad8aedad4ee38da23509d3f917d95aa3368b9a6",
+                        "url": "https://raw.githubusercontent.com/altercation/solarized/62f656a02f93c5190a8753159e34b385588d5ff3/LICENSE"
+                    }
+                ],
+                "key": "solarized",
+                "license": "MIT",
+                "licenseFiles": [
+                    {
+                        "distributionFile": "Solarized-MIT.txt",
+                        "source": "LICENSE"
+                    }
+                ],
+                "repo": "altercation/solarized"
+            }
+        ],
+        "vscodeSemanticHighlighting": true
+    },
+    "name": "Solarized Dark",
+    "schemaVersion": 1,
+    "syntax": {
+        "attribute": {
+            "fg": "#93A1A1"
+        },
+        "comment": {
+            "bold": false,
+            "fg": "#586E75",
+            "italic": true,
+            "underline": false
+        },
+        "constant": {
+            "fg": "#CB4B16"
+        },
+        "function": {
+            "fg": "#268BD2"
+        },
+        "keyword": {
+            "fg": "#CB4B16"
+        },
+        "number": {
+            "fg": "#D33682"
+        },
+        "string": {
+            "fg": "#DC322F"
+        },
+        "type": {
+            "bold": false,
+            "fg": "#CB4B16",
+            "italic": false,
+            "underline": false
+        },
+        "variable": {
+            "fg": "#268BD2"
+        }
+    },
+    "terminal": {
+        "ansi0": "#073642",
+        "ansi1": "#DC322F",
+        "ansi10": "#586E75",
+        "ansi11": "#657B83",
+        "ansi12": "#839496",
+        "ansi13": "#6C71C4",
+        "ansi14": "#93A1A1",
+        "ansi15": "#FDF6E3",
+        "ansi2": "#859900",
+        "ansi3": "#B58900",
+        "ansi4": "#268BD2",
+        "ansi5": "#D33682",
+        "ansi6": "#2AA198",
+        "ansi7": "#EEE8D5",
+        "ansi8": "#002B36",
+        "ansi9": "#CB4B16",
+        "bg": "#002B36",
+        "cursor": "#D30102",
+        "fg": "#839496",
+        "selection": "#274642"
+    },
+    "ui": {
+        "button": {
+            "bg": "#2AA19899",
+            "hover": "#2AA19899"
+        },
+        "chrome": {
+            "accent": "#2AA19899",
+            "appBackground": "#002C39",
+            "border": "#2B2B4A",
+            "danger": "#FFEAEA",
+            "pageBackground": "#002B36",
+            "panelBackground": "#002B36",
+            "panelSubtle": "#00212B",
+            "textMain": "#839496",
+            "textSecondary": "#839496"
+        },
+        "focus": {
+            "border": "#2AA19899"
+        },
+        "input": {
+            "bg": "#003847",
+            "fg": "#93A1A1"
+        },
+        "list": {
+            "fg": "#839496",
+            "hover": "#004454AA",
+            "selection": "#005A6F"
+        },
+        "sidebar": {
+            "bg": "#00212B",
+            "border": "#2B2B4A",
+            "fg": "#839496"
+        },
+        "tab": {
+            "activeBg": "#002B37",
+            "activeFg": "#D6DBDB",
+            "inactiveBg": "#004052",
+            "inactiveFg": "#93A1A1"
+        }
+    }
+}

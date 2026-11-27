@@ -1,4 +1,5 @@
 #include "control/ControlV2Client.h"
+#include "control/RelayEventFeed.h"
 #include "cloud/ControlEndpoint.h"
 #include <QCryptographicHash>
 #include <QDateTime>
@@ -25,22 +26,85 @@ bool allowedOrigin(const QUrl& origin) {
 } // namespace
 ControlV2Client::ControlV2Client(QUrl origin, QObject* parent)
     : QObject(parent), origin_(std::move(origin)), credentials_(storageNamespace(origin_)) {
-    installationId_ = QString::fromUtf8(credentials_.read("installation-id"));
-    credential_ = QJsonDocument::fromJson(credentials_.read("user-session")).object();
+    const auto installation = credentials_.read("installation-id", &storageReadError_);
+    if (!storageReadError_.isEmpty())
+        return;
+    const auto session = credentials_.read("user-session", &storageReadError_);
+    if (!storageReadError_.isEmpty())
+        return;
+    const auto pins = credentials_.read("host-pins", &storageReadError_);
+    if (!storageReadError_.isEmpty())
+        return;
+    QJsonParseError parse;
+    const auto sessionDocument = QJsonDocument::fromJson(session, &parse);
+    if (!session.isEmpty() &&
+        (parse.error != QJsonParseError::NoError || !sessionDocument.isObject())) {
+        storageReadError_ =
+            "The stored remote session is invalid; existing credentials were preserved.";
+        return;
+    }
+    const auto pinsDocument = QJsonDocument::fromJson(pins, &parse);
+    if (!pins.isEmpty() && (parse.error != QJsonParseError::NoError || !pinsDocument.isObject())) {
+        storageReadError_ = "The stored host pins are invalid; existing trust was preserved.";
+        return;
+    }
+    installationId_ = QString::fromUtf8(installation);
+    credential_ = sessionDocument.object();
     deviceId_ = credential_.value("deviceId").toString();
     keyVersion_ = credential_.value("deviceKeyVersion").toInt(1);
-    const QByteArray pins = credentials_.read("host-pins");
     hostPinsStored_ = !pins.isEmpty();
-    hostPins_ = QJsonDocument::fromJson(pins).object();
+    hostPins_ = pinsDocument.object();
+}
+std::optional<QStringList> ControlV2Client::entitlements() const {
+    const QJsonValue value = credential_.value("entitlements");
+    if (!value.isArray())
+        return std::nullopt;
+    QStringList names;
+    for (const QJsonValue& name : value.toArray())
+        if (name.isString())
+            names.append(name.toString());
+    return names;
 }
 bool ControlV2Client::storeHostPins(const QJsonObject& pins, QString* error) {
+    if (!storageReadError_.isEmpty()) {
+        if (error)
+            *error = storageReadError_;
+        return false;
+    }
     if (!credentials_.write("host-pins", QJsonDocument(pins).toJson(QJsonDocument::Compact), error))
         return false;
     hostPins_ = pins;
     hostPinsStored_ = true;
+    // A pin change invalidates every host key verified against the previous set.
+    signerVersions_.clear();
     return true;
 }
+int ControlV2Client::pinnedVersion(const QString& machineId) const {
+    // Pins are "machine/version" -> fingerprint; the machine id itself may contain '/'.
+    int newest = 0;
+    for (auto it = hostPins_.constBegin(); it != hostPins_.constEnd(); ++it) {
+        const qsizetype slash = it.key().lastIndexOf(QLatin1Char('/'));
+        if (slash < 0 || it.key().left(slash) != machineId)
+            continue;
+        bool ok = false;
+        const int version = it.key().mid(slash + 1).toInt(&ok);
+        if (ok && version > newest)
+            newest = version;
+    }
+    return newest;
+}
+QString ControlV2Client::pinnedFingerprint(const QString& machineId) const {
+    const int version = pinnedVersion(machineId);
+    return version > 0
+               ? hostPins_.value(QStringLiteral("%1/%2").arg(machineId).arg(version)).toString()
+               : QString{};
+}
 QJsonObject ControlV2Client::identity(QString* error) {
+    if (!storageReadError_.isEmpty()) {
+        if (error)
+            *error = storageReadError_;
+        return {};
+    }
     if (installationId_.isEmpty()) {
         installationId_ = "desktop_" + QUuid::createUuid().toString(QUuid::Id128);
         if (!credentials_.write("installation-id", installationId_.toUtf8(), error)) {
@@ -106,16 +170,26 @@ void ControlV2Client::authorized(const QByteArray& method, const QString& path,
         request(
             method, path, body, token,
             [done = std::move(done)](int status, const QJsonValue& value, const QString& error) {
-                done(value,
-                     !error.isEmpty() ? error
-                     : status >= 200 && status < 300
-                         ? QString{}
-                         : value.toObject().value("code").toString("Control refused the request."));
+                if (!error.isEmpty() || (status >= 200 && status < 300)) {
+                    done(value, error);
+                    return;
+                }
+                // A coded answer is the relay's verdict. Without a code, a server error, a
+                // timeout or a rate limit is the link (kept and retried); anything else refuses
+                // this request.
+                const auto code = value.toObject().value("code").toString();
+                const bool temporary = status >= 500 || status == 408 || status == 429;
+                done(value, !code.isEmpty() ? code
+                            : temporary     ? QStringLiteral("Control transport failed.")
+                                            : QStringLiteral("Control refused the request."));
             });
     });
 }
 void ControlV2Client::listSessions(Callback done) {
     authorized("GET", "/v2/mobile/sessions", {}, std::move(done));
+}
+void ControlV2Client::listMachines(Callback done) {
+    authorized("GET", "/v2/machines", {}, std::move(done));
 }
 void ControlV2Client::listWorktrees(Callback done) {
     authorized("GET", "/v2/mobile/worktrees", {}, std::move(done));

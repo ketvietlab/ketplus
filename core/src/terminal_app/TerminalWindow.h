@@ -11,7 +11,8 @@ namespace ketplus {
 class TerminalTab;
 
 // Applies the appearance saved under appearance/theme ("system", "light" or "dark") to
-// ket::Appearance. Call once, before the first window.
+// ket::Appearance. Call once, before the first window; that window then loads
+// the canonical committed selection, migrating the legacy value only once.
 void restoreTerminalAppearance();
 
 // A KétPlus Terminal window drawn with the Két Qt kit: document tabs with New tab, Find, Clear

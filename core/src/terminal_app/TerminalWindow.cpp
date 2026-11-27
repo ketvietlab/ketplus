@@ -1,4 +1,5 @@
 #include "terminal_app/TerminalWindow.h"
+#include "ui/theme/ThemeSchemeController.h"
 
 #include "terminal/TerminalTab.h"
 #include "terminal/TerminalView.h"
@@ -47,21 +48,26 @@ constexpr std::array<std::pair<const char*, ket::Appearance::Mode>, 3> appearanc
     {"dark", ket::Appearance::Mode::Dark},
 }};
 
-QString token(QStringView name, const ket::Theme theme) {
-    return ket::Tokens::color(name, theme).name(QColor::HexArgb);
+ThemeSchemeController* terminalSchemes() {
+    if (auto* existing = qApp->findChild<ThemeSchemeController*>(QStringLiteral("terminalSchemes"),
+                                                                 Qt::FindDirectChildrenOnly))
+        return existing;
+    auto* controller = new ThemeSchemeController(
+        {},
+        QSettings().value(QLatin1StringView(appearanceKey), QStringLiteral("system")).toString(),
+        qApp);
+    controller->setObjectName(QStringLiteral("terminalSchemes"));
+    controller->start();
+    return controller;
 }
-
-// The roles TerminalView reads, from Két DS tokens: the grid on the page background, the cursor
-// in the accent, matches in warning. The ANSI colours come from the tokens inside the view.
-ThemePalette terminalPalette(const ket::Theme theme) {
-    ThemePalette palette;
-    palette.dark = theme == ket::Theme::Dark;
-    palette.textMain = token(u"text-main", theme);
-    palette.panelSubtle = token(u"page-bg", theme);
-    palette.accent = token(u"accent", theme);
-    palette.accentMuted = token(u"accent-muted", theme);
-    palette.warning = token(u"warning", theme);
-    return palette;
+ColorScheme terminalWindowScheme() {
+    auto scheme = terminalSchemes()->scheme();
+    // The standalone app historically used the page, while embedded terminals
+    // used the subtle panel. Preserve that visual for reserved built-ins only.
+    if (scheme.id == u"builtin-light" || scheme.id == u"builtin-dark")
+        scheme.terminal[QStringLiteral("bg")] =
+            scheme.ui.value(QStringLiteral("chrome.pageBackground"));
+    return scheme;
 }
 
 // The tab strip's trailing area: the strip background and its bottom edge, so the actions sit
@@ -146,6 +152,7 @@ TerminalWindow::TerminalWindow(const QString& workingDirectory, const QString& c
     });
     connect(restart, &QAbstractButton::clicked, this, &TerminalWindow::restartSession);
 
+    terminalSchemes();
     createMenus();
 
     const QByteArray savedGeometry =
@@ -154,8 +161,7 @@ TerminalWindow::TerminalWindow(const QString& workingDirectory, const QString& c
         restoreGeometry(savedGeometry);
     }
 
-    connect(&ket::Appearance::instance(), &ket::Appearance::themeChanged, this,
-            &TerminalWindow::applyTheme);
+    connect(terminalSchemes(), &ThemeSchemeController::applied, this, &TerminalWindow::applyTheme);
     connect(&ket::Appearance::instance(), &ket::Appearance::themeChanged, actions,
             qOverload<>(&QWidget::update));
     connect(tabs_, &QTabWidget::tabCloseRequested, this, &TerminalWindow::closeTab);
@@ -289,11 +295,25 @@ void TerminalWindow::createMenus() {
         label[0] = label[0].toUpper();
         QAction* action = appearanceMenu->addAction(label);
         action->setCheckable(true);
-        action->setChecked(ket::Appearance::instance().mode() == mode);
+        const auto refreshMode = [action, mode] {
+            const auto selected = terminalSchemes()->mode();
+            action->setChecked(
+                selected == ThemeManager::Mode::System ? mode == ket::Appearance::Mode::System
+                : selected == ThemeManager::Mode::Dark ? mode == ket::Appearance::Mode::Dark
+                                                       : mode == ket::Appearance::Mode::Light);
+        };
+        refreshMode();
+        connect(terminalSchemes(), &ThemeSchemeController::applied, action, refreshMode);
         appearanceGroup->addAction(action);
         connect(action, &QAction::triggered, this, [name, mode] {
-            ket::Appearance::instance().setMode(mode);
-            QSettings().setValue(QLatin1StringView(appearanceKey), QLatin1StringView(name));
+            auto wanted = terminalSchemes()->selection();
+            wanted.followSystem = mode == ket::Appearance::Mode::System;
+            if (!wanted.followSystem)
+                wanted.schemeId = mode == ket::Appearance::Mode::Dark
+                                      ? QStringLiteral("builtin-dark")
+                                      : QStringLiteral("builtin-light");
+            if (terminalSchemes()->commit(wanted))
+                QSettings().setValue(QLatin1StringView(appearanceKey), QLatin1StringView(name));
         });
     }
 
@@ -311,7 +331,7 @@ void TerminalWindow::createMenus() {
 
 void TerminalWindow::addTab(const QString& workingDirectory, const QString& commandPath) {
     auto* tab = new TerminalTab(workingDirectory, commandPath, tabs_);
-    tab->applyTheme(terminalPalette(ket::Appearance::instance().theme()));
+    tab->applyColorScheme(terminalWindowScheme());
     applyTypography(tab);
     const int index = tabs_->addTab(tab, tab->title());
     tabs_->setCurrentIndex(index);
@@ -353,10 +373,10 @@ void TerminalWindow::activateAdjacentTab(const int delta) {
 }
 
 void TerminalWindow::applyTheme() {
-    const ThemePalette palette = terminalPalette(ket::Appearance::instance().theme());
+    const auto scheme = terminalWindowScheme();
     for (int index = 0; index < tabs_->count(); ++index) {
         if (auto* tab = qobject_cast<TerminalTab*>(tabs_->widget(index))) {
-            tab->applyTheme(palette);
+            tab->applyColorScheme(scheme);
             applyTypography(tab);
         }
     }

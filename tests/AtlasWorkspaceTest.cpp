@@ -1,27 +1,35 @@
+#include "KetDialog.h"
 #include "KetIcons.h"
 #include "KetTokens.h"
 #include "agent/AgentWorkspaceView.h"
+#include "app/ApplicationAttributes.h"
 #include "app/AtlasBuilderTab.h"
 #include "app/AtlasConversationPanel.h"
 #include "app/MainWindow.h"
 #include "atlas/AtlasTab.h"
+#include "atlas/ManagedAtlasViewers.h"
 #include "ui/Theme.h"
 #include "workspace/ActivityBar.h"
 #include "workspace/AtlasIndex.h"
 
 #include <QAbstractButton>
 #include <QAction>
+#include <QApplication>
 #include <QComboBox>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QGuiApplication>
+#include <QImage>
 #include <QLabel>
 #include <QLineEdit>
 #include <QListWidget>
+#include <QPixmap>
 #include <QQuickItem>
 #include <QQuickView>
 #include <QScopeGuard>
 #include <QScreen>
+#include <QSet>
 #include <QSettings>
 #include <QStatusBar>
 #include <QTabBar>
@@ -44,6 +52,82 @@ class AtlasWorkspaceTest final : public QObject {
     }
 
   private slots:
+    void bothBrowserEntryPointsRequestRendererConsent() {
+#ifndef Q_OS_UNIX
+        QSKIP("The harmless CLI fixture uses a Unix shell.");
+#else
+        QTemporaryDir settings;
+        QTemporaryDir workspace;
+        const auto path = workspace.filePath("sample.ketatlas/atlas.json");
+        QVERIFY(writeAtlas(path, "Sample Atlas"));
+        QFile sidecar(workspace.filePath("sample.ketatlas/atlas.renderer.json"));
+        QVERIFY(sidecar.open(QIODevice::WriteOnly));
+        sidecar.write(R"({"version":1,"framework":"fixture","command":["/bin/echo","fixture"]})");
+        sidecar.close();
+        QFile cli(workspace.filePath("fake-atlas"));
+        QVERIFY(cli.open(QIODevice::WriteOnly));
+        cli.write("#!/bin/sh\nprintf unexpected > unexpected-launch\nexit 1\n");
+        cli.close();
+        QVERIFY(cli.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner |
+                                   QFileDevice::ExeOwner));
+        const auto oldCli = qgetenv("KETPLUS_KETATLAS_CLI");
+        const auto restore = qScopeGuard([&] {
+            oldCli.isNull() ? qunsetenv("KETPLUS_KETATLAS_CLI")
+                            : qputenv("KETPLUS_KETATLAS_CLI", oldCli);
+        });
+        qputenv("KETPLUS_KETATLAS_CLI", cli.fileName().toUtf8());
+        QSettings::setDefaultFormat(QSettings::IniFormat);
+        QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settings.path());
+        ketplus::ThemeManager theme(*qApp);
+        ketplus::MainWindow window(theme);
+        window.openFolder(workspace.path());
+        window.resize(1000, 720);
+        if (QGuiApplication::platformName() == "cocoa") {
+            const auto screens = QGuiApplication::screens();
+            if (screens.size() < 2)
+                QSKIP("Native consent acceptance requires the secondary work display.");
+            window.setScreen(screens.at(1));
+            window.move(screens.at(1)->availableGeometry().topLeft() + QPoint(24, 24));
+        }
+        window.show();
+        auto* bar = window.findChild<ketplus::ActivityBar*>();
+        QVERIFY(bar);
+        auto* agent = bar->findChild<QAbstractButton*>("agentWorkspaceActivityButton");
+        QVERIFY(agent);
+        agent->click();
+        auto* chat = window.findChild<ketplus::AgentWorkspaceView*>();
+        QVERIFY(chat);
+        chat->setActivePath(workspace.path());
+        chat->setExecutionBranch("main", workspace.path(), 1);
+        chat->requestProductNavigation("atlas");
+        auto* panel = window.findChild<ketplus::AtlasConversationPanel*>("conversationAtlasPanel");
+        QVERIFY(panel);
+        QTRY_VERIFY(panel->findChild<QAbstractButton*>("conversationAtlasOpen"));
+        auto* registry = ketplus::ManagedAtlasViewers::instance();
+        const auto canonical = QFileInfo(path).canonicalFilePath();
+        const auto stop = qScopeGuard([&] { registry->stop(canonical); });
+        panel->findChild<QAbstractButton*>("conversationAtlasOpen")->click();
+        auto* dialog = window.findChild<ket::Dialog*>("atlasRendererPermission");
+        QVERIFY(dialog && dialog->isOpen());
+        const auto capture = [&](const QString& entry) {
+            const auto dir = qEnvironmentVariable("KETPLUS_ATLAS_PERMISSION_ENTRY_CAPTURE_DIR");
+            if (dir.isEmpty())
+                return true;
+            QCoreApplication::processEvents();
+            return QDir().mkpath(dir) && dialog->grab().save(dir + "/" + entry + ".png");
+        };
+        QVERIFY(capture("atlas-list"));
+        registry->stop(canonical);
+        QCoreApplication::sendPostedEvents(nullptr, QEvent::DeferredDelete);
+        chat->openAtlasResult("sample.ketatlas/atlas.json", true);
+        dialog = window.findChild<ket::Dialog*>("atlasRendererPermission");
+        QVERIFY(dialog && dialog->isOpen());
+        QVERIFY(capture("transcript-result"));
+        registry->stop(canonical);
+        QVERIFY(registry->viewers().isEmpty());
+        QVERIFY(!QFileInfo::exists(workspace.filePath("sample.ketatlas/unexpected-launch")));
+#endif
+    }
     void transcriptAtlasResultOpensExistingBuilder() {
         QTemporaryDir settings;
         QTemporaryDir workspace;
@@ -153,6 +237,11 @@ class AtlasWorkspaceTest final : public QObject {
             qunsetenv("KETPLUS_KETATLAS_CLI");
         else
             qputenv("KETPLUS_KETATLAS_CLI", priorCli);
+        QList<QWidget*> nativeBefore;
+        for (QWidget* page = workspaceView; page != nullptr && page != &window;
+             page = page->parentWidget())
+            if (page->internalWinId() != 0)
+                nativeBefore << page;
         auto* edit = panel->findChild<QAbstractButton*>(QStringLiteral("conversationAtlasEdit"));
         QVERIFY(edit);
         edit->click();
@@ -163,6 +252,15 @@ class AtlasWorkspaceTest final : public QObject {
         QTRY_COMPARE(
             builder->atlasPath(),
             QFileInfo(workspace.filePath("sample.ketatlas/atlas.json")).canonicalFilePath());
+        // The builder chat is a native window. Neither its siblings nor its ancestors may turn
+        // native with it: the page around the Agent Workspace's QQuickView, made native, got a
+        // native window above the view's and the conversation drew blank.
+        for (QWidget* page = workspaceView; page != nullptr && page != &window;
+             page = page->parentWidget())
+            QVERIFY2(page->internalWinId() == 0 || nativeBefore.contains(page),
+                     page->metaObject()->className());
+        agentButton->click();
+        QTRY_VERIFY(workspaceView->isVisible());
     }
 
     void mockSidebarGeometryAtDesktopViewport() {
@@ -198,10 +296,17 @@ class AtlasWorkspaceTest final : public QObject {
                          {QStringLiteral("This Mac"), QStringLiteral("Linux lab")},
                          QStringLiteral("linux-1"));
         QCOMPARE(machineSelect->currentData().toString(), QStringLiteral("linux-1"));
+        // The picked machine lists no repositories yet: the notice says so.
+        bar->setRepositories({});
         bar->setRemoteMachineSelected(true);
-        QVERIFY(bar->findChild<QLabel*>(QStringLiteral("productMachineNotice"))->isVisible());
+        auto* notice = bar->findChild<QLabel*>(QStringLiteral("productMachineNotice"));
+        QVERIFY(notice->isVisible());
         QVERIFY(!bar->findChild<QAbstractButton*>(QStringLiteral("productAddRepositoryButton"))
                      ->isEnabled());
+        // Once its backend lists one, the sidebar shows it and the notice goes.
+        bar->setRepositories({ketplus::SidebarRepository{.path = QStringLiteral("/srv/ketplus"),
+                                                         .name = QStringLiteral("ketplus")}});
+        QVERIFY(!notice->isVisible());
     }
 
     void ownsSeparateTabs() {
@@ -535,6 +640,63 @@ class AtlasWorkspaceTest final : public QObject {
         QVERIFY(ai->toolTip().contains("AI is idle"));
     }
 
+    // The conversation must still draw after the Atlas builder was shown. Offscreen has no
+    // native stacking, so this runs only on a real display.
+    void nativeConversationDrawsAfterAtlas() {
+        if (!qEnvironmentVariableIsSet("KETPLUS_NATIVE_ATLAS_TEST"))
+            QSKIP("Enable native WebView test explicitly");
+        QTemporaryDir settings;
+        QTemporaryDir workspace;
+        QVERIFY(writeAtlas(workspace.filePath("sample.ketatlas/atlas.json"),
+                           QStringLiteral("Sample Atlas")));
+        QSettings::setDefaultFormat(QSettings::IniFormat);
+        QSettings::setPath(QSettings::IniFormat, QSettings::UserScope, settings.path());
+        ketplus::ThemeManager theme(*qApp);
+        ketplus::MainWindow window(theme);
+        window.openFolder(workspace.path());
+        if (const auto screens = QGuiApplication::screens(); screens.size() > 1)
+            window.move(screens.last()->geometry().topLeft() + QPoint(40, 40));
+        window.resize(1440, 900);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        auto* bar = window.findChild<ketplus::ActivityBar*>();
+        auto* agentButton =
+            bar->findChild<QAbstractButton*>(QStringLiteral("agentWorkspaceActivityButton"));
+        agentButton->click();
+        auto* workspaceView = window.findChild<ketplus::AgentWorkspaceView*>();
+        QVERIFY(workspaceView);
+        const auto drawn = [&] {
+            const QPixmap shot = window.screen()->grabWindow(window.winId());
+            const QRect area(workspaceView->mapTo(&window, QPoint()), workspaceView->size());
+            const QImage image = shot.toImage().copy(QRect(area.topLeft() * shot.devicePixelRatio(),
+                                                           area.size() * shot.devicePixelRatio()));
+            QSet<QRgb> colours;
+            for (int y = 0; y < image.height(); y += 7)
+                for (int x = 0; x < image.width(); x += 7)
+                    colours.insert(image.pixel(x, y));
+            return colours.size();
+        };
+        QTest::qWait(1500);
+        const int before = drawn();
+        qInfo() << "colours before" << before;
+        QVERIFY(before > 3);
+        workspaceView->requestProductNavigation(QStringLiteral("atlas"));
+        auto* panel = window.findChild<ketplus::AtlasConversationPanel*>(
+            QStringLiteral("conversationAtlasPanel"));
+        QTRY_COMPARE(panel->findChildren<QWidget*>(QStringLiteral("conversationAtlasRow")).size(),
+                     1);
+        QTest::qWait(500);
+        panel->findChild<QAbstractButton*>(QStringLiteral("conversationAtlasEdit"))->click();
+        auto* tabs = window.findChild<QTabWidget*>(QStringLiteral("atlasWorkspaceTabs"));
+        QTRY_VERIFY(tabs && qobject_cast<ketplus::AtlasBuilderTab*>(tabs->currentWidget()));
+        QTest::qWait(1500);
+        agentButton->click();
+        QTRY_VERIFY(workspaceView->isVisible());
+        QTest::qWait(1500);
+        const int after = drawn();
+        qInfo() << "colours after" << after;
+        QVERIFY2(after > before / 4, "the conversation draws blank after the Atlas builder");
+    }
     void nativeBuilderRetainsChatDuringLiveReload() {
         if (!qEnvironmentVariableIsSet("KETPLUS_NATIVE_ATLAS_TEST"))
             QSKIP("Enable native WebView test explicitly");
@@ -599,5 +761,11 @@ class AtlasWorkspaceTest final : public QObject {
     }
 };
 
-QTEST_MAIN(AtlasWorkspaceTest)
+int main(int argc, char** argv) {
+    ketplus::applyApplicationAttributes();
+    QApplication app(argc, argv);
+    AtlasWorkspaceTest test;
+    QTEST_SET_MAIN_SOURCE_PATH
+    return QTest::qExec(&test, argc, argv);
+}
 #include "AtlasWorkspaceTest.moc"

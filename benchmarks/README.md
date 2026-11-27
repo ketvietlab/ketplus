@@ -22,6 +22,33 @@ Measure daemon-backed transcript restore without calling a model:
 ./benchmarks/run-daemon-restore.sh
 ```
 
+Measure a long-lived install: thousands of conversations over many repositories.
+The sidebar alone, offscreen (initial build, unchanged, select, running, rename,
+add; median ms):
+
+```sh
+cmake --preset release -DKETPLUS_BUILD_TESTS=ON -DKETPLUS_BUILD_BENCHMARKS=ON
+build/release/ketplus_sidebar_scale_benchmark 3000 150 5
+```
+
+The real Pro app on a synthetic journal (`ketplus_large_workspace_journal`, cached
+under `$TMPDIR`), against `ketplus_fixture_daemon` with file-backed synthetic
+credentials and no provider:
+
+```sh
+bash benchmarks/run-large-workspace.sh build/release 3000 150 25 /tmp/large.sample.txt
+```
+
+It reports launch-to-idle app and daemon CPU and memory, every sidebar refresh
+(`KETPLUS_SIDEBAR_TRACE`), and idle CPU. An optional `sample` profile goes to the
+fifth argument. The app gets a temporary profile (`KETPLUS_PROFILE_DIR`: INI
+settings under that directory, never the installed app's preferences) and opens
+Agent Workspace (`KETPLUS_BENCHMARK_AGENT_WORKSPACE`). INI settings write the whole
+store on every sync, which makes repeated settings writes stand out more than the
+native store does. `WINDOW_GEOMETRY=WxH+X+Y` places the window, for example on a
+second display. `CAPTURE_DISPLAY=n CAPTURE_FILE=path` captures that one display
+only (`screencapture -D`). `KEEP_RUN=1` keeps the logs.
+
 Measure cold/warm conversation selection and repeated history body measurement
 with two synthetic 90-turn conversations (8 KiB assistant bodies):
 
@@ -76,9 +103,9 @@ ctest --test-dir build/webrtc-spike --output-on-failure
 
 Without `KETPLUS_SPIKE_TURN_URL` only the direct path runs. `serve` with
 `interop.html` repeats the exchange against Chromium's libwebrtc, and the iOS
-spike in `ketplus-app` (`apps/ios/Spikes/WebRtcDataChannel`) against Google's
+spike in the private mobile app (a private mobile interoperability client) against Google's
 WebRTC for iOS; `--bind <address>` serves a physical phone on the LAN. Findings
-are in `docs/webrtc-transport-spike.md`.
+were recorded in the results directory.
 
 ## Metrics
 
@@ -213,3 +240,37 @@ temporary state directory, never written back, and never committed; no path to
 one is checked in.
 
 The scroll runner selects the conversation's origin scope even when its execution worktree changed, and forwards live reading-key changes just like Desktop. A run with zero hydrated transcript rows exits with an error; it is not a successful zero-drift measurement.
+
+## Heartbeat worktree catalog
+
+On Linux, configure the headless daemon with the Qt toolchain and build the
+opt-in benchmark target:
+
+```sh
+cmake --preset daemon-dev
+cmake --build --preset daemon-dev --target ketplus_heartbeat_worktree_catalog_benchmark
+bench=build/daemon-dev/ketplus_heartbeat_worktree_catalog_benchmark
+fixture="$PWD/build/heartbeat-fixture"
+"$bench" --fixture "$fixture"
+```
+
+The benchmark uses 1,996 synthetic journal rows and an in-process relay.
+`--fixture` creates or reuses a fixture directory. Set `--present-percent`,
+`--repositories`, and `--sessions` when creating a fixture to vary its workload.
+Use a disk-backed fixture for the `file-data-cold` samples. Eviction applies to
+file data pages, and the directory and inode caches stay warm. With the
+default 12 cold samples, nearest-rank p95 is the largest sample.
+
+For a phase trace, run `--mode phases --trace-phases` separately from timing:
+
+```sh
+strace -f -qq -e trace=%file,read,pread64,getdents64,write -o build/heartbeat-phases.trace \
+  "$bench" --fixture "$fixture" --mode phases --iterations 1 --trace-phases 2>/dev/null
+python3 -I benchmarks/count-heartbeat-worktree-syscalls.py build/heartbeat-phases.trace
+```
+
+The parser counts calls from the thread that emitted the enclosing phase
+markers. It excludes writes and instrumentation clock reads. For aggregate
+`strace -c` counts, compare a snapshot-only run with `--mode noop` on the same
+fixture and the same file-syscall filter. The no-op mode performs only setup
+and teardown.

@@ -1,0 +1,5 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Security reporting guidance
+    url: https://github.com/ketvietlab/ketplus/blob/integration/SECURITY.md
+    about: Read this before reporting a suspected vulnerability; keep details private.

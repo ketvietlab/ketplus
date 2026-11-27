@@ -1,0 +1,167 @@
+{
+    "diff": {
+        "added": "#81A1C133",
+        "removed": "#BF616A4D"
+    },
+    "editor": {
+        "bg": "#2E3440",
+        "caret": "#D8DEE9",
+        "fg": "#D8DEE9",
+        "gutterBg": "#2E3440",
+        "gutterFg": "#4C566A",
+        "lineHighlight": "#3B4252",
+        "selection": "#434C5ECC"
+    },
+    "extends": "builtin-dark",
+    "id": "builtin.nord",
+    "kind": "dark",
+    "metadata": {
+        "author": "Arctic Ice Studio / Sven Greb",
+        "importReport": {
+            "counts": {
+                "approximated": 32,
+                "mapped": 52,
+                "skipped": 425
+            },
+            "path": "docs/theme-import-reports/nord.json"
+        },
+        "license": "MIT",
+        "manualAdjustments": [
+        ],
+        "sourceApp": "VS Code",
+        "sourceFile": "themes/nord-color-theme.json",
+        "sourceLabel": "Community",
+        "upstream": {
+            "author": "Arctic Ice Studio / Sven Greb",
+            "commit": "8ead09822c02d0d49d0f764104505e5a34d3689f",
+            "files": [
+                {
+                    "path": "license",
+                    "sha256": "25ac8188d670bd2ad2ce2f4f55ab88573010ee9f7a4502543cb1eea1e2274f8a",
+                    "url": "https://raw.githubusercontent.com/nordtheme/visual-studio-code/8ead09822c02d0d49d0f764104505e5a34d3689f/license"
+                },
+                {
+                    "path": "themes/nord-color-theme.json",
+                    "sha256": "cd15e5a0c2edb2e373196ed2ab0f0d90c0eccc61f82c37131a4efc3be2ca8061",
+                    "url": "https://raw.githubusercontent.com/nordtheme/visual-studio-code/8ead09822c02d0d49d0f764104505e5a34d3689f/themes/nord-color-theme.json"
+                }
+            ],
+            "key": "nord",
+            "license": "MIT",
+            "licenseFiles": [
+                {
+                    "distributionFile": "Nord-MIT.txt",
+                    "source": "license"
+                }
+            ],
+            "repo": "nordtheme/visual-studio-code"
+        },
+        "vscodeSemanticHighlighting": true
+    },
+    "name": "Nord",
+    "schemaVersion": 1,
+    "syntax": {
+        "attribute": {
+            "fg": "#8FBCBB"
+        },
+        "comment": {
+            "fg": "#616E88"
+        },
+        "constant": {
+            "bold": true,
+            "fg": "#D8DEE9",
+            "italic": false,
+            "underline": false
+        },
+        "function": {
+            "fg": "#81A1C1"
+        },
+        "keyword": {
+            "fg": "#81A1C1"
+        },
+        "number": {
+            "fg": "#B48EAD"
+        },
+        "operator": {
+            "fg": "#81A1C1"
+        },
+        "string": {
+            "fg": "#EBCB8B"
+        },
+        "type": {
+            "fg": "#8FBCBB"
+        },
+        "variable": {
+            "bold": true,
+            "fg": "#8FBCBB",
+            "italic": false,
+            "underline": false
+        }
+    },
+    "terminal": {
+        "ansi0": "#3B4252",
+        "ansi1": "#BF616A",
+        "ansi10": "#A3BE8C",
+        "ansi11": "#EBCB8B",
+        "ansi12": "#81A1C1",
+        "ansi13": "#B48EAD",
+        "ansi14": "#8FBCBB",
+        "ansi15": "#ECEFF4",
+        "ansi2": "#A3BE8C",
+        "ansi3": "#EBCB8B",
+        "ansi4": "#81A1C1",
+        "ansi5": "#B48EAD",
+        "ansi6": "#88C0D0",
+        "ansi7": "#E5E9F0",
+        "ansi8": "#4C566A",
+        "ansi9": "#BF616A",
+        "bg": "#2E3440",
+        "cursor": "#D8DEE9",
+        "fg": "#D8DEE9",
+        "selection": "#434C5ECC"
+    },
+    "ui": {
+        "button": {
+            "bg": "#88C0D0EE",
+            "fg": "#2E3440",
+            "hover": "#88C0D0"
+        },
+        "chrome": {
+            "accent": "#3B4252",
+            "appBackground": "#2E3440",
+            "border": "#3B4252",
+            "danger": "#BF616A",
+            "pageBackground": "#2E3440",
+            "panelBackground": "#2E3440",
+            "panelSubtle": "#3B4252",
+            "textDisabled": "#D8DEE9E6",
+            "textMain": "#D8DEE9",
+            "textSecondary": "#D8DEE9E6"
+        },
+        "focus": {
+            "border": "#3B4252"
+        },
+        "input": {
+            "bg": "#3B4252",
+            "border": "#3B4252",
+            "fg": "#D8DEE9"
+        },
+        "list": {
+            "fg": "#D8DEE9",
+            "hover": "#3B4252",
+            "selection": "#88C0D0",
+            "selectionFg": "#2E3440"
+        },
+        "sidebar": {
+            "bg": "#2E3440",
+            "border": "#3B4252",
+            "fg": "#D8DEE9"
+        },
+        "tab": {
+            "activeBg": "#3B4252",
+            "activeFg": "#D8DEE9",
+            "inactiveBg": "#2E3440",
+            "inactiveFg": "#D8DEE966"
+        }
+    }
+}

@@ -146,13 +146,39 @@ void ExplorerPanel::setRootPath(const QString& path) {
     rootRow_->setToolTip(rootPath_);
     rootRow_->setChecked(true);
     rootRow_->show();
-    tree_->setRootIndex(model_->setRootPath(rootPath_));
     pages_->setCurrentWidget(tree_);
+    // Only a panel someone hid waits; one that was never shown (a window still being built)
+    // loads at once, so it is ready when its window appears.
+    rootPending_ = true;
+    if (!(isHidden() && testAttribute(Qt::WA_WState_ExplicitShowHide)))
+        applyPendingRoot();
+}
+
+void ExplorerPanel::applyPendingRoot() {
+    if (!rootPending_)
+        return;
+    rootPending_ = false;
+    tree_->setRootIndex(model_->setRootPath(rootPath_));
+}
+
+void ExplorerPanel::showEvent(QShowEvent* event) {
+    QWidget::showEvent(event);
+    if (!rootPending_)
+        return;
+    applyPendingRoot();
+    // revealPath clears pendingReveal_ first, so pass a copy rather than the member.
+    if (!pendingReveal_.isEmpty())
+        revealPath(std::exchange(pendingReveal_, {}));
 }
 
 void ExplorerPanel::revealPath(const QString& path) {
     pendingReveal_.clear();
     if (path.isEmpty() || rootPath_.isEmpty()) {
+        return;
+    }
+    if (rootPending_) {
+        // The tree still shows the previous folder; reveal once the panel loads this one.
+        pendingReveal_ = QFileInfo(path).absoluteFilePath();
         return;
     }
     const QString target = QFileInfo(path).absoluteFilePath();
@@ -194,6 +220,7 @@ bool ExplorerPanel::tryRevealPath(const QString& path) {
 }
 
 void ExplorerPanel::focusTree() {
+    applyPendingRoot();
     tree_->setFocus();
     if (!tree_->currentIndex().isValid() && tree_->model()->rowCount(tree_->rootIndex()) > 0) {
         tree_->setCurrentIndex(tree_->model()->index(0, 0, tree_->rootIndex()));
@@ -321,6 +348,7 @@ void ExplorerPanel::setShowHiddenFiles(const bool show) {
 
 void ExplorerPanel::refresh() {
     if (!rootPath_.isEmpty()) {
+        rootPending_ = false;
         tree_->setRootIndex(model_->setRootPath(rootPath_));
         tree_->viewport()->update();
     }

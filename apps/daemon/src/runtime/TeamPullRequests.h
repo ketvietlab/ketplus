@@ -1,0 +1,52 @@
+#pragma once
+
+// ADR 0118: what the remote says about a team task's pull request, asked through the GitHub
+// command line tool. Free functions, so the session runtime's git worker can run them.
+#include "teams/TeamCoordinator.h"
+
+#include <atomic>
+
+namespace ketplus::daemon::team_pull_requests {
+
+// The answer of `gh pr view --json state,mergeCommit`, or an error for an answer it cannot read.
+[[nodiscard]] teams::PullRequestFact parse(const QByteArray& json);
+struct Limits final {
+    int requestMs{15000};
+    // The whole batch: what is left when it runs out is not in the answer, asked next time.
+    int batchMs{45000};
+};
+// Asks about each pull request once; `program` is the tool to run, found on the path when
+// empty. A request that does not answer in time ends the batch (the network is likely gone),
+// and so does `cancelled`; the pull requests not asked are left out of the answer. Never
+// touches a checkout.
+[[nodiscard]] QHash<QString, teams::PullRequestFact>
+ask(const QString& directory, const QStringList& urls, const QString& program = {},
+    Limits limits = {}, const std::atomic_bool* cancelled = nullptr);
+
+// T-3: where to look for the pull request opened from a task's branch.
+struct Lookup final {
+    QString taskId;
+    QString directory;
+    QString branch;
+};
+// The pull request URL in the answer of `gh pr list --head <branch> --state all --json
+// url,state,createdAt`: the newest one that is open; nothing for none (a closed or merged one may
+// belong to an earlier use of the branch name).
+[[nodiscard]] QString parseLink(const QByteArray& json);
+// Asks for the pull request of each task's branch, bounded as `ask` is; a task whose answer
+// is none or an error is left out. Never touches a checkout.
+[[nodiscard]] QHash<QString, QString> findLinks(const QList<Lookup>& lookups,
+                                                const QString& program = {}, Limits limits = {},
+                                                const std::atomic_bool* cancelled = nullptr);
+
+// T-40: the comment's link in what `gh pr comment` printed, or nothing.
+[[nodiscard]] QString commentUrl(const QByteArray& output);
+// Posts `body` as a comment on the pull request at `url` through `gh pr comment`, reading
+// the body from standard input; the comment's link, or the error in words. Never touches a
+// checkout.
+[[nodiscard]] teams::ReviewComment comment(const QString& directory, const QString& url,
+                                           const QString& body, const QString& program = {},
+                                           int timeoutMs = 30000,
+                                           const std::atomic_bool* cancelled = nullptr);
+
+} // namespace ketplus::daemon::team_pull_requests

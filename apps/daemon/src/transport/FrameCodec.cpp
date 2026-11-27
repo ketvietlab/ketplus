@@ -34,6 +34,14 @@ QList<Packet> FrameCodec::encode(const QJsonObject& frame, Channel channel, quin
         packets.append(
             {Channel::Events, QJsonDocument(marker).toJson(QJsonDocument::Compact), false});
     }
+    packets.append(encodeTransfer(transferId, bytes));
+    return packets;
+}
+
+QList<Packet> FrameCodec::encodeTransfer(quint64 transferId, const QByteArray& bytes) {
+    if (transferId == 0 || bytes.isEmpty() || bytes.size() > transferLimit)
+        return {};
+    QList<Packet> packets;
     constexpr qsizetype partSize = messageLimit - 12;
     quint32 index = 0;
     for (qsizetype offset = 0; offset < bytes.size(); offset += partSize, ++index) {
@@ -48,44 +56,68 @@ QList<Packet> FrameCodec::encode(const QJsonObject& frame, Channel channel, quin
     return packets;
 }
 
-QJsonObject FrameCodec::receive(const Packet& packet, qint64 now, QString* error) {
+bool FrameCodec::admit(const Packet& packet, qint64 now, QString* error) {
     error->clear();
     if (packet.bytes.isEmpty() || packet.bytes.size() > messageLimit || expire(now)) {
         *error = QStringLiteral("frame_limit");
-        return {};
+        return false;
     }
-    if (!packet.binary)
-        return decode(packet.bytes, error);
+    return true;
+}
+
+std::optional<FrameCodec::CompletedTransfer> FrameCodec::assemble(const Packet& packet, qint64 now,
+                                                                  QString* error) {
     if (packet.channel != Channel::Bulk || packet.bytes.size() <= 12) {
         *error = QStringLiteral("invalid_transfer");
-        return {};
+        return std::nullopt;
     }
     const auto id = qFromBigEndian<quint64>(packet.bytes.constData());
     const auto index = qFromBigEndian<quint32>(packet.bytes.constData() + 8);
     if (!id || (!transfers_.contains(id) &&
                 ((index & 0x7fffffffU) != 0 || transfers_.size() >= transferCountLimit))) {
         *error = QStringLiteral("transfer_limit");
-        return {};
+        return std::nullopt;
     }
     auto& transfer = transfers_[id];
     if ((index & 0x7fffffffU) != transfer.next ||
         transfer.bytes.size() + packet.bytes.size() - 12 > transferLimit) {
         transfers_.remove(id);
         *error = QStringLiteral("invalid_transfer_sequence");
-        return {};
+        return std::nullopt;
     }
     if (transfer.next++ == 0)
         transfer.started = now;
     transfer.bytes.append(packet.bytes.constData() + 12, packet.bytes.size() - 12);
     if ((index & 0x80000000U) == 0)
-        return {};
-    const auto bytes = transfer.bytes;
+        return std::nullopt;
+    CompletedTransfer done{id, transfer.bytes};
     transfers_.remove(id);
-    return decode(bytes, error);
+    return done;
+}
+
+QJsonObject FrameCodec::receive(const Packet& packet, qint64 now, QString* error) {
+    if (!admit(packet, now, error))
+        return {};
+    if (!packet.binary)
+        return decode(packet.bytes, error);
+    const auto done = assemble(packet, now, error);
+    return done ? decode(done->bytes, error) : QJsonObject{};
+}
+
+std::optional<FrameCodec::CompletedTransfer>
+FrameCodec::receiveTransfer(const Packet& packet, qint64 now, QString* error) {
+    if (!admit(packet, now, error))
+        return std::nullopt;
+    if (!packet.binary) {
+        *error = QStringLiteral("invalid_transfer");
+        return std::nullopt;
+    }
+    return assemble(packet, now, error);
 }
 
 bool FrameCodec::expire(qint64 now) {
-    return transfers_.removeIf(
-               [now](const auto& entry) { return now - entry.value().started > 30'000; }) != 0;
+    return transfers_.removeIf([now, timeout = transferTimeoutMs_](const auto& entry) {
+        return now - entry.value().started > timeout;
+    }) != 0;
 }
 } // namespace ketplus::daemon::transport

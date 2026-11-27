@@ -1,5 +1,6 @@
 #include "transport/RemotePeers.h"
 #include "KetPlusProductVersion.h"
+#include "transport/RelayPeerLink.h"
 #include <QDateTime>
 #include <QJsonDocument>
 #include <QSet>
@@ -7,13 +8,13 @@
 
 namespace ketplus::daemon::transport {
 namespace {
-qint64 now() { return QDateTime::currentMSecsSinceEpoch(); }
 qint64 timeOf(const QJsonValue& value) {
     return QDateTime::fromString(value.toString(), Qt::ISODateWithMs).toMSecsSinceEpoch();
 }
 } // namespace
 RemotePeers::RemotePeers(Reader reader, QObject* parent)
-    : QObject(parent), reader_(std::move(reader)) {
+    : QObject(parent), reader_(std::move(reader)),
+      clock_([] { return QDateTime::currentMSecsSinceEpoch(); }) {
     timer_.setInterval(50);
     connect(&timer_, &QTimer::timeout, this, &RemotePeers::tick);
 }
@@ -46,8 +47,57 @@ bool RemotePeers::accept(const QString& id, const QString& device, int version,
     peer->grant = grant;
     peer->link = link;
     peer->epoch = epoch;
+    link->setDiagnosticEpoch(epoch);
     peer->created = now();
     peer->lastPing = now();
+    attach(id, peer, link);
+    return true;
+}
+
+bool RemotePeers::acceptRelay(const QString& device, int version, PeerLink* link, qint64 epoch) {
+    const auto id = relayId(device);
+    if (!link || device.isEmpty() || version <= 0 || peers_.contains(id) || peers_.size() >= 8)
+        return false;
+    auto peer = std::make_shared<Peer>();
+    peer->device = device;
+    peer->version = version;
+    peer->grant = {{"deviceId", device}, {"capabilities", QJsonArray{"session.read"}}};
+    peer->link = link;
+    peer->epoch = epoch;
+    link->setDiagnosticEpoch(epoch);
+    peer->created = now();
+    peer->lastPing = now();
+    peer->hello = true;
+    peer->relay = true;
+    peer->relayUntil = now() + relayAuthorizationMs;
+    attach(id, peer, link);
+    return true;
+}
+
+void RemotePeers::expireRelay(const QString& id, Peer& peer) {
+    // Past its authorization the link sends nothing else: each subscription gets gap, so the
+    // client subscribes again after its cursor, then the link closes.
+    for (auto it = peer.subscriptions.cbegin(); it != peer.subscriptions.cend(); ++it) {
+        const QJsonObject gap{{"type", "gap"},
+                              {"sessionId", it.key()},
+                              {"afterCursor", it->cursor},
+                              {"epoch", peer.epoch}};
+        peer.link->send({Channel::Control, QJsonDocument(gap).toJson(QJsonDocument::Compact)});
+    }
+    close(id, "peer_expired");
+}
+
+PeerLink* RemotePeers::link(const QString& id) const {
+    const auto peer = peers_.value(id);
+    return peer ? peer->link.data() : nullptr;
+}
+
+bool RemotePeers::current(const QString& id, const Peer& peer) const {
+    return peer.relay ? peer.relayUntil > now()
+                      : validGrant(peer.grant, id, peer.device, peer.version, now());
+}
+
+void RemotePeers::attach(const QString& id, const std::shared_ptr<Peer>& peer, PeerLink* link) {
     peers_.insert(id, peer);
     link->setParent(this);
     connect(link, &PeerLink::received, this,
@@ -57,12 +107,11 @@ bool RemotePeers::accept(const QString& id, const QString& device, int version,
     connect(link, &PeerLink::closed, this, [this, id] { close(id, "link_closed"); });
     connect(link, &PeerLink::writable, this, &RemotePeers::tick);
     timer_.start();
-    return true;
 }
 
 bool RemotePeers::renew(const QString& id, const QJsonObject& grant) {
     const auto peer = peers_.value(id);
-    if (!peer || !validGrant(grant, id, peer->device, peer->version, now()) ||
+    if (!peer || peer->relay || !validGrant(grant, id, peer->device, peer->version, now()) ||
         grant.value("workspaceId") != peer->grant.value("workspaceId") ||
         grant.value("machineId") != peer->grant.value("machineId") ||
         grant.value("ownerSubjectId") != peer->grant.value("ownerSubjectId") ||
@@ -74,7 +123,7 @@ bool RemotePeers::renew(const QString& id, const QJsonObject& grant) {
 
 bool RemotePeers::authorized(const QString& id, const QJsonObject& command) const {
     const auto peer = peers_.value(id);
-    if (!peer || !peer->hello || !validGrant(peer->grant, id, peer->device, peer->version, now()))
+    if (!peer || peer->relay || !peer->hello || !current(id, *peer))
         return false;
     const auto kind = command.value("kind").toString();
     const auto expected = kind.startsWith("workspace.files.") || kind == "session.resource.resolve"
@@ -82,7 +131,8 @@ bool RemotePeers::authorized(const QString& id, const QJsonObject& command) cons
                           : kind == "worktree.branches.read" ? QStringLiteral("session.create")
                                                              : kind;
     const auto content = command.value("content").toObject();
-    return !kind.isEmpty() && kind != "session.delete" &&
+    // ADR 0116 §2: team commands travel only through the mailbox in this version.
+    return !kind.isEmpty() && kind != "session.delete" && !kind.startsWith("team.") &&
            command.value("id").toString().size() <= 128 &&
            !command.value("id").toString().isEmpty() &&
            !command.value("idempotencyKey").toString().isEmpty() &&
@@ -103,7 +153,11 @@ void RemotePeers::receive(const QString& id, Channel channel, const QByteArray& 
     auto peer = peers_.value(id);
     if (!peer)
         return;
-    if (!validGrant(peer->grant, id, peer->device, peer->version, now())) {
+    if (!current(id, *peer)) {
+        if (peer->relay) {
+            expireRelay(id, *peer);
+            return;
+        }
         close(id, "grant_expired");
         return;
     }
@@ -124,6 +178,10 @@ void RemotePeers::receive(const QString& id, Channel channel, const QByteArray& 
     if (frame.isEmpty())
         return;
     const auto type = frame.value("type").toString();
+    if (peer->relay && !RelayPeerLink::clientFrame(type)) {
+        close(id, "unsupported_frame");
+        return;
+    }
     if ((!binary && channel != Channel::Control) || (binary && type != "command")) {
         close(id, "wrong_channel");
         return;
@@ -174,6 +232,8 @@ void RemotePeers::receive(const QString& id, Channel channel, const QByteArray& 
             return;
         }
         peer->subscriptions.insert(session, {generation, cursor, false});
+        if (peer->relay)
+            peer->relayUntil = now() + relayAuthorizationMs;
     } else if (type == "unsubscribe") {
         peer->subscriptions.remove(frame.value("sessionId").toString());
     } else if (type == "ping") {
@@ -190,13 +250,24 @@ void RemotePeers::receive(const QString& id, Channel channel, const QByteArray& 
 
 bool RemotePeers::send(const QString& id, QJsonObject frame, Channel channel) {
     const auto peer = peers_.value(id);
-    if (!peer || !peer->link || !peer->hello ||
-        !validGrant(peer->grant, id, peer->device, peer->version, now()))
+    if (!peer || !peer->link || !peer->hello || !current(id, *peer))
         return false;
     frame.insert("epoch", peer->epoch);
     const auto packets = FrameCodec::encode(frame, channel, peer->nextTransfer++);
-    if (packets.isEmpty() || !peer->queue.append(packets)) {
+    if (packets.isEmpty()) {
         close(id, "send_queue_full");
+        return false;
+    }
+    if (!peer->queue.append(packets)) {
+        const auto session = frame.value("sessionId").toString();
+        if (channel != Channel::Events || !peer->subscriptions.contains(session)) {
+            close(id, "send_queue_full");
+            return false;
+        }
+        // A full live queue drops this subscriber's events; the client subscribes again
+        // after the cursor it last applied.
+        const auto after = peer->subscriptions.take(session).cursor;
+        send(id, {{"type", "gap"}, {"sessionId", session}, {"afterCursor", after}});
         return false;
     }
     peer->queue.flush(*peer->link);
@@ -213,15 +284,20 @@ void RemotePeers::tick() {
         const auto peer = peers_.value(id);
         if (!peer || !peer->link)
             continue;
-        if (!validGrant(peer->grant, id, peer->device, peer->version, now()) ||
-            (!peer->hello && now() - peer->created > 10'000) || peer->codec.expire(now())) {
+        if (peer->relay && !current(id, *peer)) {
+            expireRelay(id, *peer);
+            continue;
+        }
+        if (!current(id, *peer) || (!peer->hello && now() - peer->created > 10'000) ||
+            peer->codec.expire(now())) {
             close(id, "peer_expired");
             continue;
         }
         if (!peer->hello)
             continue;
         peer->queue.flush(*peer->link);
-        if (now() - peer->lastPing >= 15'000) {
+        // Relay links carry event frames only; the socket has its own liveness check.
+        if (!peer->relay && now() - peer->lastPing >= 15'000) {
             if (peer->missedPongs >= 3) {
                 close(id, "ping_timeout");
                 continue;
@@ -241,27 +317,56 @@ void RemotePeers::tick() {
             if (sub.live && !sub.dirty)
                 continue;
             sub.dirty = false;
-            const auto page = reader_(session, sub.generation, sub.cursor);
-            if (page.reset) {
-                send(id, {{"type", "session.reset"},
-                          {"sessionId", session},
-                          {"sessionGeneration", page.generation}});
-                peer->subscriptions.remove(session);
-            } else if (!page.events.isEmpty() || (!sub.live && page.live)) {
-                const QJsonObject body{{"events", page.events},
-                                       {"nextCursor", page.nextCursor},
-                                       {"hasMore", !page.live}};
-                if (send(id,
-                         {{"type", "events"},
-                          {"sessionId", session},
-                          {"page", body},
-                          {"live", page.live}},
-                         Channel::Events)) {
-                    sub.cursor = page.nextCursor;
-                    sub.live = page.live;
-                }
-            }
+            publish(id, *peer, session, sub);
         }
+    }
+}
+
+namespace {
+// Relay links carry no transfers: a page shrinks to the events that fit one message.
+constexpr qsizetype relayPageBudget = FrameCodec::messageLimit - 1024;
+} // namespace
+
+void RemotePeers::publish(const QString& id, Peer& peer, const QString& session,
+                          Subscription& sub) {
+    auto page = reader_(session, sub.generation, sub.cursor);
+    if (page.reset) {
+        send(id, {{"type", "session.reset"},
+                  {"sessionId", session},
+                  {"sessionGeneration", page.generation}});
+        peer.subscriptions.remove(session);
+        return;
+    }
+    if (peer.relay && !page.events.isEmpty()) {
+        QJsonArray events;
+        qsizetype size = 0;
+        for (const auto& event : std::as_const(page.events)) {
+            size += QJsonDocument(event.toObject()).toJson(QJsonDocument::Compact).size() + 1;
+            if (size > relayPageBudget)
+                break;
+            events.append(event);
+        }
+        if (events.isEmpty()) {
+            // One event above the message limit: the client resumes after it.
+            const auto after = page.events.first().toObject().value("cursor").toInteger();
+            peer.subscriptions.remove(session);
+            send(id, {{"type", "gap"}, {"sessionId", session}, {"afterCursor", after}});
+            return;
+        }
+        if (events.size() < page.events.size()) {
+            page.nextCursor = events.last().toObject().value("cursor").toInteger();
+            page.live = false;
+            page.events = events;
+        }
+    }
+    if (page.events.isEmpty() && (sub.live || !page.live))
+        return;
+    const QJsonObject body{
+        {"events", page.events}, {"nextCursor", page.nextCursor}, {"hasMore", !page.live}};
+    if (send(id, {{"type", "events"}, {"sessionId", session}, {"page", body}, {"live", page.live}},
+             Channel::Events)) {
+        sub.cursor = page.nextCursor;
+        sub.live = page.live;
     }
 }
 
@@ -290,6 +395,24 @@ void RemotePeers::revoke(const QString& device) {
     for (const auto& id : peers_.keys())
         if (peers_.value(id)->device == device)
             close(id, "device_revoked");
+}
+void RemotePeers::retainRelay(const QHash<QString, int>& activeDevices) {
+    for (const auto& id : peers_.keys()) {
+        const auto peer = peers_.value(id);
+        if (!peer->relay)
+            continue;
+        const auto found = activeDevices.constFind(peer->device);
+        if (found == activeDevices.cend())
+            close(id, "device_revoked");
+        else if (found.value() != peer->version)
+            close(id, "key_changed");
+    }
+}
+void RemotePeers::closeRelay(const QString& device) { close(relayId(device), "pin_changed"); }
+void RemotePeers::closeRelay() {
+    for (const auto& id : peers_.keys())
+        if (peers_.value(id)->relay)
+            close(id, "relay_closed");
 }
 void RemotePeers::closeAll() {
     for (const auto& id : peers_.keys())

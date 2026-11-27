@@ -76,6 +76,8 @@ QString resolveMediaRef(const QJsonObject& block, const QString& mediaDirectory)
     if (file.ownerId() != ::getuid())
         return {};
 #endif
+    // Windows has no uid. The cache directory is under the user's profile, whose ACL already
+    // limits writers to the user and administrators, so there is no ownership check to make.
     return QUrl::fromLocalFile(file.absoluteFilePath()).toString();
 }
 

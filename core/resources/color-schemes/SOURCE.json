@@ -1,0 +1,10 @@
+{
+  "source": {
+    "package": "@ketvietlab/design-system",
+    "version": "0.1.44",
+    "revision": "18609c971fe46fa706f1451be2401a4bfe1fab29",
+    "sha256": "ffcb1de26f70e65da025b377e9857950ea18d5750c17f64fcf2aed7435b35733"
+  },
+  "license": "MIT",
+  "description": "Két Design System token snapshots, projected to KetPlus v1 color scheme tokens. Translucent chrome values are composited as in the existing ThemePalette."
+}

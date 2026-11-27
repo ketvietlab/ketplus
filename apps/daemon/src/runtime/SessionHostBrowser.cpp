@@ -19,7 +19,8 @@ void SessionHost::closeTurnBrowserSessions(Session& session) {
     // Only the server KetPlus injected answers to this tool; a turn that never called it has
     // nothing open, and calling would start an idle server just to close nothing.
     if (!std::exchange(session.browserUsedThisTurn, false) ||
-        adapter_->launchedBrowserArguments().isEmpty() || session.stored.threadId.isEmpty())
+        adapter_->launchedBrowserArguments(session.stored.threadId).isEmpty() ||
+        session.stored.threadId.isEmpty())
         return;
     const QString sessionId = session.stored.id;
     adapter_->call(

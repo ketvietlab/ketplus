@@ -1,11 +1,19 @@
 #include "protocol/DaemonProtocol.h"
+#include "runtime/BackgroundTaskSummary.h"
 #include "runtime/SessionHost.h"
+#include "teams/TeamCoordinator.h"
 
 #include <QJsonDocument>
+#include <algorithm>
 #include <optional>
 
 namespace ketplus::daemon {
 namespace {
+// A live page leaves room in the 1 MiB frame for the first deletion page (64 KiB) and the
+// catalog's capability fields.
+constexpr qsizetype maximumLiveSessionPageBytes = 512 * 1024;
+constexpr qsizetype maximumLiveSessionPageRows = 512;
+
 QJsonObject error(const QString& code, const QString& message) {
     return {{"ok", false}, {"error_code", code}, {"error_message", message}};
 }
@@ -15,6 +23,16 @@ QJsonObject SessionHost::listSessions(const QJsonObject& request) const {
     const auto payload = request.value("payload").toObject();
     const bool paged = payload.contains("deleted_sessions_page_version");
     const bool liveOnly = payload.value("session_catalog_live_only").toBool();
+    // Live session pages (session.catalog_pages/1): a keyset walk by session id, so a catalog of
+    // thousands of conversations is never one frame over the wire limit. Continuations are
+    // live-only; the first page may come with the deletion walk's first page.
+    const bool livePaged = payload.contains("live_sessions_page_version");
+    const auto liveAfter = payload.value("live_sessions_after");
+    if ((livePaged && payload.value("live_sessions_page_version").toInteger(-1) != 1) ||
+        (!liveAfter.isUndefined() &&
+         (!livePaged || !liveOnly || !liveAfter.isString() || liveAfter.toString().isEmpty() ||
+          liveAfter.toString().toUtf8().size() > 1024)))
+        return error("invalid_session_catalog", "Invalid live session page request.");
     if ((payload.contains("session_catalog_live_only") &&
          !payload.value("session_catalog_live_only").isBool()) ||
         (liveOnly && (!paged || payload.contains("deleted_sessions_after") ||
@@ -99,7 +117,25 @@ QJsonObject SessionHost::listSessions(const QJsonObject& request) const {
     QJsonArray values;
     const QHash<QString, QString> numbers = journal_->conversationNumbers();
     const QHash<QString, QJsonObject> agentTurns = agentTurnSenders();
-    for (const Session& session : sessions_) {
+    QStringList ids = sessions_.keys();
+    if (livePaged) {
+        // UTF-8 byte order, as the client checks it; ids are ASCII in practice.
+        std::sort(ids.begin(), ids.end(), [](const QString& left, const QString& right) {
+            return left.toUtf8() < right.toUtf8();
+        });
+        if (!liveAfter.isUndefined()) {
+            const QByteArray after = liveAfter.toString().toUtf8();
+            ids.erase(ids.begin(), std::upper_bound(ids.begin(), ids.end(), after,
+                                                    [](const QByteArray& value, const QString& id) {
+                                                        return value < id.toUtf8();
+                                                    }));
+        }
+    }
+    qsizetype pageBytes = 0;
+    QString next;
+    const auto recordedRepositories = journal_->worktreeRepositories();
+    for (const QString& id : std::as_const(ids)) {
+        const Session& session = *sessions_.constFind(id);
         const StoredSession& stored = session.stored;
         QJsonObject value{{QStringLiteral("session_id"), stored.id},
                           {QStringLiteral("session_generation"), stored.generation},
@@ -115,6 +151,18 @@ QJsonObject SessionHost::listSessions(const QJsonObject& request) const {
                           {QStringLiteral("last_event_cursor"), stored.lastCursor},
                           {QStringLiteral("last_seen_cursor"), stored.lastSeenCursor},
                           {QStringLiteral("last_turn_started_at"), stored.lastTurnStartedAt}};
+        if (stored.sidebarRepository)
+            value.insert(QStringLiteral("sidebar_repository_path"), *stored.sidebarRepository);
+        else {
+            const auto navigation = journal_->conversationPath(stored);
+            const auto recorded = recordedRepositories.value(navigation);
+            value.insert(QStringLiteral("sidebar_repository_fallback_path"),
+                         recorded.isEmpty() ? navigation : recorded);
+        }
+        if (const auto* team = teams_ ? teams_->teamOf(stored.id) : nullptr) {
+            value.insert(QStringLiteral("sidebar_team_repository_path"),
+                         team->sidebarRepository.value_or(team->repository));
+        }
         if (const QString number = numbers.value(stored.id); !number.isEmpty())
             value.insert(QStringLiteral("number"), number);
         if (!stored.archivedAt.isEmpty())
@@ -124,9 +172,31 @@ QJsonObject SessionHost::listSessions(const QJsonObject& request) const {
             value.insert(QStringLiteral("awaiting_reply"), true);
         if (const auto sender = agentTurns.constFind(stored.id); sender != agentTurns.cend())
             value.insert(QStringLiteral("agent_turn"), *sender);
-        if (!session.backgroundTasks.isEmpty())
-            value.insert(QStringLiteral("background_tasks"), session.backgroundTasks);
+        const auto taskSnapshot = managedTaskSnapshot(session.stored.id, session.stored.generation);
+        const auto tasks = taskSnapshot.isEmpty() ? session.backgroundTasks
+                                                  : taskSnapshot.value("tasks").toArray();
+        if (!tasks.isEmpty())
+            value.insert(QStringLiteral("background_tasks"), tasks);
+        // What the conversation's ended turn still waits on, beyond the bounded rows above.
+        const QJsonObject summary = taskSnapshot.isEmpty()
+                                        ? backgroundTaskSummary({}, session.backgroundTasks)
+                                        : taskSnapshot.value(QStringLiteral("summary")).toObject();
+        // Always sent, so a zero tells a client that its cached live rows have ended.
+        value.insert(QStringLiteral("background_task_summary"), summary);
+        if (livePaged) {
+            const qsizetype bytes = QJsonDocument(value).toJson(QJsonDocument::Compact).size() + 1;
+            if (!values.isEmpty() && (values.size() >= maximumLiveSessionPageRows ||
+                                      pageBytes + bytes > maximumLiveSessionPageBytes)) {
+                next = values.last().toObject().value(QStringLiteral("session_id")).toString();
+                break;
+            }
+            pageBytes += bytes;
+        }
         values.append(value);
+    }
+    if (livePaged) {
+        catalog.insert(QStringLiteral("live_sessions_page_version"), 1);
+        catalog.insert(QStringLiteral("live_sessions_next"), next);
     }
     const QJsonObject live{
         {QStringLiteral("sessions"), values},

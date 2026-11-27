@@ -66,6 +66,6 @@ Cursor's ACP has no fork operation.
   journal query and deletion would have to follow the reference. Copying keeps
   sessions independent.
 - Mobile uses the signed, generation-scoped `session.fork` command through the
-  relay. The daemon acknowledges asynchronously, then publishes the new session
+  hosted service. The daemon acknowledges asynchronously, then publishes the new session
   and its independently encrypted history. Replays use the same command and fork
   identifiers so a lost response cannot produce a second conversation.

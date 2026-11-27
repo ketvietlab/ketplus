@@ -1,0 +1,4 @@
+#!/bin/sh
+# CTest artifacts move between runner images. Keep their command in the checkout,
+# and resolve Python on the runner executing the test, not the one configuring it.
+exec python3 "$@"

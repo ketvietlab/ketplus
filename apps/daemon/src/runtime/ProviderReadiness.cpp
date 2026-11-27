@@ -70,12 +70,12 @@ void ProviderReadiness::forget(const QString& provider) {
 }
 
 void ProviderReadiness::observeClaudeSource(const QString& source) {
-    // "none": the sidecar found no credential. Any other source answers a query, but an earlier
-    // failure (an expired sign-in, a rejected key) stays until a turn works or the user checks.
-    if (source == QStringLiteral("none")) {
-        observe(QString::fromLatin1(claude), QStringLiteral("signed_out"));
+    // "none" only says no API key was used: a Claude subscription sign-in reports it too (ADR
+    // 0026), so it proves nothing either way. A real sign-out arrives as the turn's auth error.
+    // Any other source answers a query, but an earlier failure (an expired sign-in, a rejected
+    // key) stays until a turn works or the user checks.
+    if (source.isEmpty() || source == QStringLiteral("none"))
         return;
-    }
     const QString current = observed_.value(QString::fromLatin1(claude)).state;
     if (current.isEmpty() || current == QStringLiteral("signed_out"))
         observe(QString::fromLatin1(claude), QStringLiteral("ready"));

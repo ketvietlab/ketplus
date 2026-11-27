@@ -31,6 +31,19 @@ bool LocalJournal::initializeContexts() {
         setError(query.lastError().text());
         return false;
     }
+    // Additive only: old rows stay NULL rather than inventing a repository from their current cwd.
+    if (!query.exec("PRAGMA table_info(conversation_navigation)")) {
+        setError(query.lastError().text());
+        return false;
+    }
+    bool hasRepository = false;
+    while (query.next())
+        hasRepository = hasRepository || query.value(1).toString() == "repository_path";
+    if (!hasRepository &&
+        !query.exec("ALTER TABLE conversation_navigation ADD COLUMN repository_path TEXT")) {
+        setError(query.lastError().text());
+        return false;
+    }
     return true;
 }
 
@@ -43,11 +56,29 @@ QString LocalJournal::conversationPath(const StoredSession& session) const {
 }
 bool LocalJournal::recordConversationPath(const StoredSession& session) {
     QSqlQuery q(database_);
-    q.prepare("INSERT OR IGNORE INTO conversation_navigation VALUES (?,?,?)");
+    q.prepare("INSERT OR IGNORE INTO conversation_navigation "
+              "(session_id,generation,path,repository_path) VALUES (?,?,?,?)");
     q.addBindValue(session.id);
     q.addBindValue(session.generation);
     q.addBindValue(session.worktreePath);
+    // A null QString is also SQL NULL; normalize known-no-repository to a non-null empty string.
+    q.addBindValue(session.sidebarRepository
+                       ? QVariant(session.sidebarRepository->isEmpty() ? QStringLiteral("")
+                                                                       : *session.sidebarRepository)
+                       : QVariant(QMetaType::fromType<QString>()));
     return q.exec();
+}
+
+std::optional<QString>
+LocalJournal::conversationSidebarRepository(const StoredSession& session) const {
+    QSqlQuery q(database_);
+    q.prepare("SELECT repository_path FROM conversation_navigation WHERE session_id=? AND "
+              "generation=?");
+    q.addBindValue(session.id);
+    q.addBindValue(session.generation);
+    if (!q.exec() || !q.next() || q.value(0).isNull())
+        return std::nullopt;
+    return q.value(0).toString();
 }
 
 bool LocalJournal::rememberWorktree(const QString& path) {
@@ -58,6 +89,29 @@ bool LocalJournal::rememberWorktree(const QString& path) {
     q.addBindValue(path);
     q.addBindValue(QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs));
     return q.exec();
+}
+
+QStringList LocalJournal::worktreePathsAfter(const QString& after, const int limit,
+                                             const bool conversationsOnly) const {
+    QSqlQuery query(database_);
+    if (conversationsOnly) {
+        query.prepare(QStringLiteral("SELECT DISTINCT s.worktree_path FROM sessions s "
+                                     "JOIN worktree_catalog c ON c.path = s.worktree_path "
+                                     "WHERE s.worktree_path > ? ORDER BY s.worktree_path LIMIT ?"));
+    } else {
+        query.prepare(QStringLiteral(
+            "SELECT path FROM worktree_catalog WHERE path > ? ORDER BY path LIMIT ?"));
+    }
+    query.addBindValue(after);
+    query.addBindValue(limit);
+    if (!query.exec()) {
+        setError(query.lastError().text());
+        return {};
+    }
+    QStringList paths;
+    while (query.next())
+        paths.append(query.value(0).toString());
+    return paths;
 }
 
 bool LocalJournal::recordWorktreeActivity(const StoredSession& session, const QString& path,

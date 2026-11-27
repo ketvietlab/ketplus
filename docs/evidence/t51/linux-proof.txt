@@ -1,0 +1,11 @@
+Sanitized actual Linux offscreen proof output, review fixes:
+PASS   : SshInstallUiTest::initTestCase()
+PASS   : SshInstallUiTest::explicitConsentRouting(decline)
+PASS   : SshInstallUiTest::explicitConsentRouting(confirm)
+PASS   : SshInstallUiTest::missingKeyNeverDownloads()
+PASS   : SshInstallUiTest::tamperedManifestNeverInstalls()
+PASS   : SshInstallUiTest::cancelAtReadyRollsBackWithoutRequestingAConnection()
+QINFO  : SshInstallUiTest::signedInstallDeclineConnectAndUninstallOnIsolatedProfile() QA proof: signed full runtime -> verified SSH -> authenticated daemon.hello -> Connected; same UID, isolated HOME/XDG, loopback-only control URL.
+PASS   : SshInstallUiTest::signedInstallDeclineConnectAndUninstallOnIsolatedProfile()
+PASS   : SshInstallUiTest::cleanupTestCase()
+Totals: 8 passed, 0 failed, 0 skipped, 0 blacklisted, 152834ms

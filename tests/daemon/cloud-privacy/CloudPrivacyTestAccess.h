@@ -7,7 +7,18 @@
 namespace ketplus::daemon {
 class CloudPrivacyTestAccess {
   public:
+    static transport::Signaling& signaling(CloudControlClient& client) {
+        return *client.signaling_;
+    }
+    static void scope(CloudControlClient& client, const QString& machine,
+                      const QString& workspace) {
+        client.machineId_ = machine;
+        client.workspaceId_ = workspace;
+    }
     static transport::RemotePeers& peers(CloudControlClient& client) { return *client.peers_; }
+    static transport::PushSignals& pushSignals(CloudControlClient& client) {
+        return *client.pushSignals_;
+    }
     static transport::EventPage peerEvents(CloudControlClient& client, const QString& id,
                                            qint64 gen, qint64 cursor) {
         return client.peerEvents(id, gen, cursor);
@@ -49,15 +60,42 @@ class CloudPrivacyTestAccess {
         for (auto& backoff : client.eventUploadBackoff_)
             backoff.retryAt = QDeadlineTimer(0);
     }
+    // Whether the last failed upload of a session waits on a cursor gap; -1 when it does not wait.
+    static int uploadWaitsOnGap(const CloudControlClient& client,
+                                const QString& key = "session-synthetic:1") {
+        const auto found = client.eventUploadBackoff_.constFind(key);
+        return found == client.eventUploadBackoff_.cend() ? -1 : int(found->gap);
+    }
+    // Registers every session's upload cursor, as the first upload pass does.
+    static bool registerCursors(CloudControlClient& client) {
+        return client.registerCloudCursors();
+    }
+    static void setKnownUploadedCursor(CloudControlClient& client, qint64 cursor,
+                                       const QString& key = "session-synthetic:1") {
+        client.knownUploadedCursors_.insert(key, cursor);
+    }
+    static qint64 knownUploadedCursor(const CloudControlClient& client,
+                                      const QString& key = "session-synthetic:1") {
+        return client.knownUploadedCursors_.value(key, -1);
+    }
+    static void publishHeartbeat(CloudControlClient& client) { client.heartbeat(); }
+    static void startIdleTimers(CloudControlClient& client) {
+        client.syncTimer_.start();
+        client.commandTimer_.start();
+    }
     // Sends one heartbeat batch per entry, as the heartbeat timer does after its snapshot.
     static void heartbeat(CloudControlClient& client, const QList<QJsonArray>& batches) {
         client.heartbeatInFlight_ = true;
         client.refusalsThisHeartbeat_.clear();
-        client.sendHeartbeatBatches(batches, 0, client.accountEpoch_, client.machineId_,
-                                    client.workspaceId_);
+        client.sendHeartbeatBatches(batches, 0, client.accountFence());
     }
     static bool heartbeatIdle(const CloudControlClient& client) {
         return !client.heartbeatInFlight_;
+    }
+    static QList<QJsonArray> sealMetadata(CloudControlClient& client,
+                                          const QList<QJsonArray>& batches,
+                                          const QHash<QString, QJsonObject>& metadata) {
+        return client.withSessionMetadata(batches, metadata);
     }
     static bool idle(const CloudControlClient& client) {
         return client.eventUploadsInFlight_.isEmpty();
@@ -107,6 +145,24 @@ class CloudPrivacyTestAccess {
                                 const QJsonObject& payload, const QByteArray& senderKey) {
         client.executeWorktreeCommand(command, payload, senderKey);
     }
+    static void teamCommand(CloudControlClient& client, const QJsonObject& command,
+                            const QJsonObject& payload, const QByteArray& senderKey) {
+        client.executeTeamCommand(command, payload, senderKey);
+    }
+    static QByteArray resultAad(CloudControlClient& client, const QJsonObject& command, int attempt,
+                                const QString& status, const QString& code,
+                                const QJsonObject& content) {
+        return client.commandResultAssociatedData(command, attempt, status, code, content);
+    }
+    static QJsonArray worktreeSnapshots(const CloudControlClient& client) {
+        return client.worktreeSnapshots();
+    }
+    static bool teamSyncPending(const CloudControlClient& client) {
+        return client.teamSyncTimer_.isActive();
+    }
+    static bool stateSyncPending(const CloudControlClient& client) {
+        return client.stateSyncTimer_.isActive();
+    }
     static RemoteWorktreeQuota& worktreeQuota(CloudControlClient& client) {
         return client.worktreeQuota_;
     }
@@ -120,13 +176,29 @@ class CloudPrivacyTestAccess {
         client.machineKeyVersion_ = version;
     }
     static QJsonObject status(const CloudControlClient& client) { return client.status(); }
+    // Reads the capabilities of a heartbeat answer, as an accepted heartbeat does.
+    static void heartbeatAnswer(CloudControlClient& client, const QJsonObject& answer) {
+        client.negotiatePeerTransport(answer);
+    }
+    static bool eventsForwardOnly(CloudControlClient& client) { return client.eventsForwardOnly(); }
+    // A journaled event announced by the host: releases retention for its own session only.
+    static void noteEvent(CloudControlClient& client, qint64 cursor,
+                          const QString& session = "session-synthetic", qint64 generation = 1) {
+        client.noteForwardOnlyEvent(session, generation, cursor);
+    }
+    static void forgetForwardOnly(CloudControlClient& client) { client.eventsForwardOnly_.reset(); }
+    static qint64 uploadedCursor(CloudControlClient& client,
+                                 const QString& session = "session-synthetic",
+                                 qint64 generation = 1) {
+        return client.uploadedCursor(session, generation);
+    }
     static void senderKeys(CloudControlClient& client, const QString& sender, int version,
                            std::function<void(const QJsonObject&, const QString&)> callback) {
         client.withSenderKeys(sender, version, std::move(callback));
     }
     static void expireSenderKeys(CloudControlClient& client) {
         for (auto& entry : client.senderKeys_)
-            entry.second = QDateTime::currentDateTimeUtc().addSecs(-1);
+            entry.expiresAt = QDateTime::currentDateTimeUtc().addSecs(-1);
     }
     // Pins a device on this Mac, as approving its pairing does.
     static void pinDevice(CloudControlClient& client, const QString& id, int version,
@@ -163,6 +235,7 @@ class CloudPrivacyTestAccess {
         client.daemonToken_.clear();
         client.ensureDaemonCredential(std::move(done));
     }
+    static QString token(const CloudControlClient& client) { return client.daemonToken_; }
     static void pollCommands(CloudControlClient& client) { client.pollCommands(); }
     static void wakeCommandPoll(CloudControlClient& client) { client.wakeCommandPoll(); }
     static bool commandPollInFlight(const CloudControlClient& client) {

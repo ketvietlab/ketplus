@@ -1,0 +1,1133 @@
+{
+    "counts": {
+        "approximated": 5,
+        "mapped": 18,
+        "skipped": 164
+    },
+    "diagnostics": [
+    ],
+    "items": [
+        {
+            "disposition": "approximated",
+            "reason": "IDE parent 'Default' is unavailable; approximate KetPlus light/dark base replaces it",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/@parent_scheme",
+            "targetPath": "extends"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "IDE metadata/section is not applied",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/metaInfo/",
+            "targetPath": ""
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit JetBrains color mapping",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/colors/CARET_ROW_COLOR",
+            "targetPath": "editor.lineHighlight"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit JetBrains color mapping",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/colors/LINE_NUMBERS_COLOR",
+            "targetPath": "editor.gutterFg"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit JetBrains color mapping",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/colors/SELECTION_BACKGROUND",
+            "targetPath": "editor.selection"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Invalid or empty XML color; KetPlus fallback retained",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/colors/SELECTION_FOREGROUND",
+            "targetPath": "editor.selectionFg"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "IDE color has no equivalent KetPlus token",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/colors/TEARLINE_COLOR",
+            "targetPath": ""
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit JetBrains color mapping",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/colors/GUTTER_BACKGROUND",
+            "targetPath": "editor.gutterBg"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "IDE color has no equivalent KetPlus token",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/colors/FOLDED_TEXT_BORDER_COLOR",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "No authored value; IDE baseAttributes inheritance unavailable, KetPlus base retained",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/ANNOTATION_NAME_ATTRIBUTES",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "No equivalent KetPlus attribute property",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/CTRL_CLICKABLE/FOREGROUND",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Effect color/geometry is unsupported",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/CTRL_CLICKABLE/EFFECT_COLOR",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Effect color/geometry is unsupported",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/CTRL_CLICKABLE/EFFECT_TYPE",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "IDE/language-specific key has no explicit shared mapping",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/CTRL_CLICKABLE",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "No authored value; IDE baseAttributes inheritance unavailable, KetPlus base retained",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/CUSTOM_KEYWORD1_ATTRIBUTES",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "No equivalent KetPlus attribute property",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/CUSTOM_KEYWORD2_ATTRIBUTES/FOREGROUND",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "IDE/language-specific key has no explicit shared mapping",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/CUSTOM_KEYWORD2_ATTRIBUTES",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "No equivalent KetPlus attribute property",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/CUSTOM_KEYWORD3_ATTRIBUTES/FOREGROUND",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "IDE/language-specific key has no explicit shared mapping",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/CUSTOM_KEYWORD3_ATTRIBUTES",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "No equivalent KetPlus attribute property",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/CUSTOM_KEYWORD4_ATTRIBUTES/FOREGROUND",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "IDE/language-specific key has no explicit shared mapping",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/CUSTOM_KEYWORD4_ATTRIBUTES",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "No authored value; IDE baseAttributes inheritance unavailable, KetPlus base retained",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/CUSTOM_NUMBER_ATTRIBUTES",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "No authored value; IDE baseAttributes inheritance unavailable, KetPlus base retained",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/CUSTOM_STRING_ATTRIBUTES",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "No equivalent KetPlus attribute property",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/DEFAULT_ATTRIBUTE/FOREGROUND",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "IDE/language-specific key has no explicit shared mapping",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/DEFAULT_ATTRIBUTE",
+            "targetPath": ""
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Shared syntax foreground",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/DEFAULT_CONSTANT/FOREGROUND",
+            "targetPath": "syntax.constant.fg"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "FONT_TYPE bits become explicit bold/italic flags",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/DEFAULT_CONSTANT/FONT_TYPE",
+            "targetPath": "syntax.constant"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Effect color/geometry is unsupported",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/DEFAULT_DOC_COMMENT_TAG/EFFECT_COLOR",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Effect color/geometry is unsupported",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/DEFAULT_DOC_COMMENT_TAG/EFFECT_TYPE",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "IDE/language-specific key has no explicit shared mapping",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/DEFAULT_DOC_COMMENT_TAG",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "No equivalent KetPlus attribute property",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/DEFAULT_DOC_COMMENT_TAG_VALUE/FOREGROUND",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Scheme font family/size or default font styling is ignored; user typography retained",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/DEFAULT_DOC_COMMENT_TAG_VALUE/FONT_TYPE",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "IDE/language-specific key has no explicit shared mapping",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/DEFAULT_DOC_COMMENT_TAG_VALUE",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "No equivalent KetPlus attribute property",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/DEFAULT_ENTITY/FOREGROUND",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "IDE/language-specific key has no explicit shared mapping",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/DEFAULT_ENTITY",
+            "targetPath": ""
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Shared syntax foreground",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/DEFAULT_FUNCTION_DECLARATION/FOREGROUND",
+            "targetPath": "syntax.function.fg"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "No equivalent KetPlus attribute property",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/DEFAULT_INVALID_STRING_ESCAPE/FOREGROUND",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Syntax backgrounds have no shared-role equivalent",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/DEFAULT_INVALID_STRING_ESCAPE/BACKGROUND",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Scheme font family/size or default font styling is ignored; user typography retained",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/DEFAULT_INVALID_STRING_ESCAPE/FONT_TYPE",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "IDE/language-specific key has no explicit shared mapping",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/DEFAULT_INVALID_STRING_ESCAPE",
+            "targetPath": ""
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Shared syntax foreground",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/DEFAULT_KEYWORD/FOREGROUND",
+            "targetPath": "syntax.keyword.fg"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Invalid FONT_TYPE; plain flags retained",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/DEFAULT_KEYWORD/FONT_TYPE",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Effect color/geometry is unsupported",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/DEFAULT_LABEL/EFFECT_COLOR",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Effect color/geometry is unsupported",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/DEFAULT_LABEL/EFFECT_TYPE",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "IDE/language-specific key has no explicit shared mapping",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/DEFAULT_LABEL",
+            "targetPath": ""
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Shared syntax foreground",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/DEFAULT_LINE_COMMENT/FOREGROUND",
+            "targetPath": "syntax.comment.fg"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "FONT_TYPE bits become explicit bold/italic flags",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/DEFAULT_LINE_COMMENT/FONT_TYPE",
+            "targetPath": "syntax.comment"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Shared syntax foreground",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/DEFAULT_METADATA/FOREGROUND",
+            "targetPath": "syntax.attribute.fg"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Shared syntax foreground",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/DEFAULT_NUMBER/FOREGROUND",
+            "targetPath": "syntax.number.fg"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Invalid FONT_TYPE; plain flags retained",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/DEFAULT_NUMBER/FONT_TYPE",
+            "targetPath": ""
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Shared syntax foreground",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/DEFAULT_STRING/FOREGROUND",
+            "targetPath": "syntax.string.fg"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Invalid FONT_TYPE; plain flags retained",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/DEFAULT_STRING/FONT_TYPE",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Syntax backgrounds have no shared-role equivalent",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/DEFAULT_TAG/BACKGROUND",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "IDE/language-specific key has no explicit shared mapping",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/DEFAULT_TAG",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "No equivalent KetPlus attribute property",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/DEFAULT_VALID_STRING_ESCAPE/FOREGROUND",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "IDE/language-specific key has no explicit shared mapping",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/DEFAULT_VALID_STRING_ESCAPE",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Syntax backgrounds have no shared-role equivalent",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/DIFF_MODIFIED/BACKGROUND",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "No equivalent KetPlus attribute property",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/DIFF_MODIFIED/ERROR_STRIPE_COLOR",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "IDE/language-specific key has no explicit shared mapping",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/DIFF_MODIFIED",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "No equivalent KetPlus attribute property",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/FOLDED_TEXT_ATTRIBUTES/FOREGROUND",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Syntax backgrounds have no shared-role equivalent",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/FOLDED_TEXT_ATTRIBUTES/BACKGROUND",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Effect color/geometry is unsupported",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/FOLDED_TEXT_ATTRIBUTES/EFFECT_TYPE",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "IDE/language-specific key has no explicit shared mapping",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/FOLDED_TEXT_ATTRIBUTES",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "No equivalent KetPlus attribute property",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/FOLLOWED_HYPERLINK_ATTRIBUTES/FOREGROUND",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Effect color/geometry is unsupported",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/FOLLOWED_HYPERLINK_ATTRIBUTES/EFFECT_COLOR",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Effect color/geometry is unsupported",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/FOLLOWED_HYPERLINK_ATTRIBUTES/EFFECT_TYPE",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "IDE/language-specific key has no explicit shared mapping",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/FOLLOWED_HYPERLINK_ATTRIBUTES",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "No equivalent KetPlus attribute property",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/GHERKIN_PYSTRING/FOREGROUND",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "IDE/language-specific key has no explicit shared mapping",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/GHERKIN_PYSTRING",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "No equivalent KetPlus attribute property",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/GHERKIN_REGEXP_PARAMETER/FOREGROUND",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "IDE/language-specific key has no explicit shared mapping",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/GHERKIN_REGEXP_PARAMETER",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "No equivalent KetPlus attribute property",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/GO_BUILTIN_CONSTANT/FOREGROUND",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "IDE/language-specific key has no explicit shared mapping",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/GO_BUILTIN_CONSTANT",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "No equivalent KetPlus attribute property",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/GO_BUILTIN_FUNCTION_CALL/FOREGROUND",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "IDE/language-specific key has no explicit shared mapping",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/GO_BUILTIN_FUNCTION_CALL",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "No equivalent KetPlus attribute property",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/GO_BUILTIN_TYPE_REFERENCE/FOREGROUND",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "IDE/language-specific key has no explicit shared mapping",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/GO_BUILTIN_TYPE_REFERENCE",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "No equivalent KetPlus attribute property",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/GO_BUILTIN_VARIABLE/FOREGROUND",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "IDE/language-specific key has no explicit shared mapping",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/GO_BUILTIN_VARIABLE",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "No equivalent KetPlus attribute property",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/GO_EXPORTED_FUNCTION/FOREGROUND",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "IDE/language-specific key has no explicit shared mapping",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/GO_EXPORTED_FUNCTION",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "No equivalent KetPlus attribute property",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/GO_EXPORTED_FUNCTION_CALL/FOREGROUND",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "IDE/language-specific key has no explicit shared mapping",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/GO_EXPORTED_FUNCTION_CALL",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "No equivalent KetPlus attribute property",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/GO_LOCAL_CONSTANT/FOREGROUND",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "IDE/language-specific key has no explicit shared mapping",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/GO_LOCAL_CONSTANT",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "No equivalent KetPlus attribute property",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/GO_LOCAL_FUNCTION/FOREGROUND",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "IDE/language-specific key has no explicit shared mapping",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/GO_LOCAL_FUNCTION",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "No equivalent KetPlus attribute property",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/GO_LOCAL_FUNCTION_CALL/FOREGROUND",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "IDE/language-specific key has no explicit shared mapping",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/GO_LOCAL_FUNCTION_CALL",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "No equivalent KetPlus attribute property",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/GO_METHOD_RECEIVER/FOREGROUND",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "IDE/language-specific key has no explicit shared mapping",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/GO_METHOD_RECEIVER",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "No equivalent KetPlus attribute property",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/GO_PACKAGE/FOREGROUND",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "IDE/language-specific key has no explicit shared mapping",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/GO_PACKAGE",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "No equivalent KetPlus attribute property",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/GO_PACKAGE_EXPORTED_CONSTANT/FOREGROUND",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "IDE/language-specific key has no explicit shared mapping",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/GO_PACKAGE_EXPORTED_CONSTANT",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "No equivalent KetPlus attribute property",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/GO_PACKAGE_LOCAL_CONSTANT/FOREGROUND",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "IDE/language-specific key has no explicit shared mapping",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/GO_PACKAGE_LOCAL_CONSTANT",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "No equivalent KetPlus attribute property",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/GO_TYPE_REFERENCE/FOREGROUND",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "IDE/language-specific key has no explicit shared mapping",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/GO_TYPE_REFERENCE",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "No equivalent KetPlus attribute property",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/GO_COMMENT_REFERENCE/FOREGROUND",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "IDE/language-specific key has no explicit shared mapping",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/GO_COMMENT_REFERENCE",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "No equivalent KetPlus attribute property",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/GO_SHADOWING_VARIABLE/FOREGROUND",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Scheme font family/size or default font styling is ignored; user typography retained",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/GO_SHADOWING_VARIABLE/FONT_TYPE",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "IDE/language-specific key has no explicit shared mapping",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/GO_SHADOWING_VARIABLE",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "No authored value; IDE baseAttributes inheritance unavailable, KetPlus base retained",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/GROOVY_KEYWORD",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "No equivalent KetPlus attribute property",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/HYPERLINK_ATTRIBUTES/FOREGROUND",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Effect color/geometry is unsupported",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/HYPERLINK_ATTRIBUTES/EFFECT_COLOR",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Effect color/geometry is unsupported",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/HYPERLINK_ATTRIBUTES/EFFECT_TYPE",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "IDE/language-specific key has no explicit shared mapping",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/HYPERLINK_ATTRIBUTES",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Syntax backgrounds have no shared-role equivalent",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/IDENTIFIER_UNDER_CARET_ATTRIBUTES/BACKGROUND",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "No equivalent KetPlus attribute property",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/IDENTIFIER_UNDER_CARET_ATTRIBUTES/ERROR_STRIPE_COLOR",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "IDE/language-specific key has no explicit shared mapping",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/IDENTIFIER_UNDER_CARET_ATTRIBUTES",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "No equivalent KetPlus attribute property",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/IMPLICIT_ANONYMOUS_CLASS_PARAMETER_ATTRIBUTES/FOREGROUND",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "IDE/language-specific key has no explicit shared mapping",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/IMPLICIT_ANONYMOUS_CLASS_PARAMETER_ATTRIBUTES",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "No authored value; IDE baseAttributes inheritance unavailable, KetPlus base retained",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/INSTANCE_FIELD_ATTRIBUTES",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "No equivalent KetPlus attribute property",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/JS.GLOBAL_VARIABLE/FOREGROUND",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "IDE/language-specific key has no explicit shared mapping",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/JS.GLOBAL_VARIABLE",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "No equivalent KetPlus attribute property",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/JS.LOCAL_VARIABLE/FOREGROUND",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "IDE/language-specific key has no explicit shared mapping",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/JS.LOCAL_VARIABLE",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "No equivalent KetPlus attribute property",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/JS.REGEXP/FOREGROUND",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "IDE/language-specific key has no explicit shared mapping",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/JS.REGEXP",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "No equivalent KetPlus attribute property",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/List/map to object conversion/FOREGROUND",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "IDE/language-specific key has no explicit shared mapping",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/List/map to object conversion",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Syntax backgrounds have no shared-role equivalent",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/MATCHED_BRACE_ATTRIBUTES/BACKGROUND",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "IDE/language-specific key has no explicit shared mapping",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/MATCHED_BRACE_ATTRIBUTES",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Syntax backgrounds have no shared-role equivalent",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/MATCHED_TAG_NAME/BACKGROUND",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "IDE/language-specific key has no explicit shared mapping",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/MATCHED_TAG_NAME",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "No equivalent KetPlus attribute property",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/PROPERTIES.KEY/FOREGROUND",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "IDE/language-specific key has no explicit shared mapping",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/PROPERTIES.KEY",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "No equivalent KetPlus attribute property",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/SASS_MIXIN/FOREGROUND",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "IDE/language-specific key has no explicit shared mapping",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/SASS_MIXIN",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "No authored value; IDE baseAttributes inheritance unavailable, KetPlus base retained",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/STATIC_FIELD_ATTRIBUTES",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "No authored value; IDE baseAttributes inheritance unavailable, KetPlus base retained",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/STATIC_FINAL_FIELD_ATTRIBUTES",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Scheme font family/size or default font styling is ignored; user typography retained",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/STATIC_METHOD_ATTRIBUTES/FONT_TYPE",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "IDE/language-specific key has no explicit shared mapping",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/STATIC_METHOD_ATTRIBUTES",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "No equivalent KetPlus attribute property",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/TEMPLATE_VARIABLE_ATTRIBUTES/FOREGROUND",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Scheme font family/size or default font styling is ignored; user typography retained",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/TEMPLATE_VARIABLE_ATTRIBUTES/FONT_TYPE",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "IDE/language-specific key has no explicit shared mapping",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/TEMPLATE_VARIABLE_ATTRIBUTES",
+            "targetPath": ""
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit JetBrains color mapping",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/TEXT/FOREGROUND",
+            "targetPath": "editor.fg"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit JetBrains color mapping",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/TEXT/BACKGROUND",
+            "targetPath": "editor.bg"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "No equivalent KetPlus attribute property",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/TEXT_SEARCH_RESULT_ATTRIBUTES/FOREGROUND",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Syntax backgrounds have no shared-role equivalent",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/TEXT_SEARCH_RESULT_ATTRIBUTES/BACKGROUND",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "No equivalent KetPlus attribute property",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/TEXT_SEARCH_RESULT_ATTRIBUTES/ERROR_STRIPE_COLOR",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "IDE/language-specific key has no explicit shared mapping",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/TEXT_SEARCH_RESULT_ATTRIBUTES",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "No equivalent KetPlus attribute property",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/TODO_DEFAULT_ATTRIBUTES/FOREGROUND",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Scheme font family/size or default font styling is ignored; user typography retained",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/TODO_DEFAULT_ATTRIBUTES/FONT_TYPE",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "No equivalent KetPlus attribute property",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/TODO_DEFAULT_ATTRIBUTES/ERROR_STRIPE_COLOR",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "IDE/language-specific key has no explicit shared mapping",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/TODO_DEFAULT_ATTRIBUTES",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "No equivalent KetPlus attribute property",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/TYPE_PARAMETER_NAME_ATTRIBUTES/FOREGROUND",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "IDE/language-specific key has no explicit shared mapping",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/TYPE_PARAMETER_NAME_ATTRIBUTES",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Syntax backgrounds have no shared-role equivalent",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/WARNING_ATTRIBUTES/BACKGROUND",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "No equivalent KetPlus attribute property",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/WARNING_ATTRIBUTES/ERROR_STRIPE_COLOR",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Effect color/geometry is unsupported",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/WARNING_ATTRIBUTES/EFFECT_TYPE",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "IDE/language-specific key has no explicit shared mapping",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/WARNING_ATTRIBUTES",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Syntax backgrounds have no shared-role equivalent",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/WRITE_IDENTIFIER_UNDER_CARET_ATTRIBUTES/BACKGROUND",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "No equivalent KetPlus attribute property",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/WRITE_IDENTIFIER_UNDER_CARET_ATTRIBUTES/ERROR_STRIPE_COLOR",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "IDE/language-specific key has no explicit shared mapping",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/WRITE_IDENTIFIER_UNDER_CARET_ATTRIBUTES",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "No equivalent KetPlus attribute property",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/WRONG_REFERENCES_ATTRIBUTES/FOREGROUND",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Effect color/geometry is unsupported",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/WRONG_REFERENCES_ATTRIBUTES/EFFECT_COLOR",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Effect color/geometry is unsupported",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/WRONG_REFERENCES_ATTRIBUTES/EFFECT_TYPE",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Scheme font family/size or default font styling is ignored; user typography retained",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/WRONG_REFERENCES_ATTRIBUTES/FONT_TYPE",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "IDE/language-specific key has no explicit shared mapping",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/WRONG_REFERENCES_ATTRIBUTES",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "No equivalent KetPlus attribute property",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/YAML_ANCHOR/FOREGROUND",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "IDE/language-specific key has no explicit shared mapping",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/YAML_ANCHOR",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "No equivalent KetPlus attribute property",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/XPATH.FUNCTION/FOREGROUND",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "IDE/language-specific key has no explicit shared mapping",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/XPATH.FUNCTION",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "No equivalent KetPlus attribute property",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/XPATH.XPATH_NAME/FOREGROUND",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "IDE/language-specific key has no explicit shared mapping",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/XPATH.XPATH_NAME",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "No equivalent KetPlus attribute property",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/XPATH.KEYWORD/FOREGROUND",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "IDE/language-specific key has no explicit shared mapping",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/XPATH.KEYWORD",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Preferred or earlier authored attribute already supplies this role; secondary/duplicate styling omitted",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/DEFAULT_BLOCK_COMMENT",
+            "targetPath": "syntax.comment"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Preferred or earlier authored attribute already supplies this role; secondary/duplicate styling omitted",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/DEFAULT_DOC_COMMENT",
+            "targetPath": "syntax.comment"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Preferred or earlier authored attribute already supplies this role; secondary/duplicate styling omitted",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/DEFAULT_FUNCTION_CALL",
+            "targetPath": "syntax.function"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Secondary IDE attribute supplies a role without an authored primary value",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/DEFAULT_INSTANCE_FIELD",
+            "targetPath": "syntax.variable"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Shared syntax foreground",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/DEFAULT_INSTANCE_FIELD/FOREGROUND",
+            "targetPath": "syntax.variable.fg"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Preferred or earlier authored attribute already supplies this role; secondary/duplicate styling omitted",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/DEFAULT_STATIC_FIELD",
+            "targetPath": "syntax.variable"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Preferred or earlier authored attribute already supplies this role; secondary/duplicate styling omitted",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml/attributes/DEFAULT_STATIC_METHOD",
+            "targetPath": "syntax.function"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Kind inferred from opaque editor background brightness, otherwise parent name (Darcula/dark); remaining bases use light",
+            "sourcePath": "platform/platform-resources/src/themes/Light.xml",
+            "targetPath": "kind"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Bundled editor scheme merged with UI theme",
+            "sourcePath": "_prepared/intellij-light.theme.json/editorScheme",
+            "targetPath": "platform/platform-resources/src/themes/Light.xml"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit UI theme kind selects KetPlus base",
+            "sourcePath": "_prepared/intellij-light.theme.json/dark",
+            "targetPath": "kind"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "IDE UI base definitions are unavailable; KetPlus built-in base supplies unmapped UI",
+            "sourcePath": "_prepared/intellij-light.theme.json",
+            "targetPath": "extends"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "JetBrains component color mapped to nearest KetPlus component; UI engines differ",
+            "sourcePath": "_prepared/intellij-light.theme.json/ui/ToolWindow.background",
+            "targetPath": "ui.sidebar.bg"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "IDE metadata, icons, backgrounds, inheritance and plugin behavior are not executed or applied",
+            "sourcePath": "_prepared/intellij-light.theme.json/CombinedDiff",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "IDE metadata, icons, backgrounds, inheritance and plugin behavior are not executed or applied",
+            "sourcePath": "_prepared/intellij-light.theme.json/author",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "IDE metadata, icons, backgrounds, inheritance and plugin behavior are not executed or applied",
+            "sourcePath": "_prepared/intellij-light.theme.json/iconColorsOnSelection",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "IDE metadata, icons, backgrounds, inheritance and plugin behavior are not executed or applied",
+            "sourcePath": "_prepared/intellij-light.theme.json/nameKey",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "IDE metadata, icons, backgrounds, inheritance and plugin behavior are not executed or applied",
+            "sourcePath": "_prepared/intellij-light.theme.json/parentTheme",
+            "targetPath": ""
+        }
+    ]
+}

@@ -1,7 +1,10 @@
 #include "agents/AgentMcpServer.h"
 #include "cloud/CloudControlClient.h"
+#include "platform/ProcessTree.h"
+#include "service/DaemonApplication.h"
 #include "service/DaemonService.h"
 #include "service/UnixSignals.h"
+#include "service/WindowsShutdown.h"
 
 #include "KetPlusBuildIdentity.h"
 #include "KetPlusProductVersion.h"
@@ -22,33 +25,18 @@
 
 using namespace ketplus::daemon;
 
-namespace {
-
-void addBundledPluginPath() {
-#if defined(Q_OS_MACOS)
-    const QDir executableDirectory(QCoreApplication::applicationDirPath());
-    const QString pluginPath =
-        QDir(executableDirectory.filePath(QStringLiteral("../PlugIns"))).canonicalPath();
-    if (!pluginPath.isEmpty()) {
-        QCoreApplication::addLibraryPath(pluginPath);
-    }
-#endif
-}
-
-} // namespace
-
 int main(int argc, char* argv[]) {
 #if defined(Q_OS_UNIX)
     // Everything the daemon creates (journal, SQLite WAL/SHM, token, credentials, attachment
     // staging) holds transcripts or secrets. Owner-only from creation, not chmod afterwards.
     ::umask(077);
 #endif
-    QCoreApplication application(argc, argv);
+    DaemonApplication application(argc, argv);
     QCoreApplication::setApplicationName(QStringLiteral("ketplus-daemon"));
     QCoreApplication::setApplicationVersion(QStringLiteral(KETPLUS_PRODUCT_VERSION));
     QCoreApplication::setOrganizationDomain(QStringLiteral("ketsuite.com"));
     QCoreApplication::setOrganizationName(QStringLiteral("Ketsuite"));
-    addBundledPluginPath();
+    DaemonApplication::addBundledPluginPath();
 
     QCommandLineParser parser;
     parser.setApplicationDescription(QStringLiteral("KetPlus local session daemon"));
@@ -66,6 +54,8 @@ int main(int argc, char* argv[]) {
          {QStringLiteral("claude"), QStringLiteral("Claude Agent SDK sidecar path."),
           QStringLiteral("path")},
          {QStringLiteral("cursor"), QStringLiteral("Cursor CLI (`agent`) executable path."),
+          QStringLiteral("path")},
+         {QStringLiteral("copilot"), QStringLiteral("GitHub Copilot CLI executable path."),
           QStringLiteral("path")},
          {QStringLiteral("check-runtime"),
           QStringLiteral("Verify that required bundled Qt plugins can be loaded.")},
@@ -122,6 +112,9 @@ int main(int argc, char* argv[]) {
     if (parser.isSet(QStringLiteral("cursor"))) {
         configuration.cursorExecutable = parser.value(QStringLiteral("cursor"));
     }
+    if (parser.isSet(QStringLiteral("copilot"))) {
+        configuration.copilotExecutable = parser.value(QStringLiteral("copilot"));
+    }
 
     // One line a support log can be matched to a build and a relay by.
     qInfo("ketplus-daemon %s (%s) relay %s", KETPLUS_PRODUCT_VERSION, KETPLUS_BUILD_REVISION,
@@ -132,6 +125,17 @@ int main(int argc, char* argv[]) {
         QTextStream(stderr) << "Unable to install daemon shutdown handlers.\n";
         return 1;
     }
+#endif
+#if defined(Q_OS_WIN)
+    WindowsShutdown shutdownSignals;
+    if (!shutdownSignals.isReady()) {
+        QTextStream(stderr) << "Unable to install daemon shutdown handlers.\n";
+        return 1;
+    }
+    // Provider processes and their helpers must not outlive the daemon, even when it is killed.
+    QString confinementError;
+    if (!confineDaemonProcessTree(&confinementError))
+        qWarning("%s", qUtf8Printable(confinementError));
 #endif
     DaemonService service(std::move(configuration));
     if (!service.start()) {

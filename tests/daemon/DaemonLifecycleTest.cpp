@@ -662,7 +662,7 @@ class DaemonLifecycleTest final : public QObject {
     void renamesSessionBeforeProviderThreadIsReady() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const QString executable = directory.filePath(QStringLiteral("fake-codex"));
+        const QString executable = directory.filePath(fixtureName(QStringLiteral("fake-codex")));
         const QString providerLog = directory.filePath(QStringLiteral("provider.log"));
         QVERIFY(writeFakeCodex(executable, providerLog));
 
@@ -779,7 +779,7 @@ class DaemonLifecycleTest final : public QObject {
     void preservesStreamAcrossJournalFailure() {
         QFETCH(QString, boundary);
         QTemporaryDir dir;
-        const auto executable = dir.filePath("fake-codex");
+        const auto executable = dir.filePath(fixtureName("fake-codex"));
         QVERIFY(writeFakeCodex(executable, dir.filePath("provider.log")));
         const auto path = dir.filePath("journal.sqlite");
         LocalJournal journal(path);
@@ -944,7 +944,7 @@ class DaemonLifecycleTest final : public QObject {
     void boundsJournalRecoveryAcrossSessions() {
         QFETCH(QString, budget);
         QTemporaryDir dir;
-        const auto executable = dir.filePath("fake-codex");
+        const auto executable = dir.filePath(fixtureName("fake-codex"));
         QVERIFY(writeFakeCodex(executable, dir.filePath("provider.log")));
         const auto path = dir.filePath("journal.sqlite");
         LocalJournal journal(path);
@@ -1070,7 +1070,7 @@ class DaemonLifecycleTest final : public QObject {
 
     void retriesStreamAfterBusyWriter() {
         QTemporaryDir dir;
-        const auto executable = dir.filePath("fake-codex");
+        const auto executable = dir.filePath(fixtureName("fake-codex"));
         QVERIFY(writeFakeCodex(executable, dir.filePath("provider.log")));
         const auto path = dir.filePath("journal.sqlite");
         LocalJournal journal(path);
@@ -1126,7 +1126,7 @@ class DaemonLifecycleTest final : public QObject {
     void coalescesStreamedDeltasPerItem() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const QString executable = directory.filePath(QStringLiteral("fake-codex"));
+        const QString executable = directory.filePath(fixtureName(QStringLiteral("fake-codex")));
         QVERIFY(writeFakeCodex(executable, directory.filePath(QStringLiteral("provider.log"))));
         LocalJournal journal(directory.filePath(QStringLiteral("journal.sqlite3")));
         QVERIFY2(journal.isOpen(), qPrintable(journal.errorString()));
@@ -1211,7 +1211,7 @@ class DaemonLifecycleTest final : public QObject {
     void journalsCodexContextWindowUsage() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const QString executable = directory.filePath(QStringLiteral("fake-codex"));
+        const QString executable = directory.filePath(fixtureName(QStringLiteral("fake-codex")));
         const QString providerLog = directory.filePath(QStringLiteral("provider.log"));
         QVERIFY(writeFakeCodex(executable, providerLog));
         LocalJournal journal(directory.filePath(QStringLiteral("journal.sqlite3")));
@@ -1270,7 +1270,7 @@ class DaemonLifecycleTest final : public QObject {
     void journalsCodexPlanLimitsIntoTheConversationsMidTurn() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const QString executable = directory.filePath(QStringLiteral("fake-codex"));
+        const QString executable = directory.filePath(fixtureName(QStringLiteral("fake-codex")));
         QVERIFY(writeFakeCodex(executable, directory.filePath(QStringLiteral("provider.log"))));
         LocalJournal journal(directory.filePath(QStringLiteral("journal.sqlite3")));
         QVERIFY2(journal.isOpen(), qPrintable(journal.errorString()));
@@ -1349,7 +1349,7 @@ class DaemonLifecycleTest final : public QObject {
     void userConfiguredBrowserServerIsNotAutoApproved() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const QString executable = directory.filePath(QStringLiteral("fake-codex"));
+        const QString executable = directory.filePath(fixtureName(QStringLiteral("fake-codex")));
         const QString providerLog = directory.filePath(QStringLiteral("provider.log"));
         QVERIFY(writeFakeCodex(executable, providerLog));
         LocalJournal journal(directory.filePath(QStringLiteral("journal.sqlite3")));
@@ -1410,7 +1410,7 @@ class DaemonLifecycleTest final : public QObject {
     void answersMcpApprovalsWithElicitationShapes() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const QString executable = directory.filePath(QStringLiteral("fake-codex"));
+        const QString executable = directory.filePath(fixtureName(QStringLiteral("fake-codex")));
         const QString providerLog = directory.filePath(QStringLiteral("provider.log"));
         QVERIFY(writeFakeCodex(executable, providerLog));
         LocalJournal journal(directory.filePath(QStringLiteral("journal.sqlite3")));
@@ -1497,7 +1497,7 @@ class DaemonLifecycleTest final : public QObject {
     void closesBrowserSessionsWhenATurnThatUsedThemEnds() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const QString executable = directory.filePath(QStringLiteral("fake-codex"));
+        const QString executable = directory.filePath(fixtureName(QStringLiteral("fake-codex")));
         const QString providerLog = directory.filePath(QStringLiteral("provider.log"));
         QVERIFY(writeFakeCodex(executable, providerLog));
         LocalJournal journal(directory.filePath(QStringLiteral("journal.sqlite3")));
@@ -1555,7 +1555,7 @@ class DaemonLifecycleTest final : public QObject {
     void journalsMcpImagesAsMediaRefsWithoutBase64() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const QString executable = directory.filePath(QStringLiteral("fake-codex"));
+        const QString executable = directory.filePath(fixtureName(QStringLiteral("fake-codex")));
         const QString providerLog = directory.filePath(QStringLiteral("provider.log"));
         QVERIFY(writeFakeCodex(executable, providerLog));
 
@@ -1625,8 +1625,10 @@ class DaemonLifecycleTest final : public QObject {
         const QString hex = block.value("media_ref").toString().mid(7);
         const QString file = directory.filePath(QStringLiteral("media/%1.png").arg(hex));
         QVERIFY(QFileInfo::exists(file));
+#if !defined(Q_OS_WIN) // Windows reports group/other access from ACLs, not from a mode.
         QCOMPARE(QFile::permissions(file) & (QFileDevice::ReadGroup | QFileDevice::ReadOther),
                  QFileDevice::Permissions{});
+#endif
         adapter.stop();
     }
 
@@ -1685,7 +1687,7 @@ class DaemonLifecycleTest final : public QObject {
     void journalsMessageImagesAsMediaRefsThePhoneCanRead() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const QString executable = directory.filePath(QStringLiteral("fake-codex"));
+        const QString executable = directory.filePath(fixtureName(QStringLiteral("fake-codex")));
         QVERIFY(writeFakeCodex(executable, directory.filePath(QStringLiteral("provider.log"))));
         QImage image(6, 4, QImage::Format_RGB32);
         image.fill(Qt::red);
@@ -1785,7 +1787,7 @@ class DaemonLifecycleTest final : public QObject {
     void journalsEachChangedFileByItsWorktreePath() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const QString executable = directory.filePath(QStringLiteral("fake-codex"));
+        const QString executable = directory.filePath(fixtureName(QStringLiteral("fake-codex")));
         QVERIFY(writeFakeCodex(executable, directory.filePath(QStringLiteral("provider.log"))));
         const QString worktree = directory.filePath(QStringLiteral("app"));
         QVERIFY(QDir().mkpath(worktree));
@@ -1824,7 +1826,7 @@ class DaemonLifecycleTest final : public QObject {
                   {"type", "fileChange"},
                   {"status", "completed"},
                   {"changes",
-                   QJsonArray{QJsonObject{{"path", root + "/apps/ios/App.swift"}, {"diff", ""}},
+                   QJsonArray{QJsonObject{{"path", root + "/src/mobile/App.swift"}, {"diff", ""}},
                               QJsonObject{{"path", "docs/README.md"}, {"diff", ""}},
                               QJsonObject{{"path", root + "-other/KETJS.override"}, {"diff", ""}},
                               QJsonObject{{"path", root + "/../escape.txt"}, {"diff", ""}},
@@ -1838,8 +1840,8 @@ class DaemonLifecycleTest final : public QObject {
                 changes = payload.value("item").toObject().value("changes").toArray();
         }
         QCOMPARE(changes.size(), 5);
-        QCOMPARE(changes[0].toObject().value("worktreePath").toString(), "apps/ios/App.swift");
-        QCOMPARE(changes[0].toObject().value("path").toString(), root + "/apps/ios/App.swift");
+        QCOMPARE(changes[0].toObject().value("worktreePath").toString(), "src/mobile/App.swift");
+        QCOMPARE(changes[0].toObject().value("path").toString(), root + "/src/mobile/App.swift");
         QCOMPARE(changes[1].toObject().value("worktreePath").toString(), "docs/README.md");
         for (qsizetype index = 2; index < changes.size(); ++index) {
             const QJsonObject change = changes[index].toObject();
@@ -1853,7 +1855,7 @@ class DaemonLifecycleTest final : public QObject {
     void readsAWorktreeImageByPathForThePhone() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const QString executable = directory.filePath(QStringLiteral("fake-codex"));
+        const QString executable = directory.filePath(fixtureName(QStringLiteral("fake-codex")));
         QVERIFY(writeFakeCodex(executable, directory.filePath(QStringLiteral("provider.log"))));
         const QString worktree = directory.filePath(QStringLiteral("worktree"));
         QVERIFY(QDir().mkpath(worktree + QStringLiteral("/assets")));
@@ -1908,7 +1910,9 @@ class DaemonLifecycleTest final : public QObject {
         const auto code = [&](const QString& path) {
             return read(path).value(QStringLiteral("error_code")).toString();
         };
+#if !defined(Q_OS_WIN) // QFile::link makes a .lnk shortcut there, not a symbolic link.
         QCOMPARE(code(QStringLiteral("linked.png")), QStringLiteral("symlink_unsupported"));
+#endif
         QCOMPARE(code(QStringLiteral("../outside.png")), QStringLiteral("invalid_path"));
         QCOMPARE(code(QStringLiteral("/etc/hosts")), QStringLiteral("invalid_path"));
         QCOMPARE(code(QStringLiteral("assets/gone.png")), QStringLiteral("missing"));
@@ -1921,7 +1925,7 @@ class DaemonLifecycleTest final : public QObject {
         QVERIFY(directory.isValid());
         QVERIFY(QDir().mkpath(directory.filePath("worktree-a")));
         QVERIFY(QDir().mkpath(directory.filePath("worktree-b")));
-        const QString executable = directory.filePath("fake-codex");
+        const QString executable = directory.filePath(fixtureName("fake-codex"));
         const QString providerLog = directory.filePath("provider.log");
         QVERIFY(writeFakeCodex(executable, providerLog));
 
@@ -2281,6 +2285,7 @@ class DaemonLifecycleTest final : public QObject {
         const QString endpoint = directory.filePath("minor.sock");
         const QByteArray token("local-test-token-with-at-least-32-bytes");
         LocalIpcServer server(&host, endpoint, token);
+        server.setHostKeyFingerprint([] { return QStringLiteral("host-key-fingerprint"); });
         QVERIFY(server.listen());
 
         const auto hello = [&](const QString& id, const QJsonValue& minor) {
@@ -2303,11 +2308,16 @@ class DaemonLifecycleTest final : public QObject {
         QCOMPARE(legacy.value("protocol_version").toInt(-1), 0);
         QCOMPARE(legacy.value("protocol_minor").toInt(-1), 0);
         QVERIFY(legacy.value("features").toArray().isEmpty());
+        // ADR 0119: the machine id is negotiated, so a pre-negotiation client is not given one.
+        QVERIFY(!legacy.contains("host_key_fingerprint"));
         // A newer client is answered with the daemon's own minor.
         const QJsonObject newer = hello("newer", 99);
         QCOMPARE(newer.value("protocol_minor").toInt(-1), protocol::currentMinor);
         QVERIFY(newer.value("features").toArray().contains("provider.runtime_status"));
         QVERIFY(newer.value("features").toArray().contains("transcript.window/1"));
+        QVERIFY(newer.value("features").toArray().contains("daemon.host_identity/1"));
+        QCOMPARE(newer.value("host_key_fingerprint").toString(),
+                 QStringLiteral("host-key-fingerprint"));
     }
 
     void closesConnectionsThatDoNotCompleteHello() {
@@ -2429,7 +2439,7 @@ class DaemonLifecycleTest final : public QObject {
     void browserReloadWaitsForStartingAndFailedTurns() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const QString executable = directory.filePath(QStringLiteral("fake-codex"));
+        const QString executable = directory.filePath(fixtureName(QStringLiteral("fake-codex")));
         QVERIFY(writeFakeCodex(executable, directory.filePath(QStringLiteral("provider.log"))));
         CodexAdapter adapter(executable);
         QSignalSpy reloads(&adapter, &CodexAdapter::reloaded);
@@ -2504,7 +2514,7 @@ class DaemonLifecycleTest final : public QObject {
 
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const QString executable = directory.filePath(QStringLiteral("fake-codex"));
+        const QString executable = directory.filePath(fixtureName(QStringLiteral("fake-codex")));
         QVERIFY(writeFakeCodex(executable, directory.filePath(QStringLiteral("provider.log"))));
         CodexAdapter adapter(executable);
         QSignalSpy stops(&adapter, &CodexAdapter::stopped);
@@ -2551,7 +2561,7 @@ class DaemonLifecycleTest final : public QObject {
     void browserReloadLeavesIdleSessionsQuiet() {
         QTemporaryDir directory;
         QVERIFY(directory.isValid());
-        const QString executable = directory.filePath(QStringLiteral("fake-codex"));
+        const QString executable = directory.filePath(fixtureName(QStringLiteral("fake-codex")));
         const QString providerLog = directory.filePath(QStringLiteral("provider.log"));
         QVERIFY(writeFakeCodex(executable, providerLog));
         LocalJournal journal(directory.filePath(QStringLiteral("journal.sqlite3")));

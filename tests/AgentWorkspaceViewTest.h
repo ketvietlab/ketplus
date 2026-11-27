@@ -4,6 +4,7 @@
 
 #include <QObject>
 #include <QQuickItem>
+#include <QWindow>
 
 class AgentWorkspaceViewTest final : public QObject {
     Q_OBJECT
@@ -22,8 +23,17 @@ class AgentWorkspaceViewTest final : public QObject {
     void compactFollowsProviderCapabilities();
     void usageLimitsPopover();
     void claudeUsageBudget();
+    void runtimeUsageFoldsCostDetails_data();
+    void runtimeUsageFoldsCostDetails();
+    void apiKeyUsageShowsCostDetailsOpen();
     void usageLimitsFollowConversationProvider();
     void backgroundTaskBar();
+    void managedTaskNeverShowsCleanupToTheUser();
+    void managedTaskOutputFencesRequestsAndKeepsCursors();
+    void managedTaskWaitIsShown();
+    void managedTaskOutputRetriesAfterReadError();
+    void managedTaskStatesRender_data();
+    void managedTaskStatesRender();
     void heldMessageRequiresExplicitClickAndFencesDuplicates();
     void heldMessageNoticeRendersInTranscript();
     void atlasResultsUseExplicitCompletedLinks();
@@ -37,11 +47,19 @@ class AgentWorkspaceViewTest final : public QObject {
     void browserStepsReadAsTheMock_data();
     void browserStepsReadAsTheMock();
     void browserStepsCollapseAroundEvidence_data();
+    void daemonGroupScreenshotsOpenTheLightbox();
+    void daemonGroupStepsKeepTheirRowsAsTheGroupGrows();
     void browserStepsCollapseAroundEvidence();
     void fileChangesStayCompactInsideExpandedGroup();
     void fileStepsOpenTheirDiffInline();
     void claudeEditOpensItsDiffInline();
     void sentAgentMessageReadsAsTheMockNote();
+    void incomingAgentCardsClampAndExpand();
+    void internalStepsAreNotDrawn();
+    void agentCardEvidence();
+    void teamMessagesReadAsTheirBlocks();
+    void teamBlockOpensItsTask();
+    void unknownTeamMessageStaysText();
     void settledApprovalsReadAsTheirOutcome();
     void capacityErrorOffersAnotherModel();
     void silentProviderReadsAsTheMocksError();
@@ -121,6 +139,7 @@ class AgentWorkspaceViewTest final : public QObject {
     void missingWorktreeKeepsHistoryAndCanStop();
     void missingWorktreeRestoresSavedAndDaemonSessions();
     void restoresMetadataBeforeDaemonDiscovery();
+    void teamMemberTitlesFollowTheDaemon();
     void selectingColdDaemonConversationShowsChatRestoreState();
     void runningCheckoutsIncludeExecutionWorktrees();
     void configuredTurnsAndAttachments();
@@ -135,6 +154,8 @@ class AgentWorkspaceViewTest final : public QObject {
     void keepsSteeringDrafts();
     void copiesConversationTranscript();
     void runningIndicatorDoesNotOverlapLastCommand();
+    void runningGroupHeadingFollowsItsLatestStep();
+    void groupHeadingEndsWithTheTurnNotBetweenSteps();
     void streamingResponseStaysAnchoredAboveRunStatus();
     void restoresConversationScrollPosition();
     void boundsWarmConversationRenderCache();
@@ -150,10 +171,13 @@ class AgentWorkspaceViewTest final : public QObject {
     void transcriptNoticesUseRuntimeState();
     void turnEndListsTheTurnsChangedFiles();
     void turnEndShowsTheTurnsWorkReport();
+    void forgottenItemsReadStaleAndDoNotNeedYou();
+    void duplicatesHideAndOldFinishedItemsFold();
     void turnEndReportSurvivesAHistoryPageSplit();
     void workReportGroupsAcceptAnyName();
     void workReportPaneFollowsItsConversation();
-    void runningTurnShowsItsWorkReport();
+    void workReportShowsCurrentRequestAndOutstandingItems();
+    void runningTurnKeepsWorkReportPending();
     void workReportCapturesMatchTheMock();
     void changesPaneListsTheWorktreeChanges();
     void retryResendsTheLatestFailedPrompt();
@@ -184,8 +208,10 @@ class AgentWorkspaceViewTest final : public QObject {
     void conversationMenusOfferFork();
     void hiddenConversationReferenceTakesNoKeyFocus();
     void reviewerPickerFollowsTheActiveConversation();
-    void reviewerLabelCollapsesBeforeTagsSqueezeTheTitle_data();
-    void reviewerLabelCollapsesBeforeTagsSqueezeTheTitle();
+    void agentMentionsCompleteConversations();
+    void teamMemberHeaderShowsItsRoleInsteadOfReviewer();
+    void reviewerLabelCollapsesBeforeTheTitleSqueezes_data();
+    void reviewerLabelCollapsesBeforeTheTitleSqueezes();
     void selectsModelsInUnifiedPicker();
     void restoresStoredConversationModelInsteadOfCatalogDefault();
     void prefetchesModelsWhenAgentBecomesAvailable();
@@ -215,6 +241,8 @@ class AgentWorkspaceViewTest final : public QObject {
     void approvalCardStaysOutsideCommandGroup();
     void groupExpansionSurvivesPagingAndIsPruned();
     void expandedGroupHangsUnderRail();
+    void runningIndicatorLinesUpWithTheRows_data();
+    void runningIndicatorLinesUpWithTheRows();
     void activityStepsReadAsTheMock();
     void findIgnoresUnrelatedHistoryStateUpdates();
     void findGoesToLastResultWhenAnchorTrimmed();
@@ -225,6 +253,11 @@ class AgentWorkspaceViewTest final : public QObject {
 namespace agent_workspace_test {
 
 inline ketplus::ThemePalette testPalette() { return ketplus::currentThemePalette(); }
+
+// The image viewer's own window, over the desktop's window (it is not the Quick window).
+inline QWindow* imageWindow(QObject* root) {
+    return qobject_cast<QWindow*>(root->findChild<QObject*>(QStringLiteral("imageWindow")));
+}
 
 inline QQuickItem* findVisualItem(QQuickItem* item, const QString& name) {
     if (item->objectName() == name) {

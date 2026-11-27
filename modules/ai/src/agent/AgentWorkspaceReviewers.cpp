@@ -1,11 +1,6 @@
 #include "agent/AgentWorkspaceView.h"
 
-#include "agent/ConversationTags.h"
-
 namespace ketplus {
-QVariantList AgentWorkspaceView::tagCatalog() const {
-    return tagCatalogSet_ ? tagCatalog_ : conversation_tags::catalog();
-}
 
 // ADR 0067: the reviewer of the active conversation, read again whenever another
 // conversation becomes active or the active one starts its first turn.
@@ -31,9 +26,21 @@ QVariantList AgentWorkspaceView::reviewerCandidates() const {
         auto conversation = value.toMap();
         const QString number = conversation.value("number").toString();
         const QString provider = conversation.value("provider").toString();
-        // Only Claude enforces the read-only review guard (ADR 0067).
-        if (number.isEmpty() || number == active || provider != QStringLiteral("claude"))
+        // ADR 0067: Claude enforces the read-only review guard. ketplus#295: Codex reviews with
+        // its own Full access, and the daemon checks the branch after each review; without Full
+        // access it is listed but cannot be chosen.
+        const bool codex = provider == QStringLiteral("codex");
+        if (number.isEmpty() || number == active ||
+            (provider != QStringLiteral("claude") && !codex))
             continue;
+        const bool enabled = !codex || conversation.value("full_access").toBool();
+        conversation.insert("enabled", enabled);
+        if (codex)
+            conversation.insert("reason",
+                                enabled ? QStringLiteral("Reviews with Full access; KetPlus "
+                                                         "checks the branch after each review.")
+                                        : QStringLiteral("Codex can review only with Full "
+                                                         "access."));
         conversation.insert("worktree", conversation.value("path").toString().section(
                                             QLatin1Char('/'), -1, -1, QString::SectionSkipEmpty));
         candidates.append(conversation);

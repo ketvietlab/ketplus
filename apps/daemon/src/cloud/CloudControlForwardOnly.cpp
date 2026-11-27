@@ -1,0 +1,109 @@
+#include "cloud/CloudControlClient.h"
+#include "storage/LocalJournal.h"
+
+namespace ketplus::daemon {
+namespace {
+const QString forwardOnlyAccount = QStringLiteral("events-forward-only");
+}
+
+bool CloudControlClient::eventsForwardOnly() {
+    if (!eventsForwardOnly_)
+        eventsForwardOnly_ = storedString(forwardOnlyAccount) == uploadScope();
+    return *eventsForwardOnly_;
+}
+
+void CloudControlClient::followEventsForwardOnly(const bool forwardOnly) {
+    if (forwardOnly == eventsForwardOnly())
+        return;
+    QString error;
+    if (forwardOnly) {
+        // Takes effect even if it cannot be remembered; a restart then waits for the next answer.
+        eventsForwardOnly_ = true;
+        if (!storeString(forwardOnlyAccount, uploadScope(), &error))
+            lastError_ = error;
+        return;
+    }
+    // Events journaled while forward-only already reached clients live; uploading resumes after
+    // them. The journal itself is kept. On failure the next answer tries again.
+    if (!advanceUploadCursorsToHead())
+        return;
+    eventsForwardOnly_ = false;
+    forwardOnlyReleased_.clear();
+}
+
+// Moves the cloud client's acknowledgement of one session up to the cursor a peer can no longer
+// need. Monotonic: a client still behind keeps its own, lower cursor as the retention fence.
+bool CloudControlClient::releaseSessionRetention(const QString& sessionId, qint64 generation,
+                                                 qint64 head) {
+    const qint64 fence = head - peerEventWindow;
+    const QString key = QStringLiteral("%1:%2").arg(sessionId).arg(generation);
+    if (fence <= 0 || fence - forwardOnlyReleased_.value(key, 0) < forwardOnlyReleaseStep)
+        return true;
+    if (!journal_->acknowledgeCursor(QStringLiteral("cloud-control-v2"), sessionId, generation,
+                                     fence)) {
+        lastError_ = journal_->errorString();
+        return false;
+    }
+    forwardOnlyReleased_.insert(key, fence);
+    return true;
+}
+
+void CloudControlClient::noteForwardOnlyEvent(const QString& sessionId, const qint64 generation,
+                                              const qint64 cursor) {
+    if (eventsForwardOnly())
+        releaseSessionRetention(sessionId, generation, cursor);
+}
+
+void CloudControlClient::releaseForwardOnlyRetention() {
+    const QList<StoredSession> sessions = journal_->sessions();
+    QSet<QString> current;
+    for (const StoredSession& session : sessions) {
+        current.insert(QStringLiteral("%1:%2").arg(session.id).arg(session.generation));
+        if (!releaseSessionRetention(session.id, session.generation, session.lastCursor))
+            return;
+    }
+    forwardOnlyReleased_.removeIf([&current](const QHash<QString, qint64>::iterator entry) {
+        return !current.contains(entry.key());
+    });
+}
+
+// Only the upload cursor moves: acknowledging the head for journal retention here would delete
+// events the host still serves as pages. Retention follows the next acknowledged upload. Every
+// session's cursor and the forward-only record change in one credential commit.
+bool CloudControlClient::advanceUploadCursorsToHead() {
+    const QString scope = uploadScope();
+    const QList<StoredSession> sessions = journal_->sessions();
+    QHash<QString, qint64> advanced;
+    QString error;
+    const bool committed = credentials_.batch(
+        [&](CredentialStore& view, QString* failure) {
+            for (const StoredSession& session : sessions) {
+                const qint64 durable =
+                    journal_->cloudUploadCursor(scope, session.id, session.generation);
+                if (durable < 0) {
+                    *failure = journal_->errorString();
+                    return false;
+                }
+                const QString account =
+                    QStringLiteral("uploaded-cursor-%1-%2").arg(session.id).arg(session.generation);
+                const qint64 cursor = qMax(durable, view.read(account).toLongLong());
+                if (session.lastCursor <= cursor)
+                    continue;
+                if (!view.write(account, QByteArray::number(session.lastCursor), failure))
+                    return false;
+                advanced.insert(QStringLiteral("%1:%2").arg(session.id).arg(session.generation),
+                                session.lastCursor);
+            }
+            return view.remove(forwardOnlyAccount, failure);
+        },
+        &error);
+    if (!committed) {
+        lastError_ = error;
+        return false;
+    }
+    for (auto entry = advanced.cbegin(); entry != advanced.cend(); ++entry)
+        knownUploadedCursors_.insert(entry.key(), entry.value());
+    return true;
+}
+
+} // namespace ketplus::daemon

@@ -1,7 +1,7 @@
-#include "cloud/CloudControlClient.h"
-#include "cloud/CloudControlSupport.h"
 #include "atlas/AtlasLiveRuntime.h"
 #include "cloud/CloudControlBatching.h"
+#include "cloud/CloudControlClient.h"
+#include "cloud/CloudControlSupport.h"
 #include "cloud/CloudEventProjection.h"
 #include "cloud/ControlEndpoint.h"
 #include "cloud/WorktreeBranches.h"
@@ -35,7 +35,7 @@
 #include <utility>
 
 // Commands scoped to a catalog worktree rather than a session: creating a conversation and
-// reading branches or configuration.
+// reading branches or configuration, and the page of worktrees a conversation can switch to.
 
 namespace ketplus::daemon {
 using cloud_control::sourceContext;
@@ -79,6 +79,7 @@ void CloudControlClient::executeWorktreeCommand(const QJsonObject& command,
         command.value(QStringLiteral("kind")) == QStringLiteral("worktree.branches.read");
     const bool configuring =
         command.value(QStringLiteral("kind")) == QStringLiteral("worktree.configuration.read");
+    const bool preparing = command.value("kind") == "session.prepare";
     const QJsonObject newWorktree = payload.value(QStringLiteral("new_worktree")).toObject();
     const QString branch = newWorktree.value(QStringLiteral("branch")).toString().trimmed();
     const QString base = newWorktree.value(QStringLiteral("base")).toString().trimmed();
@@ -90,8 +91,9 @@ void CloudControlClient::executeWorktreeCommand(const QJsonObject& command,
         command.value(QStringLiteral("expectedCatalogRevision")).toInteger(-1) != 0 ||
         command.value(QStringLiteral("expectedLifecycleRevision")).toInteger(-1) != 0 ||
         worktreePath.isEmpty() || !QFileInfo(worktreePath).isDir() ||
-        (!listing && !configuring &&
+        (!listing && !configuring && !preparing &&
          payload.value(QStringLiteral("prompt")).toString().trimmed().isEmpty()) ||
+        (preparing && !newWorktree.isEmpty()) ||
         (!newWorktree.isEmpty() && (branch.isEmpty() || base.isEmpty()))) {
         acknowledgeCommand(
             command,
@@ -102,27 +104,51 @@ void CloudControlClient::executeWorktreeCommand(const QJsonObject& command,
             senderAgreementKey);
         return;
     }
+    if (preparing) {
+        auto localPayload = payload;
+        localPayload.insert("worktree_path", worktreePath);
+        const auto result =
+            host_->handleCommand({{"message_id", command.value("id")},
+                                  {"message_type", "session.prepare"},
+                                  {"_verified_sender_device_id", content.value("senderDeviceId")},
+                                  {"payload", localPayload}},
+                                 "cloud-control-v2");
+        if (result.value("ok").toBool())
+            publishPreparedSession(command, result, senderAgreementKey);
+        else
+            acknowledgeCommand(command, result, senderAgreementKey);
+        return;
+    }
     if (configuring) {
+        // The catalog scope this host holds for the worktree, inside the signed result: a paired
+        // Desktop verifies a worktree index entry with no conversation by it (ADR 0119). The
+        // host keeps no catalog or lifecycle revision (it accepts only 0), so none is echoed.
+        const QJsonObject scope = sourceContext(worktreePath, salt);
+        QJsonObject worktree;
+        for (const auto* key : {"repositoryId", "worktreeId", "repositoryLabel", "worktreeLabel"})
+            worktree.insert(QLatin1String(key), scope.value(QLatin1String(key)));
+        if (const auto visible = sidebarRepositoryVisible(worktreePath))
+            worktree.insert(QStringLiteral("sidebarVisible"), *visible);
         // What the phone can choose before the first message: the models, efforts and
         // permissions a conversation started here would begin with.
         host_->handleProviderQuery(
             QJsonObject{
                 {QStringLiteral("message_type"), QStringLiteral("provider.configuration_catalog")},
                 {QStringLiteral("payload"), QJsonObject{}}},
-            [this, command, senderAgreementKey](const QJsonObject& models,
-                                                const QString& providerError) {
-                acknowledgeCommand(
-                    command,
+            [this, command, senderAgreementKey, worktree](const QJsonObject& models,
+                                                          const QString& providerError) {
+                QJsonObject result =
                     providerError.isEmpty()
                         ? host_->newConversationConfiguration(
                               models.value(QStringLiteral("catalog")).toArray())
-                        : QJsonObject{{QStringLiteral("ok"), false},
-                                      {QStringLiteral("error_code"),
-                                       QStringLiteral("provider_capabilities_unavailable")},
-                                      {QStringLiteral("error_message"),
-                                       QStringLiteral(
-                                           "The available settings could not be read.")}},
-                    senderAgreementKey);
+                        : QJsonObject{
+                              {QStringLiteral("ok"), false},
+                              {QStringLiteral("error_code"),
+                               QStringLiteral("provider_capabilities_unavailable")},
+                              {QStringLiteral("error_message"),
+                               QStringLiteral("The available settings could not be read.")}};
+                result.insert(QStringLiteral("worktree"), worktree);
+                acknowledgeCommand(command, result, senderAgreementKey);
             });
         return;
     }
@@ -161,10 +187,10 @@ void CloudControlClient::executeWorktreeCommand(const QJsonObject& command,
     }
     // Git can take seconds on a large repository, so it runs off the main thread; the
     // answer is dropped if the Mac left the account meanwhile.
-    const quint64 requestEpoch = accountEpoch_;
+    const auto requestAccount = accountFence();
     const QPointer<CloudControlClient> guard(this);
     workspaceFilesPool_.start([guard, command, payload, senderAgreementKey, repository, listing,
-                               branch, base, salt, requestEpoch]() {
+                               branch, base, salt, requestAccount]() {
         QJsonObject result;
         QString createdPath;
         if (listing) {
@@ -205,8 +231,8 @@ void CloudControlClient::executeWorktreeCommand(const QJsonObject& command,
         }
         QMetaObject::invokeMethod(
             guard,
-            [guard, command, payload, senderAgreementKey, result, createdPath, requestEpoch]() {
-                if (!guard || guard->accountEpoch_ != requestEpoch)
+            [guard, command, payload, senderAgreementKey, result, createdPath, requestAccount]() {
+                if (!guard || !guard->accountCurrent(requestAccount))
                     return;
                 if (!createdPath.isEmpty())
                     guard->startCreatedConversation(command, payload, createdPath,
@@ -235,6 +261,52 @@ void CloudControlClient::startCreatedConversation(const QJsonObject& command,
              {QStringLiteral("options"), payload.value(QStringLiteral("options")).toObject()}}}};
     acknowledgeCommand(command, host_->handleCommand(local, QStringLiteral("cloud-control-v2")),
                        senderAgreementKey);
+}
+
+void CloudControlClient::answerWorktrees(const QJsonObject& command, QJsonObject result) {
+    const auto current =
+        sourceContext(result.value("worktree_path").toString(), ensurePathIdSalt());
+    result.insert("current_worktree_id", current.value("worktreeId"));
+    QJsonArray entries;
+    for (const auto& v : result.value("worktrees").toArray()) {
+        auto entry = v.toObject();
+        const auto path = entry.take("worktree_path").toString();
+        const auto scope = sourceContext(path, ensurePathIdSalt());
+        entry.insert("worktree_id", scope.value("worktreeId"));
+        entry.insert("repository_id", scope.value("repositoryId"));
+        entry.insert("folder", QFileInfo(path).fileName());
+        entries.append(entry);
+    }
+    result.insert("worktrees", entries);
+    result.remove("contexts");
+    result.remove("repositories");
+    result.remove("repository_path");
+    result.remove("worktree_path");
+    if (!result.value("ok").toBool()) {
+        acknowledgeCommand(command, result);
+        return;
+    }
+    // Publish discovered opaque targets before returning the picker page, so
+    // a newly created Git worktree already has a catalog/grant at selection.
+    const auto account = accountFence();
+    const QJsonObject heartbeatBody{
+        {"machineId", machineId_},
+        {"controlProtocolVersion", 2},
+        {"localProtocolVersion", 0},
+        {"daemonVersion", QStringLiteral(KETPLUS_PRODUCT_VERSION)},
+        {"observedAt", QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs)},
+        {"sessions", QJsonArray{}},
+        {"worktrees", worktreeSnapshots()}};
+    request("POST", "/v2/daemon/heartbeat", heartbeatBody, daemonToken_, {},
+            [this, command, result, account](int status, const QJsonValue&, const QString& error) {
+                if (!accountCurrent(account))
+                    return;
+                acknowledgeCommand(
+                    command, status == 202 && error.isEmpty()
+                                 ? result
+                                 : QJsonObject{{"ok", false},
+                                               {"error_code", "worktree_catalog_unavailable"}});
+            });
 }
 
 } // namespace ketplus::daemon

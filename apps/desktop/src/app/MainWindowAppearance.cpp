@@ -37,7 +37,7 @@ void MainWindow::applyAppearanceToSurfaces() {
             editor->setPreviewTypography(appearanceSettings_.preview.fontSizePixels,
                                          appearanceSettings_.preview.lineHeightPixels);
             if (editor == activeEditor && !editor->isHibernated()) {
-                editor->applyTheme(theme_.palette());
+                editor->applyColorScheme(theme_.colorScheme());
             } else {
                 editor->markThemePending();
             }
@@ -52,7 +52,7 @@ void MainWindow::applyAppearanceToSurfaces() {
                 editor->setPreviewTypography(appearanceSettings_.preview.fontSizePixels,
                                              appearanceSettings_.preview.lineHeightPixels);
                 if (editor == activeEditor && !editor->isHibernated()) {
-                    editor->applyTheme(theme_.palette());
+                    editor->applyColorScheme(theme_.colorScheme());
                 } else {
                     editor->markThemePending();
                 }
@@ -69,7 +69,7 @@ void MainWindow::applyAppearanceToSurfaces() {
         splitEditor_->setEditorSettings(appearanceSettings_.editor);
         splitEditor_->setPreviewTypography(appearanceSettings_.preview.fontSizePixels,
                                            appearanceSettings_.preview.lineHeightPixels);
-        splitEditor_->applyTheme(theme_.palette());
+        splitEditor_->applyColorScheme(theme_.colorScheme());
     }
     if (terminal_ != nullptr) {
         applyTerminalTypography(terminal_);

@@ -1,9 +1,15 @@
-// The KétPlus (Lite) window against the Lite mock (mockups/qt, --edition=lite).
+// The ketPlus (Lite) window against the Lite mock (mockups/qt, --edition=lite).
+#include "KetCommandPalette.h"
+#include "TestSymlink.h"
 #include "app/MainWindow.h"
 #include "app/ReviewCapture.h"
+#include "git/GitChangesPanel.h"
+#include "git/GitDiffView.h"
+#include "git/GitService.h"
 #include "terminal/TerminalPanel.h"
 #include "ui/Theme.h"
 #include "workspace/ExplorerPanel.h"
+#include "workspace/NavigationPanelWidth.h"
 #include "workspace/SearchPanel.h"
 
 #include "KetAppearance.h"
@@ -17,6 +23,7 @@
 #include <QApplication>
 #include <QDir>
 #include <QFile>
+#include <QLineEdit>
 #include <QMenuBar>
 #include <QProcess>
 #include <QSettings>
@@ -89,6 +96,35 @@ class LiteWindowTest final : public QObject {
         QVERIFY(QDir(workspace_.path()).mkpath(QStringLiteral("docs")));
         write(workspace_.filePath(QStringLiteral("docs/guide.md")), "# Guide\n");
         write(workspace_.filePath(QStringLiteral("main.cpp")), "int main() {}\n");
+    }
+
+    void colorSchemeCommandOpensKeyboardPicker() {
+        QTemporaryDir selection;
+        ketplus::ThemeManager theme(*qApp, nullptr, selection.path());
+        ketplus::MainWindow window(theme);
+        window.resize(1000, 800);
+        window.show();
+        auto* action = window.findChild<QAction*>(QStringLiteral("selectColorScheme"));
+        QVERIFY(action && action->isEnabled());
+        action->trigger();
+        auto* picker = window.findChild<ket::CommandPalette*>(QStringLiteral("schemeQuickPicker"));
+        QVERIFY(picker && picker->isOpen());
+        QTest::keyClick(picker->searchField(), Qt::Key_Escape);
+        QTRY_VERIFY(!theme.hasSchemePreview());
+    }
+
+    void themeChangeKeepsAnActiveDiffTab() {
+        QTemporaryDir selection;
+        ketplus::ThemeManager theme(*qApp, nullptr, selection.path());
+        theme.setMode(ketplus::ThemeManager::Mode::Light);
+        ketplus::MainWindow window(theme);
+        auto* tabs = window.findChild<QTabWidget*>();
+        QVERIFY(tabs);
+        auto* diff = new ketplus::GitDiffView(tabs);
+        tabs->setCurrentIndex(tabs->addTab(diff, QStringLiteral("Diff")));
+        theme.setMode(ketplus::ThemeManager::Mode::Dark);
+        QCOMPARE(tabs->currentWidget(), diff);
+        QVERIFY(theme.palette().dark);
     }
 
     void openingAFolderDropsThePreviousSearch() {
@@ -180,10 +216,11 @@ class LiteWindowTest final : public QObject {
         QVERIFY(explorer && search);
         QVERIFY(marked(explorer));
         QVERIFY(!marked(search));
-        // The mock's 248 px Explorer column at the interface zoom.
+        // The shared navigation width, at the interface zoom.
         QCOMPARE(window.findChild<QTreeView*>(QStringLiteral("explorerTree"))->window(), &window);
         QCOMPARE(window.findChild<ket::FileRow*>(QStringLiteral("explorerRoot"))->width(),
-                 qRound(ket::Appearance::instance().scaled(248)));
+                 qRound(ket::Appearance::instance().scaled(
+                     ketplus::NavigationPanelWidth::defaultWidth)));
 
         // Switching panels sets the actions under signal blockers; the buttons still repaint.
         PaintCounter counter;
@@ -197,6 +234,53 @@ class LiteWindowTest final : public QObject {
         search->click();
         QVERIFY(!search->isChecked());
         QVERIFY(!viewAction(window, QStringLiteral("Search in Files"))->isChecked());
+    }
+
+    // The Explorer and Source Control columns open at one width, and the width the user drags
+    // either to is the one both open at: switching between them never moves the editor.
+    void explorerAndSourceControlOpenAtOneWidth() {
+        QTemporaryDir repository;
+        QVERIFY(repository.isValid());
+        QProcess git;
+        git.setWorkingDirectory(repository.path());
+        git.start(QStringLiteral("git"), {QStringLiteral("init"), QStringLiteral("-q")});
+        QVERIFY(git.waitForFinished(10000) && git.exitCode() == 0);
+        ketplus::ThemeManager theme(*qApp);
+        ketplus::MainWindow window(theme);
+        window.resize(1280, 820);
+        window.openFolder(repository.path());
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        const int standard =
+            qRound(ket::Appearance::instance().scaled(ketplus::NavigationPanelWidth::defaultWidth));
+        viewAction(window, QStringLiteral("Explorer"))->trigger();
+        auto* explorer = window.findChild<ketplus::ExplorerPanel*>();
+        ketplus::GitChangesPanel* changes = nullptr;
+        QVERIFY(explorer != nullptr);
+        QTRY_COMPARE(explorer->width(), standard);
+        QTRY_VERIFY_WITH_TIMEOUT(viewAction(window, QStringLiteral("Source Control"))->isEnabled(),
+                                 10000);
+        viewAction(window, QStringLiteral("Source Control"))->trigger();
+        changes = window.findChild<ketplus::GitChangesPanel*>();
+        QVERIFY(changes != nullptr);
+        QTRY_COMPARE(changes->width(), standard);
+
+        // Dragging Source Control's edge sets the width the Explorer opens at, too.
+        auto* split = qobject_cast<QSplitter*>(changes->parentWidget());
+        QVERIFY(split != nullptr);
+        auto sizes = split->sizes();
+        const int panel = split->indexOf(changes);
+        const int editor =
+            split->indexOf(window.findChild<QWidget*>(QStringLiteral("editorColumn")));
+        const int dragged = standard + 60;
+        sizes[editor] -= dragged - sizes[panel];
+        sizes[panel] = dragged;
+        split->setSizes(sizes);
+        QMetaObject::invokeMethod(split, "splitterMoved", Q_ARG(int, dragged), Q_ARG(int, panel));
+        viewAction(window, QStringLiteral("Explorer"))->trigger();
+        QTRY_COMPARE(explorer->width(), dragged);
+        viewAction(window, QStringLiteral("Source Control"))->trigger();
+        QTRY_COMPARE(changes->width(), dragged);
     }
 
     void sidePanelWidthFollowsTheZoom() {
@@ -271,7 +355,7 @@ class LiteWindowTest final : public QObject {
         for (auto* item : row->findChildren<ket::StatusItem*>())
             items.append(item->text());
         QVERIFY(items.contains(QStringLiteral("Ln 1, Col 1")));
-        QVERIFY(!items.contains(QStringLiteral("KétPlus")));
+        QVERIFY(!items.contains(QStringLiteral("ketPlus")));
         QStringList buttons;
         for (auto* button : row->findChildren<QAbstractButton*>())
             if (button->isVisibleTo(row))
@@ -328,6 +412,54 @@ class LiteWindowTest final : public QObject {
         window.openFile(repository.filePath(QStringLiteral("clean.txt")));
         QVERIFY(viewDiff() != nullptr);
         QTRY_VERIFY(!viewDiff()->isVisibleTo(tabs));
+    }
+
+    void sourceControlKeepsSymlinkDiffTabsDistinct() {
+        QTemporaryDir temp;
+        QVERIFY(temp.isValid());
+        const QDir root(QFileInfo(temp.path()).canonicalFilePath());
+        QVERIFY(root.mkdir("checkout"));
+        const QDir checkout(root.filePath("checkout"));
+        const QString external = root.filePath("target.txt");
+        write(external, "target outside the checkout\n");
+        const QString first = checkout.filePath("link-one.txt");
+        const QString second = checkout.filePath("link-two.txt");
+        for (const auto& path : {first, second}) {
+            const auto error = ketplus::test::createSymlink(external, path);
+            QVERIFY2(error.isEmpty(), qPrintable(error));
+        }
+
+        for (const QStringList& command :
+             {QStringList{"init", "-q"}, QStringList{"config", "core.symlinks", "true"}}) {
+            QProcess git;
+            git.setWorkingDirectory(checkout.path());
+            git.start(QStringLiteral("git"), command);
+            QVERIFY(git.waitForFinished(10000) && git.exitCode() == 0);
+        }
+
+        ketplus::ThemeManager theme(*qApp);
+        ketplus::MainWindow window(theme);
+        window.openFolder(checkout.path());
+        auto* git = window.findChild<ketplus::GitService*>();
+        QVERIFY(git);
+        QTRY_COMPARE(git->snapshot().files.size(), 2);
+        auto* sourceControl = viewAction(window, QStringLiteral("Source Control"));
+        QVERIFY(sourceControl && sourceControl->isEnabled());
+        sourceControl->trigger();
+        auto* panel = window.findChild<ketplus::GitChangesPanel*>();
+        QVERIFY(panel);
+        auto* tabs = window.findChild<QTabWidget*>();
+        QVERIFY(tabs);
+        for (const auto& path : {first, second}) {
+            emit panel->diffRequested(path, ketplus::GitDiffMode::Unstaged);
+            QTRY_VERIFY(qobject_cast<ketplus::GitDiffView*>(tabs->currentWidget()));
+            QTRY_COMPARE(qobject_cast<ketplus::GitDiffView*>(tabs->currentWidget())->filePath(),
+                         path);
+        }
+        QCOMPARE(tabs->findChildren<ketplus::GitDiffView*>().size(), 2);
+        auto* diff = qobject_cast<ketplus::GitDiffView*>(tabs->currentWidget());
+        emit diff->refreshRequested(diff->filePath(), diff->mode());
+        QTRY_COMPARE(window.statusBar()->currentMessage(), QStringLiteral("Updated Git diff"));
     }
 
     void settingsIsAPageOfTheWindow() {

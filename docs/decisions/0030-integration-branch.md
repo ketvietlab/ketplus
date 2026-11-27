@@ -11,12 +11,12 @@ change waited for the same matrix as a large one, and each push to its branch
 started the matrix again. The CI cost was paid per pull request, not per change
 that reached users.
 
-`ketvietlab/ketviet` already solved this with an `integration` branch that has no
-CI and a batch gate on promotion into `develop`.
+A staging integration branch amortizes the build matrix across a batch of changes.
 
 ## Decision
 
-- Feature and fix pull requests target `integration`, which runs no CI. The
+- Feature and fix pull requests target `integration`, which runs no native build CI. A lightweight
+  public-tree boundary guard still runs on pull requests. The
   author tests the part they changed and records the commands and results in
   the pull request.
 - `develop` receives only promotion pull requests from `integration` in this
@@ -54,5 +54,5 @@ CI and a batch gate on promotion into `develop`.
 
 - Path-filtered CI per pull request: still one matrix per pull request, and the
   filters drift as `core/` and Pro share more code.
-- Reusing a green ancestor gate for documentation-only promotions, as ketviet
+- Reusing a green ancestor gate for documentation-only promotions, as other projects
   does: `paths-ignore` for Markdown already covers the common case here.

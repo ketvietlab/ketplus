@@ -1,11 +1,16 @@
 #include "app/ConversationRepository.h"
 #include "app/MainWindow.h"
+#include "teams/TeamDirectory.h"
+
+#include "machine/MachineComposition.h"
+#include "machine/MachineWorkspaceView.h"
 
 #include "agent/AgentSessionManager.h"
 #include "agent/AgentWorkspaceView.h"
 #include "app/RepositoryRouter.h"
 
 #include <QDir>
+#include <QElapsedTimer>
 #include <QFile>
 #include <QFileInfo>
 #include <QFutureWatcher>
@@ -14,6 +19,7 @@
 #include <QtConcurrentRun>
 
 #include <algorithm>
+#include <cstdio>
 
 namespace ketplus {
 namespace {
@@ -56,9 +62,6 @@ void MainWindow::scheduleSidebarRefresh(const bool repositoriesChanged) {
 
 QString MainWindow::sidebarRepositoryForPath(const QString& path) {
     const QString normalized = normalizedPath(path);
-    if (normalized == normalizedPath(workspaceRoot_))
-        return conversationRepositoryRoot(
-            repositoryDisplayRoot_.isEmpty() ? workspaceRoot_ : repositoryDisplayRoot_);
     const auto cached = sidebarRepositoryByPath_.constFind(normalized);
     if (cached != sidebarRepositoryByPath_.cend())
         return *cached;
@@ -119,8 +122,15 @@ QString MainWindow::sidebarRepositoryForPath(const QString& path) {
 }
 
 void MainWindow::refreshSidebarRepositories() {
+    // KETPLUS_SIDEBAR_TRACE=1: one stderr line per refresh, for the large-workspace benchmark.
+    static const bool trace = qEnvironmentVariableIsSet("KETPLUS_SIDEBAR_TRACE");
+    QElapsedTimer timer;
+    if (trace)
+        timer.start();
     if (selectedMachineId_ != QStringLiteral("local")) {
-        activityBar_->setRepositories({});
+        // ADR 0119: the selected machine's lists, never This Mac's.
+        activityBar_->setRepositories(machines_ != nullptr ? machines_->sidebarRepositories()
+                                                           : QVector<SidebarRepository>{});
         return;
     }
     const QString activeRepository = activeSidebarRepository();
@@ -130,23 +140,28 @@ void MainWindow::refreshSidebarRepositories() {
         sidebarRepositoryRoots_.clear();
         for (const QString& root : RepositoryRouter::cachedRecentRepositories()) {
             const QString normalized = conversationRepositoryRoot(root);
-            if (!normalized.isEmpty() && QFileInfo(normalized).isDir() &&
+            if (!normalized.isEmpty() && isSidebarRepository(normalized) &&
                 !sidebarRepositoryRoots_.contains(normalized))
                 sidebarRepositoryRoots_.append(normalized);
         }
     }
-    // SidebarRepositoryList orders these by their newest conversation, as phones do.
+    // SidebarRepositoryList keeps pin/name order across conversation and team updates.
     QStringList roots;
     for (const QString& root : std::as_const(sidebarRepositoryRoots_)) {
         if (!roots.contains(root))
             roots.append(root);
     }
-    if (!activeRepository.isEmpty() && !roots.contains(activeRepository))
+    if (!activeRepository.isEmpty() && isSidebarRepository(activeRepository) &&
+        !roots.contains(activeRepository))
         roots.append(activeRepository);
 
     // Conversations are stored per worktree. Group them under their repository so the
     // sidebar reads repository > conversation, with the worktree carried by each row.
     QHash<QString, QVariantList> conversationsByRepository;
+    // T-92: the open conversation's group is the highlighted one, also after it switched to a
+    // worktree of another repository.
+    QString selectedRepository;
+    bool selectedGroupFound = false;
     if (agentManager_ != nullptr) {
         // The transcript may show a worktree other than the open folder (a deleted worktree
         // opened as history). Selection follows the transcript in every mode, so opening
@@ -159,12 +174,19 @@ void MainWindow::refreshSidebarRepositories() {
         // A stable order: moving the open worktree first would reshuffle rows on every click.
         std::sort(paths.begin(), paths.end());
         for (const QString& path : std::as_const(paths)) {
+            // T-92: grouped by where it was created (`path`, the daemon's conversation_path,
+            // written once), not the worktree it runs in now: switching worktree or repository
+            // changes Source Control, Files and the composer's label, never the row's group.
+            // Resolved once per worktree: it touches the file system.
             for (const QVariant& value : agentManager_->conversations(path)) {
                 QVariantMap conversation = value.toMap();
-                const auto executionPath = conversation.value("executionPath", path).toString();
-                const QString repository = sidebarRepositoryForPath(executionPath);
-                if (repository.isEmpty())
-                    continue;
+                const auto fallback =
+                    conversation.value(QStringLiteral("sidebarRepositoryFallback")).toString();
+                const QString repository =
+                    conversation.value(QStringLiteral("sidebarRepositoryKnown")).toBool()
+                        ? conversation.value(QStringLiteral("sidebarRepositoryPath")).toString()
+                    : fallback.isEmpty() ? sidebarRepositoryForPath(path)
+                                         : fallback;
                 const bool selected = path == currentWorktree &&
                                       conversation.value(QStringLiteral("active")).toBool();
                 // Activating a worktree creates an untitled placeholder. Keep those hidden so
@@ -180,6 +202,10 @@ void MainWindow::refreshSidebarRepositories() {
                     continue;
                 conversation.insert(QStringLiteral("path"), path);
                 conversation.insert(QStringLiteral("selected"), selected);
+                if (selected) {
+                    selectedRepository = repository;
+                    selectedGroupFound = true;
+                }
                 conversationsByRepository[repository].append(conversation);
                 if (!roots.contains(repository))
                     roots.append(repository);
@@ -187,18 +213,61 @@ void MainWindow::refreshSidebarRepositories() {
         }
     }
 
+    // Placement is independent of a team's mutable execution repository (ADR 0123).
+    const QHash<QString, QList<QJsonObject>> sidebarTeams =
+        teams_ != nullptr && teams_->hasTeams() ? teams_->sidebarTeamsByRepository()
+                                                : QHash<QString, QList<QJsonObject>>{};
+    if (teams_ != nullptr)
+        for (const auto& team : teams_->teams()) {
+            const auto root = team.value(QStringLiteral("sidebar_repository"))
+                                  .toString(team.value(QStringLiteral("repository")).toString());
+            if (!roots.contains(root))
+                roots.append(root);
+        }
+    // Members stay under their team, whichever execution worktree a task gives them.
+    QHash<QString, QVector<SidebarTeam>> teamsByRepository;
+    for (const QString& root : std::as_const(roots)) {
+        auto folders = takeSidebarTeams(root, sidebarTeams, conversationsByRepository);
+        for (const auto& team : folders)
+            for (const auto& member : team.members)
+                if (member.toMap().value(QStringLiteral("selected")).toBool()) {
+                    selectedRepository = root;
+                    selectedGroupFound = true;
+                }
+        teamsByRepository.insert(root, folders);
+    }
     QVector<SidebarRepository> repositories;
     repositories.reserve(roots.size());
-    for (const QString& root : std::as_const(roots)) {
-        repositories.append({root, QFileInfo(root).fileName(), root == activeRepository,
-                             conversationsByRepository.value(root),
-                             root == promotedSidebarRepository_});
-    }
+    for (const QString& root : std::as_const(roots))
+        repositories.append(
+            {.path = root,
+             .name = root.isEmpty() ? tr("Other conversations") : QFileInfo(root).fileName(),
+             .active = root == (selectedGroupFound ? selectedRepository : activeRepository),
+             .conversations = conversationsByRepository.value(root),
+             .teams = teamsByRepository.value(root),
+             .pinnable = !root.isEmpty()});
     activityBar_->setRepositories(repositories);
+    updateTeamRoles();
+    if (trace) {
+        qsizetype conversations = 0;
+        for (const SidebarRepository& repository : std::as_const(repositories))
+            conversations += repository.conversations.size();
+        std::fprintf(
+            stderr, "KETPLUS_SIDEBAR_REFRESH ms=%.2f repositories=%lld conversations=%lld\n",
+            double(timer.nsecsElapsed()) / 1e6, static_cast<long long>(repositories.size()),
+            static_cast<long long>(conversations));
+    }
 }
 
 void MainWindow::openSidebarConversation(const QString& worktreePath,
                                          const QString& conversationId) {
+    if (selectedMachineId_ != QStringLiteral("local")) {
+        // A remote row names a host path or a Relay id; it is never resolved on This Mac.
+        setMachineWorkspaceVisible(true);
+        if (machines_->shown() && !conversationId.isEmpty())
+            machines_->existingView()->openConversation(conversationId);
+        return;
+    }
     const QString path = normalizedPath(worktreePath);
     if (path.isEmpty() || conversationId.isEmpty())
         return;

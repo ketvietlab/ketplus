@@ -11,7 +11,7 @@ KetPlus shipped as two products from two repositories: the public KetPlus CM edi
 consumed CM through the pinned `vendor/ketplus-cm` submodule. Every editor change was
 released in the public repository first and then pulled in by a gitlink update.
 
-The desktop is now open source. Revenue comes from the mobile apps and the hosted relay,
+The desktop is now open source. Revenue comes from the mobile apps and the hosted service,
 gateway and account services, which stay private. The editor alone is preinstalled on
 Lampion.
 
@@ -39,12 +39,12 @@ Lampion.
   `docs/licensing.md`. The bundled `ket-atlas`, `enterprise-grade` and
   `ket-design-system` agent skills are MIT. The KÉT Sans font keeps its own license from
   the public `ket-sans-font` repository.
-- The relay client is open source with the rest of the desktop: `modules/remote`,
+- The service client is open source with the rest of the desktop: `modules/remote`,
   `apps/desktop/src/remote` and the daemon's host side in `apps/daemon/src/cloud`. Users
   can audit the end-to-end encryption, and the daemon does not have to close again
   because it shares the protocol and keys with the client.
-- `ketplus-app` (iOS and Android) and the relay, gateway, account and KétRouter services
-  in `ketviet` stay private and proprietary. Paid features are enforced by those services,
+- the private mobile app (iOS and Android) and the hosted service, gateway, account and KétRouter services
+  remain private and proprietary. Paid features are enforced by those services,
   never by a build flag: anyone may build KétPlus Pro from source.
 - Each edition keeps its own version and tag (`lite-v*`, `pro-v*`;
   `docs/release-process.md`). Earlier `cm-v*` tags stay as they are.
@@ -52,17 +52,18 @@ Lampion.
 ## Consequences
 
 - Editor changes land once instead of as a public release followed by a gitlink update.
-- The daemon, the relay client and the end-to-end encryption between desktop and phone
+- The daemon, the service client and the end-to-end encryption between desktop and phone
   are public. Their security must not rely on the protocol staying private.
-- Modified clients can reach the hosted relay. The relay authorizes every request by
+- Modified clients can reach the hosted service. The hosted service authorizes every request by
   account, entitlement and rate limit, and trusts nothing a client asserts about its build.
 - The wave-1 refactor evidence under `tasks/desktop-refactor` was pinned to private
   revisions. Its CI gates (`design-evidence.yml`) and `tests/design/integration-evidence`
-  cannot run without that history and are retired; the evidence stays as a record.
+  cannot run without that history and are retired. The mixed private-source evidence
+  was removed from the public tree; public acceptance instructions remain in docs/testing.md.
 - User-visible names change to KétPlus and KétPlus Pro. Bundle identifiers, settings and
   data directories are unchanged in this step, so existing installs, Sparkle updates and
   paired phones keep working; renaming them needs a migration of its own.
-- Forks that use another relay must not use the KétPlus name or icon; a trademark policy,
+- Forks that use another hosted service must not use the KétPlus name or icon; a trademark policy,
   not the license, says so.
 
 ## Open questions
@@ -73,7 +74,7 @@ Lampion.
 
 - **Pro in a `pro/` subdirectory with the editor at the root:** every Pro path, include
   and document changes, and Pro code already builds the editor as a subdirectory.
-- **Relay client as a private package or plugin:** the protocol is still readable from the
+- **Hosted service client as a private package or plugin:** the protocol is still readable from the
   binary and traffic, users cannot verify the encryption, the daemon's host side would
   have to close too, and Linux distributions cannot ship it.
 - **New empty repository:** loses the public history, tags and redirects of `ketplus`.

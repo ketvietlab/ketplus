@@ -1,0 +1,16 @@
+{
+  "sourceCommit": "fedfad51acc2860b2916a1eef32ba4a500ff31ef",
+  "sourceUrl": "https://github.com/AppImage/type2-runtime/tree/fedfad51acc2860b2916a1eef32ba4a500ff31ef",
+  "licenseFile": "third_party/licenses/AppImage-runtime.txt",
+  "licenseSha256": "aa154fc9070614bbe7921f89db11efd1dba7a1f3a41685958110e2230f9c0ca1",
+  "assets": {
+    "x86_64": {
+      "url": "https://api.github.com/repos/AppImage/type2-runtime/releases/assets/657374641",
+      "sha256": "617aa77314d57c8b8e4fae9c3f0b35af7b30d5529cb69e98f64f92510ed98a46"
+    },
+    "aarch64": {
+      "url": "https://api.github.com/repos/AppImage/type2-runtime/releases/assets/657373827",
+      "sha256": "9a72a744d221576c9347ec074243acc5c3c7568896b12714e0e82e9f0bf47900"
+    }
+  }
+}

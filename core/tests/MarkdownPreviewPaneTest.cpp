@@ -36,11 +36,13 @@ class MarkdownPreviewPaneTest final : public QObject {
     void explainsHowToInstallMissingMmdc();
     void discoversMmdcInstalledByNvm();
     void rendersMermaidAndOpensThePopup();
+    void rendersMermaidThroughACmdShimInAFolderWithSpaces();
     void opensVectorDiagramWithPanControls();
     void classColoursSurviveQtSvg();
     void sequenceColoursSurviveQtSvg();
     void canonicalSemanticColoursSurviveQtSvg();
-    void roundsDiagramRectangles();
+    void keepsDiagramRectangleCorners();
+    void hslColoursSurviveQtSvg();
 };
 
 ketplus::ThemePalette previewTestPalette() {
@@ -276,10 +278,10 @@ fi
 if grep -q '{{' "$config"; then
   exit 15
 fi
-if ! grep -q '"primaryColor":"#202c4b"' "$config"; then
+if ! grep -q '"theme":"redux-dark"' "$config" || ! grep -q '"look":"neo"' "$config"; then
   exit 14
 fi
-if ! grep -q '.node.kv-positive path' "$config" || ! grep -q '"curve":"rounded"' "$config"; then
+if ! grep -q '"layout":"elk"' "$config" || ! grep -q '.label text{fill:#f2f4f7;}' "$config"; then
   exit 13
 fi
 printf '%s' '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="160"><rect x="10" y="10" width="300" height="140" fill="#8b5cf6"/></svg>' > "$output"
@@ -323,6 +325,66 @@ printf '%s' '<svg xmlns="http://www.w3.org/2000/svg" width="320" height="160"><r
         QVERIFY(QMetaObject::invokeMethod(browser, "anchorClicked", Qt::DirectConnection,
                                           Q_ARG(QUrl, QUrl(diagramLink))));
         QTRY_VERIFY(preview.findChild<ketplus::MermaidDiagramDialog*>() != nullptr);
+    }
+    if (overrideWasSet) {
+        qputenv("KETPLUS_MMDC", previousOverride);
+    } else {
+        qunsetenv("KETPLUS_MMDC");
+    }
+#endif
+}
+
+void MarkdownPreviewPaneTest::rendersMermaidThroughACmdShimInAFolderWithSpaces() {
+#ifndef Q_OS_WIN
+    QSKIP("mmdc is an npm .cmd shim run through cmd.exe only on Windows.");
+#else
+    // The shim's folder has spaces, as a user profile can; the renderer must still start it
+    // and pass the -o path through intact.
+    QTemporaryDir temporaryDirectory(QDir::tempPath() + QStringLiteral("/ketplus mermaid XXXXXX"));
+    QVERIFY(temporaryDirectory.isValid());
+    QVERIFY(QDir().mkpath(temporaryDirectory.filePath(QStringLiteral("npm bin"))));
+    const QString executablePath = temporaryDirectory.filePath(QStringLiteral("npm bin/mmdc.cmd"));
+    QFile executable(executablePath);
+    QVERIFY(executable.open(QIODevice::WriteOnly));
+    const QByteArray script =
+        "@echo off\r\n"
+        ":loop\r\n"
+        "if \"%~1\"==\"\" exit /b 9\r\n"
+        "if \"%~1\"==\"-o\" goto found\r\n"
+        "shift\r\n"
+        "goto loop\r\n"
+        ":found\r\n"
+        "> \"%~2\" echo ^<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"320\" "
+        "height=\"160\"^>^<rect x=\"10\" y=\"10\" width=\"300\" height=\"140\" "
+        "fill=\"#8b5cf6\"/^>^</svg^>\r\n";
+    QCOMPARE(executable.write(script), script.size());
+    executable.close();
+
+    const bool overrideWasSet = qEnvironmentVariableIsSet("KETPLUS_MMDC");
+    const QByteArray previousOverride = qgetenv("KETPLUS_MMDC");
+    qputenv("KETPLUS_MMDC", QDir::toNativeSeparators(executablePath).toUtf8());
+    {
+        ketplus::MarkdownPreviewPane preview;
+        const QString uniqueNode = QUuid::createUuid().toString(QUuid::WithoutBraces);
+        preview.setSource(
+            QStringLiteral("```mermaid\nflowchart LR\nA[%1] --> B\n```").arg(uniqueNode),
+            temporaryDirectory.filePath(QStringLiteral("diagram.md")), ketplus::ThemePalette{});
+        auto* browser = preview.findChild<QTextBrowser*>(QStringLiteral("markdownPreviewBrowser"));
+        QVERIFY(browser != nullptr);
+        QTRY_VERIFY_WITH_TIMEOUT(
+            [&] {
+                for (QTextBlock block = browser->document()->begin(); block.isValid();
+                     block = block.next()) {
+                    for (auto fragment = block.begin(); !fragment.atEnd(); ++fragment) {
+                        const QTextCharFormat format = fragment.fragment().charFormat();
+                        if (format.isImageFormat() && format.isAnchor())
+                            return format.anchorHref().startsWith(
+                                QStringLiteral("ketplus-mermaid-open:"));
+                    }
+                }
+                return false;
+            }(),
+            15000);
     }
     if (overrideWasSet) {
         qputenv("KETPLUS_MMDC", previousOverride);
@@ -428,16 +490,37 @@ void MarkdownPreviewPaneTest::canonicalSemanticColoursSurviveQtSvg() {
     QCOMPARE(image.pixelColor(80, 20).name(), QStringLiteral("#382b2f"));
 }
 
-void MarkdownPreviewPaneTest::roundsDiagramRectangles() {
+void MarkdownPreviewPaneTest::keepsDiagramRectangleCorners() {
     const QByteArray svg =
         R"(<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 40">)"
         R"(<rect width="40" height="40" fill="#252c42"/>)"
-        R"(<rect x="60" width="40" height="40" rx="3" ry="3" fill="#252c42"/>)"
-        R"(<rect x="45" width="10" height="40" rx="20" ry="20" fill="#252c42"/></svg>)";
+        R"(<rect x="60" width="40" height="40" rx="10" ry="10" fill="#252c42"/></svg>)";
     const QByteArray readable = ketplus::MermaidRenderer::qtReadableSvg(svg);
-    QCOMPARE(readable.count("rx=\"12\""), 2);
-    QCOMPARE(readable.count("ry=\"12\""), 2);
-    QVERIFY(readable.contains("rx=\"20\" ry=\"20\""));
+    // The mermaid theme owns corner radii: square nodes stay square.
+    QVERIFY(readable.contains(R"(<rect width="40" height="40" fill="#252c42"/>)"));
+    QVERIFY(readable.contains(R"(rx="10" ry="10")"));
+    QSvgRenderer renderer(readable);
+    QVERIFY(renderer.isValid());
+    QImage image(100, 40, QImage::Format_ARGB32);
+    image.fill(Qt::transparent);
+    QPainter painter(&image);
+    renderer.render(&painter);
+    painter.end();
+    QCOMPARE(image.pixelColor(0, 0).name(), QStringLiteral("#252c42"));
+    QCOMPARE(image.pixelColor(60, 0).alpha(), 0);
+}
+
+// What the redux themes write: stylesheet colours as hsl(), which Qt SVG paints black.
+void MarkdownPreviewPaneTest::hslColoursSurviveQtSvg() {
+    const QByteArray svg =
+        R"(<svg xmlns="http://www.w3.org/2000/svg" id="d" viewBox="0 0 100 40">)"
+        R"(<style>#d .edgeLabel rect{fill:hsl(-120, 0%, 80%);}#d .cluster rect{fill:HSLA(240deg, 50%, 50%, 0.5);})"
+        R"(</style><g class="edgeLabel"><rect width="40" height="40"/></g>)"
+        R"(<g class="cluster"><rect x="60" width="40" height="40"/></g>)"
+        R"(<text x="0" y="30">hsl(0, 0%, 0%)</text></svg>)";
+    const QByteArray readable = ketplus::MermaidRenderer::qtReadableSvg(svg);
+    QVERIFY(!readable.contains("hsl(-120"));
+    QVERIFY(readable.contains(">hsl(0, 0%, 0%)</text>"));
     QCOMPARE(ketplus::MermaidRenderer::qtReadableSvg(readable), readable);
     QSvgRenderer renderer(readable);
     QVERIFY(renderer.isValid());
@@ -446,10 +529,8 @@ void MarkdownPreviewPaneTest::roundsDiagramRectangles() {
     QPainter painter(&image);
     renderer.render(&painter);
     painter.end();
-    QCOMPARE(image.pixelColor(0, 0).alpha(), 0);
-    QCOMPARE(image.pixelColor(60, 0).alpha(), 0);
-    QCOMPARE(image.pixelColor(20, 20).name(), QStringLiteral("#252c42"));
-    QCOMPARE(image.pixelColor(80, 20).name(), QStringLiteral("#252c42"));
+    QCOMPARE(image.pixelColor(20, 5).name(), QStringLiteral("#cccccc"));
+    QCOMPARE(image.pixelColor(80, 5).name(), QStringLiteral("#4040bf"));
 }
 
 QTEST_MAIN(MarkdownPreviewPaneTest)

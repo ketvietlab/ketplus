@@ -1,5 +1,6 @@
 #include "storage/LocalJournal.h"
 
+#include "TranscriptVisibility.h"
 #include "agent/FileChangeStatistics.h"
 
 #include <QJsonArray>
@@ -139,6 +140,62 @@ QString mergedFileOperation(const QString& earlier, const QString& next) {
 QJsonObject failure(const QString& code, const QString& message) {
     return {{"ok", false}, {"error_code", code}, {"error_message", message}};
 }
+
+// ketplus T-78: a journal grouped before KetPlus's agents tools left the transcript holds them
+// in its groups' counts. Each session where one joined a group is grouped again, once, by the
+// bounded passes after open (ADR 0097); canonical and replay events are not changed.
+bool regroupInternalSteps(QSqlDatabase& database, QString* error) {
+    QSqlQuery query(database);
+    const auto failed = [&] {
+        *error = query.lastError().text();
+        database.rollback();
+        return false;
+    };
+    if (!query.exec(QStringLiteral(
+            "CREATE TABLE IF NOT EXISTS activity_rules (name TEXT NOT NULL PRIMARY KEY)"))) {
+        *error = query.lastError().text();
+        return false;
+    }
+    if (!query.exec(
+            QStringLiteral("SELECT 1 FROM activity_rules WHERE name='internal_steps_hidden'"))) {
+        *error = query.lastError().text();
+        return false;
+    }
+    if (query.next())
+        return true;
+    query.finish();
+    if (!database.transaction()) {
+        *error = database.lastError().text();
+        return false;
+    }
+    if (!query.exec(QStringLiteral(
+            "CREATE TEMP TABLE activity_regroup AS SELECT DISTINCT a.session_id,a.generation "
+            "FROM activity_items a JOIN replay_events e ON e.session_id=a.session_id AND "
+            "e.generation=a.generation AND e.item_id=a.item_id WHERE e.event_type IN "
+            "('item.started','item.updated','item.completed') AND e.payload LIKE "
+            "'%ketplus_agents%'")))
+        return failed();
+    for (const auto table : {"activity_items", "activity_summaries", "activity_files",
+                             "activity_files_backfill", "activity_heads"}) {
+        if (!query.exec(QStringLiteral("DELETE FROM %1 WHERE EXISTS(SELECT 1 FROM "
+                                       "temp.activity_regroup r WHERE r.session_id=%1.session_id "
+                                       "AND r.generation=%1.generation)")
+                            .arg(QLatin1String(table))))
+            return failed();
+    }
+    if (!query.exec(QStringLiteral("INSERT OR IGNORE INTO activity_backfill(session_id,generation) "
+                                   "SELECT session_id,generation FROM temp.activity_regroup")) ||
+        !query.exec(QStringLiteral("DROP TABLE temp.activity_regroup")) ||
+        !query.exec(
+            QStringLiteral("INSERT INTO activity_rules(name) VALUES('internal_steps_hidden')")))
+        return failed();
+    if (!database.commit()) {
+        *error = database.lastError().text();
+        database.rollback();
+        return false;
+    }
+    return true;
+}
 } // namespace
 
 bool LocalJournal::initializeActivityGroups() {
@@ -225,6 +282,12 @@ bool LocalJournal::initializeActivityGroups() {
         setError(query.lastError().text());
         return false;
     }
+    query.finish();
+    QString regroupError;
+    if (!regroupInternalSteps(database_, &regroupError)) {
+        setError(regroupError);
+        return false;
+    }
     return true;
 }
 
@@ -284,6 +347,9 @@ bool LocalJournal::updateActivityGroups(const QString& session, qint64 generatio
                          : QStringLiteral("Activity projection row was not stored.");
         return false;
     };
+    // A step the transcript leaves out neither joins, opens nor ends a group.
+    if (remote::transcript_visibility::hidden(type, payload))
+        return true;
     // A session still being indexed indexes this event later, after every earlier one.
     if (!activityCatchUp_) {
         bool deferred = false;
@@ -599,6 +665,11 @@ QJsonObject LocalJournal::activityGroupSummary(const QJsonObject& event, qint64 
                                             {"families", families},
                                             {"files", listed},
                                             {"files_total", int(files.size())}});
+    if (const auto latest = activityGroupLatest(event, group); !latest.isEmpty()) {
+        auto payload = projected.value("payload").toObject();
+        payload.insert("latest", latest);
+        projected.insert("payload", payload);
+    }
     return projected;
 }
 

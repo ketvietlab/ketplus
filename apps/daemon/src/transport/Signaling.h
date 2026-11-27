@@ -1,4 +1,5 @@
 #pragma once
+#include "transport/RelayPeerLink.h"
 #include "transport/RemotePeers.h"
 #include "transport/WebRtcPeerLink.h"
 
@@ -6,12 +7,24 @@ namespace ketplus::daemon::transport {
 class Signaling final : public QObject {
     Q_OBJECT
   public:
+    // The active device record for (device, key version), or empty; version 0 matches any.
     using Keys = std::function<void(const QString&, int, std::function<void(const QJsonObject&)>)>;
     using Sign = std::function<QByteArray(const QByteArray&)>;
     Signaling(RemotePeers* peers, Keys keys, Sign sign, QObject* parent = nullptr);
     void configure(const QString& workspace, const QString& machine, int keyVersion, bool enabled);
     void receive(const QJsonObject& message);
     void refreshDevices(const QJsonArray& devices);
+    // Event frames for devices without a peer connection, on the same socket as the signals.
+    // Enabled while the relay grants events.forward_only/1; `sender` writes to the socket.
+    void setRelaySender(RelayPeerLink::Sender sender) { relaySender_ = std::move(sender); }
+    void setForwardOnly(bool enabled);
+    // Events are forwarded rather than uploaded, and this host has a relay scope to forward in.
+    bool forwardOnlyActive() const { return forwardOnly_ && enabled_; }
+    // The socket closed: every relay link ends, and devices subscribe again on the next one.
+    void relayLost();
+    // The device's pin was removed or replaced: its relay link closes now, and a later
+    // subscribe must pass the pin check again.
+    void devicePinChanged(const QString& device);
     static QByteArray offerBytes(const QJsonObject& offer);
     static QByteArray answerBytes(const QJsonObject& offer, const QString& sdp, int machineVersion,
                                   const QString& issuedAt);
@@ -26,6 +39,8 @@ class Signaling final : public QObject {
     void offer(const QJsonObject& message);
     void finishOffer(const QString& id, const QJsonObject& keys);
     void end(const QString& id, const QString& reason);
+    void relayFrame(const QJsonObject& message);
+    void finishRelay(const QString& device, const QJsonObject& keys);
     struct Attempt {
         QJsonObject offer;
         QPointer<WebRtcPeerLink> link;
@@ -42,6 +57,10 @@ class Signaling final : public QObject {
     QString workspace_, machine_;
     int version_{1};
     bool enabled_{false};
+    bool forwardOnly_{false};
+    RelayPeerLink::Sender relaySender_;
+    // Frames that arrived while the device's record was being checked.
+    QHash<QString, QList<QJsonObject>> pendingRelay_;
     qint64 epoch_{0};
     QHash<QString, Attempt> attempts_;
     QHash<QString, qint64> used_;

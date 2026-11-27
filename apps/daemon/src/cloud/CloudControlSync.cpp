@@ -66,6 +66,12 @@ void CloudControlClient::heartbeat() {
         const QList<StoredSession> stored = journal_->sessions();
         const QHash<QString, QString> repositories = resolveWorktreeRepositories(*journal_);
         QHash<QString, QJsonObject> agentMetadata;
+        // Only the sealed metadata carries this lifecycle hint. Explicit false clears a
+        // previous true on the next heartbeat; no message body or recipient is exported.
+        const QSet<QString> awaiting = journal_->sessionsAwaitingAgentReply();
+        for (const StoredSession& session : stored)
+            agentMetadata[session.id].insert(QStringLiteral("awaitingAgentReply"),
+                                             awaiting.contains(session.id));
         const QHash<QString, QString> numbers = journal_->conversationNumbers();
         for (auto it = numbers.cbegin(); it != numbers.cend(); ++it)
             agentMetadata[it.key()].insert(QStringLiteral("number"), it.value());
@@ -80,31 +86,67 @@ void CloudControlClient::heartbeat() {
             host_ ? host_->agentTurnSenders() : QHash<QString, QJsonObject>{};
         for (auto it = senders.cbegin(); it != senders.cend(); ++it)
             agentMetadata[it.key()].insert(QStringLiteral("agentTurn"), it.value());
-        const quint64 requestEpoch = accountEpoch_;
+        // ADR 0116 §3: a member's team, its revision and the member's role; a conversation
+        // on no team has no `team` field.
+        const QHash<QString, QJsonObject> teams =
+            host_ ? host_->teamMetadata() : QHash<QString, QJsonObject>{};
+        QHash<QString, QString> teamPlacements;
+        for (const auto& document : journal_->teamDocuments())
+            teamPlacements.insert(
+                document.value(QStringLiteral("id")).toString(),
+                document.value(QStringLiteral("sidebar_repository"))
+                    .toString(document.value(QStringLiteral("repository")).toString()));
+        for (auto it = teams.cbegin(); it != teams.cend(); ++it) {
+            auto team = it.value();
+            const auto placement =
+                teamPlacements.constFind(team.value(QStringLiteral("id")).toString());
+            if (placement != teamPlacements.cend()) {
+                team.insert(QStringLiteral("sidebarPlacementKnown"), true);
+                team.insert(QStringLiteral("sidebarRepositoryId"),
+                            placement->isEmpty()
+                                ? QString{}
+                                : cloud_control::opaquePathId("repository", *placement, salt));
+                team.insert(QStringLiteral("sidebarRepositoryLabel"),
+                            QFileInfo(*placement).fileName());
+            }
+            agentMetadata[it.key()].insert(QStringLiteral("team"), team);
+        }
+        const auto requestAccount = accountFence();
         const QString workspaceId = workspaceId_;
         const QString machineId = machineId_;
         const QPointer<CloudControlClient> guard(this);
-        heartbeatPool_.start([guard, stored, repositories, agentMetadata, tagColors, requestEpoch,
-                              workspaceId, machineId, salt]() {
+        // Only one heartbeat runs at a time (heartbeatInFlight_), so the cache is handed to its
+        // thread and back without sharing.
+        WorktreeRevisionCache revisionCache = std::move(revisionCache_);
+        revisionCache_ = {};
+        heartbeatPool_.start([guard, stored, repositories, agentMetadata, tagColors, requestAccount,
+                              workspaceId, machineId, salt,
+                              revisionCache = std::move(revisionCache)]() mutable {
             QHash<QString, QJsonObject> metadata;
+            revisionCache.retain(stored);
             const QList<QJsonArray> batches =
                 heartbeatSessionBatches(CloudControlClient::sessionSnapshots(
                     stored, workspaceId, machineId, salt, repositories, &metadata, agentMetadata,
-                    tagColors));
+                    tagColors, &revisionCache, QDateTime::currentMSecsSinceEpoch()));
             QMetaObject::invokeMethod(
                 guard,
-                [guard, batches, metadata, requestEpoch, workspaceId, machineId]() {
+                [guard, batches, metadata, requestAccount,
+                 revisionCache = std::move(revisionCache)]() mutable {
                     if (!guard)
                         return;
-                    if (guard->accountEpoch_ != requestEpoch ||
-                        guard->workspaceId_ != workspaceId || guard->machineId_ != machineId) {
+                    guard->revisionCache_ = std::move(revisionCache);
+                    if (!guard->accountCurrent(requestAccount)) {
                         guard->heartbeatInFlight_ = false;
                         return;
                     }
                     guard->refusalsThisHeartbeat_.clear();
+                    const auto sealed = guard->withSessionMetadata(batches, metadata);
+                    if (sealed.isEmpty() && !batches.isEmpty()) {
+                        guard->heartbeatInFlight_ = false;
+                        return;
+                    }
                     guard->notePublishedRevisions(batches);
-                    guard->sendHeartbeatBatches(guard->withSessionMetadata(batches, metadata), 0,
-                                                requestEpoch, machineId, workspaceId);
+                    guard->sendHeartbeatBatches(sealed, 0, requestAccount);
                 },
                 Qt::QueuedConnection);
         });
@@ -112,10 +154,11 @@ void CloudControlClient::heartbeat() {
 }
 
 void CloudControlClient::sendHeartbeatBatches(const QList<QJsonArray>& batches,
-                                              const qsizetype index, const quint64 requestEpoch,
-                                              const QString& machineId,
-                                              const QString& workspaceId) {
-    if (accountEpoch_ != requestEpoch || machineId_ != machineId || workspaceId_ != workspaceId) {
+                                              const qsizetype index,
+                                              const AccountFence& requestAccount,
+                                              const std::optional<QJsonArray>& catalog) {
+    const auto& machineId = requestAccount.machine;
+    if (!accountCurrent(requestAccount)) {
         heartbeatInFlight_ = false;
         return;
     }
@@ -131,15 +174,18 @@ void CloudControlClient::sendHeartbeatBatches(const QList<QJsonArray>& batches,
         distributeKeys();
         return;
     }
+    // Reuse the first batch's catalog for every later batch in this heartbeat.
+    const QJsonArray worktrees = catalog ? *catalog : worktreeSnapshots();
     QJsonObject body{
         {QStringLiteral("machineId"), machineId},
         {QStringLiteral("controlProtocolVersion"), 2},
-        {QStringLiteral("capabilities"), QJsonArray{"transport.webrtc/1"}},
+        // ADR 0116 §1: this daemon serves team commands and writes the `team` metadata.
+        {QStringLiteral("capabilities"), cloud_control::daemonCapabilities()},
         {QStringLiteral("localProtocolVersion"), 0},
         {QStringLiteral("daemonVersion"), QStringLiteral(KETPLUS_PRODUCT_VERSION)},
         {QStringLiteral("observedAt"), QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs)},
         {QStringLiteral("sessions"), batches.at(index)},
-        {QStringLiteral("worktrees"), worktreeSnapshots()}};
+        {QStringLiteral("worktrees"), worktrees}};
     QJsonArray deletions;
     for (const auto& value : journal_->deletionWork(64, true)) {
         const auto work = value.toObject();
@@ -150,10 +196,9 @@ void CloudControlClient::sendHeartbeatBatches(const QList<QJsonArray>& batches,
         body.insert("deletions", deletions);
     request("POST", QStringLiteral("/v2/daemon/heartbeat"), body, daemonToken_,
             {{QByteArray("X-KetPlus-Daemon-Version"), QByteArray(KETPLUS_PRODUCT_VERSION)}},
-            [this, batches, index, requestEpoch, machineId, workspaceId](
-                const int status, const QJsonValue& value, const QString& transportError) {
-                if (accountEpoch_ != requestEpoch || machineId_ != machineId ||
-                    workspaceId_ != workspaceId) {
+            [this, batches, index, requestAccount,
+             worktrees](const int status, const QJsonValue& value, const QString& transportError) {
+                if (!accountCurrent(requestAccount)) {
                     heartbeatInFlight_ = false;
                     return;
                 }
@@ -180,7 +225,7 @@ void CloudControlClient::sendHeartbeatBatches(const QList<QJsonArray>& batches,
                         deletion.value("sessionGeneration").toInteger(),
                         deletion.value("operationId").toString());
                 }
-                sendHeartbeatBatches(batches, index + 1, requestEpoch, machineId, workspaceId);
+                sendHeartbeatBatches(batches, index + 1, requestAccount, worktrees);
             });
 }
 
@@ -202,7 +247,8 @@ bool CloudControlClient::isLiveGeneration(const QString& sessionId, const qint64
 
 void CloudControlClient::uploadSessionEvents(const QString& sessionId, const qint64 generation,
                                              qint64 afterCursor) {
-    if (!isLiveGeneration(sessionId, generation))
+    // Also ends the chain of an upload that was in flight when forward-only began.
+    if (eventsForwardOnly() || !isLiveGeneration(sessionId, generation))
         return;
     const QString scope = uploadScope();
     const qint64 durable = journal_->cloudUploadCursor(scope, sessionId, generation);
@@ -210,7 +256,17 @@ void CloudControlClient::uploadSessionEvents(const QString& sessionId, const qin
         lastError_ = journal_->errorString();
         return;
     }
-    afterCursor = qMax(afterCursor, durable);
+    // The known cursor also counts the head forward-only was withdrawn at; it is read from the
+    // credential store only when this process has not cached it yet.
+    {
+        const QString key = QStringLiteral("%1:%2").arg(sessionId).arg(generation);
+        const auto known = knownUploadedCursors_.constFind(key);
+        const qint64 cached =
+            known != knownUploadedCursors_.cend() ? *known : uploadedCursor(sessionId, generation);
+        if (cached < 0)
+            return;
+        afterCursor = std::max({afterCursor, durable, cached});
+    }
     const QString uploadKey = QStringLiteral("%1:%2").arg(sessionId).arg(generation);
     if (eventUploadsInFlight_.contains(uploadKey))
         return;
@@ -327,19 +383,19 @@ void CloudControlClient::uploadSessionEvents(const QString& sessionId, const qin
         lastError_ = journal_->errorString();
         return;
     }
-    const quint64 requestEpoch = accountEpoch_;
+    const auto requestAccount = accountFence();
     eventUploadsInFlight_.insert(uploadKey);
     request(
         "POST", QStringLiteral("/v2/events:append"),
         QJsonObject{{QStringLiteral("machineId"), machineId_}, {QStringLiteral("events"), cloud}},
         daemonToken_, {},
         [this, sessionId, generation, afterCursor, uploadKey, highestSent, cloud, scope,
-         requestEpoch, sent = int(cloud.size())](const int status, const QJsonValue& value,
-                                                 const QString& transportError) {
+         requestAccount, sent = int(cloud.size())](const int status, const QJsonValue& value,
+                                                   const QString& transportError) {
             eventUploadsInFlight_.remove(uploadKey);
             // This request owns the slot until its callback; stale account replies
             // release that slot but must not mutate progress, receipts or backoff.
-            if (requestEpoch != accountEpoch_ || scope != uploadScope())
+            if (!accountCurrent(requestAccount) || scope != uploadScope())
                 return;
             // Deleted while in flight: no retry, receipt or progress for its history.
             if (!isLiveGeneration(sessionId, generation)) {
@@ -368,8 +424,10 @@ void CloudControlClient::uploadSessionEvents(const QString& sessionId, const qin
                 EventUploadBackoff& backoff = eventUploadBackoff_[uploadKey];
                 backoff.failures += 1;
                 backoff.refused = eventUploadRefused(status);
+                backoff.gap =
+                    status == 409 && responseCode(value, {}) == QStringLiteral("event_cursor_gap");
                 const qint64 delay =
-                    eventUploadBackoffMilliseconds(backoff.failures, backoff.refused);
+                    eventUploadBackoffMilliseconds(backoff.failures, backoff.refused, backoff.gap);
                 backoff.retryAt.setRemainingTime(delay);
                 qWarning("event upload for session %s failed: %d %s; next attempt in %llds",
                          qUtf8Printable(sessionId), status, qUtf8Printable(lastError_),
@@ -400,16 +458,26 @@ void CloudControlClient::uploadSessionEvents(const QString& sessionId, const qin
                     eventUploadLimits_.insert(uploadKey, limit * 2);
             }
             if (accepted > 0) {
+                // The cursor this process knows, cached so a chunk does not read the credential
+                // store. An upload in flight across forward-only must not move it back behind the
+                // head it was advanced to.
+                const auto known = knownUploadedCursors_.constFind(uploadKey);
+                const qint64 previous = known != knownUploadedCursors_.cend()
+                                            ? *known
+                                            : uploadedCursor(sessionId, generation);
+                knownUploadedCursors_.insert(uploadKey, qMax(previous, accepted));
                 QString storageError;
                 if (!journal_->acknowledgeCloudEventUpload(scope, sessionId, generation, cloud,
                                                            accepted) ||
-                    !storeString(
-                        QStringLiteral("uploaded-cursor-%1-%2").arg(sessionId).arg(generation),
-                        QString::number(accepted), &storageError) ||
+                    (accepted > previous &&
+                     !storeString(
+                         QStringLiteral("uploaded-cursor-%1-%2").arg(sessionId).arg(generation),
+                         QString::number(accepted), &storageError)) ||
                     !journal_->acknowledgeCursor(QStringLiteral("cloud-control-v2"), sessionId,
                                                  generation, accepted) ||
                     !journal_->pruneAcknowledgedCloudEvents()) {
                     registeredCloudCursors_.remove(uploadKey);
+                    knownUploadedCursors_.remove(uploadKey);
                     lastError_ = storageError.isEmpty() ? journal_->errorString() : storageError;
                     return;
                 }
@@ -418,76 +486,46 @@ void CloudControlClient::uploadSessionEvents(const QString& sessionId, const qin
         });
 }
 
-QJsonArray CloudControlClient::trustedDevices(const QJsonArray& devices) {
-    QString error;
-    if (!pins_.adopt(devices, &error))
-        lastError_ = error;
-    return pins_.trusted(devices);
-}
-
 void CloudControlClient::distributeKeys() {
-    if (machineId_.isEmpty() || daemonToken_.isEmpty())
+    const auto fence = accountFence();
+    if (!accountCurrent(fence) || daemonToken_.isEmpty())
         return;
-    request("GET", QStringLiteral("/v2/devices"), {}, daemonToken_, {},
-            [this](const int status, const QJsonValue& value, const QString& transportError) {
-                if (status != 200 || !value.isArray() || !transportError.isEmpty()) {
-                    if (!transportError.isEmpty())
-                        lastError_ = transportError;
-                    return;
-                }
-                // Only devices pinned on this Mac receive session keys (#87).
-                const QJsonArray devices = trustedDevices(value.toArray());
-                signaling_->refreshDevices(devices);
-                QJsonArray envelopes;
-                QString cryptoError;
-                for (const QJsonValue& deviceValue : devices) {
-                    const QJsonObject device = deviceValue.toObject();
-                    for (const StoredSession& session : journal_->sessions()) {
-                        if (refusedSessions_.contains(session.id))
-                            continue;
-                        const QString account =
-                            QStringLiteral("wrapped-%1-%2-%3-%4")
-                                .arg(session.id)
-                                .arg(session.generation)
-                                .arg(device.value(QStringLiteral("id")).toString())
-                                .arg(device.value(QStringLiteral("keyVersion")).toInt());
-                        QJsonObject envelope =
-                            QJsonDocument::fromJson(credentials_.read(account)).object();
-                        // A cached malformed wrap is discarded and re-created, never re-sent.
-                        if (!CloudCrypto::validWrappedSessionKey(envelope)) {
-                            envelope = crypto_.wrapSessionKey(session.id, session.generation, 1,
-                                                              device, machineId_,
-                                                              machineKeyVersion_, &cryptoError);
-                            if (envelope.isEmpty() ||
-                                !credentials_.write(
-                                    account, QJsonDocument(envelope).toJson(QJsonDocument::Compact),
-                                    &cryptoError)) {
-                                lastError_ = cryptoError;
-                                return;
-                            }
+    request(
+        "GET", QStringLiteral("/v2/devices"), {}, daemonToken_, {},
+        [this, fence](const int status, const QJsonValue& value, const QString& transportError) {
+            if (!accountCurrent(fence))
+                return;
+            if (status != 200 || !value.isArray() || !transportError.isEmpty()) {
+                if (!transportError.isEmpty())
+                    lastError_ = transportError;
+                return;
+            }
+            // Only devices pinned on this Mac receive session keys (#87).
+            QJsonArray devices = trustedDevices(value.toArray(), fence);
+            QString cryptoError;
+            const auto envelopes = sessionKeyEnvelopes(devices, true, 500, &devices, &cryptoError);
+            if (!cryptoError.isEmpty()) {
+                lastError_ = cryptoError;
+                return;
+            }
+            signaling_->refreshDevices(devices);
+            if (envelopes.isEmpty())
+                return;
+            request("POST", QStringLiteral("/v2/session-keys:append"),
+                    QJsonObject{{QStringLiteral("envelopes"), envelopes}}, daemonToken_, {},
+                    [this, fence](const int appendStatus, const QJsonValue& appendValue,
+                                  const QString& appendError) {
+                        if (!accountCurrent(fence))
+                            return;
+                        if (appendStatus != 202 || !appendError.isEmpty()) {
+                            lastError_ =
+                                appendError.isEmpty()
+                                    ? responseCode(appendValue,
+                                                   QStringLiteral("session_key_upload_failed"))
+                                    : appendError;
                         }
-                        envelopes.append(envelope);
-                        if (envelopes.size() == 500)
-                            break;
-                    }
-                    if (envelopes.size() == 500)
-                        break;
-                }
-                if (envelopes.isEmpty())
-                    return;
-                request("POST", QStringLiteral("/v2/session-keys:append"),
-                        QJsonObject{{QStringLiteral("envelopes"), envelopes}}, daemonToken_, {},
-                        [this](const int appendStatus, const QJsonValue& appendValue,
-                               const QString& appendError) {
-                            if (appendStatus != 202 || !appendError.isEmpty()) {
-                                lastError_ =
-                                    appendError.isEmpty()
-                                        ? responseCode(appendValue,
-                                                       QStringLiteral("session_key_upload_failed"))
-                                        : appendError;
-                            }
-                        });
-            });
+                    });
+        });
 }
 
 } // namespace ketplus::daemon

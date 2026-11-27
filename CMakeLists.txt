@@ -33,10 +33,13 @@ endif()
 
 project(
     KetPlus
-    VERSION 0.1.52
+    VERSION 0.1.62
     DESCRIPTION "The full KetPlus desktop product"
     LANGUAGES C CXX
 )
+
+# MSVC options (/utf-8 and friends) for every target of the Pro tree, core/ included.
+include(core/cmake/MsvcOptions.cmake)
 if(APPLE)
     enable_language(OBJCXX)
 endif()
@@ -50,6 +53,8 @@ option(KETPLUS_ENABLE_REMOTE_DEMO "Enable Debug-only synthetic remote-control da
 # /v2/... at the root of its own host. Only a Debug build with the remote demo reads
 # KETPLUS_CONTROL_URL from the environment, so a Release build meant for any other relay must
 # name it here. `ketplus_daemon --build-info` and the bundle check report the one compiled in.
+include(cmake/KetPlusProductionControl.cmake)
+ketplus_configure_production_control()
 set(KETPLUS_CONTROL_URL "https://ketplus-staging.ketviet.vn" CACHE STRING
     "Relay (Control API) base URL compiled into the daemon")
 if(NOT KETPLUS_CONTROL_URL MATCHES "^https://[A-Za-z0-9.-]+(:[0-9]+)?(/[A-Za-z0-9._~-]+)*$" AND
@@ -76,6 +81,8 @@ set(CMAKE_RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}")
 find_package(Qt6 6.11 REQUIRED COMPONENTS
     Concurrent Core Gui Network Sql WebSockets
 )
+# T-56: lrelease compiles the team translations (modules/remote/translations).
+find_package(Qt6 6.11 REQUIRED COMPONENTS LinguistTools)
 if(KETPLUS_BUILD_DESKTOP)
     find_package(Qt6 6.11 REQUIRED COMPONENTS
         Core5Compat Qml Quick QuickControls2 Svg SvgWidgets WebView Widgets
@@ -90,7 +97,24 @@ endif()
 
 include(cmake/Warnings.cmake)
 include(cmake/OffscreenTests.cmake)
+include(cmake/TestLabels.cmake)
 
+set(KETPLUS_DAEMON_RELEASE_MANIFEST_URL
+    "https://github.com/ketvietlab/ketplus/releases/download/v${PROJECT_VERSION}/ketplus-daemon-linux-manifest.json"
+    CACHE STRING "Version-matched GitHub Releases manifest URL; empty disables daemon installation")
+if(NOT KETPLUS_DAEMON_RELEASE_MANIFEST_URL STREQUAL "" AND
+   NOT KETPLUS_DAEMON_RELEASE_MANIFEST_URL STREQUAL
+       "https://github.com/ketvietlab/ketplus/releases/download/v${PROJECT_VERSION}/ketplus-daemon-linux-manifest.json")
+    message(FATAL_ERROR "Daemon release manifest must use the matching ketvietlab/ketplus GitHub release")
+endif()
+set(KETPLUS_DAEMON_RELEASE_PUBLIC_KEY "" CACHE STRING
+    "Pinned Ed25519 public key for ketPlus Linux release manifests (64 hex digits; empty disables installs)")
+if(NOT KETPLUS_DAEMON_RELEASE_PUBLIC_KEY STREQUAL "")
+    string(LENGTH "${KETPLUS_DAEMON_RELEASE_PUBLIC_KEY}" key_length)
+    if(NOT key_length EQUAL 64 OR NOT KETPLUS_DAEMON_RELEASE_PUBLIC_KEY MATCHES "^[0-9a-f]+$")
+        message(FATAL_ERROR "KETPLUS_DAEMON_RELEASE_PUBLIC_KEY must be 64 lowercase hex digits or empty")
+    endif()
+endif()
 configure_file(
     cmake/KetPlusProductVersion.h.in
     "${CMAKE_CURRENT_BINARY_DIR}/generated/KetPlusProductVersion.h"
@@ -101,10 +125,17 @@ target_include_directories(ketplus_product_version INTERFACE
     "$<BUILD_INTERFACE:${CMAKE_CURRENT_BINARY_DIR}/generated>"
 )
 
+add_subdirectory(modules/tools)
 add_subdirectory(modules/browser)
 add_subdirectory(modules/computer)
 add_subdirectory(modules/remote)
+add_subdirectory(modules/runner)
 add_subdirectory(apps/daemon)
+# Runners are Linux nodes (POSIX state directory and process control); nothing of apps/runner is
+# built, installed or tested on Windows.
+if(NOT WIN32)
+    add_subdirectory(apps/runner)
+endif()
 
 if(KETPLUS_BUILD_DESKTOP)
     set(KETQT_BUILD_QUICK ON CACHE BOOL "Build Két QML components for Pro" FORCE)
@@ -135,6 +166,11 @@ if(KETPLUS_BUILD_DESKTOP)
     add_subdirectory(modules/atlas)
     add_subdirectory(apps/desktop)
 endif()
+option(KETPLUS_BUILD_SSH_INSTALL_UI_TESTS "Also build Connections installer tests without the desktop" OFF)
+if(KETPLUS_BUILD_TESTS AND (KETPLUS_BUILD_DESKTOP OR KETPLUS_BUILD_SSH_INSTALL_UI_TESTS))
+    enable_testing()
+    add_subdirectory(tests/ssh-install-ui)
+endif()
 add_subdirectory(packaging)
 
 if(KETPLUS_BUILD_BENCHMARKS)
@@ -146,19 +182,32 @@ endif()
 
 if(KETPLUS_BUILD_TESTS)
     enable_testing()
+    add_test(NAME ketplus_production_control_tests
+        COMMAND "${CMAKE_COMMAND}" -P "${PROJECT_SOURCE_DIR}/tests/packaging/ProductionControlTest.cmake")
+    set_tests_properties(ketplus_production_control_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+    add_test(NAME ketplus_daemon_control_build_info_tests
+        COMMAND "${CMAKE_COMMAND}" "-DKETPLUS_DAEMON=$<TARGET_FILE:ketplus_daemon>"
+            "-DKETPLUS_CONTROL_URL=${KETPLUS_CONTROL_URL}"
+            "-DKETPLUS_PRODUCTION_RELEASE=${KETPLUS_PRODUCTION_RELEASE}"
+            -P "${PROJECT_SOURCE_DIR}/tests/packaging/DaemonControlBuildInfoTest.cmake")
+    set_tests_properties(ketplus_daemon_control_build_info_tests PROPERTIES ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+    ketplus_label_tests(packaging)
     find_package(Qt6 6.11 REQUIRED COMPONENTS Test)
     if(KETPLUS_BUILD_DESKTOP)
         add_subdirectory(tests)
     else()
         add_subdirectory(tests/daemon)
     endif()
+    add_subdirectory(tests/runner)
 endif()
 
 if(NOT APPLE OR NOT KETPLUS_BUILD_DESKTOP)
     install(FILES LICENSE THIRD_PARTY_NOTICES.md
         DESTINATION share/licenses/ketplus
+        COMPONENT Runtime
     )
     install(DIRECTORY third_party/licenses/
         DESTINATION share/licenses/ketplus
+        COMPONENT Runtime
     )
 endif()

@@ -89,9 +89,12 @@ void ProviderVersionProbe::check(const QString& executable, Callback callback) {
     process_->setProcessEnvironment(environment);
     const Invocation invocation = invocation_
                                       ? invocation_(executable)
-                                      : Invocation{executable, {QStringLiteral("--version")}};
+                                      : Invocation{executable, {QStringLiteral("--version")}, {}};
     process_->setProgram(invocation.program);
     process_->setArguments(invocation.arguments);
+#if defined(Q_OS_WIN)
+    process_->setNativeArguments(invocation.nativeArguments);
+#endif
     // A CLI that ignores --version and reads stdin must still exit.
     connect(process_, &QProcess::started, process_, &QProcess::closeWriteChannel);
     const auto output = std::make_shared<ProbeOutput>();

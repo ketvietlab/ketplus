@@ -10,7 +10,7 @@ class ConversationAttentionDaemonTest final : public QObject {
     void backgroundAsyncQuestionDoesNotHydrateTranscript() {
         Environment env;
         QVERIFY(env.directory.isValid());
-        const auto executable = env.directory.filePath("fake-codex");
+        const auto executable = env.directory.filePath(fixtureName("fake-codex"));
         QVERIFY(writeFakeCodex(executable, env.directory.filePath("provider.log")));
         DaemonService service({env.directory.filePath("journal.sqlite3"),
                                env.directory.filePath("local.token"),

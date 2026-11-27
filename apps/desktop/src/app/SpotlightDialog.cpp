@@ -14,7 +14,7 @@ SpotlightDialog::SpotlightDialog(QWidget* parent)
       palette_(new ket::CommandPalette(this)) {
     palette_->setParent(this);
     setObjectName("spotlightDialog");
-    setWindowTitle(tr("KétPlus Quick search"));
+    setWindowTitle(tr("ketPlus Quick search"));
     // Agent Workspace embeds a native QQuickView. A native popup keeps the kit
     // overlay above that child window on every platform, not behind it.
     setAttribute(Qt::WA_TranslucentBackground);

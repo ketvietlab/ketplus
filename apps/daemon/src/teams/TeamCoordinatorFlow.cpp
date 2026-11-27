@@ -1,9 +1,12 @@
-// ADR 0112 §7 and open point 2: what starts a member's turn, the budget of automatic turns,
-// the messages held while a team is paused, and the leader's digest.
+// ADR 0114 §7 and open point 2: what starts a member's turn, the budget of automatic turns,
+// the messages held while a team is paused, the outbox (T-28) and the leader's digest.
 #include "storage/LocalJournal.h"
 #include "teams/TeamCoordinator.h"
 
 #include <QTimer>
+#include <QUuid>
+
+#include <algorithm>
 
 namespace ketplus::daemon::teams {
 namespace {
@@ -14,7 +17,9 @@ QJsonObject heldJson(const TeamMessage& message) {
             {QStringLiteral("kind"), message.kind},
             {QStringLiteral("task_id"), message.taskId},
             {QStringLiteral("body"), message.body},
-            {QStringLiteral("expect_reply"), message.expectReply}};
+            {QStringLiteral("expect_reply"), message.expectReply},
+            {QStringLiteral("id"), message.id},
+            {QStringLiteral("point_at"), message.pointAt}};
 }
 
 TeamMessage heldMessage(const Team& team, const QJsonObject& json) {
@@ -25,29 +30,119 @@ TeamMessage heldMessage(const Team& team, const QJsonObject& json) {
             .kind = json.value(QStringLiteral("kind")).toString(),
             .taskId = json.value(QStringLiteral("task_id")).toString(),
             .body = json.value(QStringLiteral("body")).toString(),
-            .expectReply = json.value(QStringLiteral("expect_reply")).toBool()};
+            .expectReply = json.value(QStringLiteral("expect_reply")).toBool(),
+            .id = json.value(QStringLiteral("id")).toString(),
+            .pointAt = json.value(QStringLiteral("point_at")).toString()};
 }
 
-// Every update since the last digest, grouped by task, the actionable ones marked.
-QString digestText(const Team& team, const QList<TeamUpdateRecord>& updates) {
+// T-9: what the leader's own session did needs nothing from it. The user's, a developer's, a
+// reviewer's and the daemon's updates stay actionable, as does a former leader's after a
+// handover: only the leader at the time of sending is skipped.
+bool needsLeader(const TeamUpdateRecord& update, const QString& leaderSession) {
+    return update.actionable && (leaderSession.isEmpty() || update.actor != leaderSession);
+}
+
+// The most a digest costs the leader's context (ADR 0114 §11 as amended): update lines and bytes.
+constexpr qsizetype maximumDigestLines = 40;
+constexpr qsizetype maximumDigestBytes = 8192;
+// Room kept for the heading, the closing line and the summary of what was left out.
+constexpr qsizetype digestFixedBytes = 1024;
+
+struct DigestLine {
+    QString key;
+    QString text;
+    bool needsLeader = false;
+    bool kept = false;
+};
+
+// Every update since the last digest, grouped by task, the ones that need the leader marked.
+// At most maximumDigestLines lines and maximumDigestBytes: the lines that need the leader are
+// kept first, newest first, then the newest of the rest; what is left out is counted in one line.
+QString digestText(const Team& team, const QList<TeamUpdateRecord>& updates,
+                   const QString& leaderSession) {
+    // T-39: a member's wait replaces its earlier one, so only the latest wait of each member is
+    // listed; the earlier ones would only repeat it.
+    QHash<QString, qint64> latestWait;
+    for (const TeamUpdateRecord& update : updates)
+        if (update.kind == QStringLiteral("wait"))
+            latestWait.insert(update.actor, update.id);
+    QList<DigestLine> all;
+    for (const TeamUpdateRecord& update : updates) {
+        if (update.kind == QStringLiteral("wait") && latestWait.value(update.actor) != update.id)
+            continue;
+        const QString key = update.taskId;
+        QString text = update.text;
+        if (update.kind == QStringLiteral("risk_route")) {
+            if (const auto decision = risk::fromJson(update.data)) {
+                const Task* task = key.isEmpty() ? nullptr : team.task(key);
+                text =
+                    QStringLiteral("Leader route %1; actor %2; head %3; evidence %4; "
+                                   "status %5; historical audit, not reviewer verdict/approval.")
+                        .arg(risk::routeName(decision->route), decision->actor, decision->revision,
+                             decision->evidenceIds.isEmpty() ? QStringLiteral("none")
+                                                             : decision->evidenceIds.first(),
+                             task ? task->state : QStringLiteral("team"));
+            }
+        }
+        const bool needs = needsLeader(update, leaderSession);
+        all.append(
+            {.key = key,
+             .text = QStringLiteral("%1 %2").arg(
+                 needs ? QStringLiteral("- [needs you]") : QStringLiteral("-"), text.left(400)),
+             .needsLeader = needs});
+    }
+    // Two passes, newest first: the lines that need the leader, then the others.
+    qsizetype count = 0;
+    qsizetype bytes = digestFixedBytes;
+    QSet<QString> headed;
+    for (const bool needing : {true, false}) {
+        for (qsizetype index = all.size() - 1; index >= 0; --index) {
+            DigestLine& entry = all[index];
+            if (entry.needsLeader != needing)
+                continue;
+            // A task heading costs its bytes once, with the first line kept under it.
+            const qsizetype cost =
+                entry.text.toUtf8().size() + 1 + (headed.contains(entry.key) ? 0 : 200);
+            if (count >= maximumDigestLines || bytes + cost > maximumDigestBytes)
+                continue;
+            entry.kept = true;
+            ++count;
+            bytes += cost;
+            headed.insert(entry.key);
+        }
+    }
     QStringList order;
     QHash<QString, QStringList> lines;
-    for (const TeamUpdateRecord& update : updates) {
-        const QString key = update.taskId;
-        if (!lines.contains(key))
-            order.append(key);
-        lines[key].append(QStringLiteral("%1 %2").arg(
-            update.actionable ? QStringLiteral("- [needs you]") : QStringLiteral("-"),
-            update.text.left(400)));
+    QStringList leftOut;
+    qsizetype omitted = 0;
+    for (const DigestLine& entry : all) {
+        if (!entry.kept) {
+            ++omitted;
+            if (!entry.key.isEmpty() && !leftOut.contains(entry.key))
+                leftOut << entry.key;
+            continue;
+        }
+        if (!lines.contains(entry.key))
+            order.append(entry.key);
+        lines[entry.key].append(entry.text);
     }
     QStringList text{
         QStringLiteral("Team %1: what changed since your last digest.").arg(team.name)};
+    if (omitted > 0)
+        text << QStringLiteral("%1 older updates%2 are not listed; read them with team_tasks.")
+                    .arg(omitted)
+                    .arg(leftOut.isEmpty()
+                             ? QString{}
+                             : QStringLiteral(" on tasks %1")
+                                   .arg(leftOut.mid(0, 12).join(QStringLiteral(", ")) +
+                                        (leftOut.size() > 12 ? QStringLiteral(", …") : QString{})));
     for (const QString& key : order) {
         const Task* task = key.isEmpty() ? nullptr : team.task(key);
         text << QString{}
              << (key.isEmpty() ? QStringLiteral("Team")
-                 : task ? QStringLiteral("%1 \"%2\" (%3)").arg(task->id, task->title, task->state)
-                        : key);
+                 : task        ? QStringLiteral("%1 \"%2\" (%3)")
+                                     .arg(task->id, task->title.left(160), task->state)
+                               : key);
         text << lines.value(key);
     }
     text << QString{}
@@ -58,40 +153,326 @@ QString digestText(const Team& team, const QList<TeamUpdateRecord>& updates) {
 
 } // namespace
 
-void TeamCoordinator::wake(const Team& snapshot, const TeamMessage& message) {
+void TeamCoordinator::wake(const Team& snapshot, const TeamMessage& sent) {
     const qint64 teamId = snapshot.id;
+    // T-90: a turn a developer starts on its task in progress (a review's findings, an
+    // answered question) runs in that task's worktree, wherever the conversation pointed
+    // before: another task's worktree, or one merged since.
+    TeamMessage message = sent;
+    if (const Task* task = message.pointAt.isEmpty() && !message.taskId.isEmpty()
+                               ? snapshot.task(message.taskId)
+                               : nullptr;
+        task && task->owner == message.toSession && task->state == state::inProgress &&
+        !task->worktree.isEmpty())
+        message.pointAt = task->worktree;
+    // A turn the team starts never runs in a worktree its member was handed out of. With the
+    // outbox, that is settled when the message is sent; without it (the coordinator's own
+    // tests), the host switches at once and this is settled before the lines below.
+    if (!deferSending_)
+        settleRelocations(teamId, message.toSession, {});
     Team* team = mutableTeam(teamId);
     if (!team)
         return;
     const Team before = *team;
     QList<Update> updates;
-    if (!team->paused && team->automaticTurns >= team->turnBudget) {
-        // The budget is used up: pause once and ask (ADR 0112, open point 2).
-        team->paused = true;
-        team->pausedReason = QStringLiteral("budget");
-        const QString more = QStringLiteral("Continue (%1 more turns)").arg(team->turnBudget);
-        raiseDecision(
-            *team, QStringLiteral("budget"),
-            QStringLiteral("The team used its %1 automatic turns. Continue?").arg(team->turnBudget),
-            QStringLiteral("Automatic turns are paused until you answer. Held messages "
-                           "are delivered in order when the team continues."),
-            {more, QStringLiteral("Stop")}, more, {}, QStringLiteral("daemon"));
-        updates.append({.kind = QStringLiteral("paused"),
-                        .text = QStringLiteral("Paused: the team used its %1 automatic turns.")
-                                    .arg(team->turnBudget)});
-    }
+    pauseIfBudgetUsed(*team, updates);
     if (team->paused) {
         team->held.append(heldJson(message));
         if (commit(*team, before, QStringLiteral("daemon"), updates))
             qWarning("Unable to hold the team's %s.", qUtf8Printable(message.kind));
         return;
     }
-    ++team->automaticTurns;
+    // The budget counts the turns that start, when the broker delivers the batch (takeMemberTurn),
+    // not the messages queued here.
+    if (!deferSending_) {
+        if (commit(*team, before, QStringLiteral("daemon"), {}))
+            return;
+        send(teamId, message);
+        return;
+    }
+    // T-28: stored with the turn it counts, sent once the command is answered. The id is
+    // chosen now, so a send the daemon did not get to forget is not sent again.
+    TeamMessage queued = message;
+    if (queued.id.isEmpty())
+        queued.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    team->outbox.append(heldJson(queued));
     if (commit(*team, before, QStringLiteral("daemon"), {}))
         return;
+    scheduleOutbox();
+}
+
+void TeamCoordinator::pauseIfBudgetUsed(Team& team, QList<Update>& updates) {
+    if (team.paused || team.automaticTurns < team.turnBudget)
+        return;
+    // The budget is used up: pause once and ask (ADR 0114, open point 2).
+    team.paused = true;
+    team.pausedReason = QStringLiteral("budget");
+    const QString more = say(team.language, QT_TRANSLATE_NOOP("Team", "Continue (%1 more turns)"))
+                             .arg(team.turnBudget);
+    raiseDecision(
+        team, QStringLiteral("budget"),
+        say(team.language,
+            QT_TRANSLATE_NOOP("Team", "The team used its %1 automatic turns. Continue?"))
+            .arg(team.turnBudget),
+        say(team.language, QT_TRANSLATE_NOOP("Team", "Automatic turns are paused until you answer. "
+                                                     "Held messages are delivered in order when "
+                                                     "the team continues.")),
+        {more, say(team.language, QT_TRANSLATE_NOOP("Team", "Stop"))}, more, {},
+        QStringLiteral("daemon"));
+    updates.append(
+        {.kind = QStringLiteral("paused"),
+         .text = say(team.language,
+                     QT_TRANSLATE_NOOP("Team", "Paused: the team used its %1 automatic turns."))
+                     .arg(team.turnBudget)});
+}
+
+QString TeamCoordinator::takeMemberTurn(const QString& sessionId) {
+    Team* team = mutableTeamOf(sessionId);
+    if (!team)
+        return {};
+    const Team before = *team;
+    QList<Update> updates;
+    pauseIfBudgetUsed(*team, updates);
+    if (team->paused) {
+        if (!updates.isEmpty() && commit(*team, before, QStringLiteral("daemon"), updates))
+            qWarning("Unable to pause team %lld for its budget.",
+                     static_cast<long long>(before.id));
+        return team->pausedReason == QStringLiteral("budget") ? QStringLiteral("team_budget")
+                                                              : QStringLiteral("team_paused");
+    }
+    ++team->automaticTurns;
+    // A journal that cannot count the turn does not stop the team's work: the turn runs.
+    if (commit(*team, before, QStringLiteral("daemon"), {}))
+        qWarning("Unable to count an automatic turn of team %lld.",
+                 static_cast<long long>(before.id));
+    return {};
+}
+
+void TeamCoordinator::send(const qint64 teamId, const TeamMessage& message) {
+    if (!message.pointAt.isEmpty())
+        notePointError(teamId, message,
+                       host_->pointConversationAt(message.toSession, message.pointAt));
     if (const QString error = host_->postTeamMessage(message); !error.isEmpty())
         qWarning("Unable to send the team's %s to %s: %s", qUtf8Printable(message.kind),
                  qUtf8Printable(message.toSession), qUtf8Printable(error));
+    else
+        noteDelivered(teamId, message);
+}
+
+// T-12: a turn the leader was actually sent, not one only queued, held or dropped.
+void TeamCoordinator::noteDelivered(const qint64 teamId, const TeamMessage& message) {
+    if (message.kind == QStringLiteral("wait"))
+        return;
+    const Team* current = team(teamId);
+    const Member* leader = current ? current->memberWithRole(role::leader) : nullptr;
+    if (leader && leader->sessionId == message.toSession)
+        ++leaderWakes_[teamId];
+}
+
+void TeamCoordinator::forgetRelocations(const qint64 teamId, const QString& sessionId) {
+    Team* team = mutableTeam(teamId);
+    if (!team)
+        return;
+    const Team before = *team;
+    const qsizetype removed = team->relocations.removeIf(
+        [&sessionId](const Relocation& move) { return move.session == sessionId; });
+    if (removed > 0 && commit(*team, before, QStringLiteral("daemon"), {}))
+        qWarning("Unable to forget a settled move out of a handed-over worktree.");
+}
+
+void TeamCoordinator::notePointError(const qint64 teamId, const TeamMessage& message,
+                                     const QString& error) {
+    if (error.isEmpty())
+        return;
+    Team* stored = mutableTeam(teamId);
+    if (!stored || !stored->task(message.taskId))
+        return;
+    const Team before = *stored;
+    addHistory(*stored->task(message.taskId), QStringLiteral("daemon"), QStringLiteral("worktree"),
+               say(stored->language,
+                   QT_TRANSLATE_NOOP("Team", "The owner's conversation was not moved to %1: %2"))
+                   .arg(message.pointAt, error));
+    (void)commit(*stored, before, QStringLiteral("daemon"), {});
+}
+
+void TeamCoordinator::scheduleOutbox() {
+    if (outboxScheduled_)
+        return;
+    outboxScheduled_ = true;
+    QTimer::singleShot(0, this, &TeamCoordinator::sendFromOutbox);
+}
+
+// One entry per pass, oldest first, so the events of running conversations and the next
+// command are not held up behind a long outbox. Sent first, then forgotten: a stop between
+// the two finds the message queued and only forgets it.
+void TeamCoordinator::sendFromOutbox() {
+    outboxScheduled_ = false;
+    if (outboxSending_)
+        return;
+    QList<qint64> ids = teams_.keys();
+    std::sort(ids.begin(), ids.end());
+    // A quiet mark whose member has nothing left in any outbox (the member or its team was
+    // removed) is void: its hold is released so the member is not left held.
+    for (const QString& session : outboxQuiet_.keys()) {
+        const bool waiting =
+            std::any_of(teams_.cbegin(), teams_.cend(), [&](const Team& candidate) {
+                return std::any_of(candidate.outbox.cbegin(), candidate.outbox.cend(),
+                                   [&](const QJsonValue& value) {
+                                       return heldMessage(candidate, value.toObject()).toSession ==
+                                              session;
+                                   });
+            });
+        if (!waiting && outboxQuiet_.remove(session))
+            host_->holdTeamDelivery(session, false);
+    }
+    for (const qint64 id : std::as_const(ids)) {
+        const Team* team = this->team(id);
+        if (!team || team->outbox.isEmpty())
+            continue;
+        QJsonObject entry;
+        QSet<QString> waiting;
+        bool found = false;
+        for (const QJsonValue& value : team->outbox) {
+            entry = value.toObject();
+            const QString session = heldMessage(*team, entry).toSession;
+            // The order of one member's messages is kept: nothing passes a held one.
+            if (waiting.contains(session))
+                continue;
+            if (holdForQuiet(*team, entry)) {
+                waiting.insert(session);
+                continue;
+            }
+            found = true;
+            break;
+        }
+        if (!found)
+            continue;
+        const TeamMessage message = heldMessage(*team, entry);
+        // A member that left meanwhile receives nothing of the team's.
+        if (!stillDelivers(id, message)) {
+            finishOutboxEntry(id, entry, false);
+            return;
+        }
+        // Git runs off this thread; the entry stays stored meanwhile, and the next entry
+        // waits for it. T-32: without a worktree of its own, the message waits until its
+        // conversation has left a worktree it was handed out of.
+        outboxSending_ = true;
+        const QPointer<TeamCoordinator> self(this);
+        const auto finish = [self, id, entry, message](const QString&) {
+            if (!self)
+                return;
+            self->outboxSending_ = false;
+            self->finishOutboxEntry(id, entry, self->stillDelivers(id, message));
+        };
+        if (message.pointAt.isEmpty()) {
+            settleRelocations(id, message.toSession, finish);
+            return;
+        }
+        // The switch to the task's worktree settles a pending move of the same conversation
+        // once it worked; when it failed, the move is settled before the message is sent.
+        whenConversationFree(message.toSession, [self, id, message, finish] {
+            if (!self)
+                return;
+            self->host_->askPointConversationAt(
+                message.toSession, message.pointAt,
+                [self, id, message, finish](const QString& error) {
+                    if (!self)
+                        return;
+                    self->notePointError(id, message, error);
+                    if (error.isEmpty()) {
+                        self->forgetRelocations(id, message.toSession);
+                        finish({});
+                        self->conversationFree(message.toSession);
+                        return;
+                    }
+                    self->settleStep(id, message.toSession,
+                                     [self, message, finish](const QString& waiting) {
+                                         finish(waiting);
+                                         if (self)
+                                             self->conversationFree(message.toSession);
+                                     });
+                });
+        });
+        return;
+    }
+}
+
+bool TeamCoordinator::stillDelivers(const qint64 teamId, const TeamMessage& message) const {
+    const Team* current = team(teamId);
+    return current && current->member(message.toSession) && !host_->teamMessagePosted(message.id);
+}
+
+// ADR 0114 §2: a member that is not the leader, idle, with more than one message waiting in the
+// outbox, receives them as one turn: the first waits one quiet period for the rest to arrive,
+// then the whole burst is posted with the member's delivery held, so a single turn serves it.
+// A member's only message, or a busy member's, is never delayed.
+bool TeamCoordinator::holdForQuiet(const Team& team, const QJsonObject& entry) {
+    const TeamMessage message = heldMessage(team, entry);
+    const QString& session = message.toSession;
+    const auto member = team.member(session);
+    if (!member || member->role == role::leader)
+        return false;
+    if (const auto it = outboxQuiet_.constFind(session); it != outboxQuiet_.cend()) {
+        // Released: the burst is posted without waiting again.
+        if (QDateTime::currentDateTimeUtc() >= *it)
+            return false;
+        return true;
+    }
+    qsizetype count = 0;
+    for (const QJsonValue& value : team.outbox)
+        if (heldMessage(team, value.toObject()).toSession == session)
+            ++count;
+    const auto conversation = host_->teamConversation(session);
+    if (count < 2 || !conversation || !conversation->idle)
+        return false;
+    const QDateTime until = QDateTime::currentDateTimeUtc().addMSecs(quietPeriod_);
+    outboxQuiet_.insert(session, until);
+    host_->holdTeamDelivery(session, true);
+    QTimer::singleShot(quietPeriod_, this, [this] { scheduleOutbox(); });
+    return true;
+}
+
+// Sent first, then forgotten: a stop between the two finds the message queued and only
+// forgets it.
+void TeamCoordinator::finishOutboxEntry(const qint64 teamId, const QJsonObject& entry,
+                                        const bool deliver) {
+    if (const Team* team = this->team(teamId); team && deliver) {
+        const TeamMessage message = heldMessage(*team, entry);
+        if (const QString error = host_->postTeamMessage(message); !error.isEmpty())
+            qWarning("Unable to send the team's %s to %s: %s", qUtf8Printable(message.kind),
+                     qUtf8Printable(message.toSession), qUtf8Printable(error));
+        else
+            noteDelivered(teamId, message);
+    }
+    Team* current = mutableTeam(teamId);
+    if (current) {
+        const Team before = *current;
+        const QString session = heldMessage(before, entry).toSession;
+        for (qsizetype index = 0; index < current->outbox.size(); ++index)
+            if (current->outbox.at(index).toObject().value(QStringLiteral("id")) ==
+                entry.value(QStringLiteral("id"))) {
+                current->outbox.removeAt(index);
+                break;
+            }
+        // The member's burst is over with its last entry: its delivery is released (see
+        // holdForQuiet), so one turn serves what was posted.
+        const bool more = std::any_of(
+            current->outbox.cbegin(), current->outbox.cend(), [&](const QJsonValue& value) {
+                return heldMessage(*current, value.toObject()).toSession == session;
+            });
+        if (!more && outboxQuiet_.remove(session))
+            host_->holdTeamDelivery(session, false);
+        // A journal that refuses keeps the entry; the next start sends what is left.
+        if (commit(*current, before, QStringLiteral("daemon"), {})) {
+            qWarning("Unable to forget a sent team message.");
+            return;
+        }
+    }
+    for (const qint64 id : teams_.keys())
+        if (const Team* team = this->team(id); team && !team->outbox.isEmpty()) {
+            scheduleOutbox();
+            return;
+        }
 }
 
 void TeamCoordinator::releaseHeld(const qint64 teamId) {
@@ -110,6 +491,13 @@ void TeamCoordinator::releaseHeld(const qint64 teamId) {
         const TeamMessage message = heldMessage(*current, value.toObject());
         // A member that left meanwhile receives nothing of the team's.
         if (!current->member(message.toSession))
+            continue;
+        // The user's Stop is respected here as well: what only wakes a member to go on by
+        // itself is dropped for a member that is stopped now, whenever it was held.
+        static const QStringList wakesOnly{QStringLiteral("wait"), QStringLiteral("message_failed"),
+                                           QStringLiteral("nudge"), QStringLiteral("stall")};
+        if (wakesOnly.contains(message.kind) &&
+            stalls_.value(teamId).stopped.contains(message.toSession))
             continue;
         // Past the budget, wake() holds the rest again, still in order.
         wake(*current, message);
@@ -137,12 +525,18 @@ void TeamCoordinator::scheduleDigest(const qint64 teamId) {
 void TeamCoordinator::sendDigest(const qint64 teamId) {
     const Team* team = this->team(teamId);
     const Member* leader = team ? team->memberWithRole(role::leader) : nullptr;
-    if (!leader || team->paused)
+    if (!leader || team->paused || !team->quiescedReason.isEmpty())
         return;
-    const QList<TeamUpdateRecord> updates = journal_->teamUpdates(teamId, true, 500);
+    const QList<TeamUpdateRecord> updates = updateRecords(teamId, true, 500);
+    // A wait is shown, but it is never the reason for a digest (T-39): a digest that would only
+    // repeat waits, the leader's own or a developer's, is not sent and starts no turn. The
+    // waits stay undigested and ride along with the next digest that has something to act on.
+    // The same holds for what the leader itself did (T-9): closing, assigning or creating a task
+    // is context for the next digest, never a reason to start a turn.
     const bool actionable =
-        std::any_of(updates.cbegin(), updates.cend(),
-                    [](const TeamUpdateRecord& update) { return update.actionable; });
+        std::any_of(updates.cbegin(), updates.cend(), [leader](const TeamUpdateRecord& update) {
+            return needsLeader(update, leader->sessionId) && update.kind != QStringLiteral("wait");
+        });
     if (!actionable)
         return;
     if (QTimer* timer = digestTimers_.value(teamId))
@@ -152,16 +546,72 @@ void TeamCoordinator::sendDigest(const qint64 teamId) {
                  .teamName = team->name,
                  .toSession = leader->sessionId,
                  .kind = QStringLiteral("digest"),
-                 .body = digestText(*team, updates)});
+                 .body = digestText(*team, updates, leader->sessionId)});
 }
 
-void TeamCoordinator::memberTurnEnded(const QString& sessionId) {
+void TeamCoordinator::userMessageReceived(const QString& sessionId) {
+    const Team* team = teamOf(sessionId);
+    const Member* member = team ? team->member(sessionId) : nullptr;
+    if (member && member->role == role::leader)
+        unquiesce(team->id);
+}
+
+void TeamCoordinator::unquiesce(const qint64 teamId) {
+    Team* team = mutableTeam(teamId);
+    if (!team || team->quiescedReason.isEmpty())
+        return;
+    const Team before = *team;
+    team->quiescedReason.clear();
+    (void)commit(*team, before, QStringLiteral("daemon"), {});
+}
+
+void TeamCoordinator::memberTurnEnded(const QString& sessionId,
+                                      const std::optional<bool> stoppedByUser) {
     const Team* team = teamOf(sessionId);
     if (!team)
         return;
     const Member* member = team->member(sessionId);
-    if (member && member->role == role::leader)
-        sendDigest(team->id);
+    const QString memberRole = member ? member->role : QString{};
+    const qint64 teamId = team->id;
+    if (stoppedByUser == true) {
+        stalls_[teamId].stopped.insert(sessionId);
+        // The user's Stop also ends what the member asked to be woken for: the timer, and
+        // a wake that ended while the team was paused and is held for Resume.
+        cancelWait(sessionId);
+        QJsonArray kept;
+        for (const QJsonValue& value : team->held) {
+            const QJsonObject message = value.toObject();
+            if (message.value(QStringLiteral("kind")).toString() != QStringLiteral("wait") ||
+                message.value(QStringLiteral("to")).toString() != sessionId)
+                kept.append(value);
+        }
+        if (Team* changed = kept.size() == team->held.size() ? nullptr : mutableTeam(teamId)) {
+            const Team before = *changed;
+            changed->held = kept;
+            if (commit(*changed, before, QStringLiteral("daemon"), {}))
+                qWarning("Unable to drop the held wait of a stopped member.");
+        }
+    } else if (stoppedByUser == false) {
+        stalls_[teamId].stopped.remove(sessionId);
+    }
+    forgetEndedWait(sessionId);
+    // The turn is over: a conversation that could not leave a handed-over worktree can now,
+    // before the next message to it starts a turn (the outbox waits for this switch).
+    settleRelocations(teamId, sessionId, {});
+    watchForStall(teamId);
+    checkMerged(teamId);
+    if (memberRole == role::leader) {
+        askFirstPlanAgain(teamId);
+        sendDigest(teamId);
+        if (Team* current = mutableTeam(teamId); current && current->quiescedReason.isEmpty()) {
+            const QString reason = quiescenceReason(*current);
+            if (!reason.isEmpty()) {
+                const Team before = *current;
+                current->quiescedReason = reason;
+                (void)commit(*current, before, QStringLiteral("daemon"), {});
+            }
+        }
+    }
 }
 
 } // namespace ketplus::daemon::teams

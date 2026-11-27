@@ -23,8 +23,13 @@
 #include "git/GitDiffView.h"
 #include "git/GitService.h"
 #include "index/SymbolIndex.h"
+#include "machine/MachineComposition.h"
+#include "machine/MachineRichTranscript.h"
+#include "machine/MachineWorkspaceView.h"
 #include "preview/MarkdownPreviewPane.h"
 #include "remote/RemoteControlView.h"
+#include "runners/RunnersDaemonLink.h"
+#include "teams/TeamDirectory.h"
 #include "terminal/TerminalPanel.h"
 #include "ui/FindReplaceBar.h"
 #include "ui/InterfaceZoom.h"
@@ -150,7 +155,7 @@ bool MainWindow::saveEditor(EditorWidget* editor, const bool choosePath) {
         }
     }
     editor->configureLexerForPath(path);
-    editor->applyTheme(theme_.palette());
+    editor->applyColorScheme(theme_.colorScheme());
     if (splitPane_ != nullptr && editor == splitSource_) {
         // Save As may pick a new lexer, so refresh the split view's styles.
         splitPane_->refreshCurrentSource();
@@ -421,7 +426,7 @@ EditorWidget* MainWindow::createEditor() {
             [this](const QString& message) { statusBar()->showMessage(message, 7000); });
     editor->setEditorSettings(appearanceSettings_.editor);
     editor->setViewOptions(viewOptions_);
-    editor->applyTheme(theme_.palette());
+    editor->applyColorScheme(theme_.colorScheme());
     // Ctrl+wheel zooms one Scintilla view; mirror it to every editor and persist it.
     connect(editor, &ScintillaEditBase::zoom, this, [this](const int zoom) {
         if (zoom != viewOptions_.zoom) {
@@ -543,9 +548,9 @@ void MainWindow::activateCurrentTab() {
                     .arg(result.error));
             return;
         }
-        editor->applyTheme(theme_.palette());
+        editor->applyColorScheme(theme_.colorScheme());
     } else if (editor->hasPendingTheme()) {
-        editor->applyTheme(theme_.palette());
+        editor->applyColorScheme(theme_.colorScheme());
     }
 
     editor->markActivated(++tabAccessSequence_);
@@ -974,7 +979,17 @@ void MainWindow::setSettingsWorkspaceVisible(const bool visible) {
                 QStringLiteral("daemon/storage%1%2/%3")
                     .arg(area.left(1).toUpper(), area.mid(1), operation.section('.', -1)),
                 payload, std::move(reply));
-        });
+        },
+        // Settings → Teams: the daemon keeps the automatic turns a new team starts with.
+        [window = QPointer<MainWindow>(this)](const QString& type, const QJsonObject& payload,
+                                              SettingsTeamsPage::Reply reply) {
+            if (!window || window->teams_ == nullptr) {
+                reply({}, SettingsTeamsPage::tr("Teams need a KetPlus Daemon that supports them."));
+                return;
+            }
+            window->teams_->request(type, payload, std::move(reply));
+        },
+        runners::daemonRequester(accountDaemon()));
     workspaceSplit_->addWidget(settingsWorkspace_);
     workspaceSplit_->setStretchFactor(workspaceSplit_->indexOf(settingsWorkspace_), 1);
     connect(settingsWorkspace_, &SettingsWorkspacePage::saved, this, [this] {
@@ -999,6 +1014,7 @@ void MainWindow::setSettingsWorkspaceVisible(const bool visible) {
     // Account & devices reads the remote.status Connections reads, through its own client;
     // signing out happens in Connections, which asks first.
     auto* accountDaemon = this->accountDaemon(); // shared with the sidebar identity
+    runners::followDaemon(accountDaemon, settingsWorkspace_->runnersPage());
     settingsWorkspace_->setAccountStatusReader(
         [accountDaemon](std::function<void(const QJsonObject&)> reply) {
             if (!accountDaemon->isReady())
@@ -1064,44 +1080,48 @@ void MainWindow::applyThemeToEditors() {
     for (int index = 0; index < tabs_->count(); ++index) {
         auto* editor = qobject_cast<EditorWidget*>(tabs_->widget(index));
         if (editor != nullptr && editor == activeEditor && !editor->isHibernated()) {
-            editor->applyTheme(theme_.palette());
+            editor->applyColorScheme(theme_.colorScheme());
         } else if (editor != nullptr) {
             editor->markThemePending();
         }
     }
     for (int index = 0; index < tabs_->count(); ++index) {
         if (auto* diffView = qobject_cast<GitDiffView*>(tabs_->widget(index))) {
-            diffView->applyTheme(theme_.palette());
+            diffView->applyColorScheme(theme_.colorScheme());
         }
     }
     if (splitEditor_ != nullptr) {
-        splitEditor_->applyTheme(theme_.palette());
+        splitEditor_->applyColorScheme(theme_.colorScheme());
     }
     if (terminal_ != nullptr) {
-        terminal_->applyTheme(theme_.palette());
+        terminal_->applyColorScheme(theme_.colorScheme());
         applyTerminalTypography(terminal_);
     }
     if (agentDetailTabs_ != nullptr) {
         for (int index = 0; index < agentDetailTabs_->count(); ++index) {
             if (auto* editor = qobject_cast<EditorWidget*>(agentDetailTabs_->widget(index))) {
                 if (editor == activeEditor && !editor->isHibernated()) {
-                    editor->applyTheme(theme_.palette());
+                    editor->applyColorScheme(theme_.colorScheme());
                 } else {
                     editor->markThemePending();
                 }
             } else if (auto* terminal =
                            qobject_cast<TerminalPanel*>(agentDetailTabs_->widget(index))) {
-                terminal->applyTheme(theme_.palette());
+                terminal->applyColorScheme(theme_.colorScheme());
                 applyTerminalTypography(terminal);
             } else if (auto* diffView =
                            qobject_cast<GitDiffView*>(agentDetailTabs_->widget(index))) {
-                diffView->applyTheme(theme_.palette());
+                diffView->applyColorScheme(theme_.colorScheme());
             }
         }
     }
     if (agentWorkspace_ != nullptr) {
-        agentWorkspace_->applyTheme(theme_.palette(), appearanceSettings_.interfaceZoomPercent);
+        agentWorkspace_->applyColorScheme(theme_.colorScheme(),
+                                          appearanceSettings_.interfaceZoomPercent);
     }
+    if (MachineWorkspaceView* machine = machines_ != nullptr ? machines_->existingView() : nullptr)
+        machine->transcript()->view()->applyColorScheme(theme_.colorScheme(),
+                                                        appearanceSettings_.interfaceZoomPercent);
     if (conversationAtlasPanel_ != nullptr)
         conversationAtlasPanel_->applyPalette(QApplication::palette());
     if (atlasTabs_ != nullptr) {
@@ -1112,8 +1132,8 @@ void MainWindow::applyThemeToEditors() {
             } else if (auto* builder = qobject_cast<AtlasBuilderTab*>(atlasTabs_->widget(index))) {
                 builder->applyPalette(QApplication::palette(),
                                       appearanceSettings_.interfaceZoomPercent);
-                builder->chatView()->applyTheme(theme_.palette(),
-                                                appearanceSettings_.interfaceZoomPercent);
+                builder->chatView()->applyColorScheme(theme_.colorScheme(),
+                                                      appearanceSettings_.interfaceZoomPercent);
             }
         }
     }

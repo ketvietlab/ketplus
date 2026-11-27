@@ -3,6 +3,7 @@
 #include "KetSurfaceRecipes.h"
 #include "KetTextField.h"
 #include "workspace/ExplorerPanel.h"
+#include "workspace/TreeRowColumns.h"
 #include <QFileSystemModel>
 #include <QPainter>
 #include <QStyledItemDelegate>
@@ -43,22 +44,25 @@ class ExplorerRowDelegate final : public QStyledItemDelegate {
         const bool open = folder && tree_->isExpanded(index);
         const qreal ratio = painter->device()->devicePixelRatioF();
         const int centre = option.rect.center().y();
-        int x = option.rect.left() + px(r.indentStart + depth(index) * r.indentStep);
-        const int gap = px(folder ? r.folderSpacing : r.spacing);
+        // A file leaves the folder's chevron slot empty, so both kinds share the icon and the
+        // name columns at every depth.
+        const auto columns = tree_rows::explorerColumns(r, depth(index), px);
+        const int left = option.rect.left();
         if (folder) {
             const int chevron = px(r.chevronSize);
             const QString code =
                 ket::Icons::codeForLucide(open ? u"chevron-down" : u"chevron-right");
-            painter->drawPixmap(x, centre - chevron / 2,
+            painter->drawPixmap(left + columns.chevron, centre - chevron / 2,
                                 ket::Icons::pixmap(code, chevron, ratio, r.text));
-            x += chevron + gap;
         }
         const int icon = px(r.iconSize);
         const QString code = ket::Icons::codeForLucide(!folder ? u"file"
                                                        : open  ? u"folder-open"
                                                                : u"folder");
-        painter->drawPixmap(x, centre - icon / 2, ket::Icons::pixmap(code, icon, ratio, r.text));
-        x += icon + gap;
+        painter->drawPixmap(left + columns.icon, centre - icon / 2,
+                            ket::Icons::pixmap(code, icon, ratio, r.text));
+        const int x = left + columns.text;
+        const int gap = px(r.folderSpacing);
         const QString status = statuses_.value(model_->filePath(index));
         QFont statusFont = option.font;
         statusFont.setPixelSize(px(r.statusPixels));

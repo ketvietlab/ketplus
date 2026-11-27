@@ -1,3 +1,4 @@
+#include "ToolLocations.h"
 #include "agent/AgentSessionManager.h"
 #include "agent/AgentSessionState.h"
 #include "agent/CodexAppServer.h"
@@ -16,14 +17,7 @@
 
 namespace ketplus {
 namespace {
-QString gitExecutable() {
-    QString found = QStandardPaths::findExecutable(QStringLiteral("git"));
-    if (found.isEmpty())
-        found = QStandardPaths::findExecutable(
-            QStringLiteral("git"),
-            {QStringLiteral("/opt/homebrew/bin"), QStringLiteral("/usr/local/bin")});
-    return found;
-}
+QString gitExecutable() { return tool_locations::findTool(QStringLiteral("git")); }
 
 // Newest messages first, and only as far back as a turn can plausibly reach.
 constexpr int kTurnMessageScanLimit = 4000;
@@ -52,7 +46,7 @@ void AgentSessionManager::executionWorktreeCommand(
         callback({}, "Start a conversation before choosing its execution worktree.");
         return;
     }
-    server_->executionWorktreeCommand(session->threadId, type, payload, std::move(callback));
+    serverExecutionWorktreeCommand(session->threadId, type, payload, std::move(callback));
 }
 
 // `git worktree list` runs off the GUI thread's event loop: the turn notifications that

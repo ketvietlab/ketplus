@@ -38,7 +38,7 @@ FetchContent_Declare(
 FetchContent_Declare(
     ketqt
     GIT_REPOSITORY https://github.com/ketvietlab/ket-qt.git
-    GIT_TAG 9bdd51c200ddb6f84b7504951019bba4a1713c0c # ket-qt PR #46 merge (editable select: text once, inside its border)
+    GIT_TAG 3cda91866b307cc2be33c371b9c15ff3a23b0269 # ket-qt develop: merged #63 (job conversation statuses)
     # Unlike the source-only dependencies above, the kit builds its own targets. Keep them in this
     # build tree: the shared cache is used by every build and edition at once.
     BINARY_DIR "${CMAKE_BINARY_DIR}/_deps/ketqt-build"
@@ -83,6 +83,8 @@ set(scintilla_qt_dir "${scintilla_SOURCE_DIR}/qt/ScintillaEditBase")
 # the lines under the margin. Compile a copy whose client rectangle starts at the origin; the
 # pinned upstream file stays untouched in the shared dependency cache.
 file(READ "${scintilla_qt_dir}/PlatQt.cpp" scintilla_platqt)
+# A Windows clone with core.autocrlf checks the file out with CRLF; the match below is on LF.
+string(REPLACE "\r\n" "\n" scintilla_platqt "${scintilla_platqt}")
 set(scintilla_client_upstream
     "PRectangle Window::GetClientPosition() const\n{\n\t// The client position is the window position\n\treturn GetPosition();\n}")
 set(scintilla_client_origin

@@ -21,17 +21,89 @@ response return an explicit upgrade error. This is backend/transport work;
 live-catalog bounds and the remaining #68 acceptance gates stay open. Incremental discovery now requests only live sessions
 (ADR 0092), avoiding tombstone walks and repeated deletion signals. Full refresh
 and CLI retain complete reconciliation; older daemon replies remain compatible.
+The live catalog is now paged too (ADR 0131): an install with thousands of
+conversations used to exceed the 1 MiB frame and list none. Desktop applies a
+catalog with one settings write and one list update per workspace; Control v2
+clients still read an unpaged catalog.
+
+OS credential storage (ADR 0130) replaces the Control credential file with a
+transactional Keychain/Secret Service record and verified legacy-file migration.
+Unavailable storage fails closed. Native/fake fixtures are implementation evidence;
+Linux store policy, signed upgrade prompts and platform release acceptance remain open.
 
 ## Implemented
 
-- Agent teams, store (ADR 0112, #455): the daemon keeps teams in the journal
+- Linux Pro build-only AppImage/deb assembly uses native Ubuntu 24.04 Docker
+  recipes, Qt/QML/WebEngine deployment, bundled browser/sidecar runtimes, fixed
+  production build identity, checksums and an SDK-free offline smoke. Both amd64
+  on the Linux build host and native arm64 on the GitHub Ubuntu ARM runner have
+  passed actual AppImage/deb smokes; ARM run 43395056220 is recorded engineering
+  evidence. The reusable jobs run only through the normal promotion/release
+  build workflow, not integration PRs (ADR 0030). Release signing and the
+  dependency source/notice audit remain publication gates;
+  see `linux-desktop-packaging.md`.
+
+- Appearance mounts a searchable canonical scheme library with source labels and
+  swatches, local import variant/review/preview, export, duplication and deletion.
+  Preferred system variants and the Lite/Pro keyboard picker use the live selection
+  API. This team branch is pending review; it is not a released acceptance claim.
+
+- The color-scheme catalog embeds the original two Két defaults plus eight
+  attributed MIT/Apache-2.0 conversions from pinned official upstream sources.
+  Built-ins are read-only, have offline completeness/contrast tests and a
+  reproducible importer command with saved reports. App-wide custom-color
+  application uses the integrated ThemeManager adapters described below.
+
+- Color-scheme selection now has revisioned persistence, one-time legacy migration,
+  local preview/commit/cancel, independent system preferences and asynchronous
+  snapshot preparation. Main-window editor/terminal/diff adapters preserve their
+  existing buffers and sessions. Pro chat/preview and standalone Terminal consume
+  the same snapshots; Mermaid caches capture scheme colors without rebuilding
+  unchanged Markdown. Targeted offscreen checks and native DELL Light/Dark
+  comparisons cover this integration (T-5); broader release acceptance remains
+  separate.
+
+- JetBrains import converts bounded local `.icls`/editor XML, UI `.theme.json`
+  and plugin JAR data into canonical variants with explicit approximation and
+  omission reports. It does not execute plugins or install/activate schemes.
+
+- VS Code import converts local JSON/JSONC and VSIX theme variants with bounded
+  includes, tmTheme data, explicit workbench fallbacks and shared-role syntax
+  approximations. Semantic colors remain metadata; extension code never runs.
+
+- JetBrains import converts bounded local `.icls`/editor XML, UI `.theme.json`
+  and plugin JAR data into canonical variants with explicit approximation and
+  omission reports. It does not execute plugins or install/activate schemes.
+- Canonical `.ketscheme.json` v1 color schemes have strict RGBA parsing, structured
+  diagnostics, unknown-data preservation, complete built-in inheritance, embedded
+  light/dark palette snapshots and an atomic local catalog (ADR 0121). Importers,
+  selection UI and consumer adapters are tracked separately.
+
+- GitHub Copilot daemon foundation (ADR 0120): the user-installed CLI runs as
+  `copilot --acp --stdio` through the shared ACP engine. Executable overrides,
+  streamed turns, cancellation, bounded request deadlines and explicit sign-in
+  failures have deterministic fake-process coverage. Turn-bound one-time approvals
+  and host Browser MCP setup/routing/cleanup also have fake-process coverage;
+  unverified Copilot MCP identities still require approval. Model discovery uses
+  bounded, cached ACP session catalogs and a provider-default fallback; explicit
+  selections are confirmed before prompting. Authenticated Copilot behavior
+  remains unverified.
+
+- Bounded team messages (ADR 0115):
+  - A message too large for one frame becomes a failure of its request, or a
+    `truncated` event; the client keeps its connection.
+  - `team.list` and `team.changed` carry only the members.
+  - `team.get` carries a summary without history, plus the newest 50 Updates.
+  - History, older Updates and decisions come page by page.
+  - The sidebar keeps a team's members together while the daemon reconnects.
+- Agent teams, store (ADR 0114, #455): the daemon keeps teams in the journal
   (`teams`, `team_members`, `team_updates`) and enforces the membership rules with
   their error codes; a member cannot be archived, its own Reviewer setting is refused
   with `team_member` and does not run, and a deleted member leaves its team.
   The `teams/1` protocol (#456) lists, reads, creates, changes and deletes teams for
   local clients; `team.create` starts every member as a named conversation (no turn),
   all or nothing, and `team.changed` / `team.removed` reach every local client.
-  Tasks (`teams.tasks/1`, #457): `T-n` ids, one owner, the state table of ADR 0112 §6,
+  Tasks (`teams.tasks/1`, #457): `T-n` ids, one owner, the state table of ADR 0114 §6,
   criteria only the leader or the user writes, an append-only history, dependencies,
   and a handover that moves the task's own worktree and branch to the new owner.
   Agent tools (#458): members get the `team_*` tools of the ketplus_agents server, the
@@ -39,26 +111,213 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   may), `leader` and `reviewer` are addresses for `agents_send`, `agents_list` shows
   role and lane, and each member's instructions explain its role. The leader's first
   turn carries the goal.
+  The goal (ADR 0114 §9): up to 16,000 characters and 24 KiB of UTF-8, so the leader's
+  first turn holds it whole. It keeps its line breaks and is refused above either limit,
+  never cut. New team writes it in the kit's multi-line field. Typing
+  `@` mentions a conversation (`@agent/<number>`), and a number no conversation has stops
+  Create. A mention is context only: the leader's first turn lists the mentioned
+  conversations with number and title and says it may ask them, and creating the team
+  messages nobody. The team page folds the goal after three lines, and a mention there
+  opens its conversation. Paired devices get the goal whole (ADR 0116).
+  Team activity on the phone (T-8): `team.list` gives each member's `state` and `task` and
+  the team's `working` count, and the sealed `team` metadata carries an `activity` count that
+  a member's turn start or end changes, so a phone reads the directory again (ADR 0116 §3).
   Automatic turns (#459): only an assignment, a handover, a review and an answered
   decision start a member's turn; every other change waits in Updates for the leader's
   digest, sent once when its turn ends or after 20 s of quiet while it is idle. Pause
-  holds every team message in order until Resume, and 40 automatic turns pause the team
-  with one decision.
+  holds every team message in order until Resume, and the team's budget of automatic
+  turns pauses it with one decision ("Continue (N more turns)"). The budget (ADR 0114
+  open point 2, `teams.settings/1`): a global value the daemon keeps, 40 until changed in
+  Settings → Teams, which a team created without its own takes (an older phone included);
+  New team and the team's Automatic turns dialog set a team's own, a whole number from 5
+  to 200, and a larger budget withdraws the budget decision and resumes the team, its used
+  turns still counted. The team page shows the turns used of it. The budget counts the turns
+  that start: a batch of messages for one member is one turn, and an idle developer with several
+  messages in the outbox receives them after one quiet period as a single turn.
+  Context reset (ADR 0114 §11, T-1): a turn the team starts begins a fresh native thread of
+  the same provider at a task boundary (developers and reviewers) or past the team's
+  threshold (developers and reviewers; `context_reset_turns`, 12 by default), never for a
+  user's turn and never for the leader (T-9: exempt under every policy, no context mark;
+  its digest is bounded to 40 update lines and 8 KiB);
+  its first prompt points at the transcript and carries a team briefing of at most 4 KiB.
+  `context_reset` (`task_and_threshold`, `threshold`, `never`) changes through
+  `team.update`; the desktop and the phone have no control for it yet.
+  Stall watchdog (ADR 0114 §8): 3 minutes after a member's turn ends, a team with work
+  left is moved on: an idle developer with a task in progress (or the reviewer with a
+  task in review) is nudged once, an idle team wakes the leader with the open tasks at
+  most twice, then a `stalled` decision asks the user to wake the leader again or pause.
+  A member the user stopped is not woken on its own.
+  `team_wait` lets a leader or developer wait 1 to 60 minutes for something outside the
+  team and be woken to check; a build runs as a managed background job instead, whose
+  wake ends that wait and keeps the watchdog off the member (ADR 0127 §7a). A member's message to a conversation outside the team
+  that failed or was never answered wakes that member (message kinds `wait` and
+  `message_failed`). A leader's wait ends without a turn when another turn was delivered to
+  the leader after it was set (it is not re-armed: the leader calls `team_wait` again if it
+  still waits), and moves once when the team did not change; `idle_developer` wakes the
+  leader only while a task is left to hand out (ADR 0114 §7, T-12). Waits are in memory
+  only; neither has run on a live team yet.
+  Disk and done worktrees (ADR 0114 §10, `teams.storage/1`): the team page warns below
+  20 GB free and says builds should stop below 12 GB, naming the free space; nothing is
+  paused or removed on its own. It lists each done task's worktree still on disk with its
+  path and size and removes one only after the user confirms, with `git worktree remove`
+  without force and `git worktree prune`; dirty or unpushed worktrees, the main checkout
+  and a running conversation's folder are refused in words. Agents have no way to ask.
+  Background cleanup (T-23, `teams.cleanup/1`): Remove… and Remove all… close their dialog at
+  once; the daemon removes the worktrees one after another on a thread of its own, each
+  through the same checks, and the page locks the rows it holds ("Queued", "Removing…"),
+  disables Remove all… and shows a summary (removed, freed, kept with reasons) until it is
+  dismissed. The state is the daemon's, so it is there when the page is opened again.
+  Team provider switch (T-2, ADR 0114 "Protocol"): `team.provider.set` moves all or
+  chosen members to another installed, signed-in provider with an optional model and
+  effort (the new provider's default otherwise). Nothing is interrupted: each member keeps
+  a pending switch, shown on the team, that its next turn takes through the provider
+  handoff. A Codex reviewer without the team's Full access refuses the change unless the
+  request gives the team Full access with the same acknowledgement as Create (T-3); each
+  member then takes it at its next turn. Members in
+  a switched worktree that the provider cannot continue are reported one by one. The team
+  keeps the provider for members added later. The desktop Team page's Change provider…
+  (T-3) sends it: a provider select of every provider (one not set up disabled), model
+  and effort side by side, every member checked by default, a note on members running a
+  turn, and each member's result once sent. On a move to Codex without the team's Full
+  access, a checkbox gives the team Full access so the reviewer moves too; left clear,
+  the reviewer stays on its provider. The member list shows each
+  member's provider and a pending switch. Not yet in the phone UI.
+  Per-task review (#460): a task entering In review is queued for the team's reviewer,
+  first in first out, as an ADR 0067 `review` message with its criteria and the diff of
+  its branch against the integration branch; `no findings` makes it Ready, findings go
+  back to the owner with round + 1, and past `max_rounds` the task is Blocked.
+  Lanes (#461, T-10): a developer's lane is a name the leader renames with
+  `team_lane_set` (logged with its reason). Lane paths, shared and allowed paths, the
+  outside-lane check and `team_paths_allow` were removed (ADR 0114 §4); a team stored with
+  them still loads, and paths an older client sends are ignored.
+  Leader interrupt (T-11): `team_member_interrupt` stops a member's running turn with
+  `stopped_by: leader` (its waits and background jobs stay), puts the leader's message first
+  in the next batch, and is limited to 3 per member per hour (ADR 0114 §11).
+  Decisions (#462): the leader raises a question with two to four choices
+  (`team_decision_raise`, `team_decision_withdraw`); only the user answers through
+  `team.decisions.answer_batch` or the legacy `team.decision.answer`. A submit
+  reaches the leader once and unblocks the affected tasks. The leader's first plan waits as "Start these N tasks?", and the
+  budget's decision continues or stops the team.
+  Merging (#463): a Ready task whose dependencies are done is offered once — to the
+  leader's digest under `mergePolicy` `leader`, as a "Merge T-n?" decision under
+  `user` — and becomes Done when the integration branch contains its branch
+  (`git merge-base --is-ancestor`, checked after every member's turn and on
+  `team.get`), also for a merge made by hand.
+  Repository ([ADR 0123](decisions/0123-team-and-task-repository.md)): the user (Team page,
+  Repository…) or the leader (`team_repository_set` with a reason) moves a team to another
+  checked main checkout and integration branch; started tasks keep the repository they began
+  in, and `team_task_create` may name a task's own repository.
+  Branch names (ADR 0123 §9, T-93): a new task's branch is `<type>/<slug>-t<n>` and its
+  worktree `<repository>-<type>-<slug>-t<n>`, from `branch_type`/`branch_slug` or derived
+  from the title (Vietnamese diacritics removed), refused when taken, renamed by the leader
+  only before the worktree exists; older tasks keep `team/<id>/t-<n>`.
+  Done by pull request ([ADR 0118](decisions/0118-team-tasks-done-by-pull-request.md)):
+  a task that records a pull request is done once `gh` says it is merged, from any open
+  state, checked at load, every 2 minutes and with the merge check (at most 20 pull
+  requests a check, once a minute a team, on a worker of its own that stops a batch at the
+  first request without an answer); errors move nothing and are said once. The ancestor
+  check skips tasks with a pull request, needs the branch's own commits and accepts
+  `origin/<integration>` after a fetch, and the leader closes a task by hand with `team_task_close`. Not yet run on a
+  live team.
+  Team language (T30, [contract](decisions/2026-11-18-english-ui-team-content.md)):
+  application chrome and new fixed system templates are English. Content follows the
+  user's prompt; new teams default to Follow prompt (`auto`), with legacy `en`/`vi`
+  preserved as fallback preferences. Stored content is never translated retroactively.
+  Sidebar (#464): with a daemon that advertises `teams/1`, each team is a branch of its
+  repository's tree before the other conversations, leader, developers, reviewer; a
+  member's role is in its hint and accessible description. The branch's name opens the
+  team, its chevron folds it, and while a decision waits it shows the needs-input mark and
+  a semibold name; its menu adds a member or deletes the team, the
+  conversation menu joins or leaves a team with the reason when it cannot, and a drop on
+  a folder of the same repository joins as a developer.
+  `DaemonClient::teamEventReceived` carries `team.changed` and `team.removed` to the
+  desktop's `TeamDirectory`.
+  Dialogs (#465): New team sends one `team.create` with the name, goal, integration
+  branch, who merges, the permissions of the leader and the developers (`execution_policy`:
+  Read only, Workspace or Full access; Workspace unless chosen; the reviewer's review
+  rounds run under the verify profile of ADR 0067: builds, tests and the browser, no
+  change to the work), one to five developers and each role's agent (Claude leads and
+  reviews, another ready provider develops; the reviewer's chooser offers Claude only).
+  A refusal keeps the dialog open with the error at the role it names. Add a developer
+  sends `team.member.add` with a required name, an optional lane and the agent, hints at the
+  reviewer queue from three developers and is disabled at five. Number of developers
+  (T-4) adds up to the room left at once on one agent: a row each names a developer and
+  its lane, prefilled with the next free "Developer N" and editable; names and lanes the
+  team has are refused before anything is sent, and all of them join in one change or none.
+  Member header (#467): a member's Agent Workspace header shows its role as a locked
+  label that opens the team and cannot be edited, and has no Reviewer choice (the team's
+  reviewer reviews its tasks). Leaving the team brings the Reviewer choice back with its
+  setting.
+  Team page (#466): Open team shows the team in the workspace area: what waits for the
+  user (decisions with the recommended choice first, answered in place through
+  `team.decision.answer`), the tasks with a state filter, the
+  members, and the updates from `team.get`, newest first. Paused and queue banners explain
+  why turns wait. `team.changed` rebuilds it in place and keeps the scroll position. A
+  task opens a 720 px dialog bounded by the available window: state and lane badges, the
+  facts two to a line, the description as Markdown cut at about 150 px behind Show all,
+  the criteria with how many
+  are met, and the full history; the body scrolls while the actions stay in view. A valid
+  HTTP(S) pull-request URL from task metadata opens through a keyboard-accessible link;
+  missing or invalid metadata stays plain text. Hand over… opens a dialog of its own and sends `team.task.handover` with another developer
+  and a required reason; Open the owner opens that conversation. The page never grows
+  wider than its viewport: text wraps or elides with the whole value as tooltip, a
+  decision's sentence choices become rows, the task table drops lane, owner, PR and
+  criteria in that order, and the filter becomes a select when its segments do not fit.
+  Without the team it explains teams and offers New team.
+  Transcript blocks (#468): a member's transcript draws the team's own messages as cards
+  (assignment, digest, review request, verdict, decision) with Open T-n; a digest of many
+  changes is one card. Anything it cannot read stays the message's text.
+
+- SSH daemon installer consumer (#666, ADR 0124): Connections separates metadata review
+  from explicit install consent; verifies an Ed25519-signed version-matched GitHub
+  release manifest and artifact SHA-256; installs the complete user-space runtime over
+  the verified SSH route; commits after daemon hello, with rollback, managed upgrades,
+  start and idle-only uninstall. Production remains disabled until the release owner
+  configures the pinned public key. Startup is a user process, with no automatic
+  login service. QA uses an isolated same-UID Linux profile and loopback-only runtime.
 
 - The unreviewed workspaces UI layer consumes kit worktree actions/badges,
   searchable picker rows and Connections controls. Repository/worktree switching
   still waits for the existing revisioned acknowledgment. Linux pairing continues
-  through authenticated outbound Relay; this layer does not add SSH setup.
+  through authenticated outbound hosted service; this layer does not add SSH setup.
   There is no Worktrees page (ADR 0111): worktrees are created for a
   conversation, from New conversation or the repository picker's Create
   worktree… card, which moves that conversation to the new worktree, and
   switched from inside the conversation.
   Connections follows the mock's signed-in page: a page up to 1000 px wide, one
   card per phone and per Linux machine, kit badge metrics, inset activity
-  separators and the kit empty state and avatar. Linux machines connect only
-  through the Relay; on 2026-11-11 the mock dropped its SSH option, machine
-  details and Disconnect, and its phone pairing dialog now follows the app's
-  scan, compare and approve flow (no typed pairing code).
+  separators and the kit empty state and avatar. Its phone pairing dialog follows
+  the app's scan, compare and approve flow (no typed pairing code). Since #419
+  (ADR 0119) the Linux rows come from `LinuxMachineModel` and show the route
+  (SSH or hosted service), the Connecting / Connected / Reconnecting / Offline state or an
+  actionable error (host key changed, SSH key refused, daemon not installed),
+  Details with the verified fingerprint, and Connect / Disconnect. "Connect a
+  Linux machine" has an SSH (free) mode (host alias or user@host[:port], a
+  first-use host key to accept or reject, no password field) and a ketPlus
+  Hosted service (Pro) mode (the existing pairing link). The SSH route is wired to
+  `SshMachineBackend` through `LinuxSshMachines` (docs/ssh-transport.md
+  "Connections"): live state, the verified host key, a mismatched key shown as
+  such, Connect / Disconnect / Remove, Forget old key after a mismatch of a
+  key ketPlus accepted, and Trust new identity after an ADR 0119 rotation.
+  Removing a machine deletes its identity and its accepted key from the
+  KetPlus known_hosts file. The hosted service route is wired to the hosted-service machine backend
+  through the hosted-service machine list: live state, the pinned host identity, host
+  presence ("Host offline, last seen …"), requests that wait for an absent
+  host, and pending outcomes. The hosted service is
+  gated on the signed-in session's `entitlements` (see
+  `AccountEntitlements.h`) and fails closed while the hosted service names none (D-4).
+  SSH needs no account. Machines are keyed by the ADR 0119 machine id, the
+  daemon's host key fingerprint (for the hosted service, the one pinned at pairing); the
+  Hosted service's machine id is a route attribute, so a host on both routes is one row,
+  reached over SSH, with the hosted service as the fallback while SSH cannot reach it
+  (the row says why and offers Use SSH). Saved SSH machines and, while
+  entitled, the hosted service machines connect at launch, so the activity bar's picker
+  lists them before Connections is opened. The app owns one set of these
+  backends (`LinuxMachines`) that every window shares: one tunnel and one hosted service
+  outbox writer per host. The picker shows each machine's
+  route and state. On every `machinesChanged`, `MainWindowRemote.cpp` registers
+  `LinuxMachinesSection::machineBackend(id)` in the window's `MachineSelection`
+  through `syncBackends()`, so a picked Linux machine shows its own workspace.
 
 - The unreviewed Pro overlays layer uses kit Quick search and conversation menus.
   Compact conversation window preserves the mounted session/draft and restores
@@ -68,17 +327,29 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
 
 - Pro header/composer now compose kit buttons, model-search field, usage ring,
   meters and composer/attachment recipes. The header stays 44 px, with number,
-  compact title, filterable tags and an Add tag menu; the daemon stores the tags
-  (`session.tags.set`, ADR 0107). The input retains IME/draft/steering
+  compact title, status, worktree and Reviewer choice, and no user tags (ADR 0117).
+  The input retains IME/draft/steering
   behavior and a caret-aligned placeholder. This is implementation work in the
   unreviewed UI stack; automatic reviewer assignment is not provided by this layer.
 
-- Pro sidebar uses kit navigation, repository groups, two-line conversation rows,
-  the mock's field-styled Quick search, a machine header with its chevron, and update
-  pills. A tag chosen in the conversation header filters the sidebar and shows as the
-  mock's "Tagged <label>" chip, which clears it. Storage pressure warnings consume the
-  local daemon's existing size-status contract. Tags come from the daemon catalog
-  (ADR 0107, 0113), and "Waiting for you" comes from the daemon (ADR 0112). It matches
+- Pro sidebar uses kit navigation, the mock's tree (#537) built from the ket-qt sidebar
+  tree parts: a repository is the root, its teams branch directly under it, "Conversations
+  (n)" labels the rest where the repository has teams, every conversation is one line
+  (the state's mark, title and #number; role, state, origin and worktree in the hint),
+  guide lines run under each chevron, and folds of repositories and teams survive a
+  restart (a folded repository shows a dot while something inside waits). Also the mock's
+  editable repo/conversation filter, a machine header with its chevron, and update pills.
+  The filter matches names/paths or titles in place, keeps matching ancestors, temporarily
+  reveals folded/previewed results, and restores the normal tree when cleared. It retains its
+  temporary query through local/selected-machine updates without changing selection or order.
+  Cmd+Option+K focuses it on macOS (Ctrl+Alt+K elsewhere); Cmd+P remains global Spotlight.
+  Escape clears; Enter does not navigate. New filter text follows the UI locale (vi/en).
+ Rows draw no user tags and the sidebar has no tag filter (ADR 0117); the
+  daemon still stores tags and their catalog (ADR 0107, 0113) for other clients.
+  Repository groups keep pin order, then name/path order across conversation and
+  team updates; conversations inside each group still follow their newest turn.
+  Storage pressure warnings consume the local daemon's existing size-status contract,
+  and "Waiting for you" comes from the daemon (ADR 0112). It matches
   `workspace` and `workspace/storage-warning` at zoom 1 and 1.25 (#158).
 
 - Lite shell implementation now connects the Qt mock activity rail to Explorer,
@@ -88,6 +359,13 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   the single status bar follow the Lite mock (#149); `KETPLUS_CAPTURE_STEPS` drives
   offscreen review captures (`docs/design-system.md`). Settings opens as a page of
   the window, shared with Pro through `core/src/app/SettingsWorkspace` (#155).
+
+- Explorer and Source Control rows (T-19): a file leaves the folder's chevron slot free, so its
+  icon and its name start where a folder's do at every depth; in Source Control a file's icon
+  sits under its group's title. Both columns open at one width (288 logical px, at the
+  interface zoom) in Lite and Pro, and the width the user drags either of them to is the one
+  both open at for the rest of the session; it is not saved across launches. The row columns
+  come from the kit's recipes (`core/src/workspace/TreeRowColumns.h`).
 
 - Két UI stack: Lite and Pro use KÉT Sans as the primary interface face, with
   Inter/platform fallback; fresh editor settings use KÉT Sans Mono Medium at
@@ -357,7 +635,7 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   Claude, Codex and Cursor turns receive their own `ketplus_agents` MCP server
   (the daemon executable's `--mcp-agents` mode, a per-conversation token and an
   agents-only IPC scope). Messages to idle conversations start a turn; busy ones
-  receive them when the turn ends, or by steering when `urgent`; a final answer
+  receive them, together and in order, when the turn ends (`urgent` puts a message first; on a team only the leader may send it, and it steers the member's running turn, `steering` or `urgent_waiting`; `team_member_interrupt` is the leader's last resort, ADR 2026-11-26); a final answer
   returns as the reply. Hop, chain and hourly limits hold runaway exchanges for
   the user's next turn, and requests expire after 24 hours. Delivered messages
   show as labelled agent bubbles, the sender and receiver get "Sent to @agent/N" and
@@ -430,14 +708,16 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   duplicate terminal events cannot reopen a completed compaction. Fake-daemon regressions
   include provider activity arriving during the refresh and overlapping compactions.
 
-- WebRTC host transport phase 3 (0.1.37): libdatachannel with signed SDP,
+- Peer transport host phase 3 (0.1.37): libdatachannel with signed SDP,
   active-pairing verification, expiring grants, revocation, connection epochs,
   three bounded ordered channels, cursor subscriptions and encrypted command
-  results. WebRTC and mailbox dispatch share the journal's command deduplication
+  results. peer transport and mailbox dispatch share the journal's command deduplication
   and the cloud-safe encrypted event projection. Native clients remain phase 4;
-  `events.forward_only/1`, relay-frame-only delivery and removal of legacy event
-  upload remain gated for the later migration. The current mobile app keeps its
-  Control v2 path. See `remote-transport.md` for the precise host wire contract.
+  removal of legacy event upload remains gated for the later migration. The current
+  mobile app keeps its Control v2 path. The daemon lists `events.forward_only/1` in each
+  heartbeat and follows the answer: while the answer lists it, events reach clients as frames
+  and content-free notices instead of uploads, and withdrawing it resumes uploads after the
+  journal head. See `remote-clients.md` for what the daemon does.
 
 - Async assistant questions expire with their originating turn (completion, provider stop,
   or a new turn). Canonical expiry receipts hide live and replayed unanswered question
@@ -450,7 +730,7 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   group loads bounded, cursor-fenced detail pages; output/status changes catch up
   while open, collapse fences late replies, and explicit conversation copy still
   reads full canonical history. Capture/compare and screenshot observations stay
-  outside groups. Legacy clients and the current relay/mobile projection are unchanged.
+  outside groups. Legacy clients and the current hosted service/mobile projection are unchanged.
 
 - Explicit economic context harness (ADR 0021): persisted `compactWindow` on new
   and resumed daemon turns, idle configuration changes and forks. Codex receives
@@ -495,16 +775,17 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   turn records its work with the `work_report` tool instead of a markdown matrix:
   - the daemon merges items by key into the conversation's ledger, so unfinished work
     carries forward and implementation, verification and delivery stay separate checks;
-  - the turn closes with the mock's report card, which counts the items itself; while the
-    turn runs, the same card closes the live transcript with a Running badge and the
-    turn's activity;
+  - report calls persist pending ledger data; only the actual terminal event closes
+    the turn with its latest scoped report card. Ongoing work keeps the run line;
   - Copy conversation exports the report as a table.
 
   Without the tools, or when the call fails, the turn still ends with the localized
   task/status/evidence/next-action matrix. The header's Work report button and the
   card's footer open one Report tab in the right pane. It shows the selected
-  conversation's whole ledger (`session.work_report.read`), with Open and All filters,
-  and follows its live `work_report.updated` events. Steered questions or added tasks resume the prior
+  conversation's last terminal report (`session.work_report.read`), with Open and All filters,
+  scoped to the current request. Reads/reopens and scope refreshes never expose pending
+  ledger edits; failed or stopped terminal cards retain that status even if all items are done.
+  Steered questions or added tasks resume the prior
   unfinished objective afterward unless the user cancels, pauses or replaces it.
   After compaction, agents are instructed to verify and announce repository,
   absolute worktree path, branch and next task before resuming mutations.
@@ -517,11 +798,40 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   The suffix stays outside user-message and steer transcript
   text. Tests verify provider delivery; model style compliance is not guaranteed.
 
-- Claude background tasks survive the end of their turn: the sidecar keeps the query
-  open while they run, the daemon journals and lists them, and desktop shows a bar
-  above the composer with output and Stop. iOS shows the same list through the relay
-  (`session.task.stop`/`session.task.output`). Not yet verified against a live
-  provider run.
+- The shared agent MCP server exposes daemon-owned background start/list/get/stop/
+  output for Claude, Codex and ACP providers (ADR 0127). Claude's pinned SDK native
+  background/subagent paths are disabled with host settings, tool exclusions and
+  deny hooks; the legacy collector/stop/output path remains for drain. Offline MCP,
+  sidecar and real-SDK control checks are implementation evidence, not live-model
+  or shared desktop UI acceptance. Registry completion uses the durable owner-wake
+  path instead of a retained Claude query or a watchdog. The same path carries one owner
+  notice when a job stays queued past half its timeout
+  (at most two minutes), naming why (ADR 0127 §7a). The daemon owns native cleanup (§4a):
+  it retries for a bounded window, then always ends the job and keeps any unconfirmed
+  cleanup in internal diagnostics; there is no cleanup warning, dialog, acknowledgement
+  command or `needs_attention` state, and daemon 0.1.59 ends such records from earlier
+  daemons when it starts. Start/stop require an
+  immutable per-turn mutation capability; review origins receive no grant and
+  accepted jobs retain their effective-policy snapshot. Claude waits for actual
+  SDK process exit; Codex/ACP use dedicated per-conversation processes before
+  restoring history and acknowledging a fresh MCP epoch. Offline fixtures pass;
+  installed Codex 0.162.1 also passes production-adapter injection controls and a
+  separately authorized single cheap-model turn: completed synthetic history
+  survives same-ID resume and owned-process/MCP-epoch replacement without recall.
+  Pinned Copilot 1.0.112 passes standalone
+  offline MCP discovery through process-launch configuration; its adapter uses
+  a private immutable file for that bootstrap. A separately approved single Auto
+  turn also passes actual CopilotAdapter completed-history/same-ID/MCP replacement
+  and process-closure checks; managed mutation is enabled subject to each turn's
+  transport ACK and daemon policy. Cursor's `2026.11.11-043ef28` production-adapter
+  Composer non-fast probes now verify completed synthetic history, same-ID replay,
+  owned-context exit and inventory on the exact fresh injected worker after load.
+  The separate gate delta enables Cursor mutation capability; each turn still
+  requires successful history restoration and an exact transport-epoch ACK.
+  Reviews and stale/pending origins retain no mutation authority, while registry
+  reads keep their separate grants. This remains unmerged implementation and
+  validation evidence, not release or shared desktop acceptance. See the
+  [provider evidence and gaps](decisions/0127-provider-origin-refresh-evidence.md).
 
 - Async assistant-question answers use the conversation's current execution-context
   revision for both steering and follow-up turns; switched conversations no longer
@@ -579,9 +889,34 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   older daemons retain compatibility compact replay.
 - Independent Linux headless daemon build and versioned runtime packaging
   (0.1.29), systemd user unit, authenticated `ketplusctl`, browser-approved
-  device authorization and a durable zero-session workspace catalog. A Qt
-  Control v2 client backend is available, but remote Desktop UI/composition
-  remains deferred. See `linux-headless-daemon.md` for coverage and acceptance.
+  device authorization and a durable zero-session workspace catalog. ADR 0119
+  records the remote composition (one `MachineBackend` for the local socket,
+  the hosted service and SSH; machine binding; connection states; the SSH trust
+  decision); its local adapter `DaemonMachineBackend` is in `ketplus_remote`,
+  and the SSH backend `SshMachineBackend` with its secret-free machine store is
+  in `ketplus_remote_ssh_backend` (`ssh-transport.md`). Desktop composes a
+  selected Linux machine through its backend (`apps/desktop/src/machine`,
+  `MachineSelection`, `MachineCatalog`, `MachineWorkspaceView`): the sidebar,
+  worktree picker, transcript, composer and approval/question cards follow the
+  picker, Offline/Reconnecting render as ADR 0119 specifies, and a new remote
+  conversation starts through `createSession` (agent-workspace.md, "Remote
+  machines"). Scrolling up reads older transcript pages through the backend,
+  with large events reassembled first (live ones too); rename runs on every
+  route, fork where the daemon's hello offers `session.fork` and through the
+  Hosted service, and archive where it offers `session.archive/1`. Not yet on remote
+  machines, each shown disabled with its reason (ADR 0119, "Parity of
+  conversation operations"): archive through the hosted service. Attachments stage through
+  SSH and the encrypted hosted service outbox for existing conversations. Remote transcripts render through This Mac's rich renderer in
+  transcript-only mode (ketplus#598); file actions that need this Mac's disk
+  say why they are unavailable.
+  `tests/MachineEndToEndTest.cpp` drives this window end to end (#419): over SSH
+  against a real daemon behind a loopback sshd with FakeCodex, and over the hosted service
+  against the loopback hosted service of `tests/daemon/SyntheticRelay.h`, including a
+  worktree that turns from pending to verified, a create queued while the host
+  is away that completes through `commandCompleted`, and an outage on each route
+  that shows Reconnecting/Offline and recovers without falling back to This Mac.
+  See `linux-headless-daemon.md`
+  for coverage and acceptance.
 - Conversation and linked-worktree visibility can be archived without
   deleting history or stopping an active turn. The daemon deletes a
   conversation 30 days after it was archived (ADR 0100). Archived items are restored only
@@ -625,7 +960,19 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
 
 ## Planned
 
-- Agent teams ([ADR 0112](decisions/0112-agent-teams.md), epic #450): a leader, one
+- Provider-neutral, daemon-owned background jobs: accepted contract in
+  [ADR 0127](decisions/0127-daemon-background-tasks.md) records the leader-defined
+  registry, executor/lease, transactional completion and owner-wake contract.
+  The runtime foundation includes transactional registry/output/quotas and native
+  macOS supervisor/lease and a delegated, isolated Linux cgroup executor,
+  permission/IPC/managed-child integration and durable owner-wake implementation
+  with isolated and fake-provider tests. The Ubuntu arm64 reference guest passes
+  real-helper crash/cleanup, Host/IPC and staged-runtime checks; Linux admission
+  still requires its documented systemd/namespace capabilities. Provider migration
+  (including enforced Claude blocking), shared UI
+  and integration acceptance remain gates; this is not a completed product claim.
+
+- Agent teams ([ADR 0114](decisions/0114-agent-teams.md), epic #450): a leader, one
   to five developers and a Claude reviewer on one goal, with tasks, lanes, per-task
   review, decisions on the team page and a digest instead of status messages. Each
   step of #450 moves its part to Implemented.
@@ -634,23 +981,42 @@ and CLI retain complete reconciliation; older daemon replies remain compatible.
   controls, based on actual runtime retention and occupancy rather than a shared
   timeout. Native boundary-only compaction needs provider capability verification.
 
+- Linux machine follow-ups to #419: the hosted service entitlement issued by
+  the private auth service (Desktop fails closed until a session names it, D-4), and
+  installing or updating the daemon on a remote host over SSH (today Connections
+  shows such a host as "Daemon not installed"; see `linux-headless-daemon.md`).
 - Deployment and production operation of the versioned cloud Control API.
 - Entitlements and organization-aware session policy beyond personal workspaces.
 - KétRouter client integration and cloud services.
-- Push/background delivery and a lower-latency relay transport beyond bounded
+- Push/background delivery and a lower-latency hosted service transport beyond bounded
   authenticated polling.
-- WebRTC DataChannel transport for remote Desktop and mobile clients (direct, then
-  TURN, then the HTTPS relay) with a forward-only relay that no longer stores
-  transcript events; an offline host leaves clients with their own cache
-  ([ADR 0024](decisions/0024-webrtc-transport-and-forward-only-relay.md)). The protocol
-  (capability negotiation, signaling through the relay, peer authentication, frames) is specified
-  in [remote transport](remote-transport.md) and
-  [ADR 0025](decisions/0025-remote-transport-protocol.md).
+- Remote Desktop and mobile clients may read events over an encrypted peer connection or the
+  daemon's message socket instead of events stored by the hosted service; an offline host leaves
+  clients with their own cache. What the daemon does and the limits clients follow are in
+  [serving remote clients](remote-clients.md).
 - Computer use follow-ups ([ADR 0030](decisions/0030-ketplus-computer-agent-app.md)):
   Codex (per-conversation MCP binding), before/after thumbnails in the
   transcript, minimized windows and other Spaces, shortcuts
   that need a key window in background apps, and Windows.
-- Windows daemon/desktop CI once required Qt WebView packages are available.
+- Windows daemon/desktop CI once required Qt WebView packages are available. The daemon is
+  ported in source (named-pipe IPC with per-user access, DACL-protected state, DPAPI credentials,
+  Job Object process trees; see [daemon architecture](daemon-architecture.md)) built with
+  MSVC and covered by the Windows tests listed in [testing](testing.md). Known limits: managed
+  background `process` tasks are unavailable on Windows (`ManagedTaskRuntime` answers
+  `containment_unavailable`; the POSIX job executor is not built), provider script fixtures and
+  the Claude sidecar tests are disabled there, and a Codex `.cmd` wrapper without a resolvable
+  `codex.js` refuses arguments containing quotes or percent signs.
+- Windows Pro desktop (MSVC 2022, Qt 6.11, Ninja): `cmake --preset dev` configures and builds
+  `KetPlus.exe`, `ketplus_daemon.exe`, `ketplusctl.exe` and the Pro test executables.
+  Started headless over ssh (`QT_QPA_PLATFORM=offscreen`), `KetPlus.exe` stays up, auto-starts
+  `ketplus_daemon.exe` and the daemon creates its state under `%LOCALAPPDATA%`. POSIX-only runner
+  code (`apps/runner` and the peer-session runner suite) is not built on Windows; computer use reports itself unsupported and the daemon stores credentials with
+  DPAPI. MSVC links with `/INCREMENTAL:NO` to keep build trees small.
+  Not verified: the desktop shell with a visible window (workspace, Agent Workspace, terminal,
+  Atlas WebView, computer use hidden in the UI); this is a separate check that needs an interactive
+  Windows session. Not passing yet: about 28 Pro tests on Windows (fake shell-script provider
+  fixtures, macOS bundle layouts, POSIX path assumptions), tracked as a separate follow-up; the Codex browser
+  tools and chat Mermaid suites already pass there.
 - Cross-block native selection/accessibility mapping and physical-device
   CPU/frame-time/RSS evidence for the bounded transcript renderer. Giant bodies
   already use block rows and the active presentation window is capped at 300
@@ -766,7 +1132,7 @@ The approved flow is implemented in the native Qt picker and SwiftUI companion.
 Acknowledged switches preserve the conversation anchor/draft, regroup the sidebar
 and update Files/Source Control and file search. Local repositories include both
 recent folders and the daemon’s enrolled catalog. Cross-repository remote use
-requires the companion relay target-grant authorization update; deployment and
+requires the companion hosted service target-grant authorization update; deployment and
 installed-bundle verification remain separate from source/build verification.
 
 
@@ -785,3 +1151,38 @@ receipt identifies a linked artifact, not successful preview validation. Invalid
 missing, oversized or out-of-worktree manifests are unavailable; ambiguous
 relative links after a context change are blocked. No provider invocation is
 required to inspect a receipt.
+
+### Linux conversation attachments (#623)
+
+Remote conversations stage files and clipboard images through the machine-neutral
+backend over SSH and the encrypted hosted service outbox. Uploads advance only after each
+begin/chunk/commit result is confirmed; hosted service `queued` receipts wait for
+`commandCompleted`. Ready attachment IDs accompany start/steer, and failures remain
+visible in the draft. Per-file limits match the local workspace; daemon draft quotas
+remain authoritative. Attachments require an existing conversation/session. See ADR
+0119 for lifecycle and protocol details and ADR 0007 for staging limits.
+
+## Team routing and host evidence (pending review)
+
+The daemon has a versioned evidence-gated risk routing model and coordinator API
+(ADR 0129). Explicit same-team leader decisions can record advisory, verified
+low-risk or reviewer routes without manufacturing reviewer verdicts or completion.
+Authenticated agent tools add host receipt verification and explicit leader route
+decisions. The first independent semantic validator proves only mechanical plain
+prose reflow; unknown/code/material changes remain on the reviewer route. Receipts
+come from fixed host checks at the exact task revision, never caller risk/pass
+assertions. See [team-risk-routing.md](team-risk-routing.md). A route is an audit
+record, not a reviewer verdict, a user approval, completion or merge eligibility.
+Workflow consumption and general semantic verification remain separate work;
+there is no automatic cleanup capability.
+
+## Bounded review lifecycle (pending review)
+
+[ADR 0132](decisions/0132-bounded-review-arbitration.md) defines structured findings,
+leader arbitration after at most two automatic content rounds and separate source
+interruption handling. The implementation adds exact-revision consumer guards and separate host recipes
+for nonmandatory prose line-width fixes and unchanged outside-task preference
+deferrals over base/reviewed/current immutable Git objects. Unsupported, mandatory
+or material changes still require reviewer. Native validation follows
+`docs/testing.md`; independent review remains pending. This is not general
+automatic finding closure or resource cleanup.

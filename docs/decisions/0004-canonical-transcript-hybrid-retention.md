@@ -1,8 +1,7 @@
 # ADR 0004: Canonical transcript with hybrid retention
 
-Status: accepted; the cloud hot replica is superseded by
-[ADR 0024](0024-webrtc-transport-and-forward-only-relay.md) for hosts and clients that
-negotiate its transport
+Status: accepted; the cloud hot replica is superseded for hosts and clients that
+negotiate event forwarding
 
 ## Decision
 
@@ -23,7 +22,7 @@ that page directly from the daemon. Live events resume strictly after the page's
 
 - App launch cost is bounded by three turns instead of total conversation size.
 - Claude, Cursor, Codex and KétRouter adapters must normalize into the same event taxonomy.
-- Relay operators cannot read or semantically compact encrypted content; semantic compaction remains
+- Service operators cannot read or semantically compact encrypted content; semantic compaction remains
   a daemon concern.
 - Data older than 24 hours is unavailable remotely while the authoritative Mac is offline unless a
   future user-approved archival tier is introduced.

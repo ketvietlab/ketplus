@@ -32,7 +32,7 @@ QJsonObject SessionHost::setSessionArchived(const QJsonObject& request) {
     if (!archived.isBool())
         return error(QStringLiteral("invalid_payload"),
                      QStringLiteral("`archived` must be true or false."));
-    // ADR 0112: a member leaves its team before it is archived.
+    // ADR 0114: a member leaves its team before it is archived.
     if (archived.toBool())
         if (const auto refused = teams_->archiveRefusal(session->stored.id))
             return error(refused->code, refused->message);

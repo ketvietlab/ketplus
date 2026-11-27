@@ -1,9 +1,9 @@
 #include "cloud/CloudCrypto.h"
+#include "cloud/CryptoPrimitives.h"
 
 #include <QCryptographicHash>
 #include <QDateTime>
 #include <QJsonArray>
-#include <QJsonDocument>
 
 #include <openssl/err.h>
 #include <openssl/evp.h>
@@ -18,17 +18,8 @@ namespace {
 using PKey = std::unique_ptr<EVP_PKEY, decltype(&EVP_PKEY_free)>;
 using PKeyContext = std::unique_ptr<EVP_PKEY_CTX, decltype(&EVP_PKEY_CTX_free)>;
 using CipherContext = std::unique_ptr<EVP_CIPHER_CTX, decltype(&EVP_CIPHER_CTX_free)>;
-using DigestContext = std::unique_ptr<EVP_MD_CTX, decltype(&EVP_MD_CTX_free)>;
 
-QString opensslError(const QString& fallback) {
-    const unsigned long code = ERR_get_error();
-    if (code == 0) {
-        return fallback;
-    }
-    char buffer[256]{};
-    ERR_error_string_n(code, buffer, sizeof(buffer));
-    return QStringLiteral("%1 (%2)").arg(fallback, QString::fromLatin1(buffer));
-}
+using control_crypto::opensslError;
 
 QByteArray randomBytes(const int size, QString* error) {
     QByteArray bytes(size, Qt::Uninitialized);
@@ -41,15 +32,18 @@ QByteArray randomBytes(const int size, QString* error) {
     return bytes;
 }
 
-PKey rawPrivate(const QByteArray& raw, const int type) {
-    return PKey(EVP_PKEY_new_raw_private_key(
-                    type, nullptr, reinterpret_cast<const unsigned char*>(raw.constData()),
-                    static_cast<size_t>(raw.size())),
-                EVP_PKEY_free);
+// X25519 agreement keys for derive(). Every Ed25519 key goes through
+// ketplus_control_crypto_primitives.
+PKey x25519PrivateKey(const QByteArray& raw) {
+    return PKey(
+        EVP_PKEY_new_raw_private_key(EVP_PKEY_X25519, nullptr,
+                                     reinterpret_cast<const unsigned char*>(raw.constData()),
+                                     static_cast<size_t>(raw.size())),
+        EVP_PKEY_free);
 }
 
-PKey rawPublic(const QByteArray& raw, const int type) {
-    return PKey(EVP_PKEY_new_raw_public_key(type, nullptr,
+PKey x25519PublicKey(const QByteArray& raw) {
+    return PKey(EVP_PKEY_new_raw_public_key(EVP_PKEY_X25519, nullptr,
                                             reinterpret_cast<const unsigned char*>(raw.constData()),
                                             static_cast<size_t>(raw.size())),
                 EVP_PKEY_free);
@@ -155,26 +149,19 @@ QByteArray aesGcmDecrypt(const QByteArray& ciphertext, const QByteArray& aad, co
 CloudCrypto::CloudCrypto(CredentialStore* store) : store_(store) {}
 
 QByteArray CloudCrypto::base64Url(const QByteArray& value) {
-    return value.toBase64(QByteArray::Base64UrlEncoding | QByteArray::OmitTrailingEquals);
+    return control_crypto::base64Url(value);
 }
 
 QByteArray CloudCrypto::fromBase64Url(const QString& value) {
-    return QByteArray::fromBase64(value.toLatin1(), QByteArray::Base64UrlEncoding);
+    return control_crypto::fromBase64Url(value);
 }
 
 QString CloudCrypto::keyFingerprint(const QJsonObject& keys) {
-    const QByteArray signing =
-        fromBase64Url(keys.value(QStringLiteral("signingPublicKey")).toString());
-    const QByteArray agreement =
-        fromBase64Url(keys.value(QStringLiteral("agreementPublicKey")).toString());
-    if (signing.size() != 32 || agreement.size() != 32)
-        return {};
-    return QString::fromLatin1(
-        base64Url(QCryptographicHash::hash(signing + agreement, QCryptographicHash::Sha256)));
+    return control_crypto::keyFingerprint(keys);
 }
 
 QByteArray CloudCrypto::canonical(const QJsonArray& values) {
-    return QJsonDocument(values).toJson(QJsonDocument::Compact);
+    return control_crypto::canonical(values);
 }
 
 QByteArray CloudCrypto::privateKey(const QString& account, const int keyType, QString* error) {
@@ -188,44 +175,15 @@ QByteArray CloudCrypto::privateKey(const QString& account, const int keyType, QS
     }
     if (!held.isEmpty())
         return held;
-    PKeyContext context(EVP_PKEY_CTX_new_id(keyType, nullptr), EVP_PKEY_CTX_free);
-    EVP_PKEY* generated = nullptr;
-    if (!context || EVP_PKEY_keygen_init(context.get()) != 1 ||
-        EVP_PKEY_keygen(context.get(), &generated) != 1) {
-        if (error != nullptr)
-            *error = opensslError(QStringLiteral("Unable to generate device key."));
+    held = control_crypto::generatePrivateKey(keyType, error);
+    if (held.isEmpty() || !store_->write(account, held, error))
         return {};
-    }
-    PKey key(generated, EVP_PKEY_free);
-    size_t size = 0;
-    if (EVP_PKEY_get_raw_private_key(key.get(), nullptr, &size) != 1)
-        return {};
-    held.resize(static_cast<qsizetype>(size));
-    if (EVP_PKEY_get_raw_private_key(key.get(), reinterpret_cast<unsigned char*>(held.data()),
-                                     &size) != 1 ||
-        !store_->write(account, held, error)) {
-        return {};
-    }
     return held;
 }
 
 QByteArray CloudCrypto::publicKey(const QByteArray& privateBytes, const int keyType,
                                   QString* error) {
-    PKey key = rawPrivate(privateBytes, keyType);
-    size_t size = 0;
-    if (!key || EVP_PKEY_get_raw_public_key(key.get(), nullptr, &size) != 1) {
-        if (error != nullptr)
-            *error = opensslError(QStringLiteral("Unable to derive public key."));
-        return {};
-    }
-    QByteArray result(static_cast<qsizetype>(size), Qt::Uninitialized);
-    if (EVP_PKEY_get_raw_public_key(key.get(), reinterpret_cast<unsigned char*>(result.data()),
-                                    &size) != 1) {
-        if (error != nullptr)
-            *error = opensslError(QStringLiteral("Unable to derive public key."));
-        return {};
-    }
-    return result;
+    return control_crypto::publicKey(privateBytes, keyType, error);
 }
 
 QJsonObject CloudCrypto::publicKeys(QString* error) {
@@ -246,21 +204,7 @@ QJsonObject CloudCrypto::publicKeys(QString* error) {
 QByteArray CloudCrypto::sign(const QByteArray& bytes, QString* error) {
     const QByteArray raw =
         privateKey(QStringLiteral("signing-private-key"), EVP_PKEY_ED25519, error);
-    PKey key = rawPrivate(raw, EVP_PKEY_ED25519);
-    DigestContext context(EVP_MD_CTX_new(), EVP_MD_CTX_free);
-    size_t size = 64;
-    QByteArray signature(64, Qt::Uninitialized);
-    if (!key || !context ||
-        EVP_DigestSignInit(context.get(), nullptr, nullptr, nullptr, key.get()) != 1 ||
-        EVP_DigestSign(context.get(), reinterpret_cast<unsigned char*>(signature.data()), &size,
-                       reinterpret_cast<const unsigned char*>(bytes.constData()),
-                       bytes.size()) != 1) {
-        if (error != nullptr)
-            *error = opensslError(QStringLiteral("Unable to sign content."));
-        return {};
-    }
-    signature.resize(static_cast<qsizetype>(size));
-    return signature;
+    return control_crypto::signEd25519(raw, bytes, error);
 }
 
 QString CloudCrypto::sessionKeyAccount(const QString& sessionId, const qint64 generation,
@@ -341,19 +285,12 @@ QByteArray CloudCrypto::decrypt(const QJsonObject& content, const QByteArray& as
             *error = QStringLiteral("The encrypted envelope is malformed.");
         return {};
     }
-    PKey key = rawPublic(senderSigningKey, EVP_PKEY_ED25519);
-    DigestContext context(EVP_MD_CTX_new(), EVP_MD_CTX_free);
     QByteArray signingInput = associatedData;
     signingInput.append('\0');
     signingInput.append(nonce);
     signingInput.append(ciphertext);
     signingInput.append(tag);
-    if (!key || !context || signature.size() != 64 ||
-        EVP_DigestVerifyInit(context.get(), nullptr, nullptr, nullptr, key.get()) != 1 ||
-        EVP_DigestVerify(
-            context.get(), reinterpret_cast<const unsigned char*>(signature.constData()),
-            signature.size(), reinterpret_cast<const unsigned char*>(signingInput.constData()),
-            signingInput.size()) != 1) {
+    if (!control_crypto::verifyEd25519(senderSigningKey, signingInput, signature)) {
         if (error != nullptr)
             *error = QStringLiteral("Remote signature verification failed.");
         return {};
@@ -366,11 +303,19 @@ QByteArray CloudCrypto::decrypt(const QJsonObject& content, const QByteArray& as
 QByteArray CloudCrypto::decryptSealed(const QJsonObject& content, const QByteArray& associatedData,
                                       const QByteArray& senderSigningKey, const QString& requestId,
                                       QString* error) {
+    return decryptSealedAs(content, associatedData, senderSigningKey, requestId,
+                           QStringLiteral("session-create:%1").arg(requestId), error);
+}
+
+QByteArray CloudCrypto::decryptSealedAs(const QJsonObject& content,
+                                        const QByteArray& associatedData,
+                                        const QByteArray& senderSigningKey,
+                                        const QString& requestId, const QString& keyId,
+                                        QString* error) {
     if (content.value(QStringLiteral("version")).toInt() != 1 ||
         content.value(QStringLiteral("algorithm")).toString() != QStringLiteral("A256GCM") ||
         content.value(QStringLiteral("keyEpoch")).toInt() != 1 ||
-        content.value(QStringLiteral("keyId")).toString() !=
-            QStringLiteral("session-create:%1").arg(requestId)) {
+        content.value(QStringLiteral("keyId")).toString() != keyId) {
         if (error)
             *error = QStringLiteral("The sealed command envelope is invalid.");
         return {};
@@ -388,19 +333,13 @@ QByteArray CloudCrypto::decryptSealed(const QJsonObject& content, const QByteArr
             *error = QStringLiteral("The sealed command envelope is invalid.");
         return {};
     }
-    PKey signing = rawPublic(senderSigningKey, EVP_PKEY_ED25519);
-    DigestContext context(EVP_MD_CTX_new(), EVP_MD_CTX_free);
     QByteArray input = associatedData;
     input.append('\0');
     input.append(nonce);
     input.append(ciphertext);
     input.append(tag);
-    if (!signing || !context || ephemeral.size() != 32 || signature.size() != 64 ||
-        EVP_DigestVerifyInit(context.get(), nullptr, nullptr, nullptr, signing.get()) != 1 ||
-        EVP_DigestVerify(
-            context.get(), reinterpret_cast<const unsigned char*>(signature.constData()),
-            signature.size(), reinterpret_cast<const unsigned char*>(input.constData()),
-            input.size()) != 1) {
+    if (ephemeral.size() != 32 ||
+        !control_crypto::verifyEd25519(senderSigningKey, input, signature)) {
         if (error)
             *error = QStringLiteral("Remote signature verification failed.");
         return {};
@@ -417,6 +356,28 @@ QJsonObject CloudCrypto::encryptSealed(const QByteArray& plaintext,
                                        const QString& requestId, const QString& recipientDeviceId,
                                        const int recipientKeyVersion, const QString& senderDeviceId,
                                        const int senderKeyVersion, QString* error) {
+    return encryptSealedAs(plaintext, associatedData, recipientAgreementKey, requestId,
+                           QStringLiteral("session-create:%1").arg(requestId), recipientDeviceId,
+                           recipientKeyVersion, senderDeviceId, senderKeyVersion, error);
+}
+
+QJsonObject
+CloudCrypto::encryptSealedAs(const QByteArray& plaintext, const QByteArray& associatedData,
+                             const QByteArray& recipientAgreementKey, const QString& requestId,
+                             const QString& keyId, const QString& recipientDeviceId,
+                             const int recipientKeyVersion, const QString& senderDeviceId,
+                             const int senderKeyVersion, QString* error) {
+    return encryptSealedBound(
+        plaintext, [&associatedData](const QJsonObject&) { return associatedData; },
+        recipientAgreementKey, requestId, keyId, recipientDeviceId, recipientKeyVersion,
+        senderDeviceId, senderKeyVersion, error);
+}
+
+QJsonObject CloudCrypto::encryptSealedBound(
+    const QByteArray& plaintext, const SealedAssociatedData& associatedDataFor,
+    const QByteArray& recipientAgreementKey, const QString& requestId, const QString& keyId,
+    const QString& recipientDeviceId, const int recipientKeyVersion, const QString& senderDeviceId,
+    const int senderKeyVersion, QString* error) {
     PKeyContext context(EVP_PKEY_CTX_new_id(EVP_PKEY_X25519, nullptr), EVP_PKEY_CTX_free);
     EVP_PKEY* generated = nullptr;
     if (!context || EVP_PKEY_keygen_init(context.get()) != 1 ||
@@ -432,6 +393,17 @@ QJsonObject CloudCrypto::encryptSealed(const QByteArray& plaintext,
                                     reinterpret_cast<unsigned char*>(publicBytes.data()),
                                     &publicSize) != 1)
         return {};
+    QJsonObject envelope{
+        {QStringLiteral("version"), 1},
+        {QStringLiteral("algorithm"), QStringLiteral("A256GCM")},
+        {QStringLiteral("keyId"), keyId},
+        {QStringLiteral("keyEpoch"), 1},
+        {QStringLiteral("senderDeviceId"), senderDeviceId},
+        {QStringLiteral("senderKeyVersion"), senderKeyVersion},
+        {QStringLiteral("recipientDeviceId"), recipientDeviceId},
+        {QStringLiteral("recipientKeyVersion"), recipientKeyVersion},
+        {QStringLiteral("ephemeralPublicKey"), QString::fromLatin1(base64Url(publicBytes))}};
+    const QByteArray associatedData = associatedDataFor(envelope);
     const QByteArray key = derive(privateBytes, recipientAgreementKey, requestId.toUtf8(), error);
     const QByteArray nonce = randomBytes(12, error);
     QByteArray tag;
@@ -444,25 +416,17 @@ QJsonObject CloudCrypto::encryptSealed(const QByteArray& plaintext,
     const QByteArray signature = sign(input, error);
     if (key.size() != 32 || nonce.size() != 12 || tag.size() != 16 || signature.size() != 64)
         return {};
-    return {{QStringLiteral("version"), 1},
-            {QStringLiteral("algorithm"), QStringLiteral("A256GCM")},
-            {QStringLiteral("keyId"), QStringLiteral("session-create:%1").arg(requestId)},
-            {QStringLiteral("keyEpoch"), 1},
-            {QStringLiteral("senderDeviceId"), senderDeviceId},
-            {QStringLiteral("senderKeyVersion"), senderKeyVersion},
-            {QStringLiteral("recipientDeviceId"), recipientDeviceId},
-            {QStringLiteral("recipientKeyVersion"), recipientKeyVersion},
-            {QStringLiteral("ephemeralPublicKey"), QString::fromLatin1(base64Url(publicBytes))},
-            {QStringLiteral("nonce"), QString::fromLatin1(base64Url(nonce))},
-            {QStringLiteral("ciphertext"), QString::fromLatin1(base64Url(ciphertext))},
-            {QStringLiteral("tag"), QString::fromLatin1(base64Url(tag))},
-            {QStringLiteral("signature"), QString::fromLatin1(base64Url(signature))}};
+    envelope.insert(QStringLiteral("nonce"), QString::fromLatin1(base64Url(nonce)));
+    envelope.insert(QStringLiteral("ciphertext"), QString::fromLatin1(base64Url(ciphertext)));
+    envelope.insert(QStringLiteral("tag"), QString::fromLatin1(base64Url(tag)));
+    envelope.insert(QStringLiteral("signature"), QString::fromLatin1(base64Url(signature)));
+    return envelope;
 }
 
 QByteArray CloudCrypto::derive(const QByteArray& privateBytes, const QByteArray& peerPublicKey,
                                const QByteArray& salt, QString* error) {
-    PKey privateKey = rawPrivate(privateBytes, EVP_PKEY_X25519);
-    PKey peer = rawPublic(peerPublicKey, EVP_PKEY_X25519);
+    PKey privateKey = x25519PrivateKey(privateBytes);
+    PKey peer = x25519PublicKey(peerPublicKey);
     PKeyContext deriveContext(EVP_PKEY_CTX_new(privateKey.get(), nullptr), EVP_PKEY_CTX_free);
     size_t sharedSize = 0;
     if (!privateKey || !peer || !deriveContext || EVP_PKEY_derive_init(deriveContext.get()) != 1 ||
@@ -603,15 +567,7 @@ bool CloudCrypto::importSessionKey(const QJsonObject& envelope, const QByteArray
     input.append(bytes("nonce"));
     input.append(bytes("ciphertext"));
     input.append(bytes("tag"));
-    PKey sender = rawPublic(senderSigningKey, EVP_PKEY_ED25519);
-    DigestContext verify(EVP_MD_CTX_new(), EVP_MD_CTX_free);
-    const auto signature = bytes("signature");
-    if (!sender || !verify ||
-        EVP_DigestVerifyInit(verify.get(), nullptr, nullptr, nullptr, sender.get()) != 1 ||
-        EVP_DigestVerify(
-            verify.get(), reinterpret_cast<const unsigned char*>(signature.constData()),
-            signature.size(), reinterpret_cast<const unsigned char*>(input.constData()),
-            input.size()) != 1) {
+    if (!control_crypto::verifyEd25519(senderSigningKey, input, bytes("signature"))) {
         if (error)
             *error = "Wrapped session key signature verification failed.";
         return false;

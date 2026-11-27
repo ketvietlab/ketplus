@@ -32,3 +32,25 @@ FetchContent_MakeAvailable(ketplus_libdatachannel)
 
 # Product installers ship the linked daemon, not upstream development libraries or headers.
 set_property(DIRECTORY "${ketplus_libdatachannel_SOURCE_DIR}" PROPERTY EXCLUDE_FROM_ALL TRUE)
+
+# ketplus_peer_link: the session-host independent half of apps/daemon/src/transport (ADR 0025),
+# shared by the daemon (answering side) and processes that create the offer. It depends on QtCore
+# and libdatachannel only. The files stay where they are; consumers include "transport/<file>.h".
+if(NOT TARGET ketplus_peer_link)
+    find_package(Qt6 REQUIRED COMPONENTS Core)
+    set(_ketplus_transport "${CMAKE_CURRENT_LIST_DIR}/../apps/daemon/src/transport")
+    add_library(ketplus_peer_link STATIC
+        "${_ketplus_transport}/FrameCodec.cpp" "${_ketplus_transport}/FrameCodec.h"
+        "${_ketplus_transport}/PeerLink.h"
+        "${_ketplus_transport}/SelectedPath.h"
+        "${_ketplus_transport}/SendQueue.h"
+        "${_ketplus_transport}/WebRtcPeerLink.cpp" "${_ketplus_transport}/WebRtcPeerLink.h")
+    set_target_properties(ketplus_peer_link PROPERTIES AUTOMOC ON)
+    target_include_directories(ketplus_peer_link PUBLIC
+        "$<BUILD_INTERFACE:${CMAKE_CURRENT_LIST_DIR}/../apps/daemon/src>")
+    target_link_libraries(ketplus_peer_link PUBLIC Qt6::Core LibDataChannel::LibDataChannelStatic)
+    if(COMMAND ketplus_enable_warnings)
+        ketplus_enable_warnings(ketplus_peer_link)
+    endif()
+    unset(_ketplus_transport)
+endif()

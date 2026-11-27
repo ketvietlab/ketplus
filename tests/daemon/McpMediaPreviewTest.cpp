@@ -51,6 +51,10 @@ class McpMediaPreviewTest final : public QObject {
 #ifdef Q_OS_WIN
         if (fault == "unreadable")
             QSKIP("This permission-denial fixture requires POSIX file modes.");
+        // QFile::link creates a .lnk shortcut here, not a symbolic link, so these fixtures do
+        // not build the link they name.
+        if (fault.endsWith("symlink"))
+            QSKIP("This fixture requires POSIX symbolic links; QFile::link makes shortcuts.");
 #endif
         QTemporaryDir directory;
         QVERIFY(directory.isValid());

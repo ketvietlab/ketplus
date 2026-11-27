@@ -1,10 +1,12 @@
 #pragma once
+#include <optional>
 
 #include "agent/AgentSessionManager.h"
 #include <functional>
 
 #include <QDateTime>
 #include <QJsonArray>
+#include <QJsonObject>
 #include <QJsonValue>
 #include <QSet>
 #include <QStringList>
@@ -17,6 +19,8 @@ struct AgentSessionManager::Session final {
     QString path;
     // Stable birth anchor remains path; navigation follows the acknowledged execution root.
     QString executionPath;
+    std::optional<QString> sidebarRepository;
+    QString sidebarRepositoryFallback;
     QString executionBranch;
     qint64 executionRevision{0};
     QString threadId;
@@ -29,13 +33,6 @@ struct AgentSessionManager::Session final {
     QString agentTurnTitle;
     bool agentTurnReply{false};
     bool customTitle{false};
-    // The user's labels, as the daemon stores them (`session.tags/1`).
-    QStringList tags;
-    // The list the user's changes add up to while the daemon is still storing an earlier one.
-    QStringList tagsWanted;
-    bool tagSyncPending{false};
-    // #429: labels chosen before the first turn, sent once the daemon knows the conversation.
-    bool tagsAwaitStart{false};
     // #125: the last turn ended asking the user to approve or decide ("Waiting for you").
     bool awaitingReply{false};
     bool archived{false};
@@ -66,9 +63,22 @@ struct AgentSessionManager::Session final {
     // last reading stands in until the next turn. Rows: {id,label,usedPercent,resetsAt}.
     QVariantList planLimits;
     QVariantMap sessionUsage;
-    // The daemon's report of the provider's background shells and agents; never persisted,
-    // since a restarted provider no longer runs them.
+    // Owner-scoped presentation cache. The durable daemon registry owns managed jobs;
+    // a bounded event projection never replaces membership learned through pagination.
     QVariantList backgroundTasks;
+    QVariantList backgroundTaskProjection;
+    QVariantMap backgroundTaskPage;
+    QSet<QString> backgroundTaskMetadataReads;
+    bool backgroundTaskLoading{false};
+    bool backgroundTaskRefreshAgain{false};
+    int backgroundTaskCursorRetries{0};
+    // The daemon's owner summary of every job this turn waits on (ADR 0127 §8), beyond the
+    // bounded rows above; unknown from a daemon that sends none.
+    QVariantMap daemonJobSummary;
+    bool daemonJobSummaryKnown{false};
+    // What the sidebar last heard of these jobs (backgroundJobSummary), so a change to the
+    // jobs republishes the conversation list only when its row would change.
+    QVariantMap backgroundJobSummary;
     QString pendingPrompt;
     // Pairs the locally shown prompt with its journaled user.message echo.
     QString pendingClientMessageId;
@@ -191,6 +201,14 @@ struct AgentSessionManager::Session final {
     QSet<QString> copyTurns;
     QSet<QString> copyCursors;
 };
+
+// The jobs a conversation still waits on, as its sidebar row and header word them:
+// liveJobs (queued through stopping, but not a job stopping toward cancellation, which
+// wakes no one), queuedJobs and jobTitle, the job the row names. Empty when none is live.
+// From the cached rows, or from the daemon's owner summary ({live_jobs, queued_jobs,
+// job_title}).
+QVariantMap backgroundJobSummary(const QVariantList& tasks);
+QVariantMap backgroundJobSummary(const QJsonObject& daemonSummary);
 
 // A daemon journal timestamp (UTC ISO 8601 with milliseconds) as ms since epoch, 0 if invalid.
 inline qint64 daemonTimestamp(const QString& value) {

@@ -3,12 +3,15 @@
 #include "runtime/ApprovalBroker.h"
 
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QJsonDocument>
+#include <QPointer>
 #include <QProcess>
 #include <QProcessEnvironment>
 #include <QRegularExpression>
 #include <QStandardPaths>
+#include <QThreadPool>
 #include <QUrl>
 #include <algorithm>
 
@@ -217,20 +220,183 @@ QString SessionHost::worktreeCatalogRoot(const Session& session) const {
     return !root.isEmpty() && !commonDirectory(root).isEmpty() ? root : QString{};
 }
 
+void SessionHost::rememberRepositoryIdentity(const QString& worktree) {
+    if (!QFileInfo(worktree).isDir() || journal_->worktreeRepositories().contains(worktree))
+        return;
+    QThreadPool::globalInstance()->start([guard = QPointer<SessionHost>(this), worktree] {
+        const QString common = commonDirectory(worktree);
+        if (QFileInfo(common).fileName() != ".git")
+            return;
+        QMetaObject::invokeMethod(
+            guard,
+            [guard, worktree, common] {
+                guard->journal_->rememberWorktree(worktree);
+                guard->journal_->rememberWorktreeRepository(worktree,
+                                                            QFileInfo(common).absolutePath());
+            },
+            Qt::QueuedConnection);
+    });
+}
+
+std::optional<QString> SessionHost::sidebarRepositoryAtCreation(const QString& path) const {
+    const QFileInfo origin(path);
+    if (!origin.isDir() || !origin.isReadable())
+        return std::nullopt;
+    const auto canonicalOrigin = origin.canonicalFilePath();
+    if (canonicalOrigin.isEmpty())
+        return std::nullopt;
+    QDir directory(canonicalOrigin);
+    // No Git process on the session-create path. A linked checkout's commondir is durable
+    // evidence of its repository, while the absence of .git through the ancestors is no-repo.
+    do {
+        if (QFileInfo(directory.filePath(QStringLiteral("HEAD"))).isFile() &&
+            QFileInfo(directory.filePath(QStringLiteral("objects"))).isDir())
+            return directory.canonicalPath();
+        const QFileInfo dotGit(directory.filePath(QStringLiteral(".git")));
+        if (dotGit.isDir())
+            return directory.canonicalPath();
+        if (dotGit.exists() || dotGit.isSymLink()) {
+            QFile pointer(dotGit.filePath());
+            if (!dotGit.isFile() || pointer.size() > 4096 || !pointer.open(QIODevice::ReadOnly))
+                return std::nullopt;
+            const auto line = QString::fromUtf8(pointer.readLine()).trimmed();
+            if (!line.startsWith(QLatin1String("gitdir:")))
+                return std::nullopt;
+            const QDir gitDirectory(directory.absoluteFilePath(line.mid(7).trimmed()));
+            QFile common(gitDirectory.filePath(QStringLiteral("commondir")));
+            if (common.exists()) {
+                if (common.size() > 4096 || !common.open(QIODevice::ReadOnly))
+                    return std::nullopt;
+                const auto commonPath = QString::fromUtf8(common.readLine()).trimmed();
+                if (commonPath.isEmpty())
+                    return std::nullopt;
+                const QFileInfo root(gitDirectory.absoluteFilePath(commonPath));
+                if (!root.isDir())
+                    return std::nullopt;
+                const auto canonical = root.canonicalFilePath();
+                if (canonical.isEmpty())
+                    return std::nullopt;
+                return QFileInfo(canonical).fileName() == QLatin1String(".git")
+                           ? QFileInfo(canonical).absolutePath()
+                           : canonical;
+            }
+            // A non-linked checkout may keep its Git directory elsewhere.
+            if (QFileInfo(gitDirectory.filePath(QStringLiteral("HEAD"))).isFile())
+                return directory.canonicalPath();
+            return std::nullopt;
+        }
+    } while (directory.cdUp());
+    return QStringLiteral("");
+}
+
+SessionHost::WorktreeListing SessionHost::readWorktreeListing(const QString& sessionWorktree,
+                                                              const QString& recordedRoot,
+                                                              const QString& requested) {
+    WorktreeListing listing;
+    listing.sessionWorktree = sessionWorktree;
+    listing.recordedRoot = recordedRoot;
+    listing.requested = requested;
+    listing.sessionExists = QFileInfo(sessionWorktree).isDir();
+    // worktreeCatalogRoot, without the journal: a conversation outlives its checkout.
+    if (listing.sessionExists) {
+        listing.sessionCommon = commonDirectory(sessionWorktree);
+        listing.sessionCatalogRoot = sessionWorktree;
+        listing.sessionCatalogCommon = listing.sessionCommon;
+    } else if (!recordedRoot.isEmpty()) {
+        listing.sessionCatalogCommon = commonDirectory(recordedRoot);
+        if (!listing.sessionCatalogCommon.isEmpty())
+            listing.sessionCatalogRoot = recordedRoot;
+    }
+    listing.catalogRoot =
+        requested.isEmpty() ? listing.sessionCatalogRoot : normalizedWorktree(requested);
+    listing.catalogCommon =
+        requested.isEmpty() ? listing.sessionCatalogCommon : commonDirectory(listing.catalogRoot);
+    if (!listing.catalogRoot.isEmpty() && (requested.isEmpty() || !listing.catalogCommon.isEmpty()))
+        listing.entries = worktrees(listing.catalogRoot);
+    return listing;
+}
+
 QJsonObject SessionHost::sessionWorktrees(const QJsonObject& request) {
     Session* session = nullptr;
     const auto rejected = checkedSession(request, &session);
     if (!rejected.isEmpty())
         return rejected;
     const auto payload = request.value("payload").toObject();
+    const auto worktree = session->stored.worktreePath;
+    const auto recorded =
+        QFileInfo(worktree).isDir() ? QString{} : journal_->worktreeRepositories().value(worktree);
+    const auto requested = payload.value("repository_path").toString();
+    // A listing read before the conversation moved describes another checkout.
+    const auto* prefetched = prefetchedWorktreeListing_;
+    if (prefetched != nullptr && prefetched->sessionWorktree == worktree &&
+        prefetched->recordedRoot == recorded && prefetched->requested == requested)
+        return worktreePage(*session, payload, *prefetched);
+    return worktreePage(*session, payload, readWorktreeListing(worktree, recorded, requested));
+}
+
+void SessionHost::sessionWorktreesDeferred(const QJsonObject& request, const QString& clientId,
+                                           CommandCallback done) {
+    const auto session = sessions_.constFind(request.value("session_id").toString());
+    if (session == sessions_.cend()) {
+        done(handleCommand(request, clientId));
+        return;
+    }
+    const auto worktree = session->stored.worktreePath;
+    const auto recorded =
+        QFileInfo(worktree).isDir() ? QString{} : journal_->worktreeRepositories().value(worktree);
+    const auto requested = request.value("payload").toObject().value("repository_path").toString();
+    // Git lists the worktrees on the pool; handleCommand then answers with every check it
+    // makes for any other command, using that listing when the conversation has not moved.
+    worktreeListingReads_.start([guard = QPointer<SessionHost>(this), request, clientId,
+                                 done = std::move(done), worktree, recorded, requested]() mutable {
+        auto listing = readWorktreeListing(worktree, recorded, requested);
+        QMetaObject::invokeMethod(
+            guard,
+            [guard, request, clientId, done = std::move(done),
+             listing = std::move(listing)]() mutable {
+                // The conversation moved while Git listed its old checkout: list where it is
+                // now, again off this thread, rather than read Git here.
+                const auto current =
+                    guard->sessions_.constFind(request.value("session_id").toString());
+                if (current != guard->sessions_.cend()) {
+                    const auto now = current->stored.worktreePath;
+                    const auto recordedNow =
+                        QFileInfo(now).isDir() ? QString{}
+                                               : guard->journal_->worktreeRepositories().value(now);
+                    if (now != listing.sessionWorktree || recordedNow != listing.recordedRoot) {
+                        guard->sessionWorktreesDeferred(request, clientId, std::move(done));
+                        return;
+                    }
+                }
+                guard->prefetchedWorktreeListing_ = &listing;
+                const auto result = guard->handleCommand(request, clientId);
+                guard->prefetchedWorktreeListing_ = nullptr;
+                done(result);
+            },
+            Qt::QueuedConnection);
+    });
+}
+
+QJsonObject SessionHost::worktreePage(Session& current, const QJsonObject& payload,
+                                      const WorktreeListing& listing) {
+    Session* const session = &current;
+    // What worktreeCatalogRoot records for a checkout that exists.
+    const auto rememberSessionRepository = [this, &listing] {
+        if (listing.sessionExists && QFileInfo(listing.sessionCommon).fileName() == ".git") {
+            journal_->rememberWorktree(listing.sessionWorktree);
+            journal_->rememberWorktreeRepository(listing.sessionWorktree,
+                                                 QFileInfo(listing.sessionCommon).absolutePath());
+        }
+    };
     // Trusted local IPC may list another repository's worktrees before choosing one
     // (ADR 0105). Cloud commands strip repository_path, so phones keep their catalog.
-    const auto requested = payload.value("repository_path").toString();
-    const auto catalogRoot =
-        requested.isEmpty() ? worktreeCatalogRoot(*session) : normalizedWorktree(requested);
-    if (!requested.isEmpty() && (catalogRoot.isEmpty() || commonDirectory(catalogRoot).isEmpty()))
+    const auto requested = listing.requested;
+    if (requested.isEmpty())
+        rememberSessionRepository();
+    const auto catalogRoot = listing.catalogRoot;
+    if (!requested.isEmpty() && (catalogRoot.isEmpty() || listing.catalogCommon.isEmpty()))
         return failure("invalid_repository", "Select a Git repository.");
-    auto entries = catalogRoot.isEmpty() ? QJsonArray{} : worktrees(catalogRoot);
+    auto entries = listing.entries;
     if (entries.isEmpty())
         return failure("worktree_unavailable", "The repository's worktrees could not be read.");
     const auto touched =
@@ -238,15 +404,16 @@ QJsonObject SessionHost::sessionWorktrees(const QJsonObject& request) {
     QList<QJsonObject> ranked;
     QString currentBranch;
     const auto search = payload.value("query").toString().trimmed();
-    const auto common = commonDirectory(catalogRoot);
+    const auto common = listing.catalogCommon;
     const auto repositoryRoot =
         QFileInfo(common).fileName() == ".git" ? QFileInfo(common).absolutePath() : QString{};
     // Browsing does not enrol a repository: it joins the catalog, which phones see, only
     // once the conversation switches to it.
     // A conversation whose checkout is gone has no repository to compare with.
-    const auto sessionRoot = requested.isEmpty() ? QString{} : worktreeCatalogRoot(*session);
-    const bool ownRepository =
-        requested.isEmpty() || (!sessionRoot.isEmpty() && common == commonDirectory(sessionRoot));
+    if (!requested.isEmpty())
+        rememberSessionRepository();
+    const bool ownRepository = requested.isEmpty() || (!listing.sessionCatalogRoot.isEmpty() &&
+                                                       common == listing.sessionCatalogCommon);
     for (const auto& value : entries) {
         auto entry = value.toObject();
         const auto path = entry.value("worktree_path").toString();
@@ -336,7 +503,7 @@ void SessionHost::recordWorktreeActivity(Session& session, const QString& type,
             paths.append(v.toObject().value("path").toString());
     if (paths.isEmpty())
         return;
-    const auto entries = worktrees(root);
+    const auto entries = worktreePaths_.checkouts(root);
     for (const auto& path : paths) {
         if (!QFileInfo(path).isAbsolute())
             continue;
@@ -344,8 +511,7 @@ void SessionHost::recordWorktreeActivity(Session& session, const QString& type,
         if (canonical.isEmpty())
             continue;
         QString matched;
-        for (const auto& v : entries) {
-            const auto candidate = v.toObject().value("worktree_path").toString();
+        for (const auto& candidate : entries) {
             if ((canonical == candidate || canonical.startsWith(candidate + '/')) &&
                 candidate.size() > matched.size())
                 matched = candidate;
@@ -370,9 +536,47 @@ void SessionHost::recordWorktreeActivity(Session& session, const QString& type,
 
 QJsonObject SessionHost::switchWorktree(const QJsonObject& request) {
     Session* session = nullptr;
+    QString target;
+    if (const QJsonObject refused = switchRefusal(request, &session, &target); !refused.isEmpty())
+        return refused;
+    return finishSwitch(*session, target, worktreeFacts(target),
+                        request.value("message_id").toString());
+}
+
+SessionHost::WorktreeFacts SessionHost::worktreeFacts(const QString& target) {
+    WorktreeFacts facts;
+    // Local IPC may choose another repository. Cloud commands reach this point only
+    // after resolving a granted opaque catalog target; never trust a remote path.
+    facts.repository = !commonDirectory(target).isEmpty();
+    if (!facts.repository)
+        return facts;
+    for (const auto& entry : worktrees(target)) {
+        if (entry.toObject().value("worktree_path").toString() != target)
+            continue;
+        facts.registered = true;
+        facts.branch = entry.toObject().value("branch").toString();
+    }
+    if (facts.branch.startsWith("refs/heads/"))
+        facts.branch.remove(0, 11);
+    return facts;
+}
+
+QJsonObject SessionHost::finishSwitch(Session& session, const QString& target,
+                                      const WorktreeFacts& facts, const QString& messageId) {
+    if (!facts.repository)
+        return failure("invalid_worktree", "The target must be a Git worktree.");
+    if (!facts.registered)
+        return failure("invalid_worktree", "Select a registered Git worktree root.");
+    return moveSessionWorktree(session, target, messageId, facts.branch);
+}
+
+QJsonObject SessionHost::switchRefusal(const QJsonObject& request, Session** found,
+                                       QString* targetPath) {
+    Session* session = nullptr;
     const auto rejected = checkedSession(request, &session);
     if (!rejected.isEmpty())
         return rejected;
+    *found = session;
     const auto payload = request.value("payload").toObject();
     if (payload.value("expected_context_revision").toInteger(-1) != session->stored.contextRevision)
         return failure("stale_context", "Refresh the conversation's execution context.");
@@ -397,29 +601,24 @@ QJsonObject SessionHost::switchWorktree(const QJsonObject& request) {
     const auto target = normalizedWorktree(payload.value("worktree_path").toString());
     if (target.isEmpty())
         return failure("invalid_worktree", "The target worktree does not exist.");
-    // Local IPC may choose another repository. Cloud commands reach this point only
-    // after resolving a granted opaque catalog target; never trust a remote path.
-    if (commonDirectory(target).isEmpty())
-        return failure("invalid_worktree", "The target must be a Git worktree.");
-    bool found = false;
-    for (const auto& entry : worktrees(target))
-        found |= entry.toObject().value("worktree_path").toString() == target;
-    if (!found)
-        return failure("invalid_worktree", "Select a registered Git worktree root.");
-    return moveSessionWorktree(*session, target, request.value("message_id").toString());
+    *targetPath = target;
+    return {};
 }
 
 QJsonObject SessionHost::moveSessionWorktree(Session& session, const QString& target,
-                                             const QString& messageId) {
+                                             const QString& messageId,
+                                             const std::optional<QString>& knownBranch) {
     const bool changed = target != session.stored.worktreePath;
     const auto revision = session.stored.contextRevision + (changed ? 1 : 0);
-    QString branch;
-    for (const auto& entry : worktrees(target)) {
-        if (entry.toObject().value("worktree_path").toString() == target)
-            branch = entry.toObject().value("branch").toString();
+    QString branch = knownBranch.value_or(QString{});
+    if (!knownBranch) {
+        for (const auto& entry : worktrees(target)) {
+            if (entry.toObject().value("worktree_path").toString() == target)
+                branch = entry.toObject().value("branch").toString();
+        }
+        if (branch.startsWith("refs/heads/"))
+            branch.remove(0, 11);
     }
-    if (branch.startsWith("refs/heads/"))
-        branch.remove(0, 11);
     const QJsonObject result{{"ok", true},
                              {"current_branch", branch},
                              {"session_id", session.stored.id},

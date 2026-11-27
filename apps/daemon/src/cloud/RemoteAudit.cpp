@@ -7,21 +7,18 @@
 namespace ketplus::daemon {
 
 bool remoteCommandMayChange(const QString& kind) {
-    static const QSet<QString> reads{QStringLiteral("transcript.restore_window"),
-                                     QStringLiteral("workspace.files.tree"),
-                                     QStringLiteral("workspace.files.search"),
-                                     QStringLiteral("workspace.files.file"),
-                                     QStringLiteral("workspace.files.diff"),
-                                     QStringLiteral("worktree.branches.read"),
-                                     QStringLiteral("worktree.configuration.read"),
-                                     QStringLiteral("session.configuration.read"),
-                                     QStringLiteral("session.worktrees"),
-                                     QStringLiteral("session.resource.resolve"),
-                                     QStringLiteral("session.task.output"),
-                                     QStringLiteral("session.pending_approvals"),
-                                     QStringLiteral("session.output.read"),
-                                     QStringLiteral("session.media.read"),
-                                     QStringLiteral("atlas.list")};
+    static const QSet<QString> reads{
+        QStringLiteral("transcript.restore_window"), QStringLiteral("workspace.files.tree"),
+        QStringLiteral("workspace.files.search"), QStringLiteral("workspace.files.file"),
+        QStringLiteral("workspace.files.diff"), QStringLiteral("worktree.branches.read"),
+        QStringLiteral("worktree.configuration.read"), QStringLiteral("session.configuration.read"),
+        QStringLiteral("session.worktrees"), QStringLiteral("session.resource.resolve"),
+        QStringLiteral("session.task.output"), QStringLiteral("session.pending_approvals"),
+        QStringLiteral("session.output.read"), QStringLiteral("session.media.read"),
+        QStringLiteral("atlas.list"),
+        // ADR 0116 §4: the team reads.
+        QStringLiteral("team.list"), QStringLiteral("team.get"), QStringLiteral("team.task.get"),
+        QStringLiteral("team.updates.list"), QStringLiteral("team.decision.list")};
     // Uploading an attachment takes a command per chunk; the message that sends it is recorded.
     return !reads.contains(kind) && !kind.startsWith(QStringLiteral("attachment.stage."));
 }
@@ -39,6 +36,7 @@ QJsonArray remoteAuditJson(const QList<RemoteCommandAudit>& entries,
             {QStringLiteral("device_id"), entry.deviceId},
             {QStringLiteral("device_key_version"), entry.deviceKeyVersion},
             {QStringLiteral("session_id"), entry.sessionId},
+            {QStringLiteral("team_id"), entry.teamId},
             {QStringLiteral("result_code"), entry.resultCode},
             {QStringLiteral("recorded_at"), entry.recordedAt.toUTC().toString(Qt::ISODateWithMs)}});
     }

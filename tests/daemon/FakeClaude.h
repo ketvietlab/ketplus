@@ -1,5 +1,7 @@
 #pragma once
 
+#include "ScriptFixture.h"
+
 #include <QFile>
 #include <QString>
 
@@ -17,6 +19,14 @@ import hashlib, json, sys, threading
 log_path = '%1'
 turns = 0
 lock = threading.Lock()
+
+def safe_setup(params):
+    value=json.loads(json.dumps(params))
+    value.pop('managedTransportEpoch',None)
+    for server in value.get('mcpServers',{}).values():
+        for key in ('KETPLUS_AGENT_MUTATION_TOKEN','KETPLUS_AGENT_TRANSPORT_EPOCH'):
+            if key in server.get('env',{}): server['env'][key]='[redacted]'
+    return value
 
 def emit(value):
     with lock:
@@ -103,16 +113,18 @@ for line in sys.stdin:
             # The SDK refuses the turn before it starts; nothing is logged for it.
             emit({'id': message_id, 'error': {'message': 'synthetic SDK unavailable'}})
             continue
-        log('setup:' + json.dumps(params))
-        log('browser:' + json.dumps(params.get('mcpServers')))
+        log('setup:' + json.dumps(safe_setup(params)))
+        log('browser:' + json.dumps(safe_setup(params).get('mcpServers')))
         log('policy:' + json.dumps({'instructions': params.get('browserInstructions'), 'prompt': params.get('prompt'), 'images': params.get('images')}))
         turns += 1
         session_id = params.get('sessionId')
         turn_id = 'claude-turn-' + str(turns)
         thread_id = params.get('resume') or ('claude-thread-' + str(turns))
         log('turn:' + session_id + ':' + params.get('prompt', ''))
-        emit({'id': message_id, 'result': {
-            'turn': {'id': turn_id}, 'thread': {'id': thread_id}}})
+        result={'turn': {'id': turn_id}, 'thread': {'id': thread_id}}
+        if params.get('managedTransportEpoch'):
+            result['managedTransportEpoch']=params['managedTransportEpoch']
+        emit({'id': message_id, 'result': result})
         params['prompt'] = params.get('prompt', '').split('\n\n<ketplus_response_preferences>')[0]
         if params.get('prompt') == 'needs-approval':
             waiting['perm-' + str(turns)] = (session_id, turn_id, thread_id)
@@ -123,6 +135,26 @@ for line in sys.stdin:
             emit({'method': 'event', 'params': {
                 'sessionId': session_id, 'type': 'turn.started',
                 'payload': {'turn_id': turn_id, 'thread_id': ''}}})
+        elif params.get('prompt') == 'tool-hang':
+            hanging[session_id] = turn_id
+            emit({'method': 'event', 'params': {
+                'sessionId': session_id, 'type': 'turn.started',
+                'payload': {'turn_id': turn_id, 'thread_id': ''}}})
+            emit({'method': 'event', 'params': {
+                'sessionId': session_id, 'type': 'item.started',
+                'payload': {'item_id': 'tool-1', 'item_type': 'commandExecution',
+                            'item': {'id': 'tool-1', 'tool': 'Bash',
+                                     'type': 'commandExecution'}}}})
+        elif params.get('prompt') == 'wait-loop-hang':
+            hanging[session_id] = turn_id
+            emit({'method': 'event', 'params': {
+                'sessionId': session_id, 'type': 'turn.started',
+                'payload': {'turn_id': turn_id, 'thread_id': ''}}})
+            emit({'method': 'event', 'params': {
+                'sessionId': session_id, 'type': 'item.started',
+                'payload': {'item_id': 'tool-2', 'item_type': 'dynamicToolCall',
+                            'item': {'id': 'tool-2', 'tool': 'Monitor',
+                                     'type': 'dynamicToolCall'}}}})
         elif params.get('prompt') == 'background':
             emit({'method': 'event', 'params': {
                 'sessionId': session_id, 'type': 'tasks.changed',
@@ -141,6 +173,8 @@ for line in sys.stdin:
                    'Should I push and open the PR?')
         elif 'no-findings' in params.get('prompt', ''):
             finish(session_id, turn_id, thread_id, 'Looks fine.\nVerdict: no findings')
+        elif 'with-findings' in params.get('prompt', ''):
+            finish(session_id, turn_id, thread_id, 'README.md:1 needs work.\nVerdict: findings')
         else:
             finish(session_id, turn_id, thread_id)
     elif method == 'thread/fork':
@@ -187,7 +221,5 @@ for line in sys.stdin:
     if (script.write(encoded) != encoded.size()) {
         return false;
     }
-    script.close();
-    return script.setPermissions(QFileDevice::ReadOwner | QFileDevice::WriteOwner |
-                                 QFileDevice::ExeOwner);
+    return finalizeScriptFixture(script);
 }

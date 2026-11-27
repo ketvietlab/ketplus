@@ -1,9 +1,15 @@
-// ADR 0112: the team.* requests of the teams/1 feature, for trusted local clients.
+// ADR 0114: the team.* requests of the teams/1 feature, for trusted local clients.
 #include "runtime/SessionHost.h"
+#include "teams/TeamRules.h"
+
+#include "agents/ReviewerPolicy.h"
 
 #include "protocol/DaemonProtocol.h"
 
+#include <QSet>
 #include <QUuid>
+
+#include <algorithm>
 
 namespace ketplus::daemon {
 namespace {
@@ -19,19 +25,14 @@ QJsonObject failure(const QString& code, const QString& message, const QString& 
 
 QJsonObject failure(const teams::TeamError& error) { return failure(error.code, error.message); }
 
-bool knownProvider(const QString& provider) {
-    return provider == QStringLiteral("codex") || provider == QStringLiteral("claude") ||
-           provider == QStringLiteral("cursor");
+using teams::rules::knownProvider;
+
+QString newReviewerPolicy(const QString& provider, const QString& teamPolicy) {
+    return reviewer::teamReviewerPolicy(provider, teamPolicy);
 }
 
-QStringList strings(const QJsonValue& value) {
-    QStringList result;
-    for (const auto& item : value.toArray())
-        result.append(item.toString());
-    return result;
-}
-
-// One member to start: its role, name, agent and (for a developer) lane.
+// One member to start: its role, name, agent and (for a developer) lane. T-10: a lane is
+// only a name; `paths` from an older client is ignored.
 struct MemberPlan final {
     QString role;
     QString name;
@@ -39,7 +40,6 @@ struct MemberPlan final {
     QString model;
     QString effort;
     QString lane;
-    QStringList paths;
 };
 
 MemberPlan planOf(const QString& role, const QJsonObject& agent, const QString& fallbackName) {
@@ -49,29 +49,52 @@ MemberPlan planOf(const QString& role, const QJsonObject& agent, const QString& 
             .provider = agent.value(QStringLiteral("provider")).toString(),
             .model = agent.value(QStringLiteral("model")).toString(),
             .effort = agent.value(QStringLiteral("effort")).toString(),
-            .lane = agent.value(QStringLiteral("lane")).toString().trimmed(),
-            .paths = strings(agent.value(QStringLiteral("paths")))};
+            .lane = agent.value(QStringLiteral("lane")).toString().trimmed()};
+}
+
+// ADR 0115: one page of a team's Updates, newest first, and whether an older one follows.
+QJsonArray updatesPage(const teams::TeamCoordinator& teams, const qint64 teamId, const int limit,
+                       const qint64 before, bool* more) {
+    const QJsonArray page = teams.updatesJson(teamId, limit, before);
+    const qint64 oldest =
+        page.isEmpty() ? 0 : page.last().toObject().value(QStringLiteral("id")).toInteger();
+    *more = oldest > 0 && !teams.updatesJson(teamId, 1, oldest).isEmpty();
+    return page;
 }
 
 } // namespace
 
 QString SessionHost::createMemberConversation(const QString& worktree, const QString& provider,
                                               const QString& model, const QString& effort,
-                                              const QString& title, QString* problem) {
+                                              const QString& title, QString* problem,
+                                              const QString& executionPolicy,
+                                              const QString& reservedSessionId) {
     const QString directory = normalizedWorktree(worktree);
     if (directory.isEmpty()) {
         *problem = QStringLiteral("The team's repository is not an existing directory.");
         return {};
     }
     Session session;
-    session.stored.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    session.stored.id = reservedSessionId.isEmpty()
+                            ? QUuid::createUuid().toString(QUuid::WithoutBraces)
+                            : reservedSessionId;
+    if (sessions_.contains(session.stored.id) || journal_->sessionExists(session.stored.id)) {
+        *problem = "The reserved conversation already exists.";
+        return {};
+    }
     session.stored.worktreePath = directory;
+    session.stored.sidebarRepository = sidebarRepositoryAtCreation(directory);
     session.stored.adapter = provider;
     session.stored.state = QStringLiteral("ready");
     session.stored.generation = 1;
     session.stored.title = title;
+    // Codex is told the member name once the thread starts, so its thread reads as it.
+    if (provider == QStringLiteral("codex"))
+        session.pendingProviderTitle = title;
     session.stored.model = model;
     session.stored.effort = effort;
+    if (!executionPolicy.isEmpty())
+        session.stored.executionPolicy = executionPolicy;
     if (!journal_->upsertSession(session.stored)) {
         *problem = journal_->errorString();
         return {};
@@ -110,6 +133,13 @@ void SessionHost::discardMemberConversation(const QString& sessionId) {
 }
 
 QJsonObject SessionHost::teamCommand(const QString& type, const QJsonObject& request) {
+    // A desktop/paired user is not an authenticated leader conversation. Never
+    // accept a payload actor/session as a replacement for an agent-token binding.
+    if (type == QStringLiteral("team.route.decide") || type == QStringLiteral("team.route.verify"))
+        return failure(
+            QStringLiteral("role_forbidden"),
+            QStringLiteral(
+                "Use the authenticated team agent tools; a client cannot impersonate the leader."));
     const QJsonObject payload = request.value(QStringLiteral("payload")).toObject();
     const qint64 teamId = payload.value(QStringLiteral("team_id")).toString().toLongLong();
     const auto answer = [this](const teams::TeamResult& result) {
@@ -120,22 +150,67 @@ QJsonObject SessionHost::teamCommand(const QString& type, const QJsonObject& req
             {QStringLiteral("ok"), true},
             {QStringLiteral("team"), team ? teams_->teamJson(*team) : QJsonObject{}}};
     };
+    // The teams could not be read when the daemon started: read them now, or say so. No team
+    // request acts on teams that are not all there.
+    if (!teams_->isLoaded())
+        loadTeams();
+    if (!teams_->isLoaded())
+        return failure(QStringLiteral("teams_unavailable"),
+                       QStringLiteral("The teams could not be read. Try again."));
+    // ADR 0116 §4: a change drawn from an older revision of the part it acts on is refused,
+    // with the team as it is now. Local clients that send no expected_revision are unfenced.
+    if (const teams::Team* fenced = teams_->team(teamId)) {
+        if (const auto stale = teams::rules::fence(*fenced, type, payload)) {
+            QJsonObject refusal = failure(*stale);
+            refusal.insert(QStringLiteral("team"), teams_->teamJson(*fenced));
+            return refusal;
+        }
+    }
+    // ADR 0114, open point 2: what a new team starts from (Settings → Teams).
+    if (type == QStringLiteral("team.settings.get"))
+        return {{QStringLiteral("ok"), true}, {QStringLiteral("settings"), teams_->teamSettings()}};
+    if (type == QStringLiteral("team.settings.update")) {
+        if (const auto refused = teams_->updateTeamSettings(payload))
+            return failure(*refused);
+        return {{QStringLiteral("ok"), true}, {QStringLiteral("settings"), teams_->teamSettings()}};
+    }
     if (type == QStringLiteral("team.list")) {
         const QString repository = payload.value(QStringLiteral("repository")).toString();
         QJsonArray list;
         for (const teams::Team* team :
              teams_->teams(repository.isEmpty() ? QString{} : repositoryOf(repository)))
-            list.append(teams_->teamJson(*team));
+            list.append(teams_->directoryJson(*team));
         return {{QStringLiteral("ok"), true}, {QStringLiteral("teams"), list}};
     }
     if (type == QStringLiteral("team.get")) {
+        // ADR 0114, open point 3: reading the team asks git whether a task was merged outside
+        // the app. The answer comes after this reply, as a `team.changed` event.
+        teams_->checkMerged(teamId);
         const teams::Team* team = teams_->team(teamId);
         if (!team)
             return failure(QStringLiteral("team_not_found"),
                            QStringLiteral("The team no longer exists."));
+        // ADR 0115: the newest page of Updates; team.updates.list reads older ones.
+        bool more = false;
+        const QJsonArray page = updatesPage(*teams_, teamId, teams::defaultPage, 0, &more);
         return {{QStringLiteral("ok"), true},
                 {QStringLiteral("team"), teams_->teamJson(*team)},
-                {QStringLiteral("updates"), teams_->updatesJson(teamId)}};
+                {QStringLiteral("updates"), page},
+                {QStringLiteral("updates_has_more"), more}};
+    }
+    if (type == QStringLiteral("team.updates.list")) {
+        if (!teams_->team(teamId))
+            return failure(QStringLiteral("team_not_found"),
+                           QStringLiteral("The team no longer exists."));
+        const int limit =
+            std::clamp(payload.value(QStringLiteral("limit")).toInt(teams::defaultPage), 1,
+                       teams::maximumPage);
+        const qint64 before = payload.value(QStringLiteral("before_id")).toInteger();
+        bool more = false;
+        const QJsonArray updates = updatesPage(*teams_, teamId, limit, before, &more);
+        return {{QStringLiteral("ok"), true},
+                {QStringLiteral("updates"), updates},
+                {QStringLiteral("has_more"), more}};
     }
     if (type == QStringLiteral("team.create"))
         return createTeam(payload);
@@ -146,39 +221,8 @@ QJsonObject SessionHost::teamCommand(const QString& type, const QJsonObject& req
             return failure(*refused);
         return {{QStringLiteral("ok"), true}, {QStringLiteral("team_id"), QString::number(teamId)}};
     }
-    if (type == QStringLiteral("team.member.add")) {
-        const teams::Team* team = teams_->team(teamId);
-        if (!team)
-            return failure(QStringLiteral("team_not_found"),
-                           QStringLiteral("The team no longer exists."));
-        const MemberPlan plan = planOf(teams::role::developer, payload, {});
-        if (const auto invalid = teams::rules::validName(plan.name, QStringLiteral("a developer")))
-            return failure(*invalid);
-        if (team->count(teams::role::developer) >= teams::maximumDevelopers)
-            return failure(QStringLiteral("team_full"),
-                           QStringLiteral("The team has five developers."));
-        if (!knownProvider(plan.provider))
-            return failure(QStringLiteral("provider_unavailable"),
-                           QStringLiteral("Choose the developer's agent."), plan.role);
-        if (plan.provider != QStringLiteral("codex") && !availableProvider(plan.provider))
-            return failure(QStringLiteral("provider_unavailable"),
-                           missingProviderMessage(plan.provider), plan.role);
-        QString problem;
-        const QString sessionId = createMemberConversation(
-            team->repository, plan.provider, plan.model, plan.effort, plan.name, &problem);
-        if (sessionId.isEmpty())
-            return failure(QStringLiteral("member_unavailable"), problem, plan.role);
-        const auto result = teams_->addMember(teamId,
-                                              {.sessionId = sessionId,
-                                               .role = teams::role::developer,
-                                               .name = plan.name,
-                                               .lane = plan.lane.isEmpty() ? plan.name : plan.lane,
-                                               .paths = plan.paths},
-                                              QStringLiteral("user"));
-        if (!result.ok())
-            discardMemberConversation(sessionId);
-        return answer(result);
-    }
+    if (type == QStringLiteral("team.member.add"))
+        return addTeamMembers(teamId, payload);
     if (type == QStringLiteral("team.member.join")) {
         const QString sessionId = payload.value(QStringLiteral("session_id")).toString();
         const auto it = sessions_.constFind(sessionId);
@@ -198,8 +242,7 @@ QJsonObject SessionHost::teamCommand(const QString& type, const QJsonObject& req
             {.sessionId = sessionId,
              .role = teams::role::developer,
              .name = it->stored.title.isEmpty() ? QStringLiteral("Developer") : it->stored.title,
-             .lane = lane.isEmpty() ? it->stored.title : lane,
-             .paths = strings(payload.value(QStringLiteral("paths")))},
+             .lane = lane.isEmpty() ? it->stored.title : lane},
             QStringLiteral("user")));
     }
     if (type == QStringLiteral("team.member.update")) {
@@ -210,12 +253,11 @@ QJsonObject SessionHost::teamCommand(const QString& type, const QJsonObject& req
                                            payload.contains(QStringLiteral("lane"))
                                                ? payload.value(QStringLiteral("lane")).toString()
                                                : (member ? member->lane : QString{}),
-                                           payload.contains(QStringLiteral("paths"))
-                                               ? strings(payload.value(QStringLiteral("paths")))
-                                               : (member ? member->paths : QStringList{}),
                                            QStringLiteral("user"),
                                            payload.value(QStringLiteral("reason")).toString()));
     }
+    if (type == QStringLiteral("team.provider.set"))
+        return setTeamProvider(payload);
     if (type == QStringLiteral("team.member.remove"))
         return answer(teams_->removeMember(teamId,
                                            payload.value(QStringLiteral("session_id")).toString(),
@@ -259,8 +301,19 @@ QJsonObject SessionHost::createTeam(const QJsonObject& payload) {
             member.lane = member.name;
         members.append(member);
     }
-    members.append(planOf(teams::role::reviewer, plan.value(QStringLiteral("reviewer")).toObject(),
-                          QStringLiteral("Reviewer")));
+    // T-23: "reviewers" names one or two; a plan without it names one as "reviewer".
+    const QJsonArray reviewers =
+        plan.contains(QStringLiteral("reviewers"))
+            ? plan.value(QStringLiteral("reviewers")).toArray()
+            : QJsonArray{plan.value(QStringLiteral("reviewer")).toObject()};
+    if (reviewers.isEmpty() || reviewers.size() > teams::maximumReviewers)
+        return failure(QStringLiteral("invalid_payload"),
+                       QStringLiteral("A team has one or two reviewers."), teams::role::reviewer);
+    for (qsizetype index = 0; index < reviewers.size(); ++index)
+        members.append(planOf(teams::role::reviewer, reviewers.at(index).toObject(),
+                              reviewers.size() == 1
+                                  ? QStringLiteral("Reviewer")
+                                  : QStringLiteral("Reviewer %1").arg(index + 1)));
     // Every member is checked before any conversation starts: all or nothing.
     for (const MemberPlan& member : std::as_const(members)) {
         if (const auto invalid = teams::rules::validName(member.name, QStringLiteral("a member")))
@@ -269,12 +322,14 @@ QJsonObject SessionHost::createTeam(const QJsonObject& payload) {
             return failure(QStringLiteral("provider_unavailable"),
                            QStringLiteral("Choose the agent of the %1.").arg(member.role),
                            member.role);
+        // The team's policy is validated below; a Codex reviewer needs it to be Full access.
         if (member.role == teams::role::reviewer &&
-            !teams::rules::reviewerProviderSupported(member.provider))
+            !reviewer::supported(
+                member.provider,
+                newReviewerPolicy(member.provider,
+                                  payload.value(QStringLiteral("execution_policy")).toString())))
             return failure(QStringLiteral("reviewer_unsupported"),
-                           QStringLiteral("The reviewer must be a Claude conversation, the "
-                                          "provider that keeps a review read-only."),
-                           member.role);
+                           reviewer::unsupportedMessage(member.provider), member.role);
         if (member.provider != QStringLiteral("codex") && !availableProvider(member.provider))
             return failure(QStringLiteral("provider_unavailable"),
                            missingProviderMessage(member.provider), member.role);
@@ -282,40 +337,71 @@ QJsonObject SessionHost::createTeam(const QJsonObject& payload) {
     teams::Team draft;
     draft.repository = repository;
     draft.name = teamName;
-    draft.goal = payload.value(QStringLiteral("goal")).toString().trimmed().left(4000);
+    // Refused before any member's conversation starts; never cut.
+    draft.goal = payload.value(QStringLiteral("goal")).toString().trimmed();
+    if (const auto invalid = teams::rules::validGoal(draft.goal))
+        return failure(invalid->code, invalid->message);
     draft.integrationBranch =
         payload.value(QStringLiteral("integration_branch")).toString().trimmed();
+    if (const auto invalid = teams::rules::validBranch(draft.integrationBranch))
+        return failure(invalid->code, invalid->message);
     draft.mergePolicy = payload.value(QStringLiteral("merge_policy")).toString(teams::role::leader);
+    draft.executionPolicy =
+        payload.value(QStringLiteral("execution_policy")).toString(QStringLiteral("ask"));
+    if (!QSet<QString>{QStringLiteral("read-only"), QStringLiteral("ask"), QStringLiteral("full")}
+             .contains(draft.executionPolicy))
+        return failure(QStringLiteral("invalid_payload"),
+                       QStringLiteral("Choose the team's permissions."));
+    // Full access needs the same acknowledgement as choosing it for one conversation.
+    if (draft.executionPolicy == QStringLiteral("full") &&
+        !payload.value(QStringLiteral("risk_acknowledged")).toBool())
+        return failure(QStringLiteral("execution_policy_denied"),
+                       QStringLiteral("The requested permission was not authorized."));
     draft.leaderWritesRequirements =
         payload.value(QStringLiteral("leader_writes_requirements")).toBool(true);
-    draft.sharedPaths = strings(payload.value(QStringLiteral("shared_paths")));
-    // Lanes are checked before anything starts, with placeholder ids.
+    // Missing preference follows the prompt, including older clients; never consult OS locale.
+    if (payload.contains(QStringLiteral("language"))) {
+        draft.language = payload.value(QStringLiteral("language")).toString();
+        if (const auto invalid = teams::rules::validLanguage(draft.language))
+            return failure(invalid->code, invalid->message);
+    }
+    // A team's own budget, or the global one for a client that sends none (an older phone).
+    draft.turnBudget = teams_->turnBudgetSetting();
+    if (payload.contains(QStringLiteral("turn_budget")))
+        if (const auto invalid = teams::rules::validTurnBudget(
+                payload.value(QStringLiteral("turn_budget")), &draft.turnBudget))
+            return failure(invalid->code, invalid->message);
+    // T-40: a client that sends neither (an older phone) gets two rounds on the board.
+    if (payload.contains(QStringLiteral("max_rounds")))
+        if (const auto invalid = teams::rules::validReviewRounds(
+                payload.value(QStringLiteral("max_rounds")), &draft.maxRounds))
+            return failure(invalid->code, invalid->message);
+    if (payload.contains(QStringLiteral("review_place")))
+        if (const auto invalid = teams::rules::validReviewPlace(
+                payload.value(QStringLiteral("review_place")), &draft.reviewPlace))
+            return failure(invalid->code, invalid->message);
+    // T-2: a team whose members all run on one provider has that provider as its own.
+    draft.provider = members.first().provider;
+    for (const MemberPlan& member : std::as_const(members))
+        if (member.provider != draft.provider)
+            draft.provider.clear();
+    // T-10: `shared_paths` from an older client is ignored. Placeholder ids until each
+    // member's conversation is started.
     for (int index = 0; index < members.size(); ++index)
         draft.members.append({.sessionId = QStringLiteral("planned-%1").arg(index),
                               .role = members.at(index).role,
                               .name = members.at(index).name,
-                              .lane = members.at(index).lane,
-                              .paths = members.at(index).paths});
-    for (const teams::Member& member : std::as_const(draft.members)) {
-        if (member.role != teams::role::developer)
-            continue;
-        const auto paths = teams::rules::normalisedPaths(member.paths);
-        if (!paths)
-            return failure(QStringLiteral("invalid_payload"),
-                           QStringLiteral("A lane's paths are relative to the repository root."),
-                           member.role);
-        teams::Team others = draft;
-        others.members.removeIf(
-            [&](const teams::Member& entry) { return entry.sessionId == member.sessionId; });
-        if (const auto overlap = teams::rules::laneOverlap(others, member.sessionId, *paths))
-            return failure(overlap->code, overlap->message, member.role);
-    }
+                              .lane = members.at(index).lane});
     QStringList started;
     for (int index = 0; index < members.size(); ++index) {
         const MemberPlan& member = members.at(index);
         QString problem;
         const QString sessionId = createMemberConversation(
-            repository, member.provider, member.model, member.effort, member.name, &problem);
+            repository, member.provider, member.model, member.effort, member.name, &problem,
+            // A Claude reviewer keeps a conversation's default; its review turns are read-only.
+            member.role == teams::role::reviewer
+                ? newReviewerPolicy(member.provider, draft.executionPolicy)
+                : draft.executionPolicy);
         if (sessionId.isEmpty()) {
             for (const QString& id : std::as_const(started))
                 discardMemberConversation(id);

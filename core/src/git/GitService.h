@@ -21,6 +21,7 @@ class GitService final : public QObject {
     [[nodiscard]] bool isAvailable() const noexcept;
     [[nodiscard]] const GitSnapshot& snapshot() const noexcept;
     [[nodiscard]] const QVector<GitWorktree>& worktrees() const noexcept;
+    [[nodiscard]] static QString canonicalEntryPath(const QString& path);
 
     void setWorkspacePath(const QString& path);
     void refresh();
@@ -46,9 +47,9 @@ class GitService final : public QObject {
 
     void runGit(const QStringList& arguments, const QString& workingDirectory,
                 CommandCallback callback, int timeoutMilliseconds = 10000);
+    [[nodiscard]] QStringList repositoryArguments() const;
     [[nodiscard]] bool isUntracked(const QString& relativePath) const;
     void watchGitState();
-    static QString canonicalEntryPath(const QString& path);
     void mutateFile(const QString& filePath, bool stage);
     void runMutation(const QString& operation, const QStringList& arguments);
     bool mutationRunning_{false};

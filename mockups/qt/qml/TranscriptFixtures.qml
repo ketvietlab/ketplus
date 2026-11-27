@@ -45,6 +45,95 @@ QtObject {
         + "+        && Qt.application.state === Qt.ApplicationActive\n"
         + "     visible: animating\n"
 
+    // #468: what the Cinder Trail team sends into its members' conversations.
+    readonly property var releaseTeam: Fixtures.teams[0]
+    function releaseTask(id) { return releaseTeam.tasks.find(task => task.id === id) }
+
+    // ADR 0127 §7a: a turn that ends on a managed job its conversation still owns
+    // (Fixtures.jobStates). Its last line says what it waits on instead of Completed.
+    function jobTurn(state) {
+        const job = Fixtures.jobStates[state]
+        const blocks = [
+            { type: "day", text: "Today" },
+            { type: "user", text: "Rebase T-3 on release/1.4, run the 200-trail picker check again and open the PR when it passes." },
+            { type: "activity", summary: "Ran 2 commands", expanded: false, steps: [
+                  { kind: "command", title: "Rebased", detail: "git rebase origin/release/1.4",
+                    command: "git rebase origin/release/1.4", output: "Successfully rebased and updated refs/heads/test/large-trail-library." },
+                  { kind: "command", title: "Started a background job", detail: Fixtures.jobTitle,
+                    command: "ctest --test-dir build -R trail_picker_large", output: "Managed job queued" }] },
+            { type: "answer", status: "", markdown: "The branch is rebased on `release/1.4`. The **200-trail picker check** runs as a background job; I will open the PR when it ends." },
+            { type: "wait", mark: job.label === "Needs attention" ? "warning" : "clock", text: job.line, action: job.action }]
+        if (state === "job-woke")
+            blocks.push({ type: "user", from: { number: "", title: "Background task · " + Fixtures.jobTitle, provider: "" },
+                          text: "Completed in 6m 40s · exit code 0" },
+                        { type: "working", text: "opening the pull request" })
+        return blocks
+    }
+
+    readonly property var teamAssignment: [
+        { type: "day", text: "Today" },
+        { type: "team", kind: "assignment", team: releaseTeam.name, task: "T-3",
+          title: releaseTask("T-3").title,
+          facts: ["Lane Offline QA", releaseTask("T-3").branch, "Assigned by @agent/" + Fixtures.releaseLead.number],
+          criteria: releaseTask("T-3").criteria.map(criterion => ({ text: criterion.text, done: false })) },
+        { type: "commentary", text: "Starting T-3 by checking the fixture generator and picker tests." },
+        { type: "activity", summary: "Explored 3 files", expanded: false, steps: [
+              { kind: "read", title: "Read", detail: "src/trails/TrailList.qml" },
+              { kind: "read", title: "Read", detail: "tests/offline-tests.cpp" },
+              { kind: "read", title: "Read", detail: "docs/release-checklist.md" }] },
+        { type: "answer", status: "", markdown: "T-3 is **In progress**. The 200-trail case still needs a run." }
+    ]
+    readonly property var teamDigest: [
+        { type: "day", text: "Today" },
+        { type: "team", kind: "digest", team: releaseTeam.name, title: "Changes since your last digest",
+          groups: [
+              { task: "T-1", title: releaseTask("T-1").title, state: "Done", lines: [
+                    { text: "@agent/2035 opened #412" },
+                    { text: "Both keyboard criteria passed" },
+                    { text: "@agent/4583 marked the review passed" }] },
+              { task: "T-3", title: releaseTask("T-3").title, state: "In progress", lines: [
+                    { text: "Two of three criteria met" },
+                    { text: "@agent/8213 needs a Trail picker change", needsYou: true }] },
+              { task: "T-5", title: releaseTask("T-5").title, state: "Blocked", lines: [
+                    { text: "@agent/8213 requested a dataset choice" },
+                    { text: "D-1 waits for the user" }] },
+              { task: "T-6", title: releaseTask("T-6").title, state: "In review", lines: [
+                    { text: "@agent/8215 opened #418" },
+                    { text: "Ready for the offline settings review" }] },
+              { task: "T-7", title: releaseTask("T-7").title, state: "To do", lines: [
+                    { text: "T-7 needs an owner", needsYou: true }] }] },
+        { type: "commentary", text: "I need to route the picker edit and find an owner for T-7." },
+        { type: "answer", status: "", markdown: "@agent/2035 owns changes to TrailList.qml and can take T-7. @agent/8213 keeps the test changes." }
+    ]
+    readonly property var teamReview: [
+        { type: "day", text: "Today" },
+        { type: "team", kind: "review", team: releaseTeam.name, task: "T-1", round: 1,
+          title: releaseTask("T-1").title,
+          facts: ["By @agent/2035", releaseTask("T-1").branch + " into " + releaseTeam.branch, releaseTask("T-1").pr],
+          criteria: releaseTask("T-1").criteria,
+          diff: ["3 files, +6 −2", "src/trails/TrailList.qml", "src/trails/TrailRow.qml", "docs/release-checklist.md"] },
+        { type: "commentary", text: "Checking keyboard focus and trail selection." },
+        { type: "answer", status: "", markdown: "Verdict: passed. Enter moves focus to the results and opens the selected trail." }
+    ]
+    readonly property var teamVerdict: [
+        { type: "day", text: "Today" },
+        { type: "team", kind: "verdict", team: releaseTeam.name, task: "T-6", round: 1, passed: false,
+          title: releaseTask("T-6").title,
+          facts: ["Round 1 found issues", "Back to In progress"],
+          findings: [
+              "A note sent during reconnect still appears in the pending count.",
+              "The pending count needs an accessible label."] },
+        { type: "commentary", text: "I’ll fix the reconnect case and the accessible label." },
+        { type: "answer", status: "", markdown: "Both fixes are in #418. T-6 is **In review** again." }
+    ]
+    readonly property var teamDecision: [
+        { type: "day", text: "Today" },
+        { type: "team", kind: "decision", team: releaseTeam.name, task: "T-5", title: "D-1 answered",
+          question: Fixtures.datasetQuestion, answer: releaseTeam.decisions[0].options[0], text: "T-5 can go on." },
+        { type: "commentary", text: "I’ll send the dataset choice to @agent/8213." },
+        { type: "answer", status: "", markdown: "@agent/8213 can now run the Linux smoke check with the bundled trail dataset." }
+    ]
+
     // Marketing sample: an honest end-of-turn report, not a claim about a real release.
     readonly property var turnReport: [
         { type: "user", text: "Get the release ready. Tell me what is verified, what is blocked, and who owns the next step." },
@@ -79,9 +168,9 @@ QtObject {
           images: [shot("sidebar")] },
         { type: "commentary", text: "I'll read how the sidebar draws its working rows, then measure the idle CPU." },
         { type: "activity", summary: "Explored 3 files, searched code, ran 2 commands", steps: [
-            { kind: "read", title: "Read", detail: "modules/ai/src/agent/qml/AgentSidebar.qml:540-600" },
+            { kind: "read", title: "Read", detail: "src/trails/AgentSidebar.qml:540-600" },
             { kind: "search", title: "Searched", detail: "“Animation.Infinite” in modules/ai", command: "rg -n \"Animation.Infinite\" modules/ai",
-              output: "modules/ai/src/agent/qml/AgentRunStatus.qml:33\nmodules/ai/src/agent/qml/AgentSidebar.qml:579\nmodules/ai/src/agent/qml/BackgroundTaskBar.qml:149" },
+              output: "src/trails/AgentRunStatus.qml:33\nsrc/trails/AgentSidebar.qml:579\nsrc/trails/BackgroundTaskBar.qml:149" },
             { kind: "command", title: "Measure idle CPU", detail: "top -l 4 -s 2 -pid 41087", expanded: true,
               description: "Sample the mock's CPU while nothing happens.",
               command: "top -l 4 -s 2 -pid 41087 -stats pid,cpu", output: "41087  44.3\n41087  47.4\n41087  41.5\n41087  45.0" },
@@ -91,7 +180,7 @@ QtObject {
         ] },
         { type: "question", header: "Spinner", state: "answered", question: "How should a working row animate?",
           answer: "Step on a shared clock (Recommended)" },
-        { type: "activity", summary: "Used browser · 6 steps", steps: [
+        { type: "activity", summary: "Used browser 6 times", steps: [
             { kind: "browser", title: "Opened", detail: "localhost:5173/sidebar" },
             { kind: "browser", title: "Observed the page", detail: "142 nodes · 3 running rows" },
             { kind: "browser", title: "Clicked", detail: "“Review the startup flow”" },
@@ -112,11 +201,13 @@ QtObject {
           state: "replied", expectReply: true, text: "Is the stepped spinner fine at 20 steps a second?" },
         { type: "user", from: { number: "8941", title: "DS Icon", provider: "Claude" },
           text: "20 steps a second reads as smooth at 14 px. Keep 4 behind another app." },
+        { type: "user", from: { number: "", title: "Example team", provider: "" },
+          text: "You asked to check again: synthetic build status.\n" + "A completed check has no warnings; the remaining check is still running.\n".repeat(8) },
         { type: "event", text: "Context compacted", detail: "Older steps are summarised; the conversation continues." },
         { type: "steer", text: "Also check dark mode before you finish." },
         { type: "activity", summary: "Edited 2 files, ran tests", steps: [
-            { kind: "edit", title: "Edited", detail: "modules/ai/src/agent/qml/AgentSidebar.qml  +3 −1", expanded: true, diff: sidebarDiff },
-            { kind: "create", title: "Created", detail: "modules/ai/src/agent/qml/SpinClock.qml  +48" },
+            { kind: "edit", title: "Edited", detail: "src/trails/AgentSidebar.qml  +3 −1", expanded: true, diff: sidebarDiff },
+            { kind: "create", title: "Created", detail: "src/trails/SpinClock.qml  +48" },
             { kind: "wait", title: "Waited for the build", detail: "Monitor · 1m 12s" },
             { kind: "command", title: "Run tests", detail: "ctest --test-dir build -R sidebar", duration: "9.8 s",
               command: "ctest --test-dir build -R sidebar", output: "100% tests passed, 0 tests failed out of 2" },
@@ -124,20 +215,20 @@ QtObject {
         ] },
         { type: "answer", markdown: "The sidebar now steps every working row on **one shared clock**: 20 steps a second in front, 4 behind another app.\n\n| Build | Idle CPU |\n|---|---|\n| Before | 41–47% |\n| After | 0–2% |\n\n```qml\nrotation: 360 * (KetTheme.animationClock % spinMs) / spinMs\n```\n\nEvery indicator holds the same clock:\n\n```mermaid\n" + Fixtures.mermaid.sharedClock + "\n```" },
         { type: "changes", files: [
-            { name: "AgentSidebar.qml", path: "modules/ai/src/agent/qml", added: 3, removed: 1 },
-            { name: "SpinClock.qml", path: "modules/ai/src/agent/qml", added: 48, removed: 0 }] },
+            { name: "AgentSidebar.qml", path: "src/trails", added: 3, removed: 1 },
+            { name: "SpinClock.qml", path: "src/trails", added: 48, removed: 0 }] },
         { type: "turn", status: "completed", text: "4m 12s · 182k context · $1.24 session" }
     ]
 
     readonly property var codex: [
         { type: "event", text: "Switched from Claude to Codex", detail: "GPT-5.6 Luna · High · the conversation history comes along" },
         { type: "user", text: "Add a journal size warning to the daemon status and the sidebar." },
-        { type: "activity", summary: "Thought, explored 4 files, listed 1 folder", steps: [
+        { type: "activity", summary: "Explored 4 files, listed 1 folder", steps: [
             { kind: "thinking", title: "Thought", detail: "14 s" },
             { kind: "read", title: "Read", detail: "apps/daemon/src/storage/LocalJournal.cpp" },
             { kind: "read", title: "Read", detail: "apps/daemon/src/storage/LocalJournal.h" },
             { kind: "search", title: "Searched code", detail: "“pruneRetention” in apps/daemon" },
-            { kind: "list", title: "Listed files", detail: "modules/ai/src/agent/qml" }
+            { kind: "list", title: "Listed files", detail: "src/trails" }
         ] },
         { type: "commentary", text: "Retention never reclaims free pages. I'll measure the journal before changing it." },
         { type: "activity", summary: "Ran 2 commands", steps: [
@@ -157,7 +248,7 @@ QtObject {
             { kind: "move", title: "Moved", detail: "docs/journal.md → docs/daemon-journal.md" },
             { kind: "delete", title: "Deleted", detail: "apps/daemon/src/storage/OldRetention.cpp  −120" }
         ] },
-        { type: "activity", summary: "Used ketplus_browser, node_repl · 5 steps", steps: [
+        { type: "activity", summary: "Used ketplus_browser 3 times, used node_repl, used ketplus_agents", steps: [
             { kind: "browser", title: "Opened", detail: "localhost:5173/settings/storage" },
             { kind: "browser", title: "Observed the page", detail: "Storage · 4 meters" },
             { kind: "browser", title: "Captured", detail: "1440 × 900", images: [shot("settings")], expanded: true },

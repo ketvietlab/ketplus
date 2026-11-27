@@ -138,7 +138,7 @@ class TranscriptActivityGroupsTest final : public QObject {
                           QJsonObject{{"path", "b"}, {"added", 1}, {"known", true}}}}}),
             QStringLiteral("Ran 2 commands, edited 2 files +5 -1"));
         QCOMPARE(summary({family("browser", 3), family("tool:node_repl", 2)}),
-                 QStringLiteral("Used ketplus_browser, node_repl · 5 steps"));
+                 QStringLiteral("Used ketplus_browser 3 times, used node_repl 2 times"));
         QCOMPARE(
             summary({family("command", 1), family("tool:node_repl", 1), family("subagent", 1),
                      family("subagent.step", 2), family("wait", 1)},
@@ -227,6 +227,135 @@ class TranscriptActivityGroupsTest final : public QObject {
                  QStringLiteral("Explored 5 files (1 failed)"));
         QCOMPARE(rows.at(0).value("groupFailed").toInt(), 1);
         QVERIFY(rows.at(0).value("groupRunning").toBool());
+    }
+
+    // T-91: while a group runs, its heading names the step it is on, worded as that row, and
+    // follows each row that joins; once it ends, the heading counts all it did.
+    void aRunningGroupNamesItsLatestStepThenEverything() {
+        const auto titled = [](QVariantMap row, const QString& title) {
+            row.insert("title", title);
+            return row;
+        };
+        auto mcp = titled(activity("m1", "integration"), "Used github · list_issues");
+        mcp.insert("activityFacts", QVariantMap{{"server", "github"}});
+        auto mcp2 = mcp;
+        mcp2.insert("messageKey", "m2");
+        QList<QVariantMap> rows{text("u", "user"),
+                                titled(activity("c1", "command"), "Ran git fetch"),
+                                titled(activity("t1", "thought"), "Thought"),
+                                mcp,
+                                mcp2,
+                                titled(activity("r1", "fileRead"), "Read AGENTS.md"),
+                                titled(fileChange("e1", 3, 1), "Edited a.cpp"),
+                                titled(activity("c2", "command", "turn-1", "running"),
+                                       "Running git status --short --branch\n(and more)")};
+        assignActivityGroups(rows);
+        QCOMPARE(rows.at(1).value("groupRole").toString(), QStringLiteral("leader"));
+        QVERIFY(rows.at(1).value("groupRunning").toBool());
+        // One line, as the row's own title reads.
+        QCOMPARE(rows.at(1).value("groupLatest").toString(),
+                 QStringLiteral("Running git status --short --branch"));
+
+        // A row joins: the heading follows it.
+        rows.append(titled(activity("r2", "fileRead", "turn-1", "running"), "Reading README.md"));
+        const auto changed = assignActivityGroups(rows, int(rows.size()) - 1, int(rows.size()) - 1);
+        QVERIFY(changed.contains(1));
+        QCOMPARE(rows.at(1).value("groupLatest").toString(), QStringLiteral("Reading README.md"));
+
+        // The steps finish and the agent writes: the group has ended and counts everything,
+        // naming the tool server with its count and leaving the thought out.
+        rows[8] = titled(activity("r2", "fileRead"), "Read README.md");
+        rows[7] = titled(activity("c2", "command"), "Ran git status --short --branch");
+        rows.append(text("a", "assistant"));
+        assignActivityGroups(rows);
+        QVERIFY(!rows.at(1).value("groupRunning").toBool());
+        QCOMPARE(rows.at(1).value("groupSummary").toString(),
+                 QStringLiteral(
+                     "Ran 2 commands, used github 2 times, explored 2 files, edited a file +3 -1"));
+    }
+
+    void aFailedStepIsCountedOnTheWholeGroup() {
+        QList<QVariantMap> rows{activity("c1", "command", "turn-1", "failed"),
+                                activity("c2", "command"), activity("t1", "thought"),
+                                activity("r1", "fileRead")};
+        assignActivityGroups(rows);
+        QCOMPARE(rows.at(0).value("groupSummary").toString(),
+                 QStringLiteral("Ran 2 commands, explored a file (1 failed)"));
+        QCOMPARE(rows.at(0).value("groupFailed").toInt(), 1);
+    }
+
+    // A single step is no group: it shows as its own row, with nothing to name.
+    void aSingleStepIsItsOwnRow() {
+        QList<QVariantMap> rows{text("u", "user"), activity("c1", "command", "turn-1", "running"),
+                                text("a", "assistant")};
+        rows[1].insert("title", "Running make");
+        assignActivityGroups(rows);
+        QVERIFY(rows.at(1).value("groupRole").toString().isEmpty());
+        QVERIFY(rows.at(1).value("groupLatest").toString().isEmpty());
+    }
+
+    // A group of thoughts alone still says what it was.
+    void aGroupOfThoughtsAloneSaysSo() {
+        QList<QVariantMap> rows{activity("t1", "thought"), activity("t2", "thought")};
+        assignActivityGroups(rows);
+        QCOMPARE(rows.at(0).value("groupSummary").toString(), QStringLiteral("Thought"));
+    }
+
+    // The daemon's summary carries its last step's item; the heading words it as that row.
+    void aDaemonGroupNamesItsLatestStep() {
+        const QJsonObject running{
+            {"item_id", "activity-group:4"},
+            {"group_id", "4"},
+            {"count", 3},
+            {"running_count", 1},
+            {"families", QJsonArray{QJsonObject{{"family", "command"}, {"count", 2}},
+                                    QJsonObject{{"family", "tool:github"}, {"count", 1}}}},
+            {"latest", QJsonObject{{"item", QJsonObject{{"type", "commandExecution"},
+                                                        {"id", "cmd-2"},
+                                                        {"command", "git status --short --branch"},
+                                                        {"status", "inProgress"}}},
+                                   {"completed", false}}}};
+        const auto row = daemonActivityGroupMessage(running, 2);
+        QVERIFY(row.value("groupRunning").toBool());
+        // Worded as the step's own row reads, here the command's description.
+        const auto step =
+            activityMessage(running.value("latest").toObject().value("item").toObject(), false);
+        QVERIFY(!step.value("title").toString().isEmpty());
+        QCOMPARE(row.value("groupLatest").toString(), step.value("title").toString());
+        QCOMPARE(row.value("groupSummary").toString(),
+                 QStringLiteral("Ran 2 commands, used github"));
+
+        auto tool = running;
+        tool.insert("latest", QJsonObject{{"item", QJsonObject{{"type", "mcpToolCall"},
+                                                               {"id", "mcp-1"},
+                                                               {"server", "github"},
+                                                               {"tool", "list_issues"},
+                                                               {"status", "inProgress"}}},
+                                          {"completed", false}});
+        QVERIFY2(daemonActivityGroupMessage(tool, 2)
+                     .value("groupLatest")
+                     .toString()
+                     .startsWith(QStringLiteral("Using github")),
+                 qPrintable(daemonActivityGroupMessage(tool, 2).value("groupLatest").toString()));
+
+        // A one-step daemon group names its step too, and an older daemon sends no step.
+        auto single = running;
+        single.insert("count", 1);
+        single.insert("families", QJsonArray{QJsonObject{{"family", "command"}, {"count", 1}}});
+        QCOMPARE(daemonActivityGroupMessage(single, 2).value("groupLatest").toString(),
+                 step.value("title").toString());
+        auto older = running;
+        older.remove("latest");
+        QVERIFY(daemonActivityGroupMessage(older, 2).value("groupLatest").toString().isEmpty());
+
+        // Ended: the whole group, failures kept.
+        auto ended = running;
+        ended.insert("running_count", 0);
+        ended.insert("failed_count", 1);
+        const auto settled = daemonActivityGroupMessage(ended, 2);
+        QVERIFY(!settled.value("groupRunning").toBool());
+        QCOMPARE(settled.value("groupSummary").toString(),
+                 QStringLiteral("Ran 2 commands, used github (1 failed)"));
     }
 
     void recomputingUnchangedRowsReportsNoChanges() {
@@ -321,7 +450,7 @@ class TranscriptActivityGroupsTest final : public QObject {
     }
 
     // As in the mock, MCP tool calls, image steps, waits and subagents stay in the group, and
-    // its line names the servers used: "Used ketplus_browser, node_repl · 5 steps".
+    // its line names each server with its count (T-91): "Used ketplus_browser 2 times, …".
     void toolServersImagesAndWaitsCollapseIntoTheGroup() {
         const auto served = [](const QString& key, const QString& subtype, const QString& server) {
             auto row = activity(key, subtype);
@@ -341,13 +470,14 @@ class TranscriptActivityGroupsTest final : public QObject {
         QCOMPARE(rows.at(0).value("groupRole").toString(), QStringLiteral("leader"));
         QCOMPARE(rows.at(0).value("groupSize").toInt(), 9);
         QCOMPARE(rows.at(0).value("groupSummary").toString(),
-                 QStringLiteral("Used ketplus_browser, node_repl, searched the web, "
-                                "viewed an image, generated an image, waited, used a subagent"));
+                 QStringLiteral(
+                     "Used ketplus_browser 2 times, used node_repl 2 times, searched the web, "
+                     "viewed an image, generated an image, waited, used a subagent"));
     }
 
     void groupsUseTheMocksWording() {
-        // "Thought, explored 4 files, listed 1 folder" and "Searched the web, loaded tools, used
-        // a skill": reads explore, Codex listings list folders, and text-only steps group.
+        // "Explored 4 files, listed 1 folder" and "Searched the web, loaded tools, used a
+        // skill": reads explore, Codex listings list folders, and text-only steps group.
         auto listing = activity("l1", "fileSearch");
         listing.insert("activityFacts", QVariantMap{{"listedFolders", 1}});
         QList<QVariantMap> rows{
@@ -424,13 +554,12 @@ class TranscriptActivityGroupsTest final : public QObject {
     }
 
     void thoughtsCollapseWithTheirSteps() {
-        // The mock's "Thought, …": a thought is a step of the group it starts.
+        // A thought is a step of the group it starts, but not one the line counts (T-91).
         QList<QVariantMap> rows{activity("t1", "thought"), activity("r1", "fileRead"),
                                 activity("r2", "fileRead")};
         assignActivityGroups(rows);
         QCOMPARE(rows.at(0).value("groupSize").toInt(), 3);
-        QCOMPARE(rows.at(0).value("groupSummary").toString(),
-                 QStringLiteral("Thought, explored 2 files"));
+        QCOMPARE(rows.at(0).value("groupSummary").toString(), QStringLiteral("Explored 2 files"));
     }
 
     void subagentsCollapseWithCommands() {
@@ -493,7 +622,7 @@ class TranscriptActivityGroupsTest final : public QObject {
             QList<QVariantMap> rows{activity("before", "ketplusBrowser"), step,
                                     activity("after", "ketplusBrowser")};
             assignActivityGroups(rows);
-            QCOMPARE(rows.at(0).value("groupSummary").toString(), "Used ketplus_browser · 3 steps");
+            QCOMPARE(rows.at(0).value("groupSummary").toString(), "Used ketplus_browser 3 times");
             QCOMPARE(rows.at(0).value("groupSize").toInt(), 3);
             QCOMPARE(rows.at(1).value("groupRole").toString(), "member");
             QCOMPARE(rows.at(0).value("groupRunning").toBool(), !completed);
@@ -506,7 +635,7 @@ class TranscriptActivityGroupsTest final : public QObject {
         QTest::newRow("compare") << QStringLiteral("visual_compare");
     }
 
-    // As in the mock ("Used ketplus_browser, node_repl · 5 steps" with its Captured step),
+    // As in the mock (a browser group with its Captured step),
     // a capture or comparison is a step of its group; the open group shows its image.
     void captureAndComparisonAreBrowserSteps() {
         QFETCH(QString, tool);

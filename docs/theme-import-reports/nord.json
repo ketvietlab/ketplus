@@ -1,0 +1,3065 @@
+{
+    "counts": {
+        "approximated": 32,
+        "mapped": 52,
+        "skipped": 425
+    },
+    "diagnostics": [
+    ],
+    "items": [
+        {
+            "disposition": "skipped",
+            "reason": "Declaration preserved without enabling semantic highlighting",
+            "sourcePath": "themes/nord-color-theme.json/semanticHighlighting",
+            "targetPath": "metadata"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Explicit workbench color declaration takes precedence",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/0/background",
+            "targetPath": "editor.background"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Explicit workbench color declaration takes precedence",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/0/foreground",
+            "targetPath": "editor.foreground"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/nord-color-theme.json/colors/editor.background",
+            "targetPath": "editor.bg"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/nord-color-theme.json/colors/editor.foreground",
+            "targetPath": "editor.fg"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/nord-color-theme.json/colors/editor.selectionBackground",
+            "targetPath": "editor.selection"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/nord-color-theme.json/colors/editorCursor.foreground",
+            "targetPath": "editor.caret"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/nord-color-theme.json/colors/editor.lineHighlightBackground",
+            "targetPath": "editor.lineHighlight"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/nord-color-theme.json/colors/editorGutter.background",
+            "targetPath": "editor.gutterBg"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/nord-color-theme.json/colors/editorLineNumber.foreground",
+            "targetPath": "editor.gutterFg"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/nord-color-theme.json/colors/titleBar.activeBackground",
+            "targetPath": "ui.chrome.appBackground"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/nord-color-theme.json/colors/editor.background",
+            "targetPath": "ui.chrome.pageBackground"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/nord-color-theme.json/colors/panel.background",
+            "targetPath": "ui.chrome.panelBackground"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/nord-color-theme.json/colors/sideBarSectionHeader.background",
+            "targetPath": "ui.chrome.panelSubtle"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/nord-color-theme.json/colors/foreground",
+            "targetPath": "ui.chrome.textMain"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/nord-color-theme.json/colors/descriptionForeground",
+            "targetPath": "ui.chrome.textSecondary"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "First available fallback color used for nearest KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/descriptionForeground",
+            "targetPath": "ui.chrome.textDisabled"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "First available fallback color used for nearest KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/panel.border",
+            "targetPath": "ui.chrome.border"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/nord-color-theme.json/colors/focusBorder",
+            "targetPath": "ui.chrome.accent"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/nord-color-theme.json/colors/errorForeground",
+            "targetPath": "ui.chrome.danger"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/nord-color-theme.json/colors/sideBar.background",
+            "targetPath": "ui.sidebar.bg"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/nord-color-theme.json/colors/sideBar.foreground",
+            "targetPath": "ui.sidebar.fg"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/nord-color-theme.json/colors/sideBar.border",
+            "targetPath": "ui.sidebar.border"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/nord-color-theme.json/colors/input.background",
+            "targetPath": "ui.input.bg"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/nord-color-theme.json/colors/input.foreground",
+            "targetPath": "ui.input.fg"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/nord-color-theme.json/colors/input.border",
+            "targetPath": "ui.input.border"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/nord-color-theme.json/colors/list.hoverBackground",
+            "targetPath": "ui.list.hover"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/nord-color-theme.json/colors/list.activeSelectionBackground",
+            "targetPath": "ui.list.selection"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/nord-color-theme.json/colors/list.activeSelectionForeground",
+            "targetPath": "ui.list.selectionFg"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "First available fallback color used for nearest KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/foreground",
+            "targetPath": "ui.list.fg"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/nord-color-theme.json/colors/tab.activeBackground",
+            "targetPath": "ui.tab.activeBg"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/nord-color-theme.json/colors/tab.activeForeground",
+            "targetPath": "ui.tab.activeFg"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/nord-color-theme.json/colors/tab.inactiveBackground",
+            "targetPath": "ui.tab.inactiveBg"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/nord-color-theme.json/colors/tab.inactiveForeground",
+            "targetPath": "ui.tab.inactiveFg"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/nord-color-theme.json/colors/focusBorder",
+            "targetPath": "ui.focus.border"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/nord-color-theme.json/colors/button.background",
+            "targetPath": "ui.button.bg"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/nord-color-theme.json/colors/button.foreground",
+            "targetPath": "ui.button.fg"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/nord-color-theme.json/colors/button.hoverBackground",
+            "targetPath": "ui.button.hover"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/nord-color-theme.json/colors/terminal.background",
+            "targetPath": "terminal.bg"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/nord-color-theme.json/colors/terminal.foreground",
+            "targetPath": "terminal.fg"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "First available fallback color used for nearest KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/editorCursor.foreground",
+            "targetPath": "terminal.cursor"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "First available fallback color used for nearest KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/editor.selectionBackground",
+            "targetPath": "terminal.selection"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/nord-color-theme.json/colors/terminal.ansiBlack",
+            "targetPath": "terminal.ansi0"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/nord-color-theme.json/colors/terminal.ansiRed",
+            "targetPath": "terminal.ansi1"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/nord-color-theme.json/colors/terminal.ansiGreen",
+            "targetPath": "terminal.ansi2"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/nord-color-theme.json/colors/terminal.ansiYellow",
+            "targetPath": "terminal.ansi3"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/nord-color-theme.json/colors/terminal.ansiBlue",
+            "targetPath": "terminal.ansi4"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/nord-color-theme.json/colors/terminal.ansiMagenta",
+            "targetPath": "terminal.ansi5"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/nord-color-theme.json/colors/terminal.ansiCyan",
+            "targetPath": "terminal.ansi6"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/nord-color-theme.json/colors/terminal.ansiWhite",
+            "targetPath": "terminal.ansi7"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/nord-color-theme.json/colors/terminal.ansiBrightBlack",
+            "targetPath": "terminal.ansi8"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/nord-color-theme.json/colors/terminal.ansiBrightRed",
+            "targetPath": "terminal.ansi9"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/nord-color-theme.json/colors/terminal.ansiBrightGreen",
+            "targetPath": "terminal.ansi10"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/nord-color-theme.json/colors/terminal.ansiBrightYellow",
+            "targetPath": "terminal.ansi11"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/nord-color-theme.json/colors/terminal.ansiBrightBlue",
+            "targetPath": "terminal.ansi12"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/nord-color-theme.json/colors/terminal.ansiBrightMagenta",
+            "targetPath": "terminal.ansi13"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/nord-color-theme.json/colors/terminal.ansiBrightCyan",
+            "targetPath": "terminal.ansi14"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/nord-color-theme.json/colors/terminal.ansiBrightWhite",
+            "targetPath": "terminal.ansi15"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/nord-color-theme.json/colors/diffEditor.insertedTextBackground",
+            "targetPath": "diff.added"
+        },
+        {
+            "disposition": "mapped",
+            "reason": "Explicit workbench token mapping",
+            "sourcePath": "themes/nord-color-theme.json/colors/diffEditor.removedTextBackground",
+            "targetPath": "diff.removed"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/activityBar.activeBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/activityBar.activeBorder",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/activityBar.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/activityBar.dropBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/activityBar.foreground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/activityBarBadge.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/activityBarBadge.foreground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/badge.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/badge.foreground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/button.secondaryBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/button.secondaryForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/button.secondaryHoverBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/charts.blue",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/charts.foreground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/charts.green",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/charts.lines",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/charts.orange",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/charts.purple",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/charts.red",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/charts.yellow",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/debugConsole.errorForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/debugConsole.infoForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/debugConsole.sourceForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/debugConsole.warningForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/debugConsoleInputIcon.foreground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/debugExceptionWidget.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/debugExceptionWidget.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/debugToolBar.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/dropdown.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/dropdown.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/dropdown.foreground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/editor.findMatchBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/editor.findMatchHighlightBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/editor.findRangeHighlightBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/editor.focusedStackFrameHighlightBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/editor.hoverHighlightBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/editor.inactiveSelectionBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/editor.inlineValuesBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/editor.inlineValuesForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/editor.lineHighlightBorder",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/editor.rangeHighlightBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/editor.selectionHighlightBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/editor.stackFrameHighlightBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/editor.wordHighlightBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/editor.wordHighlightStrongBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/editorActiveLineNumber.foreground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/editorBracketHighlight.foreground1",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/editorBracketHighlight.foreground2",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/editorBracketHighlight.foreground3",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/editorBracketHighlight.foreground4",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/editorBracketHighlight.foreground5",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/editorBracketHighlight.foreground6",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/editorBracketHighlight.unexpectedBracket.foreground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/editorBracketMatch.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/editorBracketMatch.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/editorCodeLens.foreground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/editorError.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/editorError.foreground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/editorGroup.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/editorGroup.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/editorGroup.dropBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/editorGroupHeader.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/editorGroupHeader.noTabsBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Higher-priority fallback supplied the target",
+            "sourcePath": "themes/nord-color-theme.json/colors/editorGroupHeader.tabsBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/editorGroupHeader.tabsBorder",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/editorGutter.addedBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/editorGutter.deletedBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/editorGutter.modifiedBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/editorHint.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/editorHint.foreground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/editorHoverWidget.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/editorHoverWidget.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/editorIndentGuide.activeBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/editorIndentGuide.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/editorInlayHint.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/editorInlayHint.foreground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/editorLineNumber.activeForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/editorLink.activeForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/editorMarkerNavigation.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/editorMarkerNavigationError.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/editorMarkerNavigationWarning.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/editorOverviewRuler.addedForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/editorOverviewRuler.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/editorOverviewRuler.currentContentForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/editorOverviewRuler.deletedForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/editorOverviewRuler.errorForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/editorOverviewRuler.findMatchForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/editorOverviewRuler.incomingContentForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/editorOverviewRuler.infoForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/editorOverviewRuler.modifiedForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/editorOverviewRuler.rangeHighlightForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/editorOverviewRuler.selectionHighlightForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/editorOverviewRuler.warningForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/editorOverviewRuler.wordHighlightForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/editorOverviewRuler.wordHighlightStrongForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/editorRuler.foreground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/editorSuggestWidget.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/editorSuggestWidget.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/editorSuggestWidget.focusHighlightForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/editorSuggestWidget.foreground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/editorSuggestWidget.highlightForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/editorSuggestWidget.selectedBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/editorSuggestWidget.selectedForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/editorWarning.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/editorWarning.foreground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/editorWhitespace.foreground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/editorWidget.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/editorWidget.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/extensionButton.prominentBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/extensionButton.prominentForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/extensionButton.prominentHoverBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/gitDecoration.conflictingResourceForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/gitDecoration.deletedResourceForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/gitDecoration.ignoredResourceForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/gitDecoration.modifiedResourceForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/gitDecoration.stageDeletedResourceForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/gitDecoration.stageModifiedResourceForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/gitDecoration.submoduleResourceForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/gitDecoration.untrackedResourceForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/input.placeholderForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/inputOption.activeBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/inputOption.activeBorder",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/inputOption.activeForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/inputValidation.errorBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/inputValidation.errorBorder",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/inputValidation.infoBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/inputValidation.infoBorder",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/inputValidation.warningBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/inputValidation.warningBorder",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/keybindingLabel.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/keybindingLabel.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/keybindingLabel.bottomBorder",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/keybindingLabel.foreground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/list.dropBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/list.errorForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/list.focusBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/list.focusForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/list.focusHighlightForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/list.highlightForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/list.hoverForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/list.inactiveFocusBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Higher-priority fallback supplied the target",
+            "sourcePath": "themes/nord-color-theme.json/colors/list.inactiveSelectionBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Higher-priority fallback supplied the target",
+            "sourcePath": "themes/nord-color-theme.json/colors/list.inactiveSelectionForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/list.warningForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/merge.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/merge.currentContentBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/merge.currentHeaderBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/merge.incomingContentBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/merge.incomingHeaderBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/minimap.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/minimap.errorHighlight",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/minimap.findMatchHighlight",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/minimap.selectionHighlight",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/minimap.warningHighlight",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/minimapGutter.addedBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/minimapGutter.deletedBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/minimapGutter.modifiedBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/minimapSlider.activeBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/minimapSlider.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/minimapSlider.hoverBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/notification.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/notification.buttonBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/notification.buttonForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/notification.buttonHoverBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/notification.errorBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/notification.errorForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/notification.foreground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/notification.infoBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/notification.infoForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/notification.warningBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/notification.warningForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/notificationCenter.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/notificationCenterHeader.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/notificationCenterHeader.foreground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/notificationLink.foreground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/notificationToast.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/notifications.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/notifications.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/notifications.foreground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/panelTitle.activeBorder",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/panelTitle.activeForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/panelTitle.inactiveForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/peekView.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/peekViewEditor.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/peekViewEditor.matchHighlightBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/peekViewEditorGutter.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/peekViewResult.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/peekViewResult.fileForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/peekViewResult.lineForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/peekViewResult.matchHighlightBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/peekViewResult.selectionBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/peekViewResult.selectionForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/peekViewTitle.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/peekViewTitleDescription.foreground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/peekViewTitleLabel.foreground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/pickerGroup.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/pickerGroup.foreground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/progressBar.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/quickInputList.focusBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/quickInputList.focusForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/sash.hoverBorder",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/scrollbar.shadow",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/scrollbarSlider.activeBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/scrollbarSlider.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/scrollbarSlider.hoverBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/selection.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/sideBarSectionHeader.foreground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/sideBarTitle.foreground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/statusBar.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/statusBar.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/statusBar.debuggingBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/statusBar.debuggingForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/statusBar.foreground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/statusBar.noFolderBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/statusBar.noFolderForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/statusBarItem.activeBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/statusBarItem.errorBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/statusBarItem.errorForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/statusBarItem.hoverBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/statusBarItem.prominentBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/statusBarItem.prominentHoverBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/statusBarItem.warningBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/statusBarItem.warningForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/tab.activeBorder",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/tab.activeBorderTop",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/tab.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/tab.hoverBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/tab.hoverBorder",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/tab.lastPinnedBorder",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/tab.unfocusedActiveBorder",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/tab.unfocusedActiveBorderTop",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/tab.unfocusedActiveForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/tab.unfocusedHoverBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/tab.unfocusedHoverBorder",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/tab.unfocusedInactiveForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/terminal.tab.activeBorder",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/textBlockQuote.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/textBlockQuote.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/textCodeBlock.background",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/textLink.activeForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/textLink.foreground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/textPreformat.foreground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/textSeparator.foreground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/titleBar.activeForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/titleBar.border",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/titleBar.inactiveBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/titleBar.inactiveForeground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/tree.indentGuidesStroke",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/walkThrough.embeddedEditorBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/welcomePage.buttonBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/welcomePage.buttonHoverBackground",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Workbench color ID has no corresponding KetPlus component",
+            "sourcePath": "themes/nord-color-theme.json/colors/widget.shadow",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/1/scope/emphasis",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/2/scope/strong",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/3",
+            "targetPath": "syntax.comment"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/4",
+            "targetPath": "syntax.constant"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/5",
+            "targetPath": "syntax.constant"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/6",
+            "targetPath": "syntax.constant"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/7",
+            "targetPath": "syntax.number"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/8",
+            "targetPath": "syntax.constant"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/9",
+            "targetPath": "syntax.type"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/10",
+            "targetPath": "syntax.function"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/11/scope/entity.name.tag",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/12",
+            "targetPath": "syntax.attribute"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/13/scope/entity.other.inherited-class",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/14/scope/invalid.deprecated",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/15/scope/invalid.illegal",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/16",
+            "targetPath": "syntax.keyword"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/17",
+            "targetPath": "syntax.operator"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/18",
+            "targetPath": "syntax.keyword"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/19/scope/markup.bold",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/20/scope/markup.changed",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/21/scope/markup.deleted",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/22/scope/markup.inserted",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/23/scope/meta.preprocessor",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/24/scope/punctuation",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/25/scope/punctuation.definition.method-parameters",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/25/scope/punctuation.definition.function-parameters",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/25/scope/punctuation.definition.parameters",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/26/scope/punctuation.definition.tag",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/27/scope/punctuation.definition.comment",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/27/scope/punctuation.end.definition.comment",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/27/scope/punctuation.start.definition.comment",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/28/scope/punctuation.section",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/29/scope/punctuation.section.embedded.begin",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/29/scope/punctuation.section.embedded.end",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/30/scope/punctuation.terminator",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/31/scope/punctuation.definition.variable",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/32/scope/storage",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/33",
+            "targetPath": "syntax.string"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/34",
+            "targetPath": "syntax.string"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/35",
+            "targetPath": "syntax.type"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/36/scope/support.constant",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/37",
+            "targetPath": "syntax.function"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/38",
+            "targetPath": "syntax.function"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/39",
+            "targetPath": "syntax.type"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/40",
+            "targetPath": "syntax.type"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/41/scope/token.debug-token",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/42/scope/token.error-token",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/43/scope/token.info-token",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/44/scope/token.warn-token",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/45",
+            "targetPath": "syntax.variable"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/46",
+            "targetPath": "syntax.variable"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/47",
+            "targetPath": "syntax.variable"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/48/scope/punctuation.separator.pointer-access.c",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/49/scope/source.c meta.preprocessor.include",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/49/scope/source.c string.quoted.other.lt-gt.include",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/50/scope/source.cpp keyword.control.directive.conditional",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/50/scope/source.cpp punctuation.definition.directive",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/50/scope/source.c keyword.control.directive.conditional",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/50/scope/source.c punctuation.definition.directive",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/51/scope/source.css constant.other.color.rgb-value",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/52/scope/source.css meta.property-value",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/53/scope/source.css keyword.control.at-rule.media",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/53/scope/source.css keyword.control.at-rule.media punctuation.definition.keyword",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/54/scope/source.css punctuation.definition.keyword",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/55/scope/source.css support.type.property-name",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/56/scope/source.diff meta.diff.range.context",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/57/scope/source.diff meta.diff.header.from-file",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/58/scope/source.diff punctuation.definition.from-file",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/59/scope/source.diff punctuation.definition.range",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/60/scope/source.diff punctuation.definition.separator",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/61",
+            "targetPath": "syntax.type"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/62",
+            "targetPath": "syntax.variable"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/63",
+            "targetPath": "syntax.constant"
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Scope collapsed to a shared Lexilla role; later explicit fields win without a TextMate scope stack",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/64",
+            "targetPath": "syntax.variable"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/65/scope/source.go constant.other.placeholder.go",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/66/scope/source.java comment.block.documentation.javadoc punctuation.definition.entity.html",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/67/scope/source.java constant.other",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/68/scope/source.java keyword.other.documentation",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/69/scope/source.java keyword.other.documentation.author.javadoc",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/70/scope/source.java keyword.other.documentation.directive",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/70/scope/source.java keyword.other.documentation.custom",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/71/scope/source.java keyword.other.documentation.see.javadoc",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/72/scope/source.java meta.method-call meta.method",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/73/scope/source.java meta.tag.template.link.javadoc",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/73/scope/source.java string.other.link.title.javadoc",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/74/scope/source.java meta.tag.template.value.javadoc",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/75/scope/source.java punctuation.definition.keyword.javadoc",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/76/scope/source.java punctuation.definition.tag.begin.javadoc",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/76/scope/source.java punctuation.definition.tag.end.javadoc",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/77/scope/source.java storage.modifier.import",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/78/scope/source.java storage.modifier.package",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/79/scope/source.java storage.type",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/80/scope/source.java storage.type.annotation",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/81/scope/source.java storage.type.generic",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/82/scope/source.java storage.type.primitive",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/83/scope/source.js punctuation.decorator",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/83/scope/source.js meta.decorator variable.other.readwrite",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/83/scope/source.js meta.decorator entity.name.function",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/84/scope/source.js meta.object-literal.key",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/85/scope/source.js storage.type.class.jsdoc",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/86/scope/source.js string.quoted.template punctuation.quasi.element.begin",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/86/scope/source.js string.quoted.template punctuation.quasi.element.end",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/86/scope/source.js string.template punctuation.definition.template-expression",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/87/scope/source.js string.quoted.template meta.method-call.with-arguments",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/88/scope/source.js string.template meta.template.expression support.variable.property",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/88/scope/source.js string.template meta.template.expression variable.other.object",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/89/scope/source.js support.type.primitive",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/90/scope/source.js variable.other.object",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/91/scope/source.js variable.other.readwrite.alias",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/92/scope/source.js meta.embedded.line meta.brace.square",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/92/scope/source.js meta.embedded.line meta.brace.round",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/92/scope/source.js string.quoted.template meta.brace.square",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/92/scope/source.js string.quoted.template meta.brace.round",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/93/scope/text.html.basic constant.character.entity.html",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/94/scope/text.html.basic constant.other.inline-data",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/95/scope/text.html.basic meta.tag.sgml.doctype",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/96/scope/text.html.basic punctuation.definition.entity",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/97/scope/source.properties entity.name.section.group-title.ini",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/98/scope/source.properties punctuation.separator.key-value.ini",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/99/scope/text.html.markdown markup.fenced_code.block",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/99/scope/text.html.markdown markup.fenced_code.block punctuation.definition",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/100/scope/markup.heading",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/101/scope/text.html.markdown markup.inline.raw",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/101/scope/text.html.markdown markup.inline.raw punctuation.definition.raw",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/102/scope/text.html.markdown markup.italic",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/103/scope/text.html.markdown markup.underline.link",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/104/scope/text.html.markdown beginning.punctuation.definition.list",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/105/scope/text.html.markdown beginning.punctuation.definition.quote",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/106/scope/text.html.markdown markup.quote",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/107/scope/text.html.markdown constant.character.math.tex",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/108/scope/text.html.markdown punctuation.definition.math.begin",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/108/scope/text.html.markdown punctuation.definition.math.end",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/109/scope/text.html.markdown punctuation.definition.function.math.tex",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/110/scope/text.html.markdown punctuation.math.operator.latex",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/111/scope/text.html.markdown punctuation.definition.heading",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/112/scope/text.html.markdown punctuation.definition.constant",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/112/scope/text.html.markdown punctuation.definition.string",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/113/scope/text.html.markdown constant.other.reference.link",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/113/scope/text.html.markdown string.other.link.description",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/113/scope/text.html.markdown string.other.link.title",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/114/scope/source.perl punctuation.definition.variable",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/115/scope/source.php meta.function-call",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/115/scope/source.php meta.function-call.object",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/116/scope/source.python entity.name.function.decorator",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/116/scope/source.python meta.function.decorator support.type",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/117/scope/source.python meta.function-call.generic",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/118/scope/source.python support.type",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/119/scope/source.python variable.parameter.function.language",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/120/scope/source.python meta.function.parameters variable.parameter.function.language.special.self",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/121/scope/source.rust entity.name.type",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/122/scope/source.rust meta.macro entity.name.function",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/123/scope/source.rust meta.attribute",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/123/scope/source.rust meta.attribute punctuation",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/123/scope/source.rust meta.attribute keyword.operator",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/124/scope/source.rust entity.name.type.trait",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/125/scope/source.rust punctuation.definition.interpolation",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/126/scope/source.css.scss punctuation.definition.interpolation.begin.bracket.curly",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/126/scope/source.css.scss punctuation.definition.interpolation.end.bracket.curly",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/127/scope/source.css.scss variable.interpolation",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/128/scope/source.ts punctuation.decorator",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/128/scope/source.ts meta.decorator variable.other.readwrite",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/128/scope/source.ts meta.decorator entity.name.function",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/128/scope/source.tsx punctuation.decorator",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/128/scope/source.tsx meta.decorator variable.other.readwrite",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/128/scope/source.tsx meta.decorator entity.name.function",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/129/scope/source.ts meta.object-literal.key",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/129/scope/source.tsx meta.object-literal.key",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/130/scope/source.ts meta.object-literal.key entity.name.function",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/130/scope/source.tsx meta.object-literal.key entity.name.function",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/131/scope/source.ts support.class",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/131/scope/source.ts support.type",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/131/scope/source.ts entity.name.type",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/131/scope/source.ts entity.name.class",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/131/scope/source.tsx support.class",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/131/scope/source.tsx support.type",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/131/scope/source.tsx entity.name.type",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/131/scope/source.tsx entity.name.class",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/132/scope/source.ts support.constant.math",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/132/scope/source.ts support.constant.dom",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/132/scope/source.ts support.constant.json",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/132/scope/source.tsx support.constant.math",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/132/scope/source.tsx support.constant.dom",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/132/scope/source.tsx support.constant.json",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/133/scope/source.ts support.variable",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/133/scope/source.tsx support.variable",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/134/scope/source.ts meta.embedded.line meta.brace.square",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/134/scope/source.ts meta.embedded.line meta.brace.round",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/134/scope/source.tsx meta.embedded.line meta.brace.square",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/134/scope/source.tsx meta.embedded.line meta.brace.round",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/135/scope/text.xml entity.name.tag.namespace",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/136/scope/text.xml keyword.other.doctype",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/137/scope/text.xml meta.tag.preprocessor entity.name.tag",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/138/scope/text.xml string.unquoted.cdata",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/138/scope/text.xml string.unquoted.cdata punctuation.definition.string",
+            "targetPath": ""
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Unsupported selector; only documented single dotted scope prefixes are recognized",
+            "sourcePath": "themes/nord-color-theme.json/tokenColors/139/scope/source.yaml entity.name.tag",
+            "targetPath": ""
+        },
+        {
+            "disposition": "approximated",
+            "reason": "Lexilla uses shared roles, not TextMate scope stacks; rule order is parent first then child, later explicit fields override",
+            "sourcePath": "themes/nord-color-theme.json",
+            "targetPath": "syntax"
+        },
+        {
+            "disposition": "skipped",
+            "reason": "Extension JavaScript, grammars, semantic token providers and UI contributions are never executed",
+            "sourcePath": "themes/nord-color-theme.json",
+            "targetPath": ""
+        }
+    ]
+}

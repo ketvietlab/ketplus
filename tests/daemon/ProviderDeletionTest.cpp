@@ -3,8 +3,13 @@
 #include "providers/CodexAdapter.h"
 #include "runtime/SessionHost.h"
 #include "storage/LocalJournal.h"
+#include "storage/McpMediaStore.h"
+#include <QBuffer>
+#include <QDir>
 #include <QElapsedTimer>
 #include <QFile>
+#include <QFileInfo>
+#include <QImage>
 #include <QSignalSpy>
 #include <QSqlDatabase>
 #include <QSqlError>
@@ -27,6 +32,7 @@ QList<QPair<QString, QString>> unsupportedOwnershipMetadata() {
             {"retired-string", R"({"codex":{"retired_thread_ids":"shared-thread"}})"},
             {"retired-number", R"({"codex":{"retired_thread_ids":[42]}})"},
             {"unknown-fields", R"({"codex":{"future_refs":["shared-thread"]}})"},
+            {"seen-cursor-string", R"({"codex":{"thread_id":"t","seen_cursor":"7"}})"},
             {"empty-provider", R"({"":{"thread_id":"shared-thread"}})"}};
 }
 } // namespace
@@ -348,6 +354,85 @@ class ProviderDeletionTest final : public QObject {
                                "desktop");
         QCOMPARE(result.value("error_code"), QJsonValue("session_catalog_too_large"));
         QVERIFY(!result.contains("sessions"));
+    }
+
+    // A catalog larger than a frame is read in live pages, a keyset walk by session id: every
+    // row once, in order, each reply under the wire limit. Unpaged, it still fails closed.
+    void liveCatalogPagesAreBoundedAndComplete() {
+        QTemporaryDir dir;
+        LocalJournal journal(dir.filePath("journal.sqlite"));
+        constexpr int count = 1300;
+        for (int index = 0; index < count; ++index)
+            QVERIFY(journal.upsertSession({QStringLiteral("s-%1").arg(index, 5, 10, QChar('0')),
+                                           dir.path(),
+                                           "codex",
+                                           {},
+                                           {},
+                                           "ready",
+                                           1,
+                                           0,
+                                           0,
+                                           QString(700, 't')}));
+        CodexAdapter adapter(dir.filePath("missing-provider"));
+        SessionHost host(&journal, &adapter);
+        const auto list = [&](const QJsonObject& payload, qsizetype* bytes = nullptr) {
+            const QJsonObject request{
+                {"message_type", "session.list"}, {"message_id", "catalog"}, {"payload", payload}};
+            const auto result = host.handleCommand(request, "desktop");
+            if (bytes != nullptr)
+                *bytes = protocol::encodeFrame(protocol::response(request, result)).size() - 4;
+            return result;
+        };
+        const QJsonObject live{{"deleted_sessions_page_version", 1},
+                               {"session_catalog_live_only", true}};
+        QCOMPARE(list(live).value("error_code"), QJsonValue("session_catalog_too_large"));
+
+        QStringList ids;
+        int pages = 0;
+        // The first page comes with the deletion walk's first page; the rest are live-only.
+        QJsonObject payload{{"deleted_sessions_page_version", 1},
+                            {"live_sessions_page_version", 1}};
+        for (;;) {
+            qsizetype bytes = 0;
+            const auto page = list(payload, &bytes);
+            QVERIFY2(page.value("ok").toBool(), qPrintable(QJsonDocument(page).toJson()));
+            QVERIFY(bytes <= protocol::maximumFrameBytes);
+            QCOMPARE(page.value("live_sessions_page_version").toInt(), 1);
+            QCOMPARE(page.contains("deleted_sessions"), pages == 0);
+            ++pages;
+            for (const auto& value : page.value("sessions").toArray())
+                ids << value.toObject().value("session_id").toString();
+            const QString next = page.value("live_sessions_next").toString();
+            if (next.isEmpty())
+                break;
+            QCOMPARE(next, ids.last());
+            payload = live;
+            payload.insert("live_sessions_page_version", 1);
+            payload.insert("live_sessions_after", next);
+        }
+        QVERIFY(pages >= 3);
+        QCOMPARE(ids.size(), count);
+        QStringList sorted = ids;
+        sorted.sort();
+        sorted.removeDuplicates();
+        QCOMPARE(ids, sorted);
+
+        auto invalid = live;
+        invalid.insert("live_sessions_page_version", 2);
+        QCOMPARE(list(invalid).value("error_code"), QJsonValue("invalid_session_catalog"));
+        // A continuation is live-only and names a session id.
+        QCOMPARE(list({{"deleted_sessions_page_version", 1},
+                       {"live_sessions_page_version", 1},
+                       {"live_sessions_after", "s-00001"}})
+                     .value("error_code"),
+                 QJsonValue("invalid_session_catalog"));
+        for (const auto& after : {QJsonValue(""), QJsonValue(1), QJsonValue(QJsonObject{})}) {
+            invalid = live;
+            invalid.insert("live_sessions_page_version", 1);
+            invalid.insert("live_sessions_after", after);
+            QCOMPARE(list(invalid).value("error_code"), QJsonValue("invalid_session_catalog"));
+        }
+        QVERIFY(protocol::features(1).contains("session.catalog_pages/1"));
     }
 
     void tombstoneSnapshotFencesMutationRollbackAndRestart() {
@@ -710,7 +795,7 @@ class ProviderDeletionTest final : public QObject {
     }
     void purgeIsDurableAndScopedToUnsharedProviderThreads() {
         QTemporaryDir directory;
-        const auto executable = directory.filePath("codex");
+        const auto executable = directory.filePath(fixtureName("codex"));
         const auto log = directory.filePath("codex.log");
         QVERIFY(writeFakeCodex(executable, log));
         LocalJournal journal(directory.filePath("journal.sqlite"));
@@ -772,7 +857,7 @@ class ProviderDeletionTest final : public QObject {
     }
     void unavailableProviderCleanupRunsAfterRestart() {
         QTemporaryDir directory;
-        const auto executable = directory.filePath("codex");
+        const auto executable = directory.filePath(fixtureName("codex"));
         const auto log = directory.filePath("codex.log");
         const auto database = directory.filePath("journal.sqlite");
         {
@@ -818,18 +903,50 @@ class ProviderDeletionTest final : public QObject {
                                                      "desktop");
         QCOMPARE(catalog.value("deleted_sessions").toArray().size(), 1);
     }
-    void unsupportedProviderKeepsItsConversation() {
+    // T-60: a provider without thread cleanup (Cursor, or one this daemon does not know)
+    // no longer blocks deletion. The conversation's KetPlus data goes; its provider history,
+    // outside KetPlus-owned paths, stays; a Codex thread it handed off from is still cleaned.
+    void providerWithoutCleanupIsDeletedLocally_data() {
+        QTest::addColumn<QString>("provider");
+        QTest::newRow("cursor") << QStringLiteral("cursor");
+        QTest::newRow("unknown") << QStringLiteral("future-agent");
+    }
+    void providerWithoutCleanupIsDeletedLocally() {
+        QFETCH(QString, provider);
         QTemporaryDir directory;
         LocalJournal journal(directory.filePath("journal.sqlite"));
         StoredSession session;
-        session.id = "cursor-owned";
+        session.id = provider + "-owned";
         session.worktreePath = directory.path();
-        session.adapter = "cursor";
-        session.threadId = "cursor-thread";
+        session.adapter = provider;
+        session.threadId = provider + "-thread";
         session.state = "ready";
+        session.providerThreads =
+            QStringLiteral(R"({"codex":{"retired_thread_ids":["codex-before"]}})");
         QVERIFY(journal.upsertSession(session));
+        // The provider's own store, standing in for ~/.cursor: never touched.
+        const QString store = directory.filePath("provider-store/chat.json");
+        QVERIFY(QDir().mkpath(QFileInfo(store).path()));
+        QFile chat(store);
+        QVERIFY(chat.open(QIODevice::WriteOnly));
+        chat.write("{}");
+        chat.close();
+        // The conversation's handoff directory and media, which KetPlus owns.
+        const QString handoff = directory.filePath("handoff/" + session.id);
+        QVERIFY(QDir().mkpath(handoff));
+        QImage image(16, 16, QImage::Format_RGB32);
+        image.fill(Qt::red);
+        QByteArray png;
+        QBuffer buffer(&png);
+        QVERIFY(buffer.open(QIODevice::WriteOnly) && image.save(&buffer, "PNG"));
+        McpMediaStore media(McpMediaStore::directoryForJournal(journal.databasePath()));
+        const QString reference =
+            media.storeImage(png, "image/png", session.id).value("media_ref").toString();
+        QVERIFY(!reference.isEmpty());
+        QVERIFY(media.preview(session.id, reference, 16).value("ok").toBool());
         CodexAdapter adapter("/missing-provider");
         SessionHost host(&journal, &adapter);
+        QSignalSpy events(&host, &SessionHost::eventReady);
         const auto result = host.handleCommand({{"protocol_version", 0},
                                                 {"message_id", "delete"},
                                                 {"message_type", "session.delete"},
@@ -837,9 +954,22 @@ class ProviderDeletionTest final : public QObject {
                                                 {"session_generation", session.generation},
                                                 {"payload", QJsonObject{}}},
                                                "desktop");
-        QCOMPARE(result.value("error_code").toString(), "provider_cleanup_unsupported");
-        QCOMPARE(journal.sessions().size(), 1);
-        QVERIFY(journal.deletionWork().isEmpty());
+        QVERIFY2(result.value("ok").toBool(), qPrintable(result.value("error_message").toString()));
+        QVERIFY(journal.sessions().isEmpty());
+        QVERIFY(!QFileInfo::exists(handoff));
+        QCOMPARE(media.preview(session.id, reference, 16).value("error_code").toString(),
+                 QString("media_unavailable"));
+        QVERIFY(QFileInfo::exists(store));
+        QVERIFY(!events.isEmpty());
+        QCOMPARE(events.last().first().toJsonObject().value("event_type").toString(),
+                 QString("session.deleted"));
+        // Only the Codex thread is queued; the provider's own thread is not.
+        QCOMPARE(journal.deletionWork().size(), 1);
+        const auto targets =
+            journal.deletionWork().first().toObject().value("provider_targets").toArray();
+        QCOMPARE(targets.size(), 1);
+        QCOMPARE(targets.first().toObject().value("provider").toString(), QString("codex"));
+        QCOMPARE(targets.first().toObject().value("thread_id").toString(), QString("codex-before"));
     }
     void newDeletionDefersWhenOwnershipCannotBeRead() {
         QTemporaryDir dir;
@@ -907,7 +1037,7 @@ class ProviderDeletionTest final : public QObject {
         QFETCH(QString, malformed);
         QTemporaryDir dir;
         const auto path = dir.filePath("journal.sqlite");
-        const auto executable = dir.filePath("codex");
+        const auto executable = dir.filePath(fixtureName("codex"));
         const auto log = dir.filePath("codex.log");
         QVERIFY(writeFakeCodex(executable, log));
         LocalJournal journal(path);
@@ -1055,6 +1185,43 @@ class ProviderDeletionTest final : public QObject {
         QCOMPARE(journal.sessions().at(corruptSource ? 0 : 1).providerThreads, malformed);
         QVERIFY(journal.sessionTombstone("first", 1).sessionId.isEmpty());
         QVERIFY(journal.deletionWork().isEmpty());
+    }
+    // Earlier daemons stored a read marker beside each provider thread. A conversation that
+    // still has one neither blocks deleting another conversation nor loses its own threads.
+    void legacySeenCursorDoesNotBlockDeletion() {
+        QTemporaryDir directory;
+        LocalJournal journal(directory.filePath("journal.sqlite"));
+        StoredSession first;
+        first.id = "first";
+        first.adapter = "codex";
+        first.threadId = "first-thread";
+        first.worktreePath = directory.path();
+        first.state = "ready";
+        first.providerThreads = R"({"claude":{"thread_id":"claude-old","seen_cursor":12}})";
+        auto second = first;
+        second.id = "second";
+        second.threadId = "second-thread";
+        second.providerThreads = R"({"claude":{"thread_id":"shared-old","seen_cursor":3}})";
+        QVERIFY(journal.upsertSession(first));
+        QVERIFY(journal.upsertSession(second));
+        CodexAdapter adapter("/missing-provider");
+        SessionHost host(&journal, &adapter);
+        const auto result = host.handleCommand({{"protocol_version", 0},
+                                                {"message_id", "delete"},
+                                                {"message_type", "session.delete"},
+                                                {"session_id", "first"},
+                                                {"session_generation", first.generation},
+                                                {"payload", QJsonObject{}}},
+                                               "desktop");
+        QVERIFY2(result.value("ok").toBool(), QJsonDocument(result).toJson().constData());
+        QCOMPARE(journal.sessions().size(), 1);
+        const auto targets =
+            journal.deletionWork().first().toObject().value("provider_targets").toArray();
+        QVERIFY(
+            targets.contains(QJsonObject{{"provider", "codex"}, {"thread_id", "first-thread"}}));
+        QVERIFY(targets.contains(QJsonObject{{"provider", "claude"}, {"thread_id", "claude-old"}}));
+        QVERIFY(
+            !targets.contains(QJsonObject{{"provider", "claude"}, {"thread_id", "shared-old"}}));
     }
     void sharedThreadsRemainOwnedByTheOtherConversation() {
         QTemporaryDir directory;
