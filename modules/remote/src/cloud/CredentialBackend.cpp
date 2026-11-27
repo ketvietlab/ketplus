@@ -17,6 +17,7 @@ class Unavailable final : public CredentialBackend {
         read({}, &ignored, error);
         return false;
     }
+    bool accessible(const QString&, QString* error) override { return write({}, {}, error); }
 };
 } // namespace
 std::shared_ptr<CredentialBackend> nativeCredentialBackend() {

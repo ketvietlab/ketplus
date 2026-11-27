@@ -21,8 +21,10 @@ class Backend final : public CredentialBackend {
     bool failWrite{false};
     bool failVerification{false};
     int writes{0};
+    int reads{0};
     std::function<void()> afterWrite;
     Result read(const QString&, QByteArray* value, QString* error) override {
+        ++reads;
         if (locked || (failVerification && writes > 0)) {
             if (error)
                 *error = "Synthetic store unavailable";
@@ -43,6 +45,11 @@ class Backend final : public CredentialBackend {
         if (afterWrite)
             afterWrite();
         return true;
+    }
+    bool accessible(const QString&, QString* error) override {
+        if (locked && error)
+            *error = "Synthetic store unavailable";
+        return !locked;
     }
 };
 struct Fixture {
@@ -260,6 +267,7 @@ class CredentialStoreTest final : public QObject {
         QVERIFY(error.contains("busy"));
         lock.close();
         f.backend->locked = true;
+        // A cached record is not served while the OS store refuses access.
         QVERIFY(f.store.read("key", &error).isEmpty());
         QVERIFY(!error.isEmpty());
         f.backend->locked = false;
@@ -267,6 +275,53 @@ class CredentialStoreTest final : public QObject {
 #else
         QSKIP("Native credential locking is supported on macOS and Linux.");
 #endif
+    }
+    void repeatedReadsDecryptTheRecordOnce() {
+        Fixture f;
+        QVERIFY(f.store.write("session-key-a", "synthetic-a"));
+        QVERIFY(f.store.write("session-key-b", "synthetic-b"));
+        const int reads = f.backend->reads;
+        for (int i = 0; i < 100; ++i) {
+            QString error;
+            QCOMPARE(f.store.read(i % 2 ? "session-key-a" : "session-key-b", &error),
+                     i % 2 ? "synthetic-a" : "synthetic-b");
+            QVERIFY(error.isEmpty());
+        }
+        QCOMPARE(f.backend->reads, reads);
+        QCOMPARE(f.backend->writes, 2);
+    }
+    void writeByAnotherStoreIsSeen() {
+        Fixture f;
+        QVERIFY(f.store.write("key", "first"));
+        QCOMPARE(f.store.read("key"), "first");
+        // Another process holds its own store over the same lock file and OS record.
+        CredentialStore other("test", f.backend, f.path);
+        QVERIFY(other.write("key", "second"));
+        QCOMPARE(f.store.read("key"), "second");
+        QVERIFY(other.remove("key"));
+        QCOMPARE(f.store.read("key"), QByteArray{});
+    }
+    void failedWriteRereadsTheOsRecord() {
+        Fixture f;
+        QVERIFY(f.store.write("key", "committed"));
+        f.backend->failWrite = true;
+        QString error;
+        QVERIFY(!f.store.write("key", "rejected", &error));
+        QVERIFY(!error.isEmpty());
+        f.backend->failWrite = false;
+        const int reads = f.backend->reads;
+        QCOMPARE(f.store.read("key"), "committed");
+        QCOMPARE(f.backend->reads, reads + 1);
+    }
+    void unchangedUpdateKeepsTheCache() {
+        Fixture f;
+        QVERIFY(f.store.write("key", "synthetic"));
+        const int reads = f.backend->reads;
+        QVERIFY(f.store.update([](auto& accounts) { accounts.insert("key", "synthetic"); }));
+        QVERIFY(f.store.batch([](CredentialStore&, QString*) { return false; }) == false);
+        QCOMPARE(f.store.read("key"), "synthetic");
+        QCOMPARE(f.backend->reads, reads);
+        QCOMPARE(f.backend->writes, 1);
     }
 };
 QTEST_GUILESS_MAIN(CredentialStoreTest)
