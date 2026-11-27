@@ -57,6 +57,7 @@ class NativeJobClient final : public QObject {
     Event event_;
     qint64 remainingTimeout_{0};
     qint64 lastConnectionAttempt_{-1000};
+    qint64 connectedAt_{0};
     qint64 lastMessage_{0};
     qint64 recoveryStarted_{-1};
     qint64 lastRecoveryAttempt_{-1000};

@@ -23,6 +23,7 @@ NativeJobClient::NativeJobClient(QString executable, QString directory, QString 
     connect(&socket_, &QLocalSocket::connected, this, [this] {
         input_.clear();
         authenticated_ = false;
+        connectedAt_ = clock_.elapsed();
         send({{"op", "auth"}, {"lease_id", lease_}});
     });
     connect(&socket_, &QLocalSocket::readyRead, this, [this] { receive(); });
@@ -316,7 +317,9 @@ void NativeJobClient::tick() {
     connectSocket();
     if (authenticated_)
         send({{"op", "ping"}});
-    if (clock_.elapsed() - lastMessage_ >= 1500 && socket_.state() == QLocalSocket::ConnectedState)
+    // A new connection gets time to authenticate, without moving the recovery deadline.
+    if (socket_.state() == QLocalSocket::ConnectedState &&
+        clock_.elapsed() - qMax(lastMessage_, connectedAt_) >= 1500)
         socket_.abort();
     // A live supervisor gets its full lease/grace window to finish cleanup and
     // write a result. Recovery never calls start() to reconstruct a missing result.

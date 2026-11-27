@@ -337,6 +337,64 @@ class NativeJobExecutorTest final : public QObject {
                                  3000);
     }
 
+    void daemonClientReauthenticatesAfterMissingHeartbeatsWithoutReplaying() {
+        Executor fixture;
+        NativeJobClient client(QStringLiteral(KETPLUS_JOB_EXECUTOR_PATH), fixture.path(),
+                               fixture.taskId, fixture.lease);
+        const QJsonObject execution{
+            {"argv",
+             QJsonArray{"/bin/sh", "-c",
+                        "printf X >> launched; while [ ! -f release ]; do sleep 0.1; done"}},
+            {"cwd", fixture.path()}};
+        int readyEvents = 0;
+        int handshakes = 0;
+        QJsonObject done;
+        QString error;
+        QVERIFY2(client.start(
+                     execution, 30000,
+                     [&](const QJsonObject&) {
+                         ++handshakes;
+                         return true;
+                     },
+                     [&](const QJsonObject& event) {
+                         if (event.value("event") == "ready")
+                             ++readyEvents;
+                         if (event.value("event") == "done")
+                             done = event;
+                     },
+                     &error),
+                 qPrintable(error));
+        QTRY_VERIFY_WITH_TIMEOUT(QFileInfo::exists(fixture.path() + "/launched"), 5000);
+        const auto supervisor = fixture.receipt().value("supervisor_identity").toObject();
+        const NativeProcessIdentity identity{supervisor.value("pid").toInteger(), 0, 0,
+                                             supervisor.value("birth").toString()};
+        const auto stopOnFailure = qScopeGuard([&] {
+            if (done.value("state") == "completed")
+                return;
+            QString ignored;
+            signalIdentity(identity, SIGCONT, &ignored);
+            signalIdentity(identity, SIGTERM, &ignored);
+        });
+        QCOMPARE(readyEvents, 1);
+        QVERIFY2(signalIdentity(identity, SIGSTOP, &error), qPrintable(error));
+        // Let the existing client cross its 1.5 s silence threshold while leaving time to
+        // authenticate on a new connection before the supervisor's macOS lease expires.
+        QTest::qWait(3000);
+        QVERIFY2(signalIdentity(identity, SIGCONT, &error), qPrintable(error));
+        QTRY_VERIFY_WITH_TIMEOUT(readyEvents >= 2, 6000);
+        QVERIFY(done.isEmpty());
+        QFile release(fixture.path() + "/release");
+        QVERIFY(release.open(QIODevice::WriteOnly));
+        release.close();
+        QTRY_VERIFY_WITH_TIMEOUT(!done.isEmpty(), 5000);
+        QCOMPARE(done.value("state"), "completed");
+        client.acknowledge();
+        QCOMPARE(handshakes, 1);
+        QFile marker(fixture.path() + "/launched");
+        QVERIFY(marker.open(QIODevice::ReadOnly));
+        QCOMPARE(marker.readAll(), QByteArray("X"));
+    }
+
     void daemonClientRefusesWorkloadWhenHostHandshakeCannotCommit() {
         Executor fixture;
         NativeJobClient client(QStringLiteral(KETPLUS_JOB_EXECUTOR_PATH), fixture.path(),
