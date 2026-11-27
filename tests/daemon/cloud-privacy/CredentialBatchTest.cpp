@@ -269,6 +269,76 @@ class CredentialBatchTest final : public QObject {
         QVERIFY(backend->reads <= 3);
         QCOMPARE(backend->writes, 1);
     }
+    void sealingABacklogReadsKeysOnce() {
+        backend = std::make_shared<CountingBackend>();
+        CredentialStore store;
+        CloudCrypto crypto(&store);
+        QString error;
+        QVERIFY(
+            !crypto.encrypt("first", "aad", "session-backlog", 1, 1, "machine-synthetic", 1, &error)
+                 .isEmpty());
+        QVERIFY(!crypto.sign("first", &error).isEmpty());
+        QVERIFY2(error.isEmpty(), qPrintable(error));
+        backend->reads = 0;
+        backend->writes = 0;
+        // Each OS read is a locked fetch of the whole record; a backlog of a hundred events
+        // read it twice per event on the daemon's only thread.
+        for (int i = 0; i < 100; ++i) {
+            QVERIFY(!crypto
+                         .encrypt(QByteArray::number(i), "aad", "session-backlog", 1, 1,
+                                  "machine-synthetic", 1, &error)
+                         .isEmpty());
+            QVERIFY(!crypto.sign(QByteArray::number(i), &error).isEmpty());
+        }
+        QVERIFY2(error.isEmpty(), qPrintable(error));
+        QCOMPARE(backend->reads, 0);
+        QCOMPARE(backend->writes, 0);
+    }
+    void forgottenKeysAreReadAgain() {
+        backend = std::make_shared<CountingBackend>();
+        CredentialStore store;
+        CloudCrypto crypto(&store);
+        const auto account = keyAccount("session-moved");
+        QVERIFY(store.write(account, QByteArray(32, 'a')));
+        QCOMPARE(crypto.sessionKey("session-moved", 1), QByteArray(32, 'a'));
+        // Adopting another workspace puts that workspace's key under the same account.
+        QVERIFY(store.write(account, QByteArray(32, 'b')));
+        QCOMPARE(crypto.sessionKey("session-moved", 1), QByteArray(32, 'a'));
+        crypto.forgetKeys();
+        QCOMPARE(crypto.sessionKey("session-moved", 1), QByteArray(32, 'b'));
+    }
+    void signingOutForgetsKeys() {
+        Fixture f(16, 1);
+        auto& crypto = Access::crypto(*f.client);
+        QCOMPARE(crypto.sessionKey("session-0", 1), QByteArray(32, 'k'));
+        CredentialStore store;
+        QVERIFY(store.write(keyAccount("session-0"), QByteArray(32, 'n')));
+        bool finished = false;
+        Access::signOut(*f.client, [&](const QJsonObject&, const QString&) { finished = true; });
+        QTRY_VERIFY(finished);
+        QCOMPARE(crypto.sessionKey("session-0", 1), QByteArray(32, 'n'));
+    }
+    void aBacklogUploadGivesTheEventLoopBack() {
+        constexpr int sessions = 12;
+        Fixture f(64, sessions);
+        f.reply("/v2/events:append", QJsonObject{}, 202);
+        for (int i = 0; i < sessions; ++i) {
+            QString error;
+            QVERIFY2(f.journal.appendEvent(QString("session-%1").arg(i), 1, "user.message",
+                                           {{"text", "synthetic"}}, &error) > 0,
+                     qPrintable(error));
+        }
+        const auto sent = [&f] {
+            return int(std::count_if(
+                f.transport.requests.cbegin(), f.transport.requests.cend(),
+                [](const auto& request) { return request.url().path() == "/v2/events:append"; }));
+        };
+        // Every session's first upload reads its cursor and key from the slow store.
+        backend->delayMs = 20;
+        Access::uploadAll(*f.client);
+        QVERIFY2(sent() < sessions, "One pass must not seal every session's backlog at once");
+        QTRY_COMPARE_WITH_TIMEOUT(sent(), sessions, 60000);
+    }
     void operationReads_data() {
         QTest::addColumn<int>("accounts");
         QTest::addColumn<int>("sessions");

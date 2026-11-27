@@ -48,6 +48,7 @@ QJsonArray CloudControlClient::trustedDevices(const QJsonArray& devices,
 void CloudControlClient::invalidateSenderKeys() {
     ++senderKeysRevision_;
     senderKeys_.clear();
+    crypto_.forgetKeys();
 }
 
 void CloudControlClient::withSenderKeys(const QString& senderId, const int version,

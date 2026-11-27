@@ -2,8 +2,16 @@
 #include "storage/LocalJournal.h"
 #include <QJsonDocument>
 #include <QSet>
+#include <QTimer>
+#include <utility>
 
 namespace ketplus::daemon {
+namespace {
+// How long one upload pass may hold the daemon's only thread. A backlog seals up to a batch of
+// events per session; a pass over many sessions kept IPC waiting until clients timed out.
+constexpr qint64 uploadPassBudgetMs = 25;
+} // namespace
+
 QString CloudControlClient::uploadScope() const {
     return QString::fromUtf8(QJsonDocument(QJsonArray{QStringLiteral("cloud-upload-v1"),
                                                       baseUrl_.toString(QUrl::FullyEncoded),
@@ -25,6 +33,8 @@ qint64 CloudControlClient::uploadedCursor(const QString& sessionId, qint64 gener
 }
 
 void CloudControlClient::uploadEvents() {
+    // A pass that gave the event loop back continues with the sessions it had not reached.
+    const bool continuing = std::exchange(uploadPassContinuing_, false);
     if (machineId_.isEmpty() || daemonToken_.isEmpty() || eventsForwardOnly())
         return;
     const QList<StoredSession> sessions = journal_->sessions();
@@ -43,13 +53,41 @@ void CloudControlClient::uploadEvents() {
     knownUploadedCursors_.removeIf([&current](const QHash<QString, qint64>::iterator entry) {
         return !current.contains(entry.key());
     });
-    for (const StoredSession& session : sessions) {
+    const QSet<QString> reach =
+        continuing ? std::exchange(uploadPassRemaining_, {}) : QSet<QString>{};
+    uploadPassRemaining_.clear();
+    QElapsedTimer spent;
+    spent.start();
+    int visited = 0;
+    for (qsizetype index = 0; index < sessions.size(); ++index) {
+        const StoredSession& session = sessions.at(index);
+        const QString key = QStringLiteral("%1:%2").arg(session.id).arg(session.generation);
+        if (continuing && !reach.contains(key))
+            continue;
+        if (visited > 0 && spent.elapsed() >= uploadPassBudgetMs) {
+            for (qsizetype rest = index; rest < sessions.size(); ++rest) {
+                const QString restKey = QStringLiteral("%1:%2")
+                                            .arg(sessions.at(rest).id)
+                                            .arg(sessions.at(rest).generation);
+                if (!continuing || reach.contains(restKey))
+                    uploadPassRemaining_.insert(restKey);
+            }
+            if (!uploadContinuationQueued_) {
+                uploadContinuationQueued_ = true;
+                QTimer::singleShot(0, this, [this] {
+                    uploadContinuationQueued_ = false;
+                    uploadPassContinuing_ = true;
+                    uploadEvents();
+                });
+            }
+            return;
+        }
+        ++visited;
         if (refusedSessions_.contains(session.id))
             continue;
         // Every heartbeat and journaled event runs this over every stored session. A session
         // already uploaded through its last event, being sent or waiting out a failure needs no
         // journal read; reading each one kept the daemon's main thread busy.
-        const QString key = QStringLiteral("%1:%2").arg(session.id).arg(session.generation);
         if (eventUploadsInFlight_.contains(key))
             continue;
         if (const auto backoff = eventUploadBackoff_.constFind(key);

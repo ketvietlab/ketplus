@@ -164,9 +164,33 @@ QByteArray CloudCrypto::canonical(const QJsonArray& values) {
     return control_crypto::canonical(values);
 }
 
+void CloudCrypto::forgetKeys() { keys_.clear(); }
+
+QByteArray CloudCrypto::heldKey(const QString& account, QString* error) {
+    if (const auto held = keys_.constFind(account); held != keys_.cend())
+        return *held;
+    QString readError;
+    const QByteArray key = store_->read(account, &readError);
+    if (!readError.isEmpty()) {
+        if (error != nullptr)
+            *error = readError;
+        return {};
+    }
+    if (!key.isEmpty())
+        keys_.insert(account, key);
+    return key;
+}
+
+bool CloudCrypto::keepKey(const QString& account, const QByteArray& key, QString* error) {
+    if (!store_->write(account, key, error))
+        return false;
+    keys_.insert(account, key);
+    return true;
+}
+
 QByteArray CloudCrypto::privateKey(const QString& account, const int keyType, QString* error) {
     QString readError;
-    QByteArray held = store_->read(account, &readError);
+    QByteArray held = heldKey(account, &readError);
     if (!readError.isEmpty()) {
         // An unreadable store is not a missing key: replacing the identity would break pairing.
         if (error != nullptr)
@@ -176,7 +200,7 @@ QByteArray CloudCrypto::privateKey(const QString& account, const int keyType, QS
     if (!held.isEmpty())
         return held;
     held = control_crypto::generatePrivateKey(keyType, error);
-    if (held.isEmpty() || !store_->write(account, held, error))
+    if (held.isEmpty() || !keepKey(account, held, error))
         return {};
     return held;
 }
@@ -219,7 +243,7 @@ QByteArray CloudCrypto::sessionKey(const QString& sessionId, const qint64 genera
                                    QString* error) {
     const QString account = sessionKeyAccount(sessionId, generation, 1);
     QString readError;
-    QByteArray key = store_->read(account, &readError);
+    QByteArray key = heldKey(account, &readError);
     if (!readError.isEmpty()) {
         // Regenerating would make earlier ciphertext for this session undecryptable.
         if (error != nullptr)
@@ -229,7 +253,7 @@ QByteArray CloudCrypto::sessionKey(const QString& sessionId, const qint64 genera
     if (!key.isEmpty())
         return key;
     key = randomBytes(32, error);
-    return key.size() == 32 && store_->write(account, key, error) ? key : QByteArray{};
+    return key.size() == 32 && keepKey(account, key, error) ? key : QByteArray{};
 }
 
 QJsonObject CloudCrypto::encrypt(const QByteArray& plaintext, const QByteArray& associatedData,
@@ -296,7 +320,7 @@ QByteArray CloudCrypto::decrypt(const QJsonObject& content, const QByteArray& as
         return {};
     }
     const int epoch = content.value(QStringLiteral("keyEpoch")).toInt();
-    const QByteArray session = store_->read(sessionKeyAccount(sessionId, generation, epoch), error);
+    const QByteArray session = heldKey(sessionKeyAccount(sessionId, generation, epoch), error);
     return aesGcmDecrypt(ciphertext, associatedData, session, nonce, tag, error);
 }
 
@@ -578,7 +602,7 @@ bool CloudCrypto::importSessionKey(const QJsonObject& envelope, const QByteArray
         aesGcmDecrypt(bytes("ciphertext"), {}, wrapping, bytes("nonce"), bytes("tag"), error);
     if (key.size() != 32)
         return false;
-    return store_->write(sessionKeyAccount(session, generation, 1), key, error);
+    return keepKey(sessionKeyAccount(session, generation, 1), key, error);
 }
 
 bool CloudCrypto::validWrappedSessionKey(const QJsonObject& envelope) {

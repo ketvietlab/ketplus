@@ -333,6 +333,11 @@ class CloudControlClient final : public QObject {
     // session:generation -> the cursor the relay accepted through, as last read or acknowledged
     // here. uploadEvents() skips a session with nothing newer without reading the journal.
     QHash<QString, qint64> knownUploadedCursors_;
+    // session:generation keys an upload pass had not reached when it gave the event loop back,
+    // whether its continuation is queued and whether the running pass is that continuation.
+    QSet<QString> uploadPassRemaining_;
+    bool uploadContinuationQueued_{false};
+    bool uploadPassContinuing_{false};
     // session:generation -> consecutive failed uploads and when the next one may be sent.
     QHash<QString, EventUploadBackoff> eventUploadBackoff_;
     // Sessions the last heartbeat was refused for; their events and keys stay local.

@@ -191,6 +191,8 @@ void CloudControlClient::restoreEnrollment() {
         return;
     }
     bool changedDuringRestore = false;
+    // The workspace's own keys may replace the ones in use.
+    crypto_.forgetKeys();
     if (!credentials_.update(
             [&](QHash<QString, QByteArray>& accounts) {
                 // Another cooperating process may have changed the record between reads.
@@ -285,6 +287,7 @@ void CloudControlClient::enrollMachine(const quint64 signInEpoch, const QString&
                     SessionCredentials::adoptWorkspace(accounts, workspaceId);
                 },
                 &storageError);
+            crypto_.forgetKeys();
             if (!stored) {
                 finishCredentialWaiters(false, storageError);
                 callback({}, storageError);
